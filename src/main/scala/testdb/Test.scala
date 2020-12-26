@@ -9,14 +9,16 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.BiFunction
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, Promise}
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.matching.Regex
 
+import scribe.Execution.global
+
 object Test {
   def main(args: Array[String]): Unit = {
-    val t = StoredType(Vector(
+    /*val t = StoredType(Vector(
       ValueTypeEntry("name", StringType),
       ValueTypeEntry("age", IntType)
     ))
@@ -33,7 +35,28 @@ object Test {
     }
     val result = Await.result(future, Duration.Inf)
     scribe.info(s"Result: $result")
-    db.dispose()
+    db.dispose()*/
+
+    val q = new ObjectTaskQueue
+    val p1 = Promise[String]
+    val p2 = Promise[String]
+    val f1 = q("test") {
+      scribe.info("Starting execution...")
+      p1.future
+    }
+    val f2 = q("test") {
+      scribe.info("Second execution!")
+      p2.future
+    }
+    scribe.info(s"Is Empty? ${q.isEmpty}")
+    p1.success("Wahoo!")
+    scribe.info(s"Is Empty? ${q.isEmpty}")
+    Await.result(f1, Duration.Inf)
+    scribe.info(s"Is Empty? ${q.isEmpty}")
+    p2.success("Next!")
+    scribe.info(s"Is Empty? ${q.isEmpty}")
+    Await.result(f2, Duration.Inf)
+    scribe.info(s"Is Empty? ${q.isEmpty}")
 
     /*val map = new ConcurrentHashMap[String, Future[Unit]]()
 
