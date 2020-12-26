@@ -8,7 +8,8 @@ import io.youi.Unique
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.BiFunction
-import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.matching.Regex
@@ -24,6 +25,15 @@ object Test {
     val stored = t(bytes)
     println(s"Name: [${stored("name")}]")
     println(s"Age: [${stored("age")}]")
+
+    val db = new LightDB()
+    val future = db.modify(Id[String]("testing", "hello")) { option =>
+      scribe.info(s"Existing? ${option.map(array => new String(array, "UTF-8"))}")
+      Some("Hello, World".getBytes("UTF-8"))
+    }
+    val result = Await.result(future, Duration.Inf)
+    scribe.info(s"Result: $result")
+    db.dispose()
 
     /*val map = new ConcurrentHashMap[String, Future[Unit]]()
 

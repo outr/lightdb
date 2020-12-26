@@ -5,7 +5,7 @@ import io.youi.Unique
 
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, ForkJoinPool}
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
 import scala.util.matching.Regex
 
 class LightDB(directory: String = "lightdb",
@@ -18,11 +18,43 @@ class LightDB(directory: String = "lightdb",
     HaloDB.open(directory, opts)
   }
   private lazy val locks: ConcurrentHashMap[String, Future[Unit]] = new ConcurrentHashMap[String, Future[Unit]]
-  private lazy val executionContext: ExecutionContextExecutor = ExecutionContext.fromExecutor(new ForkJoinPool(processingThreads))
+  private implicit lazy val executionContext: ExecutionContextExecutor = ExecutionContext.fromExecutor(new ForkJoinPool(processingThreads))
 
-  def get[T](id: Id[T]): Future[Array[Byte]] = Future {
-    halo.get(id.bytes)
-  }(executionContext)
+  def get[T](id: Id[T]): Future[Option[Array[Byte]]] = Future {
+    Option(halo.get(id.bytes))
+  }
+
+  def put[T](id: Id[T], value: Array[Byte]): Future[Array[Byte]] = Future {
+    halo.put(id.bytes, value)
+  }.map(_ => value)
+
+  def delete[T](id: Id[T]): Future[Unit] = Future {
+    halo.delete(id.bytes)
+  }
+
+  def modify[T](id: Id[T])(f: Option[Array[Byte]] => Option[Array[Byte]]): Future[Option[Array[Byte]]] = {
+    val promise = Promise[Option[Array[Byte]]]
+    locks.compute(id.toString, (_, future) => {
+      val previous = Option(future).getOrElse(Future.successful(()))
+      val next = previous.transformWith { _ =>
+        val nextFuture = get[T](id).flatMap { current =>
+          f(current) match {
+            case None if current.isEmpty => Future.successful(None)               // No value
+            case None => delete[T](id).map(_ => None)                             // Delete existing value
+            case Some(updated) => put[T](id, updated).map(array => Some(array))   // Set new value
+          }
+        }
+        nextFuture.failed.foreach { t =>
+          // TODO: better error handling
+          scribe.error(s"Failed to modify $id", t)
+        }
+        nextFuture
+      }
+      promise.completeWith(next)
+      next.map(_ => ())
+    })
+    promise.future
+  }
 
   def dispose(): Unit = halo.close()
 }
