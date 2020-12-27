@@ -11,6 +11,8 @@ import scala.util.matching.Regex
 class LightDB(val store: ObjectStore) {
 //  private implicit lazy val executionContext: ExecutionContextExecutor = ExecutionContext.fromExecutor(new ForkJoinPool(processingThreads))
 
+  // def collection[T](dataManager: DataManager[T]): Collection[T]
+
   def dispose(): Unit = store.dispose()
 }
 
@@ -29,7 +31,6 @@ case class StoredType(types: Vector[ValueTypeEntry]) {
     val map = tuples.toMap
     val entriesAndValues = types.map(e => (e, map(e.name)))
     val length = entriesAndValues.foldLeft(0)((sum, t) => sum + t._1.`type`.asInstanceOf[ValueType[Any]].length(t._2))
-    println(s"Length: $length")
     val bb = ByteBuffer.allocate(length)
     entriesAndValues.foreach {
       case (e, v) => e.`type`.asInstanceOf[ValueType[Any]].write(bb, v)
