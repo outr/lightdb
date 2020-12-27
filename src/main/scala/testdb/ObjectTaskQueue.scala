@@ -3,7 +3,7 @@ package testdb
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-class ObjectTaskQueue {
+object ObjectTaskQueue {
   private val map = new ConcurrentHashMap[Any, List[() => Future[Unit]]]
 
   def isEmpty: Boolean = map.isEmpty
