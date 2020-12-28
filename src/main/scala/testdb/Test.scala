@@ -22,16 +22,26 @@ object Test {
       ValueTypeEntry("name", StringType),
       ValueTypeEntry("age", IntType)
     ))
-    val bytes = t.create("name" -> "Hello, World", "age" -> 26)
-
-    val stored = t(bytes)
-    println(s"Name: [${stored("name")}]")
-    println(s"Age: [${stored("age")}]")
+//    val stored1 = t.create("name" -> "Hello, World", "age" -> 26)
+//
+//    val stored2 = t(stored1.bb.array())
+//    println(s"Name: [${stored2("name")}]")
+//    println(s"Age: [${stored2("age")}]")
 
     val db = new LightDB(new HaloStore)
-    val future = db.store.modify(Id[String]("testing", "hello")) { option =>
-      scribe.info(s"Existing? ${option.map(array => new String(array, "UTF-8"))}")
-      Some("Hello, World".getBytes("UTF-8"))
+//    val future = db.store.modify(Id[String]("testing", "hello")) { option =>
+//      scribe.info(s"Existing? ${option.map(array => new String(array, "UTF-8"))}")
+//      Some("Hello, World".getBytes("UTF-8"))
+//    }
+    val collection = db.collection[Stored](new StoredDataManager(t))
+    val future = collection.modify(Id[Stored]("person", "test1")) { existing =>
+      existing match {
+        case Some(s) => {
+          scribe.info(s"Name: ${s("name")}, Age: ${s("age")}")
+        }
+        case None => scribe.info("No record found!")
+      }
+      Some(t.create("name" -> "Matt Hicks", "age" -> 41))
     }
     val result = Await.result(future, Duration.Inf)
     scribe.info(s"Result: $result")

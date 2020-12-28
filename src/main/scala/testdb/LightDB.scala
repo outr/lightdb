@@ -30,6 +30,12 @@ trait DataManager[T] {
   def toArray(value: T): Array[Byte]
 }
 
+class StoredDataManager(`type`: StoredType) extends DataManager[Stored] {
+  override def fromArray(array: Array[Byte]): Stored = `type`(array)
+
+  override def toArray(value: Stored): Array[Byte] = value.bb.array()
+}
+
 case class Stored(`type`: StoredType, bb: ByteBuffer, values: Map[String, StoredValue]) {
   def apply[T](name: String): T = {
     val sv = values(name)
@@ -40,17 +46,22 @@ case class Stored(`type`: StoredType, bb: ByteBuffer, values: Map[String, Stored
 case class StoredValue(offset: Int, `type`: ValueType[_])
 
 case class StoredType(types: Vector[ValueTypeEntry]) {
-  def create(tuples: (String, Any)*): Array[Byte] = {
+  def create(tuples: (String, Any)*): Stored = {
     assert(tuples.length == types.length, "Supplied tuples must be identical to the types")
     val map = tuples.toMap
     val entriesAndValues = types.map(e => (e, map(e.name)))
-    val length = entriesAndValues.foldLeft(0)((sum, t) => sum + t._1.`type`.asInstanceOf[ValueType[Any]].length(t._2))
+    var offsets = Map.empty[String, Int]
+    val length = entriesAndValues.foldLeft(0)((sum, t) => {
+      offsets += t._1.name -> sum
+      sum + t._1.`type`.asInstanceOf[ValueType[Any]].length(t._2)
+    })
     val bb = ByteBuffer.allocate(length)
     entriesAndValues.foreach {
       case (e, v) => e.`type`.asInstanceOf[ValueType[Any]].write(bb, v)
     }
     bb.flip()
-    bb.array()
+    val values = types.map(t => t.name -> StoredValue(offsets(t.name), t.`type`)).toMap
+    Stored(this, bb, values)
   }
 
   def apply(bytes: Array[Byte]): Stored = {
