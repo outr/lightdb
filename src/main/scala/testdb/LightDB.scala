@@ -1,19 +1,33 @@
 package testdb
 
-import com.oath.halodb.{HaloDB, HaloDBOptions}
-import io.youi.Unique
-
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentHashMap, ForkJoinPool}
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
-import scala.util.matching.Regex
+import scala.concurrent.{ExecutionContext, Future}
 
 class LightDB(val store: ObjectStore) {
-//  private implicit lazy val executionContext: ExecutionContextExecutor = ExecutionContext.fromExecutor(new ForkJoinPool(processingThreads))
-
-  // def collection[T](dataManager: DataManager[T]): Collection[T]
+  def collection[T](implicit dataManager: DataManager[T]): Collection[T] = new Collection[T](this, dataManager)
 
   def dispose(): Unit = store.dispose()
+}
+
+class Collection[T] private[testdb](db: LightDB, dataManager: DataManager[T]) {
+  private implicit def executionContext: ExecutionContext = db.store.executionContext
+
+  def get(id: Id[T]): Future[Option[T]] = db.store.get(id).map(_.map(dataManager.fromArray))
+  def put(id: Id[T], value: T): Future[T] = db.store.put(id, dataManager.toArray(value)).map(_ => value)
+  def modify(id: Id[T])(f: Option[T] => Option[T]): Future[Option[T]] = {
+    var result: Option[T] = None
+    db.store.modify(id) { bytes =>
+      val value = bytes.map(dataManager.fromArray)
+      result = f(value)
+      result.map(dataManager.toArray)
+    }.map(_ => result)
+  }
+  def delete(id: Id[T]): Future[Unit] = db.store.delete(id)
+}
+
+trait DataManager[T] {
+  def fromArray(array: Array[Byte]): T
+  def toArray(value: T): Array[Byte]
 }
 
 case class Stored(`type`: StoredType, bb: ByteBuffer, values: Map[String, StoredValue]) {
@@ -100,12 +114,6 @@ object IntType extends ValueType[Int] {
 
   override def length(offset: Int, bytes: ByteBuffer): Int = 4
 }
-
-/*
-
-offset
-0
- */
 
 case class Person(name: String, age: Int, location: Location)
 case class Location(city: String, state: String)
