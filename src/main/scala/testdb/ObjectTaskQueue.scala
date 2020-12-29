@@ -43,6 +43,7 @@ object ObjectTaskQueue {
   })
 
   protected def errorHandler[Key](key: Key, throwable: Throwable): Unit = {
-    scribe.error(s"Error occurred while handling: $key", throwable)
+    println(s"Error occurred while handling: $key")
+    throwable.printStackTrace()
   }
 }

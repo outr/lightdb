@@ -1,7 +1,5 @@
 package testdb
 
-import io.youi.Unique
-
 import scala.util.matching.Regex
 
 case class Id[T](collection: String, value: String = Unique(length = 32)) {
