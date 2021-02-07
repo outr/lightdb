@@ -1,4 +1,4 @@
-package testdb
+package lightdb
 
 import java.util.concurrent.ThreadLocalRandom
 
@@ -16,7 +16,7 @@ object Unique {
   /**
    * Generates a unique String using the characters supplied at the length defined.
    *
-   * @param length the length of the resulting String. Defaults to 32.
+   * @param length     the length of the resulting String. Defaults to 32.
    * @param characters the characters for use in the String. Defaults to AllLettersAndNumbers.
    * @return a unique String
    */

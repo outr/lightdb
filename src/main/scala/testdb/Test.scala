@@ -1,8 +1,11 @@
 package testdb
 
+import lightdb.{Id, LightDB}
+import lightdb.data.stored._
+import lightdb.store.HaloStore
+
 import scala.concurrent.duration.Duration
 import scala.concurrent.Await
-
 import concurrent.ExecutionContext.Implicits.global
 
 object Test {

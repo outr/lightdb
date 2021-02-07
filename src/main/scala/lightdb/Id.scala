@@ -1,4 +1,4 @@
-package testdb
+package lightdb
 
 import scala.util.matching.Regex
 

@@ -1,4 +1,4 @@
-package testdb
+package lightdb.util
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.{ExecutionContext, Future, Promise}
