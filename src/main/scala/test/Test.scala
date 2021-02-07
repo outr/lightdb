@@ -1,4 +1,4 @@
-package testdb
+package test
 
 import lightdb.{Id, LightDB}
 import lightdb.data.stored._
