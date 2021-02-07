@@ -5,7 +5,7 @@ import lightdb.Id
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class HaloStore(directory: String = "lightdb/store",
+class HaloStore(directory: String = "db/store",
                 indexThreads: Int = 8) extends ObjectStore {
   private val halo = {
     val opts = new HaloDBOptions
