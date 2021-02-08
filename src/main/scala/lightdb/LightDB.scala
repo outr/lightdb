@@ -13,5 +13,5 @@ class LightDB(val store: ObjectStore) { thisDb =>
     override protected def dataManager: DataManager[T] = dm
   }
 
-  def dispose()(implicit ec: ExecutionContext): Unit = store.dispose()
+  def dispose(): Unit = store.dispose()
 }
