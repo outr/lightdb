@@ -34,22 +34,11 @@ object ObjectLock {
     promise.future
   }
 
-  def io[Key, Return](key: Key)(f: => IO[Return]): IO[Return] = IO.async[ReleasableLock] { callback =>
+  def io[Key, Return](key: Key)(task: IO[Return]): IO[Return] = IO.async[ReleasableLock] { callback =>
     apply(key, (lock: ReleasableLock) => {
       callback(Right(lock))
     })
-  }.flatMap { lock =>
-    f.attempt.map { result =>
-      try {
-        result match {
-          case Left(t) => throw t
-          case Right(r) => r
-        }
-      } finally {
-        lock.release()
-      }
-    }
-  }
+  }.flatMap(lock => task.guarantee(IO(lock.release())))
 
   private def triggerNext[Key](key: Key): Unit = {
     map.compute(key, (_, q) => {
