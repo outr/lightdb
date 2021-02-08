@@ -1,5 +1,6 @@
 package lightdb
 
+import cats.effect.IO
 import lightdb.collection.Collection
 import lightdb.data.DataManager
 import lightdb.store.ObjectStore
@@ -13,5 +14,5 @@ class LightDB(val store: ObjectStore) { thisDb =>
     override protected def dataManager: DataManager[T] = dm
   }
 
-  def dispose(): Unit = store.dispose()
+  def dispose(): IO[Unit] = store.dispose()
 }

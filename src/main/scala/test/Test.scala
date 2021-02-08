@@ -24,6 +24,6 @@ object Test {
     }
     val result = io.unsafeRunSync()
     println(s"Result: $result")
-    db.dispose()
+    db.dispose().unsafeRunSync()
   }
 }
