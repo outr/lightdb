@@ -1,6 +1,6 @@
 package lightdb.util
 
-import cats.effect.IO
+import cats.effect.{IO, Resource}
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -34,11 +34,16 @@ object ObjectLock {
     promise.future
   }
 
-  def io[Key, Return](key: Key)(task: IO[Return]): IO[Return] = IO.async[ReleasableLock] { callback =>
-    apply(key, (lock: ReleasableLock) => {
-      callback(Right(lock))
+  def io[Key, Return](key: Key)(task: IO[Return]): IO[Return] = resource(key).use(_ => task)
+
+  def resource[Key](key: Key): Resource[IO, Unit] = for {
+    lock <- Resource.eval(IO.async_[ReleasableLock] { callback =>
+      apply(key, (lock: ReleasableLock) => {
+        callback(Right(lock))
+      })
     })
-  }.flatMap(lock => task.guarantee(IO(lock.release())))
+    _ <- Resource.make(IO.unit)(_ => IO(lock.release()))
+  } yield ()
 
   private def triggerNext[Key](key: Key): Unit = {
     map.compute(key, (_, q) => {

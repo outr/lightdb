@@ -1,11 +1,12 @@
 package test
 
+import cats.effect._
 import lightdb.{Id, LightDB}
 import lightdb.data.stored._
 import lightdb.store.HaloStore
 
-object Test {
-  def main(args: Array[String]): Unit = {
+object Test extends IOApp {
+  override def run(args: List[String]): IO[ExitCode] = {
     val t = StoredType(Vector(
       ValueTypeEntry("name", StringType),
       ValueTypeEntry("age", IntType)
@@ -22,8 +23,12 @@ object Test {
         Some(t.create("name" -> "Matt Hicks", "age" -> 41))
       }
     }
-    val result = io.unsafeRunSync()
-    println(s"Result: $result")
-    db.dispose().unsafeRunSync()
+    for {
+      result <- io
+      _ <- db.dispose()
+    } yield {
+      println(s"Result: $result")
+      ExitCode.Success
+    }
   }
 }
