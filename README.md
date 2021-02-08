@@ -9,4 +9,3 @@ Still in the prototype stages, but shows promise
 - [ ] Implement very basic Lucene integration
 - [ ] Create LuceneStore backed by a Lucene index with byte arrays - same index for searching, separate field
 - [ ] Create benchmark tool to evaluate performance of basic operations to see how well this performs
-- [ ] Investigate migrating to using cats-effect instead of Futures
