@@ -9,7 +9,7 @@ resolvers += "yahoo-bintray" at "https://yahoo.bintray.com/maven"
 fork := true
 
 val haloDBVersion: String = "0.5.3"
-val catsEffectVersion: String = "2.3.1"
+val catsEffectVersion: String = "3.0.0-M5"
 
 libraryDependencies ++= Seq(
 	"com.oath.halodb" % "halodb" % haloDBVersion,
