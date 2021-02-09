@@ -71,3 +71,24 @@ case class Person(name: String, age: Int)
 object Person {
   implicit val rw: ReadWriter[Person] = macroRW
 }
+
+trait PersonFields extends Fields[Person] {
+  val name: Field[String, Person] = field[String]("name")
+  val age: Field[Int, Person] = field[Int]("age")
+}
+
+trait Fields[P] {
+  private var _fields = Map.empty[String, Field[_, P]]
+
+  def fields: Map[String, Field[_, P]] = _fields
+
+  def field[F](name: String): Field[F, P] = {
+    val f = Field[F, P](name)
+    synchronized {
+      _fields += name -> f
+    }
+    f
+  }
+}
+
+case class Field[F, P](name: String)
