@@ -2,16 +2,33 @@ package test
 
 import cats.effect._
 import lightdb.data.JsonDataManager
-import lightdb.{Id, LightDB}
+import lightdb.{Id, LightDB, index}
 import lightdb.data.stored._
+import lightdb.index.{Indexable, LuceneIndex}
 import lightdb.store.HaloStore
-
+import org.apache.lucene.document.{Document, StringField, Field => LuceneField}
 import profig._
 
 object Test extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
 //    stored()
-    json()
+//    json()
+    indexing()
+  }
+
+  private def indexing(): IO[ExitCode] = {
+    object ndx extends LuceneIndex[Person]() {
+      val name: index.Field[Person, String] = field[String]("name", _.name)
+    }
+
+    ndx.index(Id("people", "indexing-example1"), Person("Test Indexing", 123))
+    ndx.flush()
+
+
+
+    implicit object StringIndexable extends Indexable[String] {
+      override def index[T](doc: Document, name: String, value: String): Unit = doc.add(new StringField(name, value, LuceneField.Store.YES))
+    }
   }
 
   private def json(): IO[ExitCode] = {
