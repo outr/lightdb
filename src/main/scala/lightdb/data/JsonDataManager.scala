@@ -1,15 +1,17 @@
 package lightdb.data
 
-import profig._
+import fabric.parse._
+import fabric.rw._
 
-class JsonDataManager[T: ReadWriter] extends DataManager[T] {
+class JsonDataManager[T: ReaderWriter] extends DataManager[T] {
   override def fromArray(array: Array[Byte]): T = {
     val jsonString = new String(array, "UTF-8")
-    JsonUtil.fromJsonString[T](jsonString)
+    Json.parse(jsonString).as[T]
   }
 
   override def toArray(value: T): Array[Byte] = {
-    val jsonString = JsonUtil.toJsonString[T](value)
+    val v = value.toValue
+    val jsonString = Json.format(v)
     jsonString.getBytes("UTF-8")
   }
 }
