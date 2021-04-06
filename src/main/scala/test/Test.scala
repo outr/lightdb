@@ -7,7 +7,6 @@ import lightdb.data.stored._
 import lightdb.index.{Indexable, LuceneIndex}
 import lightdb.store.HaloStore
 import org.apache.lucene.document.{Document, StringField, Field => LuceneField}
-import profig._
 
 object Test extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
@@ -18,7 +17,7 @@ object Test extends IOApp {
 
   private def indexing(): IO[ExitCode] = {
     object ndx extends LuceneIndex[Person]() {
-      val name: index.Field[Person, String] = field[String]("name", _.name)
+      val name = field[String]("name", _.name)
     }
 
     ndx.index(Id("people", "indexing-example1"), Person("Test Indexing", 123))
