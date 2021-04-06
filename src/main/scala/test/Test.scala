@@ -1,6 +1,7 @@
 package test
 
 import cats.effect._
+import fabric.rw._
 import lightdb.data.JsonDataManager
 import lightdb.{Id, LightDB, index}
 import lightdb.data.stored._
@@ -17,16 +18,14 @@ object Test extends IOApp {
 
   private def indexing(): IO[ExitCode] = {
     object ndx extends LuceneIndex[Person]() {
-      val name = field[String]("name", _.name)
+      val name = field[String]("name", _.name)(StringIndexable)
     }
 
-    ndx.index(Id("people", "indexing-example1"), Person("Test Indexing", 123))
-    ndx.flush()
-
-
-
-    implicit object StringIndexable extends Indexable[String] {
-      override def index[T](doc: Document, name: String, value: String): Unit = doc.add(new StringField(name, value, LuceneField.Store.YES))
+    for {
+      _ <- ndx.index(Id("people", "indexing-example1"), Person("Test Indexing", 123))
+      _ <- ndx.flush()
+    } yield {
+      ExitCode.Success
     }
   }
 
@@ -80,12 +79,16 @@ object Test extends IOApp {
       ExitCode.Success
     }
   }
+
+  object StringIndexable extends Indexable[String] {
+    override def index[T](doc: Document, name: String, value: String): Unit = doc.add(new StringField(name, value, LuceneField.Store.YES))
+  }
 }
 
 case class Person(name: String, age: Int)
 
 object Person {
-  implicit val rw: ReadWriter[Person] = macroRW
+  implicit val rw: ReaderWriter[Person] = ccRW
 }
 
 trait PersonFields extends Fields[Person] {
