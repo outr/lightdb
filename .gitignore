@@ -2,3 +2,4 @@
 .bsp/
 target/
 /testdb/
+/db/
