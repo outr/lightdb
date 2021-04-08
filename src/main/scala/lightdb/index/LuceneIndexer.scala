@@ -115,7 +115,7 @@ case class ResultDoc[D <: Document[D]](results: PagedResults[D], index: Int) {
   private lazy val doc = results.searcher.doc(scoreDoc.doc)
 
   lazy val id: Id[D] = Id(doc.getField("_id").stringValue())
-  lazy val value: D = results.
+//  lazy val value: D = results.
 
   def apply[F](field: Field[D, F]): F = {
     val lf = doc.getField(field.name)
