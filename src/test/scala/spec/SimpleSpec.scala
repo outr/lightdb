@@ -84,9 +84,33 @@ class SimpleSpec extends Spec {
         doc(Person.age) should be(19)
       }
     }
-    // TODO: replace an item
     // TODO: search for an item
+    "replace Jane Doe" async {
+      db.people.put(Person("Jan Doe", 20, id2)).map { p =>
+        p._id should be(id2)
+      }
+    }
+    "verify Jan Doe" in {
+      db.people(id2).map { p =>
+        p._id should be(id2)
+        p.name should be("Jan Doe")
+        p.age should be(20)
+      }
+    }
+    "commit data" async {
+      db.people.commit()
+    }
+    "list all documents" async {
+      db.indexer.search[Person]().map { results =>
+        results.total should be(1)
+        val doc = results.documents.head
+        doc.id should be(id2)
+        doc(Person.name) should be("Jan Doe")
+        doc(Person.age) should be(20)
+      }
+    }
     // TODO: support multiple item types (make sure queries don't return different types)
+    // TODO: test batch operations: insert, replace, and delete
     "dispose" async {
       db.dispose()
     }
