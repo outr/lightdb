@@ -14,10 +14,16 @@ val fabricVersion: String = "1.0.2"
 val luceneVersion: String = "8.8.1"
 val scribeVersion: String = "3.5.1"
 
+val testyVersion: String = "1.0.2-SNAPSHOT"
+
 libraryDependencies ++= Seq(
 	"com.oath.halodb" % "halodb" % haloDBVersion,
 	"org.typelevel" %% "cats-effect" % catsEffectVersion,
 	"com.outr" %% "fabric-parse" % fabricVersion,
 	"org.apache.lucene" % "lucene-core" % luceneVersion,
-	"com.outr" %% "scribe" % scribeVersion
+	"com.outr" %% "scribe" % scribeVersion,
+
+	"com.outr" %% "testy" % testyVersion % Test
 )
+
+testFrameworks += new TestFramework("munit.Framework")

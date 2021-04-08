@@ -2,27 +2,51 @@ package lightdb
 
 import java.util.concurrent.ThreadLocalRandom
 
+/**
+ * Unique String generator
+ */
 object Unique {
-  val LettersLower = "abcdefghijklmnopqrstuvwxyz"
-  val LettersUpper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-  val Numbers = "0123456789"
-  val Readable = "ABCDEFGHJKLMNPQRSTWXYZ23456789"
-  val Hexadecimal = s"${Numbers}abcdef"
-  val LettersAndNumbers = s"$LettersLower$Numbers"
-  val AllLettersAndNumbers = s"$LettersLower$LettersUpper$Numbers"
+  lazy val LettersLower = "abcdefghijklmnopqrstuvwxyz"
+  lazy val LettersUpper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  lazy val Numbers = "0123456789"
+  lazy val Readable = "ABCDEFGHJKLMNPQRSTWXYZ23456789"
+  lazy val Hexadecimal = s"${Numbers}abcdef"
+  lazy val LettersAndNumbers = s"$LettersLower$Numbers"
+  lazy val AllLettersAndNumbers = s"$LettersLower$LettersUpper$Numbers"
 
-  private def r: ThreadLocalRandom = ThreadLocalRandom.current()
+  /**
+   * Random number generator used to generate unique values. Defaults to `threadLocalRandom`.
+   */
+  var random: Int => Int = threadLocalRandom
+
+  /**
+   * The default length to use for generating unique values. Defaults to 32.
+   */
+  var defaultLength: Int = 32
+
+  /**
+   * The default characters to use for generating unique values. Defaults to AllLettersAndNumbers.
+   */
+  var defaultCharacters: String = AllLettersAndNumbers
+
+  /**
+   * Uses java.util.concurrent.ThreadLocalRandom to generate random numbers.
+   *
+   * @param max the maximum value to include
+   * @return random number between 0 and max
+   */
+  final def threadLocalRandom(max: Int): Int = ThreadLocalRandom.current().nextInt(max)
 
   /**
    * Generates a unique String using the characters supplied at the length defined.
    *
-   * @param length     the length of the resulting String. Defaults to 32.
-   * @param characters the characters for use in the String. Defaults to AllLettersAndNumbers.
+   * @param length     the length of the resulting String. Defaults to Unique.defaultLength.
+   * @param characters the characters for use in the String. Defaults to Unique.defaultCharacters.
    * @return a unique String
    */
-  def apply(length: Int = 32, characters: String = AllLettersAndNumbers): String = {
+  def apply(length: Int = defaultLength, characters: String = defaultCharacters): String = {
     val charMax = characters.length
-    (0 until length).map(i => characters.charAt(r.nextInt(charMax))).mkString
+    (0 until length).map(i => characters.charAt(random(charMax))).mkString
   }
 
   /**

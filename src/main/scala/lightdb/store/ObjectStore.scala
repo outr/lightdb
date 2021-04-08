@@ -24,4 +24,6 @@ trait ObjectStore {
       }
     }
   }
+
+  def count(): IO[Long]
 }
