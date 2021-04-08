@@ -165,6 +165,11 @@ object Test extends LightDB(new HaloStore) with IOApp {
     for {
       _ <- people.put(id1, p1)
       _ <- people.put(id2, p2)
+      g1 <- people.get(id1)
+      _ = assert(g1.contains(p1), s"$g1 did not contain $p1")
+      g2 <- people.get(id2)
+      _ = assert(g2.contains(p2), s"$g2 did not contain $p2")
+      // TODO: query from the index
       _ <- dispose()
     } yield {
       ExitCode.Success
