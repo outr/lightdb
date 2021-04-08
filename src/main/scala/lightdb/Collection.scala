@@ -3,18 +3,12 @@ package lightdb
 import cats.effect.{ExitCode, IO, IOApp}
 import fabric.rw._
 import lightdb.data.{DataManager, JsonDataManager}
+import lightdb.field.Field
+import lightdb.index.{Indexer, LuceneIndexer}
 import lightdb.store.HaloStore
-import org.apache.lucene.analysis.standard.StandardAnalyzer
-import org.apache.lucene.document.{Document => LuceneDoc, StoredField, StringField, Field => LuceneField}
-import org.apache.lucene.index.{DirectoryReader, IndexWriter, IndexWriterConfig, IndexableField, Term}
-import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, Query}
-import org.apache.lucene.store.{ByteBuffersDirectory, Directory, FSDirectory}
+import org.apache.lucene.store.FSDirectory
 
 import java.nio.file.Paths
-
-trait Document[D <: Document[D]] {
-  def _id: Id[D]
-}
 
 case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D]) {
   protected def dataManager: DataManager[D] = mapping.dataManager
@@ -52,76 +46,6 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D]) 
   protected lazy val data: CollectionData[D] = CollectionData(this)
 }
 
-trait Indexer[D <: Document[D]] {
-  def put(value: D): IO[D]
-  def delete(id: Id[D]): IO[Unit]
-  def flush(): IO[Unit]
-  def dispose(): IO[Unit]
-}
-
-case class LuceneIndexer[D <: Document[D]](mapping: ObjectMapping[D], directory: Directory = new ByteBuffersDirectory) extends Indexer[D] {
-  private lazy val analyzer = new StandardAnalyzer
-  private lazy val config = new IndexWriterConfig(analyzer)
-  private lazy val writer = new IndexWriter(directory, config)
-  private lazy val reader: DirectoryReader = DirectoryReader.open(writer)
-  private lazy val searcher: IndexSearcher = new IndexSearcher(reader)
-
-  override def put(value: D): IO[D] = IO {
-    val doc = new LuceneDoc
-    doc.add(new StringField("_id", value._id.toString, LuceneField.Store.YES))
-    mapping.fields.foreach { f =>
-      f.features.foreach {
-        case lif: LuceneIndexFeature[D] => lif.index(f.name, value, doc)
-        case _ => // Ignore
-      }
-    }
-    writer.updateDocument(new Term("_id", value._id.toString), doc)
-    writer.commit()
-    value
-  }
-
-  override def delete(id: Id[D]): IO[Unit] = IO {
-    writer.deleteDocuments(new Term("_id", id.toString))
-  }
-
-  override def flush(): IO[Unit] = IO {
-    writer.flush()
-  }
-
-  override def dispose(): IO[Unit] = IO {
-    writer.flush()
-    writer.close()
-  }
-
-  def test(): IO[Unit] = IO {
-    val topDocs = searcher.search(new MatchAllDocsQuery, 1000)
-    scribe.info(s"Total Hits: ${topDocs.totalHits.value}")
-    val scoreDocs = topDocs.scoreDocs.toVector
-    scoreDocs.foreach { sd =>
-      val docId = sd.doc
-      val doc = searcher.doc(docId)
-      val id = doc.getField("_id").stringValue()
-      val name = doc.getField("name").stringValue()
-      val age = doc.getField("age").numericValue().intValue()
-      scribe.info(s"ID: $id, Name: $name, Age: $age")
-    }
-  }
-
-  def string(f: D => String): LuceneIndexFeature[D] = feature(f, (name: String, value: String) =>
-    new StringField(name, value, LuceneField.Store.YES))
-  def int(f: D => Int): LuceneIndexFeature[D] = feature(f, (name: String, value: Int) => new StoredField(name, value))
-
-  def feature[F](f: D => F, lf: (String, F) => IndexableField): LuceneIndexFeature[D] = new LuceneIndexFeature[D] {
-    override def index(name: String, value: D, document: LuceneDoc): Unit = {
-      document.add(lf(name, f(value)))
-    }
-  }
-}
-
-trait LuceneIndexFeature[T] extends FieldFeature {
-  def index(name: String, value: T, document: LuceneDoc): Unit
-}
-
 case class CollectionData[D <: Document[D]](collection: Collection[D]) {
   protected def db: LightDB = collection.db
   protected def dataManager: DataManager[D] = collection.mapping.dataManager
@@ -142,22 +66,6 @@ case class CollectionData[D <: Document[D]](collection: Collection[D]) {
   }
 
   def delete(id: Id[D]): IO[Unit] = db.store.delete(id)
-}
-
-case class Field[T, F](name: String, features: List[FieldFeature])
-
-trait FieldFeature
-
-trait ObjectMapping[D <: Document[D]] {
-  def fields: List[Field[D, _]]
-  def dataManager: DataManager[D]
-  def indexer: Indexer[D]
-
-  def collectionName: String
-
-  def field[F](name: String, features: FieldFeature*): Field[D, F] = {
-    Field[D, F](name, features.toList)
-  }
 }
 
 object Test extends LightDB(new HaloStore) with IOApp {
