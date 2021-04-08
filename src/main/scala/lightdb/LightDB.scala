@@ -3,6 +3,7 @@ package lightdb
 import cats.effect.IO
 import cats.instances.list._
 import cats.syntax.parallel._
+import lightdb.collection.Collection
 import lightdb.store.ObjectStore
 
 class LightDB(val store: ObjectStore) {
