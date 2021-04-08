@@ -20,7 +20,7 @@ class MapStore extends ObjectStore {
 
   override def count(): IO[Long] = IO.pure(map.size)
 
-  override def flush(): IO[Unit] = IO.unit
+  override def commit(): IO[Unit] = IO.unit
 
   override def dispose(): IO[Unit] = {
     map = Map.empty

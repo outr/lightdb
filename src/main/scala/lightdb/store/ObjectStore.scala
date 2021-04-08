@@ -27,5 +27,5 @@ trait ObjectStore {
 
   def count(): IO[Long]
 
-  def flush(): IO[Unit]
+  def commit(): IO[Unit]
 }
