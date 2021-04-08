@@ -1,19 +1,21 @@
 package lightdb
 
-import scala.util.matching.Regex
+import fabric.rw._
 
-case class Id[T](collection: String, value: String = Unique(length = 32)) {
-  lazy val bytes: Array[Byte] = toString.getBytes("UTF-8")
+class Id[T](val value: String) extends AnyVal {
+  def bytes: Array[Byte] = toString.getBytes("UTF-8")
 
-  override def toString: String = s"$collection/$value"
+  override def toString: String = value
 }
 
 object Id {
-  private val IdRegex: Regex = """(.+)[/](.+)""".r
+  private lazy val _rw: ReaderWriter[Id[_]] = ccRW
 
-  def toString[T](id: Id[T]): String = s"${id.collection}/${id.value}"
+  implicit def rw[T]: ReaderWriter[Id[T]] = _rw.asInstanceOf[ReaderWriter[Id[T]]]
 
-  def fromString[T](s: String): Id[T] = s match {
-    case IdRegex(collection, value) => Id[T](collection, value)
-  }
+  def apply[T](value: String = Unique()): Id[T] = new Id[T](value)
+
+  def toString[T](id: Id[T]): String = id.value
+
+  def fromString[T](s: String): Id[T] = apply[T](s)
 }

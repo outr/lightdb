@@ -1,7 +1,6 @@
 package lightdb.data.`lazy`
 
 import lightdb.data.DataManager
-import test.Field
 
 import java.nio.ByteBuffer
 
@@ -13,7 +12,7 @@ class LazyDataManager[T] extends DataManager[LazyData[T]] {
 
 trait LazyData[T] {
   def data: T
-  def apply[F](field: Field[F, T]): F
+//  def apply[F](field: Field[F, T]): F
 }
 
 trait DataPoint[T] {
@@ -83,6 +82,7 @@ object DataType {
   case object Variable extends DataType
 }
 
+/*
 object Test {
   def main(args: Array[String]): Unit = {
     val map = Map(
@@ -102,4 +102,4 @@ object Test {
     scribe.info(s"Fixed Length: $fixedLength, Variable Length: $variableLength, Variable Lengths Length: $variableLengthsLength")
     scribe.info(s"Length: $length")
   }
-}
+}*/
