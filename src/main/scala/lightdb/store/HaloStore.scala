@@ -27,5 +27,9 @@ class HaloStore(directory: String = "db/store",
     halo.delete(id.bytes)
   }
 
+  override def count(): IO[Long] = IO {
+    halo.size()
+  }
+
   override def dispose(): IO[Unit] = IO(halo.close())
 }
