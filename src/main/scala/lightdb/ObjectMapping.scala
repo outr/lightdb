@@ -9,11 +9,7 @@ trait ObjectMapping[D <: Document[D]] {
 
   def dataManager: DataManager[D]
 
-  def indexer: Indexer[D]
-
-  def collectionName: String
-
-  def field[F](name: String, features: FieldFeature*): Field[D, F] = {
-    Field[D, F](name, features.toList)
+  def field[F](name: String, getter: D => F): Field[D, F] = {
+    Field[D, F](name, getter, Nil)
   }
 }
