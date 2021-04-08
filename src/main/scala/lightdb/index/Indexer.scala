@@ -1,18 +1,21 @@
 package lightdb.index
 
 import cats.effect.IO
+import lightdb.collection.Collection
 import lightdb.{Document, Id, ObjectMapping}
 
-trait Indexer {
-  def put[D <: Document[D]](value: D, mapping: ObjectMapping[D]): IO[D]
+trait Indexer[D <: Document[D]] {
+  protected def collection: Collection[D]
 
-  def delete[D <: Document[D]](id: Id[D], mapping: ObjectMapping[D]): IO[Unit]
+  def put(value: D): IO[D]
 
-  def commit[D <: Document[D]](mapping: ObjectMapping[D]): IO[Unit]
+  def delete(id: Id[D]): IO[Unit]
+
+  def commit(): IO[Unit]
 
   def count(): IO[Long]
 
-  def search[D <: Document[D]](limit: Int = 1000): IO[PagedResults[D]]
+  def search(limit: Int = 1000): IO[PagedResults[D]]
 
   def dispose(): IO[Unit]
 }

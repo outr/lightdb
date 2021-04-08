@@ -1,6 +1,7 @@
 package lightdb.index
 
 import cats.effect.IO
+import lightdb.collection.Collection
 import lightdb.field.Field
 import lightdb.{Document, Id, IndexFeature, IntIndexed, ObjectMapping, StringIndexed}
 import org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -15,8 +16,12 @@ import org.apache.lucene.facet.taxonomy.writercache.TaxonomyWriterCache
 
 import java.nio.file.Path
 
-// TODO: break this out into db-level and collection-level for individual indexes and cleaner design
-case class LuceneIndexer(directory: Option[Path] = None) extends Indexer {
+trait LuceneIndexerSupport {
+  def indexer[D <: Document[D]](collection: Collection[D]): Indexer[D] = LuceneIndexer(collection)
+}
+
+case class LuceneIndexer[D <: Document[D]](collection: Collection[D]) extends Indexer[D] {
+  private lazy val directory: Option[Path] = collection.db.directory.map(_.resolve(collection.collectionName))
   private lazy val indexPath = directory.map(_.resolve("index"))
   private lazy val taxonomyPath = directory.map(_.resolve("taxonomy"))
   private lazy val indexDirectory = indexPath.map(FSDirectory.open).getOrElse(new ByteBuffersDirectory)
@@ -39,8 +44,8 @@ case class LuceneIndexer(directory: Option[Path] = None) extends Indexer {
     }
   }
 
-  override def put[D <: Document[D]](value: D, mapping: ObjectMapping[D]): IO[D] = IO {
-    val fieldIndexes: List[LuceneDoc => Unit] = mapping.fields.flatMap { f =>
+  override def put(value: D): IO[D] = IO {
+    val fieldIndexes: List[LuceneDoc => Unit] = collection.mapping.fields.flatMap { f =>
       f.features.collect {
         case indexFeature: IndexFeature => indexFeature match {
           case StringIndexed => (d: LuceneDoc) => {
@@ -63,13 +68,13 @@ case class LuceneIndexer(directory: Option[Path] = None) extends Indexer {
     value
   }
 
-  override def commit[D <: Document[D]](mapping: ObjectMapping[D]): IO[Unit] = IO {
+  override def commit(): IO[Unit] = IO {
     indexWriter.commit()
     taxonomyWriter.commit()
     searcherTaxonomyManager.maybeRefreshBlocking()
   }
 
-  override def delete[D <: Document[D]](id: Id[D], mapping: ObjectMapping[D]): IO[Unit] = IO {
+  override def delete(id: Id[D]): IO[Unit] = IO {
     indexWriter.deleteDocuments(new Term("_id", id.toString))
   }
 
@@ -77,7 +82,7 @@ case class LuceneIndexer(directory: Option[Path] = None) extends Indexer {
     i.searcher.getIndexReader.numDocs()
   }
 
-  override def search[D <: Document[D]](limit: Int): IO[PagedResults[D]] = withSearcherAndTaxonomy { i =>
+  override def search(limit: Int): IO[PagedResults[D]] = withSearcherAndTaxonomy { i =>
     val topDocs = i.searcher.search(new MatchAllDocsQuery, limit)
     PagedResults[D](0, limit, topDocs, i.searcher)
   }
