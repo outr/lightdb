@@ -21,6 +21,10 @@ libraryDependencies ++= Seq(
 	"org.typelevel" %% "cats-effect" % catsEffectVersion,
 	"com.outr" %% "fabric-parse" % fabricVersion,
 	"org.apache.lucene" % "lucene-core" % luceneVersion,
+	"org.apache.lucene" % "lucene-analyzers-common" % luceneVersion,
+	"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
+	"org.apache.lucene" % "lucene-facet" % luceneVersion,
+	"org.apache.lucene" % "lucene-highlighter" % luceneVersion,
 	"com.outr" %% "scribe" % scribeVersion,
 
 	"com.outr" %% "testy" % testyVersion % Test

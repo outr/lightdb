@@ -30,7 +30,7 @@ case class HaloStore(directory: String = "db/store", indexThreads: Int = 8) exte
     halo.size()
   }
 
-  override def flush(): IO[Unit] = IO.unit
+  override def commit(): IO[Unit] = IO.unit
 
   override def dispose(): IO[Unit] = IO(halo.close())
 }

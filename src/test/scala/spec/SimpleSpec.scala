@@ -9,10 +9,8 @@ import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
 import lightdb.index._
 import lightdb.store.HaloStore
-import org.apache.lucene.store.FSDirectory
 import testy.{AsyncSupport, Spec}
 
-import java.nio.file.Paths
 import scala.concurrent.Future
 
 class SimpleSpec extends Spec {
@@ -53,14 +51,42 @@ class SimpleSpec extends Spec {
         size should be(2)
       }
     }
-    "commit to index" async {
-      db.people.flush()
+    "flush data" async {
+      db.people.commit()
     }
     "verify exactly two objects in index" async {
       db.indexer.count().map { size =>
         size should be(2)
       }
     }
+    "delete John" async {
+      db.people.delete(id1)
+    }
+    "verify exactly one object in data" async {
+      db.store.count().map { size =>
+        size should be(1)
+      }
+    }
+    "commit data" async {
+      db.people.commit()
+    }
+    "verify exactly one object in index" async {
+      db.indexer.count().map { size =>
+        size should be(1)
+      }
+    }
+    "list all documents" async {
+      db.indexer.search[Person]().map { results =>
+        results.total should be(1)
+        val doc = results.documents.head
+        doc.id should be(id2)
+        doc(Person.name) should be("Jane Doe")
+        doc(Person.age) should be(19)
+      }
+    }
+    // TODO: replace an item
+    // TODO: search for an item
+    // TODO: support multiple item types (make sure queries don't return different types)
     "dispose" async {
       db.dispose()
     }

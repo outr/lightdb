@@ -35,8 +35,8 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D]) 
     ()
   }
 
-  def flush(): IO[Unit] = for {
-    _ <- data.flush()
+  def commit(): IO[Unit] = for {
+    _ <- data.commit()
     _ <- indexer.commit(mapping)
   } yield {
     ()

@@ -12,5 +12,7 @@ class NullIndexer extends Indexer {
 
   override def count(): IO[Long] = IO.pure(0L)
 
+  override def search[D <: Document[D]](limit: Int): IO[PagedResults[D]] = ???
+
   override def dispose(): IO[Unit] = IO.unit
 }
