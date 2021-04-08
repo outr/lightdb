@@ -8,8 +8,8 @@ import lightdb.store.ObjectStore
 class LightDB(val store: ObjectStore) {
   private var _collections = List.empty[Collection[_]]
 
-  def collection[T](mapping: ObjectMapping[T]): Collection[T] = synchronized {
-    val c = Collection[T](this, mapping)
+  def collection[D <: Document[D]](mapping: ObjectMapping[D]): Collection[D] = synchronized {
+    val c = Collection[D](this, mapping)
     _collections = _collections ::: List(c)
     c
   }
