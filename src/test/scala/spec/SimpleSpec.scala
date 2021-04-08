@@ -55,7 +55,7 @@ class SimpleSpec extends Spec {
       db.people.commit()
     }
     "verify exactly two objects in index" async {
-      db.indexer.count().map { size =>
+      db.people.indexer.count().map { size =>
         size should be(2)
       }
     }
@@ -71,12 +71,12 @@ class SimpleSpec extends Spec {
       db.people.commit()
     }
     "verify exactly one object in index" async {
-      db.indexer.count().map { size =>
+      db.people.indexer.count().map { size =>
         size should be(1)
       }
     }
     "list all documents" async {
-      db.indexer.search[Person]().map { results =>
+      db.people.indexer.search().map { results =>
         results.total should be(1)
         val doc = results.documents.head
         doc.id should be(id2)
@@ -101,7 +101,7 @@ class SimpleSpec extends Spec {
       db.people.commit()
     }
     "list all documents" async {
-      db.indexer.search[Person]().map { results =>
+      db.people.indexer.search().map { results =>
         results.total should be(1)
         val doc = results.documents.head
         doc.id should be(id2)
@@ -116,8 +116,8 @@ class SimpleSpec extends Spec {
     }
   }
 
-  object db extends LightDB(HaloStore(), LuceneIndexer()) {
-    val people: Collection[Person] = collection(Person)
+  object db extends LightDB(None, HaloStore()) with LuceneIndexerSupport {
+    val people: Collection[Person] = collection("people", Person)
   }
 
   case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
