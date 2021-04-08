@@ -12,5 +12,7 @@ trait Indexer {
 
   def count(): IO[Long]
 
+  def search[D <: Document[D]](limit: Int = 1000): IO[PagedResults[D]]
+
   def dispose(): IO[Unit]
 }
