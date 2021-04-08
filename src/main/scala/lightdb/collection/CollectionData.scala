@@ -25,4 +25,6 @@ case class CollectionData[D <: Document[D]](collection: Collection[D]) {
   }
 
   def delete(id: Id[D]): IO[Unit] = db.store.delete(id)
+
+  def flush(): IO[Unit] = db.store.flush()
 }

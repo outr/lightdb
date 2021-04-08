@@ -26,4 +26,6 @@ trait ObjectStore {
   }
 
   def count(): IO[Long]
+
+  def flush(): IO[Unit]
 }
