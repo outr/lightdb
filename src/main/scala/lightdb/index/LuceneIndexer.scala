@@ -1,40 +1,54 @@
 package lightdb.index
 
 import cats.effect.IO
-import lightdb.{Document, Id, ObjectMapping}
+import lightdb.{Document, Id, IndexFeature, IntIndexed, ObjectMapping, StringIndexed}
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.index._
 import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery}
 import org.apache.lucene.store.{ByteBuffersDirectory, Directory}
 import org.apache.lucene.document.{StoredField, StringField, Document => LuceneDoc, Field => LuceneField}
 
-case class LuceneIndexer[D <: Document[D]](mapping: ObjectMapping[D], directory: Directory = new ByteBuffersDirectory) extends Indexer[D] {
+case class LuceneIndexer(directory: Directory = new ByteBuffersDirectory) extends Indexer {
   private lazy val analyzer = new StandardAnalyzer
   private lazy val config = new IndexWriterConfig(analyzer)
   private lazy val writer = new IndexWriter(directory, config)
   private lazy val reader: DirectoryReader = DirectoryReader.open(writer)
   private lazy val searcher: IndexSearcher = new IndexSearcher(reader)
 
-  override def put(value: D): IO[D] = IO {
-    val doc = new LuceneDoc
-    doc.add(new StringField("_id", value._id.toString, LuceneField.Store.YES))
-    mapping.fields.foreach { f =>
-      f.features.foreach {
-        case lif: LuceneIndexFeature[D] => lif.index(f.name, value, doc)
-        case _ => // Ignore
+  override def put[D <: Document[D]](value: D, mapping: ObjectMapping[D]): IO[D] = IO {
+    val fieldIndexes: List[LuceneDoc => Unit] = mapping.fields.flatMap { f =>
+      f.features.collect {
+        case indexFeature: IndexFeature => indexFeature match {
+          case StringIndexed => (d: LuceneDoc) => {
+            d.add(new StringField(f.name, f.getter(value).asInstanceOf[String], LuceneField.Store.YES))
+          }
+          case IntIndexed => (d: LuceneDoc) => {
+            d.add(new StoredField(f.name, f.getter(value).asInstanceOf[Int]))
+          }
+        }
       }
     }
-    writer.updateDocument(new Term("_id", value._id.toString), doc)
-    writer.commit()
+    if (fieldIndexes.nonEmpty) {
+      val doc = new LuceneDoc
+      doc.add(new StringField("_id", value._id.toString, LuceneField.Store.YES))
+      fieldIndexes.foreach { fi =>
+        fi(doc)
+      }
+      writer.updateDocument(new Term("_id", value._id.toString), doc)
+    }
     value
   }
 
-  override def delete(id: Id[D]): IO[Unit] = IO {
+  override def commit[D <: Document[D]](mapping: ObjectMapping[D]): IO[Unit] = IO {
+    writer.commit()
+  }
+
+  override def delete[D <: Document[D]](id: Id[D], mapping: ObjectMapping[D]): IO[Unit] = IO {
     writer.deleteDocuments(new Term("_id", id.toString))
   }
 
-  override def flush(): IO[Unit] = IO {
-    writer.flush()
+  override def count(): IO[Long] = IO {
+    reader.numDocs()
   }
 
   override def dispose(): IO[Unit] = IO {
@@ -53,17 +67,6 @@ case class LuceneIndexer[D <: Document[D]](mapping: ObjectMapping[D], directory:
       val name = doc.getField("name").stringValue()
       val age = doc.getField("age").numericValue().intValue()
       scribe.info(s"ID: $id, Name: $name, Age: $age")
-    }
-  }
-
-  def string(f: D => String): LuceneIndexFeature[D] = feature(f, (name: String, value: String) =>
-    new StringField(name, value, LuceneField.Store.YES))
-
-  def int(f: D => Int): LuceneIndexFeature[D] = feature(f, (name: String, value: Int) => new StoredField(name, value))
-
-  def feature[F](f: D => F, lf: (String, F) => IndexableField): LuceneIndexFeature[D] = new LuceneIndexFeature[D] {
-    override def index(name: String, value: D, document: LuceneDoc): Unit = {
-      document.add(lf(name, f(value)))
     }
   }
 }

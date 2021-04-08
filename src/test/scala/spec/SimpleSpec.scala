@@ -7,7 +7,7 @@ import lightdb.collection.Collection
 import lightdb.{Document, Id, LightDB, ObjectMapping}
 import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
-import lightdb.index.LuceneIndexer
+import lightdb.index._
 import lightdb.store.HaloStore
 import org.apache.lucene.store.FSDirectory
 import testy.{AsyncSupport, Spec}
@@ -53,12 +53,20 @@ class SimpleSpec extends Spec {
         size should be(2)
       }
     }
+    "commit to index" async {
+      db.people.flush()
+    }
+    "verify exactly two objects in index" async {
+      db.indexer.count().map { size =>
+        size should be(2)
+      }
+    }
     "dispose" async {
       db.dispose()
     }
   }
 
-  object db extends LightDB(new HaloStore) {
+  object db extends LightDB(HaloStore(), LuceneIndexer()) {
     val people: Collection[Person] = collection(Person)
   }
 
@@ -67,13 +75,10 @@ class SimpleSpec extends Spec {
   object Person extends ObjectMapping[Person] {
     implicit val rw: ReaderWriter[Person] = ccRW
 
-    override def collectionName: String = "people"
-
     lazy val dataManager: DataManager[Person] = new JsonDataManager[Person]
-    lazy val indexer: LuceneIndexer[Person] = new LuceneIndexer[Person](this, FSDirectory.open(Paths.get("db/index")))
 
-    lazy val name: Field[Person, String] = field[String]("name", indexer.string(_.name))
-    lazy val age: Field[Person, Int] = field[Int]("age", indexer.int(_.age))
+    lazy val name: Field[Person, String] = field[String]("name", _.name).indexed
+    lazy val age: Field[Person, Int] = field[Int]("age", _.age).indexed
 
     override lazy val fields: List[Field[Person, _]] = List(name, age)
   }

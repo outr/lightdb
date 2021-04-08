@@ -6,8 +6,7 @@ import lightdb.Id
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class HaloStore(directory: String = "db/store",
-                indexThreads: Int = 8) extends ObjectStore {
+case class HaloStore(directory: String = "db/store", indexThreads: Int = 8) extends ObjectStore {
   private val halo = {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
@@ -30,6 +29,8 @@ class HaloStore(directory: String = "db/store",
   override def count(): IO[Long] = IO {
     halo.size()
   }
+
+  override def flush(): IO[Unit] = IO.unit
 
   override def dispose(): IO[Unit] = IO(halo.close())
 }
