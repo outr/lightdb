@@ -1,8 +1,13 @@
 package lightdb.store
 
 import cats.effect.IO
-import lightdb.Id
+import lightdb.collection.Collection
+import lightdb.{Document, Id}
 import lightdb.util.ObjectLock
+
+trait ObjectStoreSupport {
+  def store[D <: Document[D]](collection: Collection[D]): ObjectStore
+}
 
 trait ObjectStore {
   def get[T](id: Id[T]): IO[Option[Array[Byte]]]

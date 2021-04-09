@@ -8,9 +8,10 @@ import lightdb.{Document, Id, LightDB, ObjectMapping}
 import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
 import lightdb.index._
-import lightdb.store.HaloStore
+import lightdb.store.{HaloStore, MultiHaloSupport, SharedHaloSupport}
 import testy.{AsyncSupport, Spec}
 
+import java.nio.file.Paths
 import scala.concurrent.Future
 
 class SimpleSpec extends Spec {
@@ -47,7 +48,7 @@ class SimpleSpec extends Spec {
       }
     }
     "verify exactly two objects in data" async {
-      db.store.count().map { size =>
+      db.people.store.count().map { size =>
         size should be(2)
       }
     }
@@ -63,7 +64,7 @@ class SimpleSpec extends Spec {
       db.people.delete(id1)
     }
     "verify exactly one object in data" async {
-      db.store.count().map { size =>
+      db.people.store.count().map { size =>
         size should be(1)
       }
     }
@@ -116,7 +117,7 @@ class SimpleSpec extends Spec {
     }
   }
 
-  object db extends LightDB(None, HaloStore()) with LuceneIndexerSupport {
+  object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with SharedHaloSupport {
     val people: Collection[Person] = collection("people", Person)
   }
 
