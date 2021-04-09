@@ -1,5 +1,4 @@
 .idea/
 .bsp/
 target/
-/testdb/
-/db/
+testdb/
