@@ -9,10 +9,10 @@ import lightdb.store.ObjectStore
 
 import java.nio.file.Path
 
-// TODO: extract ObjectStore to each collection?
-abstract class LightDB(val directory: Option[Path], val store: ObjectStore) {
+abstract class LightDB(val directory: Option[Path]) {
   private var _collections = List.empty[Collection[_]]
 
+  def store[D <: Document[D]](collection: Collection[D]): ObjectStore
   def indexer[D <: Document[D]](collection: Collection[D]): Indexer[D]
 
   def collection[D <: Document[D]](name: String, mapping: ObjectMapping[D]): Collection[D] = synchronized {
@@ -21,10 +21,5 @@ abstract class LightDB(val directory: Option[Path], val store: ObjectStore) {
     c
   }
 
-  def dispose(): IO[Unit] = for {
-    _ <- _collections.map(_.dispose()).parSequence
-    _ <- store.dispose()
-  } yield {
-    ()
-  }
+  def dispose(): IO[Unit] = _collections.map(_.dispose()).parSequence.map(_ => ())
 }
