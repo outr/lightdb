@@ -3,6 +3,7 @@ package lightdb.collection
 import cats.effect.IO
 import lightdb.data.DataManager
 import lightdb.index.Indexer
+import lightdb.query.Query
 import lightdb.store.ObjectStore
 import lightdb.{Document, Id, LightDB, ObjectMapping}
 
@@ -11,6 +12,7 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
 
   lazy val store: ObjectStore = db.store[D](this)
   lazy val indexer: Indexer[D] = db.indexer(this)
+  lazy val query: Query[D] = Query[D](this)
 
   def get(id: Id[D]): IO[Option[D]] = data.get(id)
 
