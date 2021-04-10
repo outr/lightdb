@@ -8,6 +8,7 @@ import lightdb.{Document, Id, LightDB, ObjectMapping}
 import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
 import lightdb.index._
+import lightdb.index.lucene.LuceneIndexerSupport
 import lightdb.query._
 import lightdb.store.{HaloStore, MultiHaloSupport, SharedHaloSupport}
 import testy.{AsyncSupport, Spec}
