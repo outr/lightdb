@@ -1,6 +1,6 @@
 package spec
 
-import cats.effect.IO
+import cats.effect.{IO, Unique}
 import cats.effect.unsafe.IORuntime
 import fabric.rw.{ReaderWriter, ccRW}
 import lightdb.collection.Collection
@@ -8,6 +8,7 @@ import lightdb.{Document, Id, LightDB, ObjectMapping}
 import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
 import lightdb.index._
+import lightdb.query._
 import lightdb.store.{HaloStore, MultiHaloSupport, SharedHaloSupport}
 import testy.{AsyncSupport, Spec}
 
@@ -77,15 +78,29 @@ class SimpleSpec extends Spec {
       }
     }
     "list all documents" async {
-      db.people.indexer.search().map { results =>
+      db.people.query.search().flatMap { results =>
         results.total should be(1)
         val doc = results.documents.head
         doc.id should be(id2)
         doc(Person.name) should be("Jane Doe")
         doc(Person.age) should be(19)
+        doc.get().map { person =>
+          person._id should be(id2)
+          person.name should be("Jane Doe")
+          person.age should be(19)
+        }
       }
     }
-    // TODO: search for an item
+//    "search by name for positive result" async {
+//      db.people.query.filter(Person.name === "Jane Doe").search().map { results =>
+//        results.total should be(1)
+//        val doc = results.documents.head
+//        doc.id should be(id2)
+//        doc(Person.name) should be("Jane Doe")
+//        doc(Person.age) should be(19)
+//      }
+//    }
+    // TODO: search for an item by name and by age range
     "replace Jane Doe" async {
       db.people.put(Person("Jan Doe", 20, id2)).map { p =>
         p._id should be(id2)
@@ -101,15 +116,15 @@ class SimpleSpec extends Spec {
     "commit data" async {
       db.people.commit()
     }
-    "list all documents" async {
-      db.people.indexer.search().map { results =>
-        results.total should be(1)
-        val doc = results.documents.head
-        doc.id should be(id2)
-        doc(Person.name) should be("Jan Doe")
-        doc(Person.age) should be(20)
-      }
-    }
+//    "list all documents" async {
+//      db.people.indexer.search().map { results =>
+//        results.total should be(1)
+//        val doc = results.documents.head
+//        doc.id should be(id2)
+//        doc(Person.name) should be("Jan Doe")
+//        doc(Person.age) should be(20)
+//      }
+//    }
     // TODO: support multiple item types (make sure queries don't return different types)
     // TODO: test batch operations: insert, replace, and delete
     "dispose" async {

@@ -2,6 +2,7 @@ package lightdb.index
 
 import cats.effect.IO
 import lightdb.collection.Collection
+import lightdb.query.Query
 import lightdb.{Document, Id}
 
 case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Indexer[D] {
@@ -13,7 +14,7 @@ case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Inde
 
   override def count(): IO[Long] = IO.pure(0L)
 
-  override def search(limit: Int): IO[PagedResults[D]] = ???
+  override def search(query: Query[D]): IO[PagedResults[D]] = ???
 
   override def dispose(): IO[Unit] = IO.unit
 }

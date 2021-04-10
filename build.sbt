@@ -16,6 +16,8 @@ val scribeVersion: String = "3.5.1"
 
 val testyVersion: String = "1.0.2-SNAPSHOT"
 
+Test / parallelExecution := false
+
 libraryDependencies ++= Seq(
 	"com.oath.halodb" % "halodb" % haloDBVersion,
 	"org.typelevel" %% "cats-effect" % catsEffectVersion,
