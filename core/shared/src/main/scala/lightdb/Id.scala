@@ -1,5 +1,6 @@
 package lightdb
 
+import fabric._
 import fabric.rw._
 
 class Id[T](val value: String) extends AnyVal {
@@ -9,7 +10,7 @@ class Id[T](val value: String) extends AnyVal {
 }
 
 object Id {
-  private lazy val _rw: ReaderWriter[Id[_]] = ccRW
+  private lazy val _rw: ReaderWriter[Id[_]] = ReaderWriter[Id[_]](id => str(id.value), v => Id(v.asStr.value))
 
   implicit def rw[T]: ReaderWriter[Id[T]] = _rw.asInstanceOf[ReaderWriter[Id[T]]]
 

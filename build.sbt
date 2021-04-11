@@ -114,6 +114,7 @@ lazy val halo = project.in(file("halo"))
 			"com.oath.halodb" % "halodb" % haloDBVersion,
 			"com.outr" %% "testy" % testyVersion % Test
 		),
+		fork := true,
 		crossScalaVersions := scalaJVMVersions,
 		testFrameworks += new TestFramework("munit.Framework")
 	)
@@ -125,6 +126,7 @@ lazy val all = project.in(file("all"))
 		libraryDependencies ++= Seq(
 			"com.outr" %% "testy" % testyVersion % Test
 		),
+		fork := true,
 		crossScalaVersions := scalaJVMVersions,
 		testFrameworks += new TestFramework("munit.Framework")
 	)
