@@ -9,7 +9,7 @@ import lightdb.{Document, Id, LightDB}
 import java.nio.file.{Path, Paths}
 import scala.concurrent.{ExecutionContext, Future}
 
-case class HaloStore(directory: Path, indexThreads: Int = 8) extends ObjectStore {
+case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore {
   private val halo = {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
