@@ -2,7 +2,8 @@ package lightdb.index
 
 import cats.effect.IO
 import lightdb.collection.Collection
-import lightdb.query.Query
+import lightdb.field.Field
+import lightdb.query.{PagedResults, Query}
 import lightdb.{Document, Id, ObjectMapping}
 
 trait Indexer[D <: Document[D]] {
