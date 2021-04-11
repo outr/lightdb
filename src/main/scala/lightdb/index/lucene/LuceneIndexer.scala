@@ -36,7 +36,11 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
   override def put(value: D): IO[D] = if (fields.nonEmpty) {
     IO {
       val fieldsAndValues = fields.map(_.fieldAndValue(value))
-      lucene.doc().fields(fieldsAndValues: _*).index()
+      lucene
+        .doc()
+        .update(parse(s"_id:${value._id.value}"))
+        .fields(fieldsAndValues: _*)
+        .index()
       value
     }
   } else {
