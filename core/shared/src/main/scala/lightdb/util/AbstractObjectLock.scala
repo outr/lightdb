@@ -5,23 +5,9 @@ import cats.effect.{IO, Resource}
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-object ObjectLock {
-  private val map = new ConcurrentHashMap[Any, List[ReleasableLock => Unit]]
-
-  def isEmpty: Boolean = map.isEmpty
-
-  def apply[Key](key: Key, f: ReleasableLock => Unit): Unit = {
-    var trigger = false
-    map.compute(key, (_, q) => {
-      val existingQueue = Option(q).getOrElse(Nil)
-      trigger = existingQueue.isEmpty
-      val queue = existingQueue ::: List(f)
-      queue
-    })
-    if (trigger) {
-      triggerNext(key)
-    }
-  }
+trait AbstractObjectLock {
+  def isEmpty: Boolean
+  def apply[Key](key: Key, f: ReleasableLock => Unit): Unit
 
   def future[Key, Return](key: Key)(f: => Future[Return])(implicit ec: ExecutionContext): Future[Return] = {
     val promise = Promise[Return]()
@@ -45,25 +31,7 @@ object ObjectLock {
     _ <- Resource.make(IO.unit)(_ => IO(lock.release()))
   } yield ()
 
-  private def triggerNext[Key](key: Key): Unit = {
-    map.compute(key, (_, q) => {
-      val queue = Option(q).getOrElse(Nil)
-      if (queue.nonEmpty) {
-        val task = queue.head
-        val lock = new Lock(key)
-        task(lock)
-
-        val updatedQueue = queue.tail
-        if (updatedQueue.isEmpty) {
-          None.orNull
-        } else {
-          updatedQueue
-        }
-      } else {
-        None.orNull
-      }
-    })
-  }
+  protected def triggerNext[Key](key: Key): Unit
 
   trait ReleasableLock {
     def release(): Unit
