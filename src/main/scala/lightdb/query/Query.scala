@@ -4,7 +4,6 @@ import cats.effect.IO
 import lightdb.Document
 import lightdb.collection.Collection
 import lightdb.field.Field
-import lightdb.index.PagedResults
 
 case class Query[D <: Document[D]](collection: Collection[D],
                                    filters: List[Filter] = Nil,

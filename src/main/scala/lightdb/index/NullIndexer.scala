@@ -2,7 +2,7 @@ package lightdb.index
 
 import cats.effect.IO
 import lightdb.collection.Collection
-import lightdb.query.Query
+import lightdb.query.{PagedResults, Query}
 import lightdb.{Document, Id}
 
 case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Indexer[D] {
