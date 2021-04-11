@@ -1,8 +1,9 @@
-package lightdb.store
+package lightdb.store.halo
 
 import cats.effect.IO
 import com.oath.halodb.{HaloDB, HaloDBOptions}
 import lightdb.collection.Collection
+import lightdb.store.ObjectStore
 import lightdb.{Document, Id, LightDB}
 
 import java.nio.file.{Path, Paths}

@@ -24,7 +24,7 @@ object ObjectLock {
   }
 
   def future[Key, Return](key: Key)(f: => Future[Return])(implicit ec: ExecutionContext): Future[Return] = {
-    val promise = Promise[Return]
+    val promise = Promise[Return]()
     apply(key, (lock: ReleasableLock) => {
       f.onComplete { result =>
         promise.complete(result)

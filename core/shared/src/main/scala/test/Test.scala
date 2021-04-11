@@ -3,35 +3,20 @@
 //import cats.effect._
 //import fabric.rw._
 //import lightdb.data.JsonDataManager
-//import lightdb.{Id, LightDB, index}
+//import lightdb.{Document, Id, LightDB, index}
 //import lightdb.data.stored._
-//import lightdb.index.{Indexable, LuceneIndex}
-//import lightdb.store.HaloStore
-//import org.apache.lucene.document.{Document, StringField, Field => LuceneField}
+//import lightdb.index.lucene.LuceneIndexerSupport
+//import lightdb.store.{HaloStore, SharedHaloSupport}
 //
 //object Test extends IOApp {
 //  override def run(args: List[String]): IO[ExitCode] = {
 ////    stored()
-////    json()
-//    indexing()
-//  }
-//
-//  private def indexing(): IO[ExitCode] = {
-//    object ndx extends LuceneIndex[Person]() {
-//      val name = field[String]("name", _.name)(StringIndexable)
-//    }
-//
-//    for {
-//      _ <- ndx.index(Id("people", "indexing-example1"), Person("Test Indexing", 123))
-//      _ <- ndx.flush()
-//    } yield {
-//      ExitCode.Success
-//    }
+//    json()
 //  }
 //
 //  private def json(): IO[ExitCode] = {
 //    val dataManager = new JsonDataManager[Person]
-//    val db = new LightDB(new HaloStore)
+//    val db = new LightDB(None) with SharedHaloSupport with LuceneIndexerSupport
 //    val collection = db.collection[Person](dataManager)
 //    val io: IO[Option[Person]] = collection.modify(Id[Person]("person", "test2")) {
 //      case Some(p) => {
@@ -79,13 +64,9 @@
 //      ExitCode.Success
 //    }
 //  }
-//
-//  object StringIndexable extends Indexable[String] {
-//    override def index[T](doc: Document, name: String, value: String): Unit = doc.add(new StringField(name, value, LuceneField.Store.YES))
-//  }
 //}
 //
-//case class Person(name: String, age: Int)
+//case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
 //
 //object Person {
 //  implicit val rw: ReaderWriter[Person] = ccRW

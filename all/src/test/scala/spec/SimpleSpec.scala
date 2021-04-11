@@ -4,12 +4,12 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fabric.rw.{ReaderWriter, ccRW}
 import lightdb.collection.Collection
-import lightdb.{Document, Id, LightDB, ObjectMapping}
 import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
 import lightdb.index.lucene._
-import lightdb.store.SharedHaloSupport
 import lightdb.query._
+import lightdb.store.halo.SharedHaloSupport
+import lightdb.{Document, Id, LightDB, ObjectMapping}
 import testy.{AsyncSupport, Spec}
 
 import java.nio.file.Paths

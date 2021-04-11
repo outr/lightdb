@@ -1,6 +1,7 @@
-package lightdb.store
+package lightdb.store.halo
 
 import lightdb.collection.Collection
+import lightdb.store.{ObjectStore, ObjectStoreSupport}
 import lightdb.{Document, LightDB}
 
 import java.nio.file.Paths
