@@ -3,7 +3,6 @@ package lightdb.query
 import cats.effect.IO
 import lightdb.Document
 import lightdb.collection.Collection
-import lightdb.field.Field
 
 case class Query[D <: Document[D]](collection: Collection[D],
                                    filters: List[Filter] = Nil,
@@ -16,12 +15,3 @@ case class Query[D <: Document[D]](collection: Collection[D],
   def scoreDocs(b: Boolean = true): Query[D] = copy(scoreDocs = b)
   def search(): IO[PagedResults[D]] = collection.indexer.search(this)
 }
-
-sealed trait Filter
-
-object Filter {
-  case class Equals[T, F](field: Field[T, F], value: F) extends Filter
-  case class NotEquals[T, F](field: Field[T, F], value: F) extends Filter
-}
-
-sealed trait Sort

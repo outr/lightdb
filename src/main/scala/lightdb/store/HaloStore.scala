@@ -36,20 +36,3 @@ case class HaloStore(directory: Path, indexThreads: Int = 8) extends ObjectStore
 
   override def dispose(): IO[Unit] = IO(halo.close())
 }
-
-trait MultiHaloSupport extends ObjectStoreSupport {
-  private val defaultPath: Path = Paths.get("db")
-
-  override def store[D <: Document[D]](collection: Collection[D]): ObjectStore = {
-    val baseDir = collection.db.directory.getOrElse(defaultPath)
-    HaloStore(baseDir.resolve(collection.collectionName).resolve("store"))
-  }
-}
-
-trait SharedHaloSupport extends ObjectStoreSupport {
-  this: LightDB =>
-
-  private lazy val shared: HaloStore = new HaloStore(directory.getOrElse(Paths.get("db")).resolve("store"))
-
-  override def store[D <: Document[D]](collection: Collection[D]): ObjectStore = shared
-}
