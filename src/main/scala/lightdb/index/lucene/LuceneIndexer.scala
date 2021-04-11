@@ -4,11 +4,10 @@ import cats.effect.IO
 import com.outr.lucene4s._
 import com.outr.lucene4s.field.value.FieldAndValue
 import com.outr.lucene4s.field.{Field => LuceneField}
-import com.outr.lucene4s.query.SearchResult
 import lightdb.collection.Collection
 import lightdb.field.Field
 import lightdb.index.Indexer
-import lightdb.query.{PagedResults, Query, ResultDoc}
+import lightdb.query.{PagedResults, Query}
 import lightdb.{Document, Id}
 
 case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit: Boolean = false) extends Indexer[D] {
@@ -62,23 +61,5 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
 
   case class IndexedField[F](luceneField: LuceneField[F], field: Field[D, F]) {
     def fieldAndValue(value: D): FieldAndValue[F] = luceneField(field.getter(value))
-  }
-}
-
-case class LucenePagedResults[D <: Document[D]](indexer: LuceneIndexer[D],
-                                                query: Query[D],
-                                                lpr: com.outr.lucene4s.query.PagedResults[SearchResult]) extends PagedResults[D] {
-  override def total: Long = lpr.total
-
-  override def documents: List[ResultDoc[D]] = lpr.entries.toList.map(r => LuceneResultDoc(this, r))
-}
-
-case class LuceneResultDoc[D <: Document[D]](results: LucenePagedResults[D], result: SearchResult) extends ResultDoc[D] {
-  override lazy val id: Id[D] = result(results.indexer.id.luceneField)
-  override def get(): IO[D] = results.query.collection(id)
-
-  override def apply[F](field: Field[D, F]): F = {
-    val indexedField = results.indexer.fields.find(_.field.name == field.name).getOrElse(throw new RuntimeException(s"Unable to find indexed field for: ${field.name}"))
-    result(indexedField.luceneField).asInstanceOf[F]
   }
 }
