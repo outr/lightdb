@@ -5,5 +5,7 @@ import lightdb.collection.Collection
 import lightdb.index.Indexer
 
 trait LuceneIndexerSupport {
-  def indexer[D <: Document[D]](collection: Collection[D]): Indexer[D] = LuceneIndexer(collection)
+  protected def autoCommit: Boolean = false
+
+  def indexer[D <: Document[D]](collection: Collection[D]): Indexer[D] = LuceneIndexer(collection, autoCommit)
 }

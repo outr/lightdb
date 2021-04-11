@@ -1,16 +1,14 @@
 package spec
 
-import cats.effect.{IO, Unique}
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import fabric.rw.{ReaderWriter, ccRW}
 import lightdb.collection.Collection
 import lightdb.{Document, Id, LightDB, ObjectMapping}
 import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
-import lightdb.index._
-import lightdb.index.lucene.LuceneIndexerSupport
-import lightdb.query._
-import lightdb.store.{HaloStore, MultiHaloSupport, SharedHaloSupport}
+import lightdb.index.lucene._
+import lightdb.store.SharedHaloSupport
 import testy.{AsyncSupport, Spec}
 
 import java.nio.file.Paths
@@ -134,6 +132,8 @@ class SimpleSpec extends Spec {
   }
 
   object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with SharedHaloSupport {
+    override protected def autoCommit: Boolean = true
+
     val people: Collection[Person] = collection("people", Person)
   }
 
@@ -144,8 +144,8 @@ class SimpleSpec extends Spec {
 
     lazy val dataManager: DataManager[Person] = new JsonDataManager[Person]
 
-    lazy val name: Field[Person, String] = field[String]("name", _.name).indexed
-    lazy val age: Field[Person, Int] = field[Int]("age", _.age).indexed
+    lazy val name: Field[Person, String] = field[String]("name", _.name).indexed()
+    lazy val age: Field[Person, Int] = field[Int]("age", _.age).indexed()
 
     override lazy val fields: List[Field[Person, _]] = List(name, age)
   }

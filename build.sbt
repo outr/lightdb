@@ -11,7 +11,7 @@ fork := true
 val haloDBVersion: String = "0.5.3"
 val catsEffectVersion: String = "3.0.1"
 val fabricVersion: String = "1.0.2"
-val lucene4sVersion: String = "1.10.0"
+val lucene4sVersion: String = "1.10.1-SNAPSHOT"
 val scribeVersion: String = "3.5.1"
 
 val testyVersion: String = "1.0.2-SNAPSHOT"
