@@ -43,7 +43,7 @@ ThisBuild / developers := List(
 
 val collectionCompatVersion: String = "2.4.3"
 val haloDBVersion: String = "0.5.3"
-val catsEffectVersion: String = "3.0.1"
+val catsEffectVersion: String = "3.0.2"
 val fabricVersion: String = "1.0.3"
 val lucene4sVersion: String = "1.11.0"
 val scribeVersion: String = "3.5.1"
