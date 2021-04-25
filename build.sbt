@@ -48,7 +48,7 @@ val fabricVersion: String = "1.0.3"
 val lucene4sVersion: String = "1.11.0"
 val scribeVersion: String = "3.5.1"
 
-val testyVersion: String = "1.0.2"
+val testyVersion: String = "1.0.3"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.js, core.jvm, lucene, halo, all)
