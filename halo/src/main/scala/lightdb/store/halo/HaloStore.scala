@@ -1,7 +1,6 @@
 package lightdb.store.halo
 
 import cats.effect.IO
-import cats.effect.kernel._
 import fs2.Stream
 import com.oath.halodb.{HaloDB, HaloDBOptions}
 import lightdb.store.ObjectStore
@@ -18,9 +17,8 @@ case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
 
-  override def all[T](chunkSize: Int = 512)(implicit F: Sync[IO]): Stream[IO, (Id[T], Array[Byte])] = Stream
-    .fromBlockingIterator
-    .apply(halo.newIterator().asScala, chunkSize)
+  override def all[T](chunkSize: Int = 512): Stream[IO, (Id[T], Array[Byte])] = Stream
+    .fromBlockingIterator[IO](halo.newIterator().asScala, chunkSize)
     .map(r => Id[T](new String(r.getKey, "UTF-8")) -> r.getValue)
 
   override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO {
