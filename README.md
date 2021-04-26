@@ -14,7 +14,7 @@ First working release with minimal functionality in `0.1.0`
     - [ ] Verify data identical between store and index
     - [ ] Rebuild index from store
 
-## 0.3 TODO
+## 1.0 TODO
 - [ ] Complete Lucene type support
 - [ ] Create benchmark tool to evaluate performance of basic operations to see how well this performs
 - [ ] Create an SBT plugin to update base traits for case classes (ex. Person would generate PersonFields trait to be mixed into Person companion)
