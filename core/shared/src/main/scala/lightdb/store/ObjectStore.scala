@@ -29,7 +29,7 @@ trait ObjectStore {
 
   def count(): IO[Long]
 
-  def all[T](chunkSize: Int = 512)(implicit F: Sync[IO]): Stream[IO, (Id[T], Array[Byte])]
+  def all[T](chunkSize: Int = 512): Stream[IO, (Id[T], Array[Byte])]
 
   def commit(): IO[Unit]
 }
