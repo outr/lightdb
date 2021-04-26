@@ -61,6 +61,15 @@ class SimpleSpec extends Spec {
         size should be(2)
       }
     }
+    "verify exactly two objects in the store" async {
+      db.people.store.all[Person]()
+        .compile
+        .toList
+        .map(_.map(_._1))
+        .map { ids =>
+          ids.toSet should be(Set(id1, id2))
+        }
+    }
     "delete John" async {
       db.people.delete(id1)
     }

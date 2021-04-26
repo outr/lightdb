@@ -1,10 +1,18 @@
 package lightdb.store
 
 import cats.effect.IO
+import cats.effect.kernel.Sync
 import lightdb.Id
 
 class MapStore extends ObjectStore {
   private var map = Map.empty[Id[_], Array[Byte]]
+
+  override def all[T](chunkSize: Int = 512)(implicit F: Sync[IO]): fs2.Stream[IO, (Id[T], Array[Byte])] = fs2.Stream
+    .fromBlockingIterator
+    .apply(map.iterator, chunkSize)
+    .map {
+      case (id, value) => id.asInstanceOf[Id[T]] -> value
+    }
 
   override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO.pure(map.get(id))
 
