@@ -19,7 +19,7 @@ val developerURL: String = "http://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.1.0"
+ThisBuild / version := "0.2.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
 ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
@@ -43,9 +43,10 @@ ThisBuild / developers := List(
 
 val collectionCompatVersion: String = "2.4.3"
 val haloDBVersion: String = "0.5.3"
-val catsEffectVersion: String = "3.0.2"
+val catsEffectVersion: String = "3.1.0"
 val fabricVersion: String = "1.0.4"
 val lucene4sVersion: String = "1.11.0"
+val fs2Version: String = "3.0.2"
 val scribeVersion: String = "3.5.1"
 
 val testyVersion: String = "1.0.3"
@@ -66,6 +67,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 			"com.outr" %%% "scribe" % scribeVersion,
 			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
 			"com.outr" %%% "fabric-parse" % fabricVersion,
+			"co.fs2" %%% "fs2-core" % fs2Version,
 			"com.outr" %%% "testy" % testyVersion % Test
 		),
 		testFrameworks += new TestFramework("munit.Framework"),

@@ -1,13 +1,14 @@
 package lightdb.store.halo
 
 import cats.effect.IO
+import cats.effect.kernel._
+import fs2.Stream
 import com.oath.halodb.{HaloDB, HaloDBOptions}
-import lightdb.collection.Collection
 import lightdb.store.ObjectStore
-import lightdb.{Document, Id, LightDB}
+import lightdb.Id
 
-import java.nio.file.{Path, Paths}
-import scala.concurrent.{ExecutionContext, Future}
+import java.nio.file.Path
+import scala.jdk.CollectionConverters._
 
 case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore {
   private val halo = {
@@ -17,7 +18,13 @@ case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
 
+  override def all[T](chunkSize: Int = 512)(implicit F: Sync[IO]): Stream[IO, (Id[T], Array[Byte])] = Stream
+    .fromBlockingIterator
+    .apply(halo.newIterator().asScala, chunkSize)
+    .map(r => Id[T](new String(r.getKey, "UTF-8")) -> r.getValue)
+
   override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO {
+    halo.newIterator()
     Option(halo.get(id.bytes))
   }
 
