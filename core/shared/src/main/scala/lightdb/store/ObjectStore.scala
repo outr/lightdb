@@ -1,8 +1,9 @@
 package lightdb.store
 
 import cats.effect.IO
-import lightdb.collection.Collection
-import lightdb.{Document, Id}
+import cats.effect.kernel.Sync
+import fs2.Stream
+import lightdb.Id
 import lightdb.util.ObjectLock
 
 trait ObjectStore {
@@ -27,6 +28,8 @@ trait ObjectStore {
   }
 
   def count(): IO[Long]
+
+  def all[T](chunkSize: Int = 512)(implicit F: Sync[IO]): Stream[IO, (Id[T], Array[Byte])]
 
   def commit(): IO[Unit]
 }
