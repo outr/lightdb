@@ -70,6 +70,15 @@ class SimpleSpec extends Spec {
           ids.toSet should be(Set(id1, id2))
         }
     }
+    "search by name for positive result" async {
+      db.people.query.filter(Person.name === "Jane Doe").search().map { results =>
+        results.total should be(1)
+        val doc = results.documents.head
+        doc.id should be(id2)
+        doc(Person.name) should be("Jane Doe")
+        doc(Person.age) should be(19)
+      }
+    }
     "delete John" async {
       db.people.delete(id1)
     }
@@ -98,15 +107,6 @@ class SimpleSpec extends Spec {
           person.name should be("Jane Doe")
           person.age should be(19)
         }
-      }
-    }
-    "search by name for positive result" async {
-      db.people.query.filter(Person.name === "Jane Doe").search().map { results =>
-        results.total should be(1)
-        val doc = results.documents.head
-        doc.id should be(id2)
-        doc(Person.name) should be("Jane Doe")
-        doc(Person.age) should be(19)
       }
     }
     // TODO: search for an item by name and by age range
