@@ -4,10 +4,11 @@ import cats.effect.IO
 import com.outr.lucene4s._
 import com.outr.lucene4s.field.value.FieldAndValue
 import com.outr.lucene4s.field.{Field => LuceneField}
+import com.outr.lucene4s.query.{Sort => LuceneSort}
 import lightdb.collection.Collection
 import lightdb.field.Field
 import lightdb.index.Indexer
-import lightdb.query.{PagedResults, Query}
+import lightdb.query.{Filter, PagedResults, Query, Sort}
 import lightdb.{Document, Id}
 
 case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit: Boolean = false) extends Indexer[D] {
@@ -58,7 +59,34 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
   }
 
   override def search(query: Query[D]): IO[PagedResults[D]] = IO {
-    LucenePagedResults(this, query, lucene.query().search())
+    var q = lucene.query().offset(query.offset).limit(query.limit)
+
+    // Configure filters
+    def indexedField(field: Field[Any, Any]): IndexedField[Any] = _fields
+      .find(_.field.name == field.name)
+      .getOrElse(throw new RuntimeException(s"Field is not indexed: ${field.name}"))
+
+    def fieldAndValue(field: Field[Any, Any], value: Any): FieldAndValue[Any] = indexedField(field).luceneField(value)
+
+    query.filters.foreach {
+      case Filter.Equals(field, value) => {
+        val fv = fieldAndValue(field, value)
+        q = q.filter(exact(fv))
+      }
+      case Filter.NotEquals(field, value) => {
+        val fv = fieldAndValue(field, value)
+        q = q.filter(none(exact(fv)))
+      }
+    }
+
+    // Sort
+    q = q.sort(query.sort.map {
+      case Sort.BestMatch => LuceneSort.Score
+      case Sort.IndexOrder => LuceneSort.IndexOrder
+      case Sort.ByField(field, reverse) => LuceneSort(indexedField(field).luceneField, reverse)
+    }: _*)
+
+    LucenePagedResults(this, query, q.search())
   }
 
   override def dispose(): IO[Unit] = IO(lucene.dispose())
