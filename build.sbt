@@ -1,9 +1,9 @@
 // Scala versions
 val scala213 = "2.13.5"
 val scala212 = "2.12.13"
-val scala3 = "3.0.0-RC2"
+val scala3 = "3.0.0"
 val scala2 = List(scala213, scala212)
-val allScalaVersions = scala2 //scala3 :: scala2 // TODO: Switch back after everything is upgraded to RC3
+val allScalaVersions = scala3 :: scala2
 val scalaJVMVersions = allScalaVersions
 val scalaJSVersions = allScalaVersions
 val scalaNativeVersions = scala2
@@ -44,12 +44,12 @@ ThisBuild / developers := List(
 val collectionCompatVersion: String = "2.4.4"
 val haloDBVersion: String = "0.5.3"
 val catsEffectVersion: String = "3.1.1"
-val fabricVersion: String = "1.0.5"
-val lucene4sVersion: String = "1.11.0"
+val fabricVersion: String = "1.0.6"
+val lucene4sVersion: String = "1.11.1"
 val fs2Version: String = "3.0.3"
-val scribeVersion: String = "3.5.4"
+val scribeVersion: String = "3.5.5"
 
-val testyVersion: String = "1.0.5"
+val testyVersion: String = "1.0.6"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.js, core.jvm, lucene, halo, all)
