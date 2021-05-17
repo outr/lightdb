@@ -41,7 +41,7 @@ ThisBuild / developers := List(
 	Developer(id=developerId, name=developerName, email=email, url=url(developerURL))
 )
 
-val collectionCompatVersion: String = "2.4.3"
+val collectionCompatVersion: String = "2.4.4"
 val haloDBVersion: String = "0.5.3"
 val catsEffectVersion: String = "3.1.0"
 val fabricVersion: String = "1.0.5"
