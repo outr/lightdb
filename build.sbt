@@ -41,15 +41,15 @@ ThisBuild / developers := List(
 	Developer(id=developerId, name=developerName, email=email, url=url(developerURL))
 )
 
-val collectionCompatVersion: String = "2.4.3"
+val collectionCompatVersion: String = "2.4.4"
 val haloDBVersion: String = "0.5.3"
 val catsEffectVersion: String = "3.1.1"
-val fabricVersion: String = "1.0.4"
+val fabricVersion: String = "1.0.5"
 val lucene4sVersion: String = "1.11.0"
-val fs2Version: String = "3.0.2"
-val scribeVersion: String = "3.5.3"
+val fs2Version: String = "3.0.3"
+val scribeVersion: String = "3.5.4"
 
-val testyVersion: String = "1.0.3"
+val testyVersion: String = "1.0.5"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.js, core.jvm, lucene, halo, all)
