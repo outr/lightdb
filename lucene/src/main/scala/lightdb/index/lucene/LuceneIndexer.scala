@@ -70,11 +70,11 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
 
     query.filters.foreach {
       case Filter.Equals(field, value) => {
-        val fv = fieldAndValue(field, value)
+        val fv = fieldAndValue(field.asInstanceOf[Field[Any, Any]], value)
         q = q.filter(exact(fv))
       }
       case Filter.NotEquals(field, value) => {
-        val fv = fieldAndValue(field, value)
+        val fv = fieldAndValue(field.asInstanceOf[Field[Any, Any]], value)
         q = q.filter(none(exact(fv)))
       }
     }
@@ -83,7 +83,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
     q = q.sort(query.sort.map {
       case Sort.BestMatch => LuceneSort.Score
       case Sort.IndexOrder => LuceneSort.IndexOrder
-      case Sort.ByField(field, reverse) => LuceneSort(indexedField(field).luceneField, reverse)
+      case Sort.ByField(field, reverse) => LuceneSort(indexedField(field.asInstanceOf[Field[Any, Any]]).luceneField, reverse)
     }: _*)
 
     LucenePagedResults(this, query, q.search())

@@ -49,7 +49,7 @@ val lucene4sVersion: String = "1.11.1"
 val fs2Version: String = "3.0.4"
 val scribeVersion: String = "3.5.5"
 
-val testyVersion: String = "1.0.6"
+val testyVersion: String = "1.0.7"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.js, core.jvm, lucene, halo, all)
@@ -131,4 +131,11 @@ lazy val all = project.in(file("all"))
 		fork := true,
 		crossScalaVersions := scalaJVMVersions,
 		testFrameworks += new TestFramework("munit.Framework")
+	)
+
+lazy val benchmark = project.in(file("benchmark"))
+	.dependsOn(all)
+	.settings(
+		name := s"$projectName-benchmark",
+		fork := true
 	)
