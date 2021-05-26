@@ -5,6 +5,7 @@ import fabric.rw._
 
 class Id[T](val value: String) extends AnyVal {
   def bytes: Array[Byte] = toString.getBytes("UTF-8")
+  def parts: Vector[String] = value.split('/').toVector
 
   override def toString: String = value
 }

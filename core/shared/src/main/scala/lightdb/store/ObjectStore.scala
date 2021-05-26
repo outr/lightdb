@@ -32,4 +32,6 @@ trait ObjectStore {
   def all[T](chunkSize: Int = 512): Stream[IO, (Id[T], Array[Byte])]
 
   def commit(): IO[Unit]
+
+  def truncate(): IO[Unit]
 }

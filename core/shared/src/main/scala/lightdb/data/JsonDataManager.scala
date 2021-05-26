@@ -15,3 +15,7 @@ class JsonDataManager[T: ReaderWriter] extends DataManager[T] {
     jsonString.getBytes("UTF-8")
   }
 }
+
+object JsonDataManager {
+  def apply[T: ReaderWriter](): JsonDataManager[T] = new JsonDataManager[T]
+}

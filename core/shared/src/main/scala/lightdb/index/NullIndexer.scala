@@ -16,5 +16,7 @@ case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Inde
 
   override def search(query: Query[D]): IO[PagedResults[D]] = ???
 
+  override def truncate(): IO[Unit] = IO.unit
+
   override def dispose(): IO[Unit] = IO.unit
 }

@@ -46,6 +46,13 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
     ()
   }
 
+  def truncate(): IO[Unit] = for {
+    _ <- store.truncate()
+    _ <- indexer.truncate()
+  } yield {
+    ()
+  }
+
   def dispose(): IO[Unit] = {
     indexer.dispose()
   }
