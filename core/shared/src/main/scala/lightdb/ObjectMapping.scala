@@ -1,8 +1,7 @@
 package lightdb
 
 import lightdb.data.DataManager
-import lightdb.field.{Field, FieldFeature}
-import lightdb.index.Indexer
+import lightdb.field.Field
 
 trait ObjectMapping[D <: Document[D]] {
   def fields: List[Field[D, _]]
