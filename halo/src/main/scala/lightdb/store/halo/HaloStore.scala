@@ -58,10 +58,13 @@ case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore
   override def truncate(): IO[Unit] = synchronized {
     IO {
       _instance.foreach(_.close())
-      val files = directory.toFile.listFiles()
-      files.foreach { f =>
-        if (!f.delete()) {
-          throw new RuntimeException(s"Unable to delete ${f.getAbsolutePath}")
+      val d = directory.toFile
+      if (d.exists()) {
+        val files = d.listFiles()
+        files.foreach { f =>
+          if (!f.delete()) {
+            throw new RuntimeException(s"Unable to delete ${f.getAbsolutePath}")
+          }
         }
       }
     }
