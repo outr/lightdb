@@ -9,7 +9,7 @@ import lightdb.field.Field
 import lightdb.index.lucene._
 import lightdb.query._
 import lightdb.store.halo.SharedHaloSupport
-import lightdb.{Document, Id, LightDB, ObjectMapping}
+import lightdb.{Document, Id, JsonMapping, LightDB, ObjectMapping}
 import testy.{AsyncSupport, Spec}
 
 import java.nio.file.Paths
@@ -160,10 +160,8 @@ class SimpleSpec extends Spec {
 
   case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
 
-  object Person extends ObjectMapping[Person] {
-    implicit val rw: ReaderWriter[Person] = ccRW
-
-    lazy val dataManager: DataManager[Person] = JsonDataManager[Person]()
+  object Person extends JsonMapping[Person] {
+    override implicit val rw: ReaderWriter[Person] = ccRW
 
     lazy val name: Field[Person, String] = field[String]("name", _.name).indexed()
     lazy val age: Field[Person, Int] = field[Int]("age", _.age).indexed()
