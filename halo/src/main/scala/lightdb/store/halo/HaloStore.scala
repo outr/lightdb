@@ -6,15 +6,28 @@ import com.oath.halodb.{HaloDB, HaloDBOptions}
 import lightdb.store.ObjectStore
 import lightdb.Id
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
 
 case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore {
-  private val halo = {
+  private var _instance: Option[HaloDB] = None
+
+  private def createInstance(): HaloDB = synchronized {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
 
     HaloDB.open(directory.toAbsolutePath.toString, opts)
+  }
+
+  private def halo: HaloDB = synchronized {
+    _instance match {
+      case Some(db) => db
+      case None => {
+        val db = createInstance()
+        _instance = Some(db)
+        db
+      }
+    }
   }
 
   override def all[T](chunkSize: Int = 512): Stream[IO, (Id[T], Array[Byte])] = Stream
@@ -41,4 +54,16 @@ case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore
   override def commit(): IO[Unit] = IO.unit
 
   override def dispose(): IO[Unit] = IO(halo.close())
+
+  override def truncate(): IO[Unit] = synchronized {
+    IO {
+      _instance.foreach(_.close())
+      val files = directory.toFile.listFiles()
+      files.foreach { f =>
+        if (!f.delete()) {
+          throw new RuntimeException(s"Unable to delete ${f.getAbsolutePath}")
+        }
+      }
+    }
+  }
 }

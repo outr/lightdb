@@ -6,6 +6,9 @@ import lightdb.store.{ObjectStore, ObjectStoreSupport}
 
 import java.nio.file.{Path, Paths}
 
+/**
+ * MultiHaloSupport creates a new HaloStore directory per collection
+ */
 trait MultiHaloSupport extends ObjectStoreSupport {
   private val defaultPath: Path = Paths.get("db")
 

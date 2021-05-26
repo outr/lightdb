@@ -4,12 +4,13 @@ import cats.effect.IO
 import com.outr.lucene4s._
 import com.outr.lucene4s.field.value.FieldAndValue
 import com.outr.lucene4s.field.{Field => LuceneField}
-import com.outr.lucene4s.query.{Sort => LuceneSort}
+import com.outr.lucene4s.query.{MatchAllSearchTerm, Sort => LuceneSort}
 import lightdb.collection.Collection
 import lightdb.field.Field
 import lightdb.index.Indexer
 import lightdb.query.{Filter, PagedResults, Query, Sort}
 import lightdb.{Document, Id}
+import org.apache.lucene.queryparser.classic.QueryParserBase
 
 case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit: Boolean = false) extends Indexer[D] {
   private val lucene = new DirectLucene(
@@ -34,12 +35,14 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
     .map(_.asInstanceOf[IndexedField[Id[D]]])
     .getOrElse(IndexedField(lucene.create.field[Id[D]]("_id"), Field("_id", _._id, Nil)))
 
+  private def ids(id: Id[D]): String = QueryParserBase.escape(id.value)
+
   override def put(value: D): IO[D] = if (fields.nonEmpty) {
     IO {
       val fieldsAndValues = fields.map(_.fieldAndValue(value))
       lucene
         .doc()
-        .update(parse(s"_id:${value._id.value}"))
+        .update(parse(s"_id:${ids(value._id)}"))
         .fields(fieldsAndValues: _*)
         .index()
       value
@@ -48,7 +51,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
     IO.pure(value)
   }
 
-  override def delete(id: Id[D]): IO[Unit] = IO(lucene.delete(parse(s"_id:${id.value}")))
+  override def delete(id: Id[D]): IO[Unit] = IO(lucene.delete(parse(s"_id:${ids(id)}")))
 
   override def commit(): IO[Unit] = IO {
     lucene.commit()
@@ -88,6 +91,8 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
 
     LucenePagedResults(this, query, q.search())
   }
+
+  override def truncate(): IO[Unit] = IO(lucene.delete(MatchAllSearchTerm))
 
   override def dispose(): IO[Unit] = IO(lucene.dispose())
 

@@ -28,6 +28,17 @@ class SimpleSpec extends Spec {
   private val p2 = Person("Jane Doe", 19, id2)
 
   "Simple database" should {
+    "clear data if any exists" async {
+      for {
+        _ <- db.truncate()
+        _ <- db.people.commit()
+        storeCount <- db.people.store.count()
+        indexCount <- db.people.indexer.count()
+      } yield {
+        storeCount should be(0)
+        indexCount should be(0)
+      }
+    }
     "store John Doe" async {
       db.people.put(p1).map { p =>
         p._id should be(id1)
@@ -152,7 +163,7 @@ class SimpleSpec extends Spec {
   object Person extends ObjectMapping[Person] {
     implicit val rw: ReaderWriter[Person] = ccRW
 
-    lazy val dataManager: DataManager[Person] = new JsonDataManager[Person]
+    lazy val dataManager: DataManager[Person] = JsonDataManager[Person]()
 
     lazy val name: Field[Person, String] = field[String]("name", _.name).indexed()
     lazy val age: Field[Person, Int] = field[Int]("age", _.age).indexed()

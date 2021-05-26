@@ -21,5 +21,7 @@ abstract class LightDB(val directory: Option[Path]) {
     c
   }
 
+  def truncate(): IO[Unit] = _collections.map(_.truncate()).parSequence.map(_ => ())
+
   def dispose(): IO[Unit] = _collections.map(_.dispose()).parSequence.map(_ => ())
 }

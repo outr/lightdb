@@ -33,4 +33,9 @@ class MapStore extends ObjectStore {
     map = Map.empty
     IO.unit
   }
+
+  override def truncate(): IO[Unit] = synchronized {
+    map = Map.empty
+    IO.unit
+  }
 }

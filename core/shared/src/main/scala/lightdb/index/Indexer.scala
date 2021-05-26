@@ -19,5 +19,7 @@ trait Indexer[D <: Document[D]] {
 
   def search(query: Query[D]): IO[PagedResults[D]]
 
+  def truncate(): IO[Unit]
+
   def dispose(): IO[Unit]
 }
