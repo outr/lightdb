@@ -7,7 +7,7 @@ import lightdb.query.ResultDoc
 import lightdb.{Document, Id}
 
 case class LuceneResultDoc[D <: Document[D]](results: LucenePagedResults[D], result: SearchResult) extends ResultDoc[D] {
-  override lazy val id: Id[D] = result(results.indexer.id.luceneField)
+  override lazy val id: Id[D] = result(results.indexer._id.luceneField)
 
   override def get(): IO[D] = results.query.collection(id)
 
