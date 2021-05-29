@@ -163,9 +163,7 @@ class SimpleSpec extends Spec {
   object Person extends JsonMapping[Person] {
     override implicit val rw: ReaderWriter[Person] = ccRW
 
-    lazy val name: Field[Person, String] = field[String]("name", _.name).indexed()
-    lazy val age: Field[Person, Int] = field[Int]("age", _.age).indexed()
-
-    override lazy val fields: List[Field[Person, _]] = List(name, age)
+    val name: Field[Person, String] = field[String]("name", _.name).indexed()
+    val age: Field[Person, Int] = field[Int]("age", _.age).indexed()
   }
 }
