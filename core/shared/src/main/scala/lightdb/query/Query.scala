@@ -12,6 +12,7 @@ case class Query[D <: Document[D]](collection: Collection[D],
                                    limit: Int = 1000) {
   def filter(filters: Filter*): Query[D] = copy(filters = this.filters ::: filters.toList)
   def sort(sort: Sort*): Query[D] = copy(sort = this.sort ::: sort.toList)
+  def limit(limit: Int): Query[D] = copy(limit = limit)
   def scoreDocs(b: Boolean = true): Query[D] = copy(scoreDocs = b)
   def search(): IO[PagedResults[D]] = collection.indexer.search(this)
 }

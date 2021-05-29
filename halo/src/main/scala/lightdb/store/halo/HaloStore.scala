@@ -61,11 +61,7 @@ case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore
       val d = directory.toFile
       if (d.exists()) {
         val files = d.listFiles()
-        files.foreach { f =>
-          if (!f.delete()) {
-            throw new RuntimeException(s"Unable to delete ${f.getAbsolutePath}")
-          }
-        }
+        files.foreach(_.delete())
       }
     }
   }
