@@ -6,7 +6,7 @@ import com.oath.halodb.{HaloDB, HaloDBOptions}
 import lightdb.store.ObjectStore
 import lightdb.Id
 
-import java.nio.file.{Files, Path}
+import java.nio.file.Path
 import scala.jdk.CollectionConverters._
 
 case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore {
@@ -55,14 +55,7 @@ case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore
 
   override def dispose(): IO[Unit] = IO(halo.close())
 
-  override def truncate(): IO[Unit] = synchronized {
-    IO {
-      _instance.foreach(_.close())
-      val d = directory.toFile
-      if (d.exists()) {
-        val files = d.listFiles()
-        files.foreach(_.delete())
-      }
-    }
-  }
+  override def truncate(): IO[Unit] = all[Any]().evalMap {
+    case (id, _) => delete(id)
+  }.compile.drain
 }

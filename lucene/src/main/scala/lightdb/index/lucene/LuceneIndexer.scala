@@ -54,12 +54,14 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
 
   override def put(value: D): IO[D] = IO {
     val fields = collection.mapping.fields.flatMap(f => field.get[Any](f.name))
-    val fieldsAndValues = fields.map(_.fieldAndValue(value))
-    lucene
-      .doc()
-      .update(exact(_id.luceneField(value._id)))
-      .fields(fieldsAndValues: _*)
-      .index()
+    if (fields.tail.nonEmpty) {     // No need to index if _id is the only field
+      val fieldsAndValues = fields.map(_.fieldAndValue(value))
+      lucene
+        .doc()
+        .update(exact(_id.luceneField(value._id)))
+        .fields(fieldsAndValues: _*)
+        .index()
+    }
     value
   }
 
