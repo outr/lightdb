@@ -2,9 +2,9 @@ package lightdb.index
 
 import cats.effect.IO
 import lightdb.collection.Collection
-import lightdb.field.Field
-import lightdb.query.{PagedResults, Query}
-import lightdb.{Document, Id, ObjectMapping}
+import fs2.Stream
+import lightdb.query.Query
+import lightdb.{Document, Id}
 
 trait Indexer[D <: Document[D]] {
   protected def collection: Collection[D]
@@ -17,7 +17,7 @@ trait Indexer[D <: Document[D]] {
 
   def count(): IO[Long]
 
-  def search(query: Query[D]): IO[PagedResults[D]]
+  def search(query: Query[D]): Stream[IO, SearchResult[D]]
 
   def truncate(): IO[Unit]
 

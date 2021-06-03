@@ -1,13 +1,15 @@
-package lightdb.query
+package lightdb.index
 
 import cats.effect.IO
 import lightdb.field.Field
+import lightdb.query.Query
 import lightdb.{Document, Id}
 
-trait ResultDoc[D <: Document[D]] {
+trait SearchResult[D <: Document[D]] {
+  def query: Query[D]
+  def total: Long
   def id: Id[D]
 
   def get(): IO[D]
-
   def apply[F](field: Field[D, F]): F
 }

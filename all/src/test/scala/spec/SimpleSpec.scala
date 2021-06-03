@@ -82,9 +82,9 @@ class SimpleSpec extends Spec {
         }
     }
     "search by name for positive result" async {
-      db.people.query.filter(Person.name === "Jane Doe").search().map { results =>
-        results.total should be(1)
-        val doc = results.documents.head
+      db.people.query.filter(Person.name === "Jane Doe").search().compile.toList.map { results =>
+        results.length should be(1)
+        val doc = results.head
         doc.id should be(id2)
         doc(Person.name) should be("Jane Doe")
         doc(Person.age) should be(19)
@@ -107,9 +107,9 @@ class SimpleSpec extends Spec {
       }
     }
     "list all documents" async {
-      db.people.query.search().flatMap { results =>
-        results.total should be(1)
-        val doc = results.documents.head
+      db.people.query.search().compile.toList.flatMap { results =>
+        results.length should be(1)
+        val doc = results.head
         doc.id should be(id2)
         doc(Person.name) should be("Jane Doe")
         doc(Person.age) should be(19)
@@ -137,9 +137,9 @@ class SimpleSpec extends Spec {
       db.people.commit()
     }
     "list all documents" async {
-      db.people.query.search().map { results =>
-        results.total should be(1)
-        val doc = results.documents.head
+      db.people.query.search().compile.toList.map { results =>
+        results.length should be(1)
+        val doc = results.head
         doc.id should be(id2)
         doc(Person.name) should be("Jan Doe")
         doc(Person.age) should be(20)

@@ -2,7 +2,7 @@ package lightdb.index
 
 import cats.effect.IO
 import lightdb.collection.Collection
-import lightdb.query.{PagedResults, Query}
+import lightdb.query.Query
 import lightdb.{Document, Id}
 
 case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Indexer[D] {
@@ -14,7 +14,7 @@ case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Inde
 
   override def count(): IO[Long] = IO.pure(0L)
 
-  override def search(query: Query[D]): IO[PagedResults[D]] = ???
+  override def search(query: Query[D]): fs2.Stream[IO, SearchResult[D]] = fs2.Stream.empty
 
   override def truncate(): IO[Unit] = IO.unit
 
