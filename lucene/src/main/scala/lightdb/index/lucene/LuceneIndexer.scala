@@ -4,12 +4,13 @@ import cats.effect.IO
 import com.outr.lucene4s._
 import com.outr.lucene4s.field.value.FieldAndValue
 import com.outr.lucene4s.field.{FieldType, Field => LuceneField}
-import com.outr.lucene4s.query.{MatchAllSearchTerm, SearchTerm, Sort => LuceneSort}
+import com.outr.lucene4s.query.{MatchAllSearchTerm, SearchTerm, Sort => LuceneSort, SearchResult => L4SSearchResult}
 import lightdb.collection.Collection
 import lightdb.field.Field
-import lightdb.index.Indexer
-import lightdb.query.{Filter, PagedResults, Query, Sort}
+import lightdb.index.{Indexer, SearchResult}
+import lightdb.query.{Filter, Query, Sort}
 import lightdb.{Document, Id}
+import fs2.Stream
 
 case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit: Boolean = false) extends Indexer[D] { li =>
   private val lucene = new DirectLucene(
@@ -97,19 +98,19 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
     }
   }
 
-  override def search(query: Query[D]): IO[PagedResults[D]] = IO {
-    var q = lucene.query().offset(query.offset).limit(query.limit)
-
+  override def search(query: Query[D]): Stream[IO, SearchResult[D]] = {
+    var q = lucene.query().offset(query.offset).limit(query.batchSize)
     q = query.filters.foldLeft(q)((qb, f) => q.filter(filter2Lucene(f)))
-
-    // Sort
     q = q.sort(query.sort.map {
       case Sort.BestMatch => LuceneSort.Score
       case Sort.IndexOrder => LuceneSort.IndexOrder
       case Sort.ByField(field, reverse) => LuceneSort(this.field[Any](field.name).luceneField, reverse)
     }: _*)
 
-    LucenePagedResults(this, query, q.search())
+    val pagedResults = q.search()
+    val pagedResultsIterator = pagedResults.pagedResultsIterator
+    Stream.fromBlockingIterator[IO](pagedResultsIterator, query.batchSize)
+      .map(result => LuceneSearchResult(query, pagedResults.total, result))
   }
 
   override def truncate(): IO[Unit] = IO(lucene.delete(MatchAllSearchTerm))
@@ -118,5 +119,18 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
 
   case class IndexedField[F](luceneField: LuceneField[F], field: Field[D, F]) {
     def fieldAndValue(value: D): FieldAndValue[F] = luceneField(field.getter(value))
+  }
+
+  case class LuceneSearchResult(query: Query[D],
+                                total: Long,
+                                result: L4SSearchResult) extends SearchResult[D] {
+    override lazy val id: Id[D] = result(_id.luceneField)
+
+    override def get(): IO[D] = collection(id)
+
+    override def apply[F](field: Field[D, F]): F = {
+      val indexedField = fields.find(_.field.name == field.name).getOrElse(throw new RuntimeException(s"Unable to find indexed field for: ${field.name}"))
+      result(indexedField.luceneField).asInstanceOf[F]
+    }
   }
 }
