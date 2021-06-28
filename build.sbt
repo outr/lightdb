@@ -137,5 +137,8 @@ lazy val benchmark = project.in(file("benchmark"))
 	.dependsOn(all)
 	.settings(
 		name := s"$projectName-benchmark",
-		fork := true
+		fork := true,
+		libraryDependencies ++= Seq(
+			"co.fs2" %%% "fs2-io" % fs2Version
+		)
 	)
