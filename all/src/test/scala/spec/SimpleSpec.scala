@@ -163,7 +163,7 @@ class SimpleSpec extends Spec {
   object Person extends JsonMapping[Person] {
     override implicit val rw: ReaderWriter[Person] = ccRW
 
-    val name: Field[Person, String] = field[String]("name", _.name).indexed()
-    val age: Field[Person, Int] = field[Int]("age", _.age).indexed()
+    val name: FD[String] = field("name", _.name).indexed()
+    val age: FD[Int] = field("age", _.age).indexed()
   }
 }
