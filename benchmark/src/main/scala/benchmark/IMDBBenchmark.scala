@@ -1,21 +1,13 @@
 package benchmark
 
 import cats.effect.unsafe.IORuntime
-import cats.effect.{ExitCode, IO, IOApp, Resource, SyncIO}
-import fabric.rw._
-import lightdb.field.Field
-import lightdb.{Document, Id, JsonMapping, LightDB}
-import lightdb.index.lucene._
-import lightdb.store.halo.SharedHaloSupport
+import cats.effect.IO
 
-import java.io.{BufferedOutputStream, File, FileInputStream, FileOutputStream}
-import java.nio.file.Paths
+import java.io.{BufferedOutputStream, BufferedReader, File, FileInputStream, FileOutputStream, FileReader}
 import java.util.zip.GZIPInputStream
 import scala.io.Source
 import fs2._
-import fs2.compression._
 import fs2.io.file._
-import lightdb.collection.Collection
 import perfolation._
 
 import java.net.URL
@@ -23,62 +15,113 @@ import scala.annotation.tailrec
 import sys.process._
 import scribe.Execution.global
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 // 64 seconds for zero processing
 // 99 seconds for TitleAka parsing - Total: 26838044 in 95.132 seconds (282113.7 per second)
 // What the crap - Old-school: 54 seconds for TitleAka parsing - Total: 26838043 in 53.17 seconds (504759.1 per second)
 // 4.5 hours for complete - Total: 26472316 in 15966.323 seconds (1658.0 per second)
+
+// LightDB - Total: 999999 in 186.082 seconds (5374.0 per second) - 16 threads (HaloDB / Lucene)
+// LightDB - Total: 999999 in 261.31 seconds (3826.9 per second) - 16 threads (MapDB / Lucene)
+// LightDB - Total: 999999 in 183.937 seconds (5436.6 per second) - 16 threads (NullStore / Lucene)
+// LightDB - Total: 999999 in 11.715 seconds (85360.6 per second) - 16 threads (HaloDB / NullIndexer)
+// MongoDB - Total: 999999 in 19.165 seconds (52178.4 per second)
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
+  val implementation: BenchmarkImplementation = LightDBImplementation
+
+  type TitleAka = implementation.TitleAka
 
   def main(args: Array[String]): Unit = {
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
     val future = for {
-      file <- downloadFile(new File(baseDirectory, "title.akas.tsv")).unsafeToFuture()
+      file <- downloadFile(new File(baseDirectory, "title.akas.1m.tsv")).unsafeToFuture()
       total <- process(file)
+      _ <- implementation.flush()
+      _ <- implementation.verifyTitleAka()
     } yield {
       val elapsed = (System.currentTimeMillis() - start) / 1000.0
       val perSecond = total / elapsed
-      scribe.info(s"Total: $total in $elapsed seconds (${perSecond.f(f = 1)} per second)")
+      scribe.info(s"${implementation.name} - Total: $total in $elapsed seconds (${perSecond.f(f = 1)} per second)")
     }
     Await.result(future, Duration.Inf)
+    sys.exit(0)
   }
 
   private def process(file: File): Future[Int] = Future {
-    val source = Source.fromFile(file)
-    var count = 0
+    val reader = new BufferedReader(new FileReader(file))
+    val counter = new AtomicInteger(0)
+    val concurrency = 16
     try {
-      var keys = List.empty[String]
-      source.getLines().foreach { line =>
-        val values = line.split('\t').toList
-        if (keys.isEmpty) {
-          keys = values
-        } else {
-          val map = keys.zip(values).filter(t => t._2.nonEmpty && t._2 != "\\N").toMap
-          if (map.nonEmpty) {
-            val t = TitleAka(
-              titleId = map.value("titleId"),
-              ordering = map.int("ordering"),
-              title = map.value("title"),
-              region = map.option("region"),
-              language = map.option("language"),
-              types = map.list("types"),
-              attributes = map.list("attributes"),
-              isOriginalTitle = map.boolOption("isOriginalTitle")
-            )
+      val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(concurrency))
+      val keys = reader.readLine().split('\t').toList
 
-//            db.titleAka.put(t)
-            count += 1
+      val hasMoreLines = new AtomicBoolean(true)
+      def nextLine(): Option[String] = {
+        val start = System.currentTimeMillis()
+        try {
+          if (hasMoreLines.get()) {
+            val o = Option(reader.readLine())
+            if (o.isEmpty) {
+              hasMoreLines.set(false)
+            }
+            o
+          } else {
+            None
           }
+        } finally {
+          val elapsed = System.currentTimeMillis() - start
+          if (elapsed > 1000) scribe.warn(s"Took way too long: $elapsed")
         }
       }
+
+      val iterator = new FutureIterator[TitleAka] {
+        override def next()(implicit ec: ExecutionContext): Future[Option[TitleAka]] = Future {
+          nextLine()
+        }(ec).map(_.map { line =>
+          val values = line.split('\t').toList
+          val map = keys.zip(values).filter(t => t._2.nonEmpty && t._2 != "\\N").toMap
+          implementation.map2TitleAka(map)
+        })(ec)
+      }
+
+      var running = true
+
+      val future = iterator.stream(concurrency) { t =>
+        counter.incrementAndGet()
+        val start = System.currentTimeMillis()
+        implementation.persistTitleAka(t).map { _ =>
+          val elapsed = System.currentTimeMillis() - start
+//          if (elapsed > 1000) scribe.warn(s"Took way too long: $elapsed")
+        }
+      }(ec)
+
+      new Thread() {
+        private val startTime = System.currentTimeMillis()
+
+        override def run(): Unit = {
+          while (running) {
+            Thread.sleep(10000L)
+            val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+            val perSecond = counter.get() / elapsed
+            scribe.info(s"Processed: $counter in $elapsed seconds (${perSecond.f(f = 1)} per second) - Active threads: ${iterator.running.get()}")
+          }
+        }
+      }.start()
+
+      Await.result(future, Duration.Inf)
+      running = false
     } finally {
-      source.close()
+      scribe.info(s"Finished with counter: $counter")
+      reader.close()
     }
-    count
+
+    counter.get()
   }
 
 //  override def run(args: List[String]): IO[ExitCode] = {
@@ -114,18 +157,6 @@ object IMDBBenchmark { // extends IOApp {
 //    }
 //  }
 
-  implicit class MapExtras(map: Map[String, String]) {
-    def option(key: String): Option[String] = map.get(key) match {
-      case Some("") | None => None
-      case Some(s) => Some(s)
-    }
-    def value(key: String): String = option(key).getOrElse(throw new RuntimeException(s"Key not found: $key in ${map.keySet}"))
-    def int(key: String): Int = value(key).toInt
-    def list(key: String): List[String] = option(key).map(_.split(' ').toList).getOrElse(Nil)
-    def bool(key: String): Boolean = if (int(key) == 0) false else true
-    def boolOption(key: String): Option[Boolean] = option(key).map(s => if (s.toInt == 0) false else true)
-  }
-
   private def downloadFile(file: File): IO[File] = if (file.exists()) {
     IO.pure(file)
   } else {
@@ -137,7 +168,7 @@ object IMDBBenchmark { // extends IOApp {
       val url = new URL(s"https://datasets.imdbws.com/$fileName")
       (url #> gz).!!
 
-      scribe.info(s"sUnzipping ${file.getName}...")
+      scribe.info(s"Unzipping ${file.getName}...")
       val input = new GZIPInputStream(new FileInputStream(gz))
       val output = new BufferedOutputStream(new FileOutputStream(file))
 
@@ -181,19 +212,5 @@ object IMDBBenchmark { // extends IOApp {
       .map {
         case (headers, row) => headers.zip(row.split('\t').toList).map(t => t._1 -> t._2.trim).filter(t => t._2.nonEmpty && t._2 != "\\N").toMap
       }
-  }
-
-  object db extends LightDB(directory = Some(Paths.get("imdb"))) with LuceneIndexerSupport with SharedHaloSupport {
-    val titleAka: Collection[TitleAka] = collection[TitleAka]("titleAka", TitleAka)
-  }
-
-  case class TitleAka(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAka] = Id[TitleAka]()) extends Document[TitleAka]
-
-  object TitleAka extends JsonMapping[TitleAka] {
-    override implicit val rw: ReaderWriter[TitleAka] = ccRW
-
-    val titleId: FD[String] = field("titleId", _.titleId).indexed()
-    val ordering: FD[Int] = field("ordering", _.ordering).indexed()
-    val title: FD[String] = field("title", _.title).indexed()
   }
 }

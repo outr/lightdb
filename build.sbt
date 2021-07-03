@@ -52,7 +52,7 @@ val scribeVersion: String = "3.5.5"
 val testyVersion: String = "1.0.7"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.js, core.jvm, lucene, halo, all)
+	.aggregate(core.js, core.jvm, lucene, halo, mapdb, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -121,8 +121,21 @@ lazy val halo = project.in(file("halo"))
 		testFrameworks += new TestFramework("munit.Framework")
 	)
 
+lazy val mapdb = project.in(file("mapdb"))
+	.dependsOn(core.jvm)
+	.settings(
+		name := s"$projectName-mapdb",
+		libraryDependencies ++= Seq(
+			"org.mapdb" % "mapdb" % "3.0.8",
+			"com.outr" %% "testy" % testyVersion % Test
+		),
+		fork := true,
+		crossScalaVersions := scalaJVMVersions,
+		testFrameworks += new TestFramework("munit.Framework")
+	)
+
 lazy val all = project.in(file("all"))
-	.dependsOn(lucene, halo)
+	.dependsOn(lucene, halo, mapdb)
 	.settings(
 		name := s"$projectName-all",
 		libraryDependencies ++= Seq(
@@ -139,6 +152,7 @@ lazy val benchmark = project.in(file("benchmark"))
 		name := s"$projectName-benchmark",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"co.fs2" %%% "fs2-io" % fs2Version
+			"co.fs2" %%% "fs2-io" % fs2Version,
+			"org.mongodb" % "mongodb-driver-sync" % "4.2.3"
 		)
 	)
