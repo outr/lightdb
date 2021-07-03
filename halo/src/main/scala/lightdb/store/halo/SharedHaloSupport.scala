@@ -12,7 +12,14 @@ import java.nio.file.Paths
 trait SharedHaloSupport extends ObjectStoreSupport {
   this: LightDB =>
 
-  private lazy val shared: HaloStore = HaloStore(directory.getOrElse(Paths.get("db")).resolve("store"))
+  protected def haloIndexThreads: Int = 2
+  protected def haloMaxFileSize: Int = 1024 * 1024
+
+  private lazy val shared: HaloStore = HaloStore(
+    directory = directory.getOrElse(Paths.get("db")).resolve("store"),
+    indexThreads = haloIndexThreads,
+    maxFileSize = haloMaxFileSize
+  )
 
   override def store[D <: Document[D]](collection: Collection[D]): ObjectStore = shared
 }

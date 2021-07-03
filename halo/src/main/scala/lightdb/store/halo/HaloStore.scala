@@ -9,12 +9,13 @@ import lightdb.Id
 import java.nio.file.Path
 import scala.jdk.CollectionConverters._
 
-case class HaloStore(directory: Path, indexThreads: Int = 2) extends ObjectStore {
+case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 1024 * 1024) extends ObjectStore {
   private var _instance: Option[HaloDB] = None
 
   private def createInstance(): HaloDB = synchronized {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
+    opts.setMaxFileSize(maxFileSize)
 
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
