@@ -46,7 +46,7 @@ val haloDBVersion: String = "0.5.3"
 val catsEffectVersion: String = "3.1.1"
 val fabricVersion: String = "1.0.8"
 val lucene4sVersion: String = "1.11.1"
-val fs2Version: String = "3.0.4"
+val fs2Version: String = "3.0.6"
 val scribeVersion: String = "3.5.5"
 
 val testyVersion: String = "1.0.7"
