@@ -153,6 +153,7 @@ lazy val benchmark = project.in(file("benchmark"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"co.fs2" %%% "fs2-io" % fs2Version,
-			"org.mongodb" % "mongodb-driver-sync" % "4.2.3"
+			"org.mongodb" % "mongodb-driver-sync" % "4.2.3",
+			"org.postgresql" % "postgresql" % "42.2.22"
 		)
 	)

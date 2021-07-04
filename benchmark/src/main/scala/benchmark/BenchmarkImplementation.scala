@@ -7,6 +7,8 @@ trait BenchmarkImplementation {
 
   def name: String
 
+  def init()(implicit ec: ExecutionContext): Future[Unit] = Future.unit
+
   def map2TitleAka(map: Map[String, String]): TitleAka
   def persistTitleAka(t: TitleAka)(implicit ec: ExecutionContext): Future[Unit]
 
