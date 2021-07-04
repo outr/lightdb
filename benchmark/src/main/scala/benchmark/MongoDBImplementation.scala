@@ -36,7 +36,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
     ).asJava)
   }
 
-  private lazy val backlog = new FlushingBacklog[Document](1000) {
+  private lazy val backlog = new FlushingBacklog[Document](1000, 10000) {
     override protected def write(list: List[Document]): IO[Unit] = IO {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)

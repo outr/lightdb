@@ -20,16 +20,18 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-// 64 seconds for zero processing
-// 99 seconds for TitleAka parsing - Total: 26838044 in 95.132 seconds (282113.7 per second)
-// What the crap - Old-school: 54 seconds for TitleAka parsing - Total: 26838043 in 53.17 seconds (504759.1 per second)
-// 4.5 hours for complete - Total: 26472316 in 15966.323 seconds (1658.0 per second)
+// PostgreSQL - Total: 26838043 in 547.247 seconds (49041.9 per second)
+// MongoDB - Total: 26838043 in 605.694 seconds (44309.6 per second)
+// LightDB - Total: 26838043 in 280.04 seconds (95836.5 per second) - (HaloDB / NullIndexer)
+// LightDB - Total: 26838043 in 9016.418 seconds (2976.6 per second) - (HaloDB / Lucene)
 
-// LightDB - Total: 999999 in 186.082 seconds (5374.0 per second) - 16 threads (HaloDB / Lucene)
-// LightDB - Total: 999999 in 261.31 seconds (3826.9 per second) - 16 threads (MapDB / Lucene)
-// LightDB - Total: 999999 in 183.937 seconds (5436.6 per second) - 16 threads (NullStore / Lucene)
-// LightDB - Total: 999999 in 11.715 seconds (85360.6 per second) - 16 threads (HaloDB / NullIndexer)
-// MongoDB - Total: 999999 in 19.165 seconds (52178.4 per second)
+// LightDB    - Total: 999999 in 186.082 seconds (5374.0 per second) - 16 threads (HaloDB / Lucene)
+// LightDB    - Total: 999999 in 261.31 seconds (3826.9 per second) - 16 threads (MapDB / Lucene)
+// LightDB    - Total: 999999 in 183.937 seconds (5436.6 per second) - 16 threads (NullStore / Lucene)
+// LightDB    - Total: 999999 in 11.715 seconds (85360.6 per second) - 16 threads (HaloDB / NullIndexer)
+
+// MongoDB    - Total: 999999 in 19.165 seconds (52178.4 per second)
+// PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
   val implementation: BenchmarkImplementation = LightDBImplementation
@@ -40,7 +42,8 @@ object IMDBBenchmark { // extends IOApp {
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
     val future = for {
-      file <- downloadFile(new File(baseDirectory, "title.akas.1m.tsv")).unsafeToFuture()
+      _ <- implementation.init()
+      file <- downloadFile(new File(baseDirectory, "title.akas.tsv")).unsafeToFuture()
       total <- process(file)
       _ <- implementation.flush()
       _ <- implementation.verifyTitleAka()
@@ -63,20 +66,14 @@ object IMDBBenchmark { // extends IOApp {
 
       val hasMoreLines = new AtomicBoolean(true)
       def nextLine(): Option[String] = {
-        val start = System.currentTimeMillis()
-        try {
-          if (hasMoreLines.get()) {
-            val o = Option(reader.readLine())
-            if (o.isEmpty) {
-              hasMoreLines.set(false)
-            }
-            o
-          } else {
-            None
+        if (hasMoreLines.get()) {
+          val o = Option(reader.readLine())
+          if (o.isEmpty) {
+            hasMoreLines.set(false)
           }
-        } finally {
-          val elapsed = System.currentTimeMillis() - start
-          if (elapsed > 1000) scribe.warn(s"Took way too long: $elapsed")
+          o
+        } else {
+          None
         }
       }
 
