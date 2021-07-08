@@ -1,12 +1,11 @@
-on:
-  workflow_dispatch:
+name: build
+on: [push, pull_request]
 jobs:
-  run-tests:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: SBT action test
-        id: sbt
-        uses: lokkju/github-action-sbt@master
+      - uses: actions/checkout@v1
+      - uses: actions/setup-java@v1
         with:
-          commands: test
-          sbt_project_directory: ./test
+          java-version: 8
+      - run: sbt test
