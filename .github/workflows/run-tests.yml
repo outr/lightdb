@@ -1,0 +1,6 @@
+- name: SBT action test
+  id: sbt
+  uses: lokkju/github-action-sbt@master
+  with:
+    commands: test
+    sbt_project_directory: ./test
