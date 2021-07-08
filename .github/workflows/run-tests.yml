@@ -8,4 +8,5 @@ jobs:
       - uses: actions/setup-java@v1
         with:
           java-version: 8
+          repo-token: ${{ secrets.ADMIN_GITHUB_TOKEN }}
       - run: sbt test
