@@ -57,6 +57,7 @@ object IMDBBenchmark { // extends IOApp {
   }
 
   private def process(file: File): Future[Int] = Future {
+    // TODO: if limit is set, create new file with limitation or reuse if already existing
     val reader = new BufferedReader(new FileReader(file))
     val counter = new AtomicInteger(0)
     val concurrency = 16
