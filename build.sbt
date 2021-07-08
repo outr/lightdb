@@ -24,7 +24,8 @@ ThisBuild / scalaVersion := scala213
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
 ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
 
-ThisBuild / resolvers += "yahoo-bintray" at "https://yahoo.bintray.com/maven"
+ThisBuild / githubTokenSource := TokenSource.Environment("GITHUB_TOKEN")
+ThisBuild / resolvers += Resolver.githubPackages("yahoo", "HaloDB")
 
 ThisBuild / publishTo := sonatypePublishTo.value
 ThisBuild / sonatypeProfileName := org
@@ -42,7 +43,7 @@ ThisBuild / developers := List(
 )
 
 val collectionCompatVersion: String = "2.4.4"
-val haloDBVersion: String = "0.5.3"
+val haloDBVersion: String = "0.5.6"
 val catsEffectVersion: String = "3.1.1"
 val fabricVersion: String = "1.0.8"
 val lucene4sVersion: String = "1.11.1"
