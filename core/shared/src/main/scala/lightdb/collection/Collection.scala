@@ -25,6 +25,10 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
     value
   }
 
+  def all(chunkSize: Int = 512, maxConcurrent: Int = 16): fs2.Stream[IO, D] = store
+    .all[D](chunkSize)
+    .mapAsync(maxConcurrent)(t => IO(dataManager.fromArray(t._2)))
+
   def modify(id: Id[D])(f: Option[D] => Option[D]): IO[Option[D]] = for {
     result <- data.modify(id)(f)
     _ <- result.map(indexer.put).getOrElse(IO.unit)

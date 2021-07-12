@@ -59,6 +59,42 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   override def persistTitleAka(t: TitleAka): IO[Unit] = backlog.enqueue(t).map(_ => ())
 
+  override def streamTitleAka(): fs2.Stream[IO, TitleAkaPG] = {
+    val s = connection.createStatement()
+    try {
+      val rs = s.executeQuery("SELECT * FROM title_aka")
+      val iterator = new Iterator[TitleAkaPG] {
+        private var current = Option.empty[TitleAkaPG]
+
+        override def hasNext: Boolean = if (current.isEmpty) {
+          if (rs.next()) {
+            // TODO: populate current
+            current = Some(TitleAkaPG(
+              titleId = rs.getString("titleId"),
+              ordering = rs.getInt("ordering"),
+              title = rs.getString("title"),
+              region = rs.getString("region"),
+              language = rs.getString("language"),
+              types = rs.getString("types"),
+              attributes = rs.getString("attributes"),
+              isOriginalTitle = rs.getInt("isOriginalTitle")
+            ))
+            true
+          } else {
+            false
+          }
+        } else {
+          true
+        }
+
+        override def next(): TitleAkaPG = current.getOrElse(throw new NullPointerException("Out of results"))
+      }
+      fs2.Stream.fromBlockingIterator[IO](iterator, 512)
+    } finally {
+      s.closeOnCompletion()
+    }
+  }
+
   override def flush(): IO[Unit] = for {
     _ <- backlog.flush()
     _ <- IO(commit())
