@@ -41,7 +41,7 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   override def name: String = "PostgreSQL"
 
-  override def init()(implicit ec: ExecutionContext): Future[Unit] = Future {
+  override def init(): IO[Unit] = IO {
     executeUpdate("DROP TABLE IF EXISTS title_aka")
     executeUpdate("CREATE TABLE title_aka(id SERIAL PRIMARY KEY, titleId TEXT, ordering INTEGER, title TEXT, region TEXT, language TEXT, types TEXT, attributes TEXT, isOriginalTitle SMALLINT)")
   }
@@ -57,16 +57,16 @@ object PostgresImplementation extends BenchmarkImplementation {
     isOriginalTitle = map.boolOption("isOriginalTitle").map(b => if (b) 1 else 0).getOrElse(-1)
   )
 
-  override def persistTitleAka(t: TitleAka)(implicit ec: ExecutionContext): Future[Unit] = backlog.enqueue(t).unsafeToFuture().map(_ => ())
+  override def persistTitleAka(t: TitleAka): IO[Unit] = backlog.enqueue(t).map(_ => ())
 
-  override def flush()(implicit ec: ExecutionContext): Future[Unit] = for {
-    _ <- backlog.flush().unsafeToFuture()
-    _ <- Future(commit())
+  override def flush(): IO[Unit] = for {
+    _ <- backlog.flush()
+    _ <- IO(commit())
   } yield {
     ()
   }
 
-  override def verifyTitleAka()(implicit ec: ExecutionContext): Future[Unit] = Future {
+  override def verifyTitleAka(): IO[Unit] = IO {
     val s = connection.createStatement()
     val rs = s.executeQuery("SELECT COUNT(1) FROM title_aka")
     rs.next()

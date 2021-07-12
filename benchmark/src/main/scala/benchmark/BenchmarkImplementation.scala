@@ -1,20 +1,20 @@
 package benchmark
 
-import scala.concurrent.{ExecutionContext, Future}
+import cats.effect.IO
 
 trait BenchmarkImplementation {
   type TitleAka
 
   def name: String
 
-  def init()(implicit ec: ExecutionContext): Future[Unit] = Future.unit
+  def init(): IO[Unit] = IO.unit
 
   def map2TitleAka(map: Map[String, String]): TitleAka
-  def persistTitleAka(t: TitleAka)(implicit ec: ExecutionContext): Future[Unit]
+  def persistTitleAka(t: TitleAka): IO[Unit]
 
-  def flush()(implicit ec: ExecutionContext): Future[Unit]
+  def flush(): IO[Unit]
 
-  def verifyTitleAka()(implicit ec: ExecutionContext): Future[Unit]
+  def verifyTitleAka(): IO[Unit]
 
   implicit class MapExtras(map: Map[String, String]) {
     def option(key: String): Option[String] = map.get(key) match {

@@ -3,7 +3,7 @@ package benchmark
 import cats.effect.unsafe.IORuntime
 import cats.effect.IO
 
-import java.io.{BufferedOutputStream, BufferedReader, File, FileInputStream, FileOutputStream, FileReader}
+import java.io.{BufferedOutputStream, BufferedReader, File, FileInputStream, FileOutputStream, FileReader, PrintWriter}
 import java.util.zip.GZIPInputStream
 import scala.io.Source
 import fs2._
@@ -41,9 +41,9 @@ object IMDBBenchmark { // extends IOApp {
   def main(args: Array[String]): Unit = {
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
-    val future = for {
+    val io = for {
       _ <- implementation.init()
-      file <- downloadFile(new File(baseDirectory, "title.akas.tsv")).unsafeToFuture()
+      file <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneHundredThousand)
       total <- process(file)
       _ <- implementation.flush()
       _ <- implementation.verifyTitleAka()
@@ -52,12 +52,11 @@ object IMDBBenchmark { // extends IOApp {
       val perSecond = total / elapsed
       scribe.info(s"${implementation.name} - Total: $total in $elapsed seconds (${perSecond.f(f = 1)} per second)")
     }
-    Await.result(future, Duration.Inf)
+    io.unsafeRunSync()
     sys.exit(0)
   }
 
-  private def process(file: File): Future[Int] = Future {
-    // TODO: if limit is set, create new file with limitation or reuse if already existing
+  private def process(file: File): IO[Int] = IO {
     val reader = new BufferedReader(new FileReader(file))
     val counter = new AtomicInteger(0)
     val concurrency = 16
@@ -78,26 +77,26 @@ object IMDBBenchmark { // extends IOApp {
         }
       }
 
-      val iterator = new FutureIterator[TitleAka] {
-        override def next()(implicit ec: ExecutionContext): Future[Option[TitleAka]] = Future {
+      val iterator = new IOIterator[TitleAka] {
+        override def next(): IO[Option[TitleAka]] = IO {
           nextLine()
-        }(ec).map(_.map { line =>
+        }.map(_.map { line =>
           val values = line.split('\t').toList
           val map = keys.zip(values).filter(t => t._2.nonEmpty && t._2 != "\\N").toMap
           implementation.map2TitleAka(map)
-        })(ec)
+        })
       }
 
       var running = true
 
-      val future = iterator.stream(concurrency) { t =>
+      val io = iterator.stream(concurrency) { t =>
         counter.incrementAndGet()
         val start = System.currentTimeMillis()
         implementation.persistTitleAka(t).map { _ =>
           val elapsed = System.currentTimeMillis() - start
 //          if (elapsed > 1000) scribe.warn(s"Took way too long: $elapsed")
         }
-      }(ec)
+      }
 
       new Thread() {
         private val startTime = System.currentTimeMillis()
@@ -112,7 +111,7 @@ object IMDBBenchmark { // extends IOApp {
         }
       }.start()
 
-      Await.result(future, Duration.Inf)
+      io.unsafeRunSync()
       running = false
     } finally {
       scribe.info(s"Finished with counter: $counter")
@@ -155,7 +154,7 @@ object IMDBBenchmark { // extends IOApp {
 //    }
 //  }
 
-  private def downloadFile(file: File): IO[File] = if (file.exists()) {
+  private def downloadFile(file: File, limit: Limit): IO[File] = (if (file.exists()) {
     IO.pure(file)
   } else {
     IO {
@@ -193,6 +192,32 @@ object IMDBBenchmark { // extends IOApp {
       scribe.info(s"${file.getName} downloaded and extracted successfully")
       file
     }
+  }).flatMap { file =>
+    limit match {
+      case Limit.Unlimited => IO.pure(file)
+      case _ => IO {
+        val source = Source.fromFile(file)
+        try {
+          val (pre, post) = file.getName.splitAt(file.getName.lastIndexOf("."))
+          val limitFile = new File(file.getParentFile, s"$pre.${limit.name}$post")
+          if (!limitFile.exists()) {
+            scribe.info(s"Creating limit file: ${limitFile.getName}...")
+            val writer = new PrintWriter(limitFile)
+            try {
+              source.getLines().take(limit.value).foreach { line =>
+                writer.write(s"$line\n")
+              }
+            } finally {
+              writer.flush()
+              writer.close()
+            }
+          }
+          limitFile
+        } finally {
+          source.close()
+        }
+      }
+    }
   }
 
   private def processTSV(file: File): Stream[IO, Map[String, String]] = {
@@ -210,5 +235,37 @@ object IMDBBenchmark { // extends IOApp {
       .map {
         case (headers, row) => headers.zip(row.split('\t').toList).map(t => t._1 -> t._2.trim).filter(t => t._2.nonEmpty && t._2 != "\\N").toMap
       }
+  }
+}
+
+sealed trait Limit {
+  def name: String
+  def value: Int
+}
+
+object Limit {
+  case object OneThousand extends Limit {
+    override def name: String = "1k"
+    override def value: Int = 1_000
+  }
+  case object TenThousand extends Limit {
+    override def name: String = "10k"
+    override def value: Int = 10_000
+  }
+  case object OneHundredThousand extends Limit {
+    override def name: String = "100k"
+    override def value: Int = 100_000
+  }
+  case object OneMillion extends Limit {
+    override def name: String = "1m"
+    override def value: Int = 1_000_000
+  }
+  case object TenMillion extends Limit {
+    override def name: String = "10m"
+    override def value: Int = 10_000_000
+  }
+  case object Unlimited extends Limit {
+    override def name: String = ""
+    override def value: Int = -1
   }
 }
