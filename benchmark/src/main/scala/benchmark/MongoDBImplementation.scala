@@ -45,11 +45,11 @@ object MongoDBImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def persistTitleAka(t: Document)(implicit ec: ExecutionContext): Future[Unit] = backlog.enqueue(t).unsafeToFuture().map(_ => ())
+  override def persistTitleAka(t: Document): IO[Unit] = backlog.enqueue(t).map(_ => ())
 
-  override def flush()(implicit ec: ExecutionContext): Future[Unit] = backlog.flush().unsafeToFuture()
+  override def flush(): IO[Unit] = backlog.flush()
 
-  override def verifyTitleAka()(implicit ec: ExecutionContext): Future[Unit] = Future {
+  override def verifyTitleAka(): IO[Unit] = IO {
     val docs = collection.countDocuments()
     scribe.info(s"TitleAka counts -- $docs")
   }
