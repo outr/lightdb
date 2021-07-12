@@ -13,12 +13,8 @@ import perfolation._
 import java.net.URL
 import scala.annotation.tailrec
 import sys.process._
-import scribe.Execution.global
 
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
 
 // PostgreSQL - Total: 26838043 in 547.247 seconds (49041.9 per second)
 // MongoDB - Total: 26838043 in 605.694 seconds (44309.6 per second)
@@ -34,7 +30,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 // PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = LightDBImplementation
+  val implementation: BenchmarkImplementation = PostgresImplementation
 
   type TitleAka = implementation.TitleAka
 
@@ -47,6 +43,9 @@ object IMDBBenchmark { // extends IOApp {
       total <- process(file)
       _ <- implementation.flush()
       _ <- implementation.verifyTitleAka()
+      now = System.currentTimeMillis()
+      _ <- cycleThroughEntireCollection()
+      _ = scribe.info(s"Processed entire collection in ${(System.currentTimeMillis() - now) / 1000.0} seconds")
     } yield {
       val elapsed = (System.currentTimeMillis() - start) / 1000.0
       val perSecond = total / elapsed
@@ -61,7 +60,6 @@ object IMDBBenchmark { // extends IOApp {
     val counter = new AtomicInteger(0)
     val concurrency = 16
     try {
-      val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(concurrency))
       val keys = reader.readLine().split('\t').toList
 
       val hasMoreLines = new AtomicBoolean(true)
@@ -119,6 +117,14 @@ object IMDBBenchmark { // extends IOApp {
     }
 
     counter.get()
+  }
+
+  private val counter = new AtomicInteger(0)
+
+  def cycleThroughEntireCollection(): IO[Unit] = implementation.streamTitleAka().map { titleAka =>
+    counter.incrementAndGet()
+  }.compile.drain.map { _ =>
+    scribe.info(s"Counter for entire collection: ${counter.get()}")
   }
 
 //  override def run(args: List[String]): IO[ExitCode] = {

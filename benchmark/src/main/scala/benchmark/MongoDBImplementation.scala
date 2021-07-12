@@ -47,6 +47,11 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def persistTitleAka(t: Document): IO[Unit] = backlog.enqueue(t).map(_ => ())
 
+  override def streamTitleAka(): fs2.Stream[IO, Document] = {
+    val iterator: Iterator[Document] = collection.find().iterator().asScala
+    fs2.Stream.fromBlockingIterator[IO](iterator, 512)
+  }
+
   override def flush(): IO[Unit] = backlog.flush()
 
   override def verifyTitleAka(): IO[Unit] = IO {

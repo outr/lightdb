@@ -14,6 +14,7 @@ trait BenchmarkImplementation {
 
   def flush(): IO[Unit]
 
+  def streamTitleAka(): fs2.Stream[IO, TitleAka]
   def verifyTitleAka(): IO[Unit]
 
   implicit class MapExtras(map: Map[String, String]) {

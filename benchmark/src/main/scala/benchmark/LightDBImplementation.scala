@@ -9,7 +9,6 @@ import lightdb.store.halo.SharedHaloSupport
 import lightdb.index.lucene._
 
 import java.nio.file.Paths
-import scala.concurrent.{ExecutionContext, Future}
 
 object LightDBImplementation extends BenchmarkImplementation {
   type TitleAka = TitleAkaLDB
@@ -28,6 +27,8 @@ object LightDBImplementation extends BenchmarkImplementation {
   )
 
   override def persistTitleAka(t: TitleAkaLDB): IO[Unit] = db.titleAka.put(t).map(_ => ())
+
+  override def streamTitleAka(): fs2.Stream[IO, TitleAkaLDB] = db.titleAka.all()
 
   override def flush(): IO[Unit] = db.titleAka.commit()
 
