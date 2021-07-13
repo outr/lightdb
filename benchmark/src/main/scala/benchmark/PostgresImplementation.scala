@@ -69,7 +69,9 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   override def init(): IO[Unit] = IO {
     executeUpdate("DROP TABLE IF EXISTS title_aka")
+    executeUpdate("DROP TABLE IF EXISTS title_basics")
     executeUpdate("CREATE TABLE title_aka(id VARCHAR NOT NULL, titleId TEXT, ordering INTEGER, title TEXT, region TEXT, language TEXT, types TEXT, attributes TEXT, isOriginalTitle SMALLINT, PRIMARY KEY (id))")
+    executeUpdate("CREATE TABLE title_basics(id VARCHAR NOT NULL, tconst TEXT, titleType TEXT, primaryTitle TEXT, originalTitle TEXT, isAdult INTEGER, startYear INTEGER, endYear INTEGER, runtimeMinutes INTEGER, genres TEXT, PRIMARY KEY (id))")
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
@@ -163,6 +165,14 @@ object PostgresImplementation extends BenchmarkImplementation {
     rs.next()
     val count = rs.getInt(1)
     scribe.info(s"Counted $count records in title_aka table")
+  }
+
+  override def verifyTitleBasics(): IO[Unit] = IO {
+    val s = connection.createStatement()
+    val rs = s.executeQuery("SELECT COUNT(1) FROM title_basics")
+    rs.next()
+    val count = rs.getInt(1)
+    scribe.info(s"Counted $count records in title_basics table")
   }
 
   private def executeUpdate(sql: String): Unit = {

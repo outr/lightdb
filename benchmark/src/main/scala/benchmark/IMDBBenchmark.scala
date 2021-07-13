@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 // PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = PostgresImplementation
+  val implementation: BenchmarkImplementation = LightDBImplementation
 
   private var ids: List[(String, String)] = Nil
 
@@ -43,32 +43,37 @@ object IMDBBenchmark { // extends IOApp {
     val io = for {
       _ <- implementation.init()
       _ = scribe.info("--- Stage 1 ---")
-      file <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneMillion)
+      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneHundredThousand)
       _ = scribe.info("--- Stage 2 ---")
-      total <- process(file)
+      totalAka <- process(akasFile, implementation.map2TitleAka, implementation.persistTitleAka)
       _ = scribe.info("--- Stage 3 ---")
-      _ <- implementation.flush()
+      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneHundredThousand)
       _ = scribe.info("--- Stage 4 ---")
-      _ <- implementation.verifyTitleAka()
+      totalBasics <- process(basicsFile, implementation.map2TitleBasics, implementation.persistTitleBasics)
       _ = scribe.info("--- Stage 5 ---")
+      _ <- implementation.flush()
+      _ = scribe.info("--- Stage 6 ---")
+      _ <- implementation.verifyTitleAka()
+      _ <- implementation.verifyTitleBasics()
+      _ = scribe.info("--- Stage 7 ---")
       _ = now = System.currentTimeMillis()
       _ <- cycleThroughEntireCollection(10)
-      _ = scribe.info("--- Stage 6 ---")
+      _ = scribe.info("--- Stage 8 ---")
       _ = scribe.info(s"Processed entire collection in ${(System.currentTimeMillis() - now) / 1000.0} seconds. Id list of ${ids.length}")
       _ = now = System.currentTimeMillis()
       _ <- validateIds(ids)
-      _ = scribe.info("--- Stage 7 ---")
+      _ = scribe.info("--- Stage 9 ---")
       _ = scribe.info(s"Validated ${ids.length} in ${(System.currentTimeMillis() - now) / 1000.0} seconds.")
     } yield {
       val elapsed = (System.currentTimeMillis() - start) / 1000.0
-      val perSecond = total / elapsed
-      scribe.info(s"${implementation.name} - Total: $total in $elapsed seconds (${perSecond.f(f = 1)} per second)")
+      val perSecond = (totalAka + totalBasics) / elapsed
+      scribe.info(s"${implementation.name} - Total Akas: $totalAka and Total Basics: $totalBasics in $elapsed seconds (${perSecond.f(f = 1)} per second)")
     }
     io.unsafeRunSync()
     sys.exit(0)
   }
 
-  private def process(file: File): IO[Int] = IO {
+  private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO {
     val reader = new BufferedReader(new FileReader(file))
     val counter = new AtomicInteger(0)
     val concurrency = 16
@@ -88,13 +93,13 @@ object IMDBBenchmark { // extends IOApp {
         }
       }
 
-      val iterator = new IOIterator[TitleAka] {
-        override def next(): IO[Option[TitleAka]] = IO {
+      val iterator = new IOIterator[T] {
+        override def next(): IO[Option[T]] = IO {
           nextLine()
         }.map(_.map { line =>
           val values = line.split('\t').toList
           val map = keys.zip(values).filter(t => t._2.nonEmpty && t._2 != "\\N").toMap
-          implementation.map2TitleAka(map)
+          map2t(map)
         })
       }
 
@@ -103,10 +108,7 @@ object IMDBBenchmark { // extends IOApp {
       val io = iterator.stream(concurrency) { t =>
         counter.incrementAndGet()
         val start = System.currentTimeMillis()
-        implementation.persistTitleAka(t).map { _ =>
-          val elapsed = System.currentTimeMillis() - start
-//          if (elapsed > 1000) scribe.warn(s"Took way too long: $elapsed")
-        }
+        persist(t)
       }
 
       new Thread() {
