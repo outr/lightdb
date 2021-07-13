@@ -19,7 +19,8 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   private lazy val client = MongoClients.create()
   private lazy val db = client.getDatabase("imdb")
-  private lazy val collection = db.getCollection("titleAka")
+  private lazy val titleAka = db.getCollection("titleAka")
+  private lazy val titleBasics = db.getCollection("titleBasics")
 
   override def name: String = "MongoDB"
 
@@ -52,21 +53,30 @@ object MongoDBImplementation extends BenchmarkImplementation {
     ).asJava)
   }
 
-  private lazy val backlog = new FlushingBacklog[Document](1000, 10000) {
+  private lazy val backlogAka = new FlushingBacklog[Document](1000, 10000) {
     override protected def write(list: List[Document]): IO[Unit] = IO {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)
-      collection.insertMany(javaList)
+      titleAka.insertMany(javaList)
       ()
     }
   }
 
-  override def persistTitleAka(t: Document): IO[Unit] = backlog.enqueue(t).map(_ => ())
+  private lazy val backlogBasics = new FlushingBacklog[Document](1000, 10000) {
+    override protected def write(list: List[Document]): IO[Unit] = IO {
+      val javaList = new util.ArrayList[Document](batchSize)
+      list.foreach(javaList.add)
+      titleBasics.insertMany(javaList)
+      ()
+    }
+  }
 
-  override def persistTitleBasics(t: Document): IO[Unit] = backlog.enqueue(t).map(_ => ())
+  override def persistTitleAka(t: Document): IO[Unit] = backlogAka.enqueue(t).map(_ => ())
+
+  override def persistTitleBasics(t: Document): IO[Unit] = backlogBasics.enqueue(t).map(_ => ())
 
   override def streamTitleAka(): fs2.Stream[IO, Document] = {
-    val iterator: Iterator[Document] = collection.find().iterator().asScala
+    val iterator: Iterator[Document] = titleAka.find().iterator().asScala
     fs2.Stream.fromBlockingIterator[IO](iterator, 512)
   }
 
@@ -77,13 +87,23 @@ object MongoDBImplementation extends BenchmarkImplementation {
   import com.mongodb.client.model.Filters
 
   override def get(id: String): IO[Document] = IO {
-    collection.find(Filters.eq("_id", id)).first()
+    titleAka.find(Filters.eq("_id", id)).first()
   }
 
-  override def flush(): IO[Unit] = backlog.flush()
+  override def flush(): IO[Unit] = for {
+    _ <- backlogAka.flush()
+    _ <- backlogBasics.flush()
+  } yield {
+    ()
+  }
 
   override def verifyTitleAka(): IO[Unit] = IO {
-    val docs = collection.countDocuments()
+    val docs = titleAka.countDocuments()
+    scribe.info(s"TitleAka counts -- $docs")
+  }
+
+  override def verifyTitleBasics(): IO[Unit] = IO {
+    val docs = titleBasics.countDocuments()
     scribe.info(s"TitleAka counts -- $docs")
   }
 }

@@ -5,7 +5,7 @@ import fabric.rw.{ReaderWriter, ccRW}
 import lightdb.{Document, Id, JsonMapping, LightDB}
 import lightdb.collection.Collection
 import lightdb.index.lucene.LuceneIndexerSupport
-import lightdb.store.halo.SharedHaloSupport
+import lightdb.store.halo.{MultiHaloSupport, SharedHaloSupport}
 import lightdb.index.lucene._
 
 import java.nio.file.Paths
@@ -59,10 +59,16 @@ object LightDBImplementation extends BenchmarkImplementation {
     luceneCount <- db.titleAka.indexer.count()
   } yield {
     scribe.info(s"TitleAka counts -- Halo: $haloCount, Lucene: $luceneCount")
-    ()
   }
 
-  object db extends LightDB(directory = Some(Paths.get("imdb"))) with LuceneIndexerSupport with SharedHaloSupport {
+  override def verifyTitleBasics(): IO[Unit] = for {
+    haloCount <- db.titleBasics.store.count()
+    luceneCount <- db.titleBasics.indexer.count()
+  } yield {
+    scribe.info(s"TitleBasic counts -- Halo: $haloCount, Lucene: $luceneCount")
+  }
+
+  object db extends LightDB(directory = Some(Paths.get("imdb"))) with LuceneIndexerSupport with MultiHaloSupport {
     override protected def haloIndexThreads: Int = 10
     override protected def haloMaxFileSize: Int = 1024 * 1024 * 10    // 10 meg
 
