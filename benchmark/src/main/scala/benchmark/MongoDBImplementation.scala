@@ -15,6 +15,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
   implicit val runtime: IORuntime = IORuntime.global
 
   override type TitleAka = Document
+  override type TitleBasics = Document
 
   private lazy val client = MongoClients.create()
   private lazy val db = client.getDatabase("imdb")
@@ -36,6 +37,21 @@ object MongoDBImplementation extends BenchmarkImplementation {
     ).asJava)
   }
 
+  override def map2TitleBasics(map: Map[String, String]): Document = {
+    new Document(Map[String, AnyRef](
+      "_id" -> Unique(),
+      "tconst" -> map.value("tconst"),
+      "titleType" -> map.value("titleType"),
+      "primaryTitle" -> map.value("primaryTitle"),
+      "originalTitle" -> map.value("originalTitle"),
+      "isAdult" -> map.value("isAdult"),
+      "startYear" -> map.value("startYear"),
+      "endYear" -> map.value("endYear"),
+      "runtimeMinutes" -> map.value("runtimeMinutes"),
+      "genres" -> map.list("genres").mkString(", ")
+    ).asJava)
+  }
+
   private lazy val backlog = new FlushingBacklog[Document](1000, 10000) {
     override protected def write(list: List[Document]): IO[Unit] = IO {
       val javaList = new util.ArrayList[Document](batchSize)
@@ -46,6 +62,8 @@ object MongoDBImplementation extends BenchmarkImplementation {
   }
 
   override def persistTitleAka(t: Document): IO[Unit] = backlog.enqueue(t).map(_ => ())
+
+  override def persistTitleBasics(t: Document): IO[Unit] = backlog.enqueue(t).map(_ => ())
 
   override def streamTitleAka(): fs2.Stream[IO, Document] = {
     val iterator: Iterator[Document] = collection.find().iterator().asScala

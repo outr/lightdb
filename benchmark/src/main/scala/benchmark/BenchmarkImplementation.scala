@@ -4,13 +4,17 @@ import cats.effect.IO
 
 trait BenchmarkImplementation {
   type TitleAka
+  type TitleBasics
 
   def name: String
 
   def init(): IO[Unit] = IO.unit
 
   def map2TitleAka(map: Map[String, String]): TitleAka
+  def map2TitleBasics(map: Map[String, String]): TitleBasics
+
   def persistTitleAka(t: TitleAka): IO[Unit]
+  def persistTitleBasics(t: TitleBasics): IO[Unit]
 
   def flush(): IO[Unit]
 

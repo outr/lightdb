@@ -11,7 +11,8 @@ import lightdb.index.lucene._
 import java.nio.file.Paths
 
 object LightDBImplementation extends BenchmarkImplementation {
-  type TitleAka = TitleAkaLDB
+  override type TitleAka = TitleAkaLDB
+  override type TitleBasics = TitleBasicsLDB
 
   override def name: String = "LightDB"
 
@@ -26,7 +27,22 @@ object LightDBImplementation extends BenchmarkImplementation {
     isOriginalTitle = map.boolOption("isOriginalTitle")
   )
 
+
+  override def map2TitleBasics(map: Map[String, String]): TitleBasicsLDB = TitleBasicsLDB(
+    tconst = map.value("tconst"),
+    titleType = map.value("titleType"),
+    primaryTitle = map.value("primaryTitle"),
+    originalTitle = map.value("originalTitle"),
+    isAdult = map.bool("isAdult"),
+    startYear = map.int("startYear"),
+    endYear = map.int("endYear"),
+    runtimeMinutes = map.int("runtimeMinutes"),
+    genres = map.list("genres"),
+  )
+
   override def persistTitleAka(t: TitleAkaLDB): IO[Unit] = db.titleAka.put(t).map(_ => ())
+
+  override def persistTitleBasics(t: TitleBasicsLDB): IO[Unit] = db.titleBasics.put(t).map(_ => ())
 
   override def streamTitleAka(): fs2.Stream[IO, TitleAkaLDB] = db.titleAka.all()
 
@@ -50,7 +66,8 @@ object LightDBImplementation extends BenchmarkImplementation {
     override protected def haloIndexThreads: Int = 10
     override protected def haloMaxFileSize: Int = 1024 * 1024 * 10    // 10 meg
 
-    val titleAka: Collection[TitleAkaLDB] = collection[TitleAkaLDB]("titleAka", TitleAkaLDB)
+    val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
+    val titleBasics: Collection[TitleBasicsLDB] = collection("titleBasics", TitleBasicsLDB)
   }
 
   case class TitleAkaLDB(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAka] = Id[TitleAka]()) extends Document[TitleAka]
@@ -61,5 +78,15 @@ object LightDBImplementation extends BenchmarkImplementation {
     val titleId: FD[String] = field("titleId", _.titleId).indexed()
     val ordering: FD[Int] = field("ordering", _.ordering).indexed()
     val title: FD[String] = field("title", _.title).indexed()
+  }
+
+  case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics] = Id[TitleBasics]()) extends Document[TitleBasics]
+
+  object TitleBasicsLDB extends JsonMapping[TitleBasicsLDB] {
+    override implicit val rw: ReaderWriter[TitleBasicsLDB] = ccRW
+
+    val tconst: FD[String] = field("tconst", _.tconst).indexed()
+    val primaryTitle: FD[String] = field("primaryTitle", _.primaryTitle).indexed()
+    val originalTitle: FD[String] = field("originalTitle", _.originalTitle).indexed()
   }
 }
