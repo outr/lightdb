@@ -52,6 +52,16 @@ object MongoDBImplementation extends BenchmarkImplementation {
     fs2.Stream.fromBlockingIterator[IO](iterator, 512)
   }
 
+  override def idFor(t: Document): String = t.getString("_id")
+
+  override def titleIdFor(t: Document): String = t.getString("titleId")
+
+  import com.mongodb.client.model.Filters
+
+  override def get(id: String): IO[Document] = IO {
+    collection.find(Filters.eq("_id", id)).first()
+  }
+
   override def flush(): IO[Unit] = backlog.flush()
 
   override def verifyTitleAka(): IO[Unit] = IO {

@@ -30,6 +30,12 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def streamTitleAka(): fs2.Stream[IO, TitleAkaLDB] = db.titleAka.all()
 
+  override def idFor(t: TitleAkaLDB): String = t._id.value
+
+  override def titleIdFor(t: TitleAkaLDB): String = t.titleId
+
+  override def get(id: String): IO[TitleAkaLDB] = db.titleAka.get(Id[TitleAkaLDB](id)).map(_.getOrElse(throw new RuntimeException(s"$id not found")))
+
   override def flush(): IO[Unit] = db.titleAka.commit()
 
   override def verifyTitleAka(): IO[Unit] = for {
