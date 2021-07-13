@@ -10,6 +10,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   implicit val runtime: IORuntime = IORuntime.global
 
   override type TitleAka = TitleAkaPG
+  override type TitleBasics = TitleBasicsPG
 
   private lazy val connection: Connection = {
     val c = DriverManager.getConnection("jdbc:postgresql://localhost:5432/imdb", "postgres", "password")
@@ -17,7 +18,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     c
   }
 
-  private lazy val backlog = new FlushingBacklog[TitleAka](1000, 10000) {
+  private lazy val backlogAka = new FlushingBacklog[TitleAka](1000, 10000) {
     override protected def write(list: List[TitleAkaPG]): IO[Unit] = IO {
       val ps = connection.prepareStatement("INSERT INTO title_aka(id, titleId, ordering, title, region, language, types, attributes, isOriginalTitle) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
@@ -31,6 +32,30 @@ object PostgresImplementation extends BenchmarkImplementation {
           ps.setString(7, t.types)
           ps.setString(8, t.attributes)
           ps.setInt(9, t.isOriginalTitle)
+          ps.addBatch()
+        }
+        ps.executeBatch()
+      } finally {
+        ps.close()
+      }
+    }
+  }
+
+  private lazy val backlogBasics = new FlushingBacklog[TitleBasics](1000, 10000) {
+    override protected def write(list: List[TitleBasicsPG]): IO[Unit] = IO {
+      val ps = connection.prepareStatement("INSERT INTO title_basics(id, tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genres) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      try {
+        list.foreach { t =>
+          ps.setString(1, t.id)
+          ps.setString(2, t.tconst)
+          ps.setString(3, t.titleType)
+          ps.setString(4, t.primaryTitle)
+          ps.setString(5, t.originalTitle)
+          ps.setInt(6, t.isAdult)
+          ps.setInt(7, t.startYear)
+          ps.setInt(8, t.endYear)
+          ps.setInt(9, t.runtimeMinutes)
+          ps.setString(10, t.genres)
           ps.addBatch()
         }
         ps.executeBatch()
@@ -59,7 +84,22 @@ object PostgresImplementation extends BenchmarkImplementation {
     isOriginalTitle = map.boolOption("isOriginalTitle").map(b => if (b) 1 else 0).getOrElse(-1)
   )
 
-  override def persistTitleAka(t: TitleAka): IO[Unit] = backlog.enqueue(t).map(_ => ())
+  override def map2TitleBasics(map: Map[String, String]): TitleBasicsPG = TitleBasicsPG(
+    id = map.option("id").getOrElse(lightdb.Unique()),
+    tconst = map.value("tconst"),
+    titleType = map.value("titleType"),
+    primaryTitle = map.value("primaryTitle"),
+    originalTitle = map.value("originalTitle"),
+    isAdult = map.int("isAdult"),
+    startYear = map.int("startYear"),
+    endYear = map.int("endYear"),
+    runtimeMinutes = map.int("runtimeMinutes"),
+    genres = map.value("genres")
+  )
+
+  override def persistTitleAka(t: TitleAka): IO[Unit] = backlogAka.enqueue(t).map(_ => ())
+
+  override def persistTitleBasics(t: TitleBasicsPG): IO[Unit] = backlogBasics.enqueue(t).map(_ => ())
 
   private def fromRS(rs: ResultSet): TitleAkaPG = TitleAkaPG(
     id = rs.getString("id"),
@@ -111,7 +151,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   }
 
   override def flush(): IO[Unit] = for {
-    _ <- backlog.flush()
+    _ <- backlogAka.flush()
     _ <- IO(commit())
   } yield {
     ()
@@ -137,4 +177,5 @@ object PostgresImplementation extends BenchmarkImplementation {
   private def commit(): Unit = connection.commit()
 
   case class TitleAkaPG(id: String, titleId: String, ordering: Int, title: String, region: String, language: String, types: String, attributes: String, isOriginalTitle: Int)
+  case class TitleBasicsPG(id: String, tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Int, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: String)
 }

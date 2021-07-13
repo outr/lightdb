@@ -6,7 +6,7 @@ import com.oath.halodb.{HaloDB, HaloDBOptions}
 import lightdb.store.ObjectStore
 import lightdb.Id
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
 
 case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 1024 * 1024) extends ObjectStore {
@@ -17,6 +17,7 @@ case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 
     opts.setBuildIndexThreads(indexThreads)
     opts.setMaxFileSize(maxFileSize)
 
+    Files.createDirectories(directory.getParent)
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
 
