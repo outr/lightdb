@@ -14,8 +14,13 @@ trait BenchmarkImplementation {
 
   def flush(): IO[Unit]
 
+  def idFor(t: TitleAka): String
+  def titleIdFor(t: TitleAka): String
+
   def streamTitleAka(): fs2.Stream[IO, TitleAka]
   def verifyTitleAka(): IO[Unit]
+
+  def get(id: String): IO[TitleAka]
 
   implicit class MapExtras(map: Map[String, String]) {
     def option(key: String): Option[String] = map.get(key) match {

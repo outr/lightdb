@@ -32,20 +32,33 @@ object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
   val implementation: BenchmarkImplementation = PostgresImplementation
 
+  private var ids: List[(String, String)] = Nil
+
   type TitleAka = implementation.TitleAka
 
   def main(args: Array[String]): Unit = {
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
+    var now = System.currentTimeMillis()
     val io = for {
       _ <- implementation.init()
-      file <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneHundredThousand)
+      _ = scribe.info("--- Stage 1 ---")
+      file <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneMillion)
+      _ = scribe.info("--- Stage 2 ---")
       total <- process(file)
+      _ = scribe.info("--- Stage 3 ---")
       _ <- implementation.flush()
+      _ = scribe.info("--- Stage 4 ---")
       _ <- implementation.verifyTitleAka()
-      now = System.currentTimeMillis()
-      _ <- cycleThroughEntireCollection()
-      _ = scribe.info(s"Processed entire collection in ${(System.currentTimeMillis() - now) / 1000.0} seconds")
+      _ = scribe.info("--- Stage 5 ---")
+      _ = now = System.currentTimeMillis()
+      _ <- cycleThroughEntireCollection(10)
+      _ = scribe.info("--- Stage 6 ---")
+      _ = scribe.info(s"Processed entire collection in ${(System.currentTimeMillis() - now) / 1000.0} seconds. Id list of ${ids.length}")
+      _ = now = System.currentTimeMillis()
+      _ <- validateIds(ids)
+      _ = scribe.info("--- Stage 7 ---")
+      _ = scribe.info(s"Validated ${ids.length} in ${(System.currentTimeMillis() - now) / 1000.0} seconds.")
     } yield {
       val elapsed = (System.currentTimeMillis() - start) / 1000.0
       val perSecond = total / elapsed
@@ -121,10 +134,25 @@ object IMDBBenchmark { // extends IOApp {
 
   private val counter = new AtomicInteger(0)
 
-  def cycleThroughEntireCollection(): IO[Unit] = implementation.streamTitleAka().map { titleAka =>
-    counter.incrementAndGet()
+  def cycleThroughEntireCollection(idEvery: Int): IO[Unit] = implementation.streamTitleAka().map { titleAka =>
+    val v = counter.incrementAndGet()
+    if (v % idEvery == 0) {
+      ids = implementation.idFor(titleAka) -> implementation.titleIdFor(titleAka) :: ids
+    }
   }.compile.drain.map { _ =>
     scribe.info(s"Counter for entire collection: ${counter.get()}")
+  }
+
+  def validateIds(ids: List[(String, String)]): IO[Unit] = if (ids.isEmpty) {
+    IO.unit
+  } else {
+    val (id, expectedTitleId) = ids.head
+    implementation.get(id).flatMap { titleAka =>
+      assert(titleAka != null, s"$id / $expectedTitleId is null in lookup")
+      val titleId = implementation.titleIdFor(titleAka)
+      assert(titleId == expectedTitleId, s"TitleID: $titleId was not expected: $expectedTitleId for $id")
+      validateIds(ids.tail)
+    }
   }
 
 //  override def run(args: List[String]): IO[ExitCode] = {

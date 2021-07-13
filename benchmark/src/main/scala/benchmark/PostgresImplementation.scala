@@ -1,9 +1,9 @@
 package benchmark
-import cats.effect.IO
+import cats.effect.{IO, Unique}
 import cats.effect.unsafe.IORuntime
 import lightdb.util.FlushingBacklog
 
-import java.sql.{Connection, DriverManager}
+import java.sql.{Connection, DriverManager, ResultSet}
 import scala.concurrent.{ExecutionContext, Future}
 
 object PostgresImplementation extends BenchmarkImplementation {
@@ -19,17 +19,18 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   private lazy val backlog = new FlushingBacklog[TitleAka](1000, 10000) {
     override protected def write(list: List[TitleAkaPG]): IO[Unit] = IO {
-      val ps = connection.prepareStatement("INSERT INTO title_aka(titleId, ordering, title, region, language, types, attributes, isOriginalTitle) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      val ps = connection.prepareStatement("INSERT INTO title_aka(id, titleId, ordering, title, region, language, types, attributes, isOriginalTitle) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
         list.foreach { t =>
-          ps.setString(1, t.titleId)
-          ps.setInt(2, t.ordering)
-          ps.setString(3, t.title)
-          ps.setString(4, t.region)
-          ps.setString(5, t.language)
-          ps.setString(6, t.types)
-          ps.setString(7, t.attributes)
-          ps.setInt(8, t.isOriginalTitle)
+          ps.setString(1, t.id)
+          ps.setString(2, t.titleId)
+          ps.setInt(3, t.ordering)
+          ps.setString(4, t.title)
+          ps.setString(5, t.region)
+          ps.setString(6, t.language)
+          ps.setString(7, t.types)
+          ps.setString(8, t.attributes)
+          ps.setInt(9, t.isOriginalTitle)
           ps.addBatch()
         }
         ps.executeBatch()
@@ -43,10 +44,11 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   override def init(): IO[Unit] = IO {
     executeUpdate("DROP TABLE IF EXISTS title_aka")
-    executeUpdate("CREATE TABLE title_aka(id SERIAL PRIMARY KEY, titleId TEXT, ordering INTEGER, title TEXT, region TEXT, language TEXT, types TEXT, attributes TEXT, isOriginalTitle SMALLINT)")
+    executeUpdate("CREATE TABLE title_aka(id VARCHAR NOT NULL, titleId TEXT, ordering INTEGER, title TEXT, region TEXT, language TEXT, types TEXT, attributes TEXT, isOriginalTitle SMALLINT, PRIMARY KEY (id))")
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
+    id = map.option("id").getOrElse(lightdb.Unique()),
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
     title = map.value("title"),
@@ -59,39 +61,52 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   override def persistTitleAka(t: TitleAka): IO[Unit] = backlog.enqueue(t).map(_ => ())
 
+  private def fromRS(rs: ResultSet): TitleAkaPG = TitleAkaPG(
+    id = rs.getString("id"),
+    titleId = rs.getString("titleId"),
+    ordering = rs.getInt("ordering"),
+    title = rs.getString("title"),
+    region = rs.getString("region"),
+    language = rs.getString("language"),
+    types = rs.getString("types"),
+    attributes = rs.getString("attributes"),
+    isOriginalTitle = rs.getInt("isOriginalTitle")
+  )
+
   override def streamTitleAka(): fs2.Stream[IO, TitleAkaPG] = {
     val s = connection.createStatement()
     try {
       val rs = s.executeQuery("SELECT * FROM title_aka")
-      val iterator = new Iterator[TitleAkaPG] {
-        private var current = Option.empty[TitleAkaPG]
-
-        override def hasNext: Boolean = if (current.isEmpty) {
-          if (rs.next()) {
-            // TODO: populate current
-            current = Some(TitleAkaPG(
-              titleId = rs.getString("titleId"),
-              ordering = rs.getInt("ordering"),
-              title = rs.getString("title"),
-              region = rs.getString("region"),
-              language = rs.getString("language"),
-              types = rs.getString("types"),
-              attributes = rs.getString("attributes"),
-              isOriginalTitle = rs.getInt("isOriginalTitle")
-            ))
-            true
-          } else {
-            false
-          }
+      val iterator = Iterator.unfold(rs) { rs =>
+        if (rs.next()) {
+          Some(fromRS(rs) -> rs)
         } else {
-          true
+          None
         }
-
-        override def next(): TitleAkaPG = current.getOrElse(throw new NullPointerException("Out of results"))
       }
       fs2.Stream.fromBlockingIterator[IO](iterator, 512)
     } finally {
       s.closeOnCompletion()
+    }
+  }
+
+  override def idFor(t: TitleAkaPG): String = t.id
+
+  override def titleIdFor(t: TitleAkaPG): String = t.titleId
+
+  override def get(id: String): IO[TitleAkaPG] = IO {
+    val s = connection.prepareStatement("SELECT * FROM title_aka WHERE id = ?")
+    try {
+      s.setString(1, id)
+      val rs = s.executeQuery()
+      try {
+        rs.next()
+        fromRS(rs)
+      } finally {
+        rs.close()
+      }
+    } finally {
+      s.close()
     }
   }
 
@@ -121,5 +136,5 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   private def commit(): Unit = connection.commit()
 
-  case class TitleAkaPG(titleId: String, ordering: Int, title: String, region: String, language: String, types: String, attributes: String, isOriginalTitle: Int)
+  case class TitleAkaPG(id: String, titleId: String, ordering: Int, title: String, region: String, language: String, types: String, attributes: String, isOriginalTitle: Int)
 }
