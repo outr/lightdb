@@ -3,6 +3,7 @@ package benchmark
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.mongodb.client.MongoClients
+import com.mongodb.client.model.Indexes
 import lightdb.Unique
 import lightdb.util.FlushingBacklog
 import org.bson.Document
@@ -71,6 +72,10 @@ object MongoDBImplementation extends BenchmarkImplementation {
     }
   }
 
+  override def init(): IO[Unit] = IO {
+    titleAka.createIndex(Indexes.ascending("titleId"))
+  }
+
   override def persistTitleAka(t: Document): IO[Unit] = backlogAka.enqueue(t).map(_ => ())
 
   override def persistTitleBasics(t: Document): IO[Unit] = backlogBasics.enqueue(t).map(_ => ())
@@ -88,6 +93,10 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def get(id: String): IO[Document] = IO {
     titleAka.find(Filters.eq("_id", id)).first()
+  }
+
+  override def findByTitleId(titleId: String): IO[List[Document]] = IO {
+    titleAka.find(Filters.eq("titleId", titleId)).iterator().asScala.toList
   }
 
   override def flush(): IO[Unit] = for {

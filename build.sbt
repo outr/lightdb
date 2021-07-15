@@ -65,7 +65,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 	.settings(
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
-			"com.outr" %%% "scribe" % scribeVersion,
+			"com.outr" %%% "scribe-slf4j" % scribeVersion,
 			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
 			"com.outr" %%% "fabric-parse" % fabricVersion,
 			"co.fs2" %%% "fs2-core" % fs2Version,

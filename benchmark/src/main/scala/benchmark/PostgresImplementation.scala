@@ -72,6 +72,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     executeUpdate("DROP TABLE IF EXISTS title_basics")
     executeUpdate("CREATE TABLE title_aka(id VARCHAR NOT NULL, titleId TEXT, ordering INTEGER, title TEXT, region TEXT, language TEXT, types TEXT, attributes TEXT, isOriginalTitle SMALLINT, PRIMARY KEY (id))")
     executeUpdate("CREATE TABLE title_basics(id VARCHAR NOT NULL, tconst TEXT, titleType TEXT, primaryTitle TEXT, originalTitle TEXT, isAdult INTEGER, startYear INTEGER, endYear INTEGER, runtimeMinutes INTEGER, genres TEXT, PRIMARY KEY (id))")
+    executeUpdate("CREATE INDEX title_aka_title_id_idx ON title_aka(titleId)")
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
@@ -144,6 +145,25 @@ object PostgresImplementation extends BenchmarkImplementation {
       try {
         rs.next()
         fromRS(rs)
+      } finally {
+        rs.close()
+      }
+    } finally {
+      s.close()
+    }
+  }
+
+  override def findByTitleId(titleId: String): IO[List[TitleAkaPG]] = IO {
+    val s = connection.prepareStatement("SELECT * FROM title_aka WHERE titleId = ?")
+    try {
+      s.setString(1, titleId)
+      val rs = s.executeQuery()
+      try {
+        new Iterator[TitleAkaPG] {
+          override def hasNext: Boolean = rs.next()
+
+          override def next(): TitleAkaPG = fromRS(rs)
+        }.toList
       } finally {
         rs.close()
       }
