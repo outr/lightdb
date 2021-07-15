@@ -9,11 +9,11 @@ import scala.io.Source
 import fs2._
 import fs2.io.file._
 import perfolation._
+import scribe.{Level, Logger}
 
 import java.net.URL
 import scala.annotation.tailrec
 import sys.process._
-
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 // PostgreSQL - Total: 26838043 in 547.247 seconds (49041.9 per second)
@@ -30,13 +30,15 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 // PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = LightDBImplementation
+  val implementation: BenchmarkImplementation = MongoDBImplementation
 
-  private var ids: List[(String, String)] = Nil
+  private var ids: List[Ids] = Nil
 
   type TitleAka = implementation.TitleAka
 
   def main(args: Array[String]): Unit = {
+    Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
+
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
     var now = System.currentTimeMillis()
@@ -64,6 +66,10 @@ object IMDBBenchmark { // extends IOApp {
       _ <- validateIds(ids)
       _ = scribe.info("--- Stage 9 ---")
       _ = scribe.info(s"Validated ${ids.length} in ${(System.currentTimeMillis() - now) / 1000.0} seconds.")
+      _ = now = System.currentTimeMillis()
+      _ <- validateTitleIds(ids)
+      _ = scribe.info("--- Stage 10 ---")
+      _ = scribe.info(s"Validated ${ids.length} titleIds in ${(System.currentTimeMillis() - now) / 1000.0} seconds.")
     } yield {
       val elapsed = (System.currentTimeMillis() - start) / 1000.0
       val perSecond = (totalAka + totalBasics) / elapsed
@@ -139,21 +145,31 @@ object IMDBBenchmark { // extends IOApp {
   def cycleThroughEntireCollection(idEvery: Int): IO[Unit] = implementation.streamTitleAka().map { titleAka =>
     val v = counter.incrementAndGet()
     if (v % idEvery == 0) {
-      ids = implementation.idFor(titleAka) -> implementation.titleIdFor(titleAka) :: ids
+      ids = Ids(implementation.idFor(titleAka), implementation.titleIdFor(titleAka)) :: ids
     }
   }.compile.drain.map { _ =>
     scribe.info(s"Counter for entire collection: ${counter.get()}")
   }
 
-  def validateIds(ids: List[(String, String)]): IO[Unit] = if (ids.isEmpty) {
+  def validateIds(idsList: List[Ids]): IO[Unit] = if (idsList.isEmpty) {
     IO.unit
   } else {
-    val (id, expectedTitleId) = ids.head
-    implementation.get(id).flatMap { titleAka =>
-      assert(titleAka != null, s"$id / $expectedTitleId is null in lookup")
+    val ids = idsList.head
+    implementation.get(ids.id).flatMap { titleAka =>
+      assert(titleAka != null, s"${ids.id} / ${ids.titleId} is null in lookup")
       val titleId = implementation.titleIdFor(titleAka)
-      assert(titleId == expectedTitleId, s"TitleID: $titleId was not expected: $expectedTitleId for $id")
-      validateIds(ids.tail)
+      assert(titleId == ids.titleId, s"TitleID: $titleId was not expected: ${ids.titleId} for ${ids.id}")
+      validateIds(idsList.tail)
+    }
+  }
+
+  def validateTitleIds(idsList: List[Ids]): IO[Unit] = if (idsList.isEmpty) {
+    IO.unit
+  } else {
+    val ids = idsList.head
+    implementation.findByTitleId(ids.titleId).flatMap { titleAkas =>
+      titleAkas.find(ta => implementation.idFor(ta) == ids.id).getOrElse(throw new RuntimeException(s"Unable to find id match (${ids.id}) for: $titleAkas"))
+      validateTitleIds(idsList.tail)
     }
   }
 
@@ -273,6 +289,8 @@ object IMDBBenchmark { // extends IOApp {
       }
   }
 }
+
+case class Ids(id: String, titleId: String)
 
 sealed trait Limit {
   def name: String

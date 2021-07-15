@@ -1,12 +1,14 @@
 package benchmark
 
 import cats.effect.IO
+import cats.implicits.toTraverseOps
 import fabric.rw.{ReaderWriter, ccRW}
 import lightdb.{Document, Id, JsonMapping, LightDB}
 import lightdb.collection.Collection
 import lightdb.index.lucene.LuceneIndexerSupport
 import lightdb.store.halo.{MultiHaloSupport, SharedHaloSupport}
 import lightdb.index.lucene._
+import lightdb.query.FieldQueryExtras
 
 import java.nio.file.Paths
 
@@ -24,9 +26,9 @@ object LightDBImplementation extends BenchmarkImplementation {
     language = map.option("language"),
     types = map.list("types"),
     attributes = map.list("attributes"),
-    isOriginalTitle = map.boolOption("isOriginalTitle")
+    isOriginalTitle = map.boolOption("isOriginalTitle"),
+    _id = Id[TitleAkaLDB]()
   )
-
 
   override def map2TitleBasics(map: Map[String, String]): TitleBasicsLDB = TitleBasicsLDB(
     tconst = map.value("tconst"),
@@ -38,6 +40,7 @@ object LightDBImplementation extends BenchmarkImplementation {
     endYear = map.int("endYear"),
     runtimeMinutes = map.int("runtimeMinutes"),
     genres = map.list("genres"),
+    _id = Id[TitleBasicsLDB]()
   )
 
   override def persistTitleAka(t: TitleAkaLDB): IO[Unit] = db.titleAka.put(t).map(_ => ())
@@ -51,6 +54,8 @@ object LightDBImplementation extends BenchmarkImplementation {
   override def titleIdFor(t: TitleAkaLDB): String = t.titleId
 
   override def get(id: String): IO[TitleAkaLDB] = db.titleAka.get(Id[TitleAkaLDB](id)).map(_.getOrElse(throw new RuntimeException(s"$id not found")))
+
+  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = db.titleAka.query.filter(TitleAkaLDB.titleId === titleId).search().compile.toList.flatMap(_.map(_.get()).sequence)
 
   override def flush(): IO[Unit] = db.titleAka.commit()
 
@@ -76,7 +81,7 @@ object LightDBImplementation extends BenchmarkImplementation {
     val titleBasics: Collection[TitleBasicsLDB] = collection("titleBasics", TitleBasicsLDB)
   }
 
-  case class TitleAkaLDB(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAka] = Id[TitleAka]()) extends Document[TitleAka]
+  case class TitleAkaLDB(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAka]) extends Document[TitleAka]
 
   object TitleAkaLDB extends JsonMapping[TitleAkaLDB] {
     override implicit val rw: ReaderWriter[TitleAkaLDB] = ccRW
@@ -86,7 +91,7 @@ object LightDBImplementation extends BenchmarkImplementation {
     val title: FD[String] = field("title", _.title).indexed()
   }
 
-  case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics] = Id[TitleBasics]()) extends Document[TitleBasics]
+  case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]
 
   object TitleBasicsLDB extends JsonMapping[TitleBasicsLDB] {
     override implicit val rw: ReaderWriter[TitleBasicsLDB] = ccRW

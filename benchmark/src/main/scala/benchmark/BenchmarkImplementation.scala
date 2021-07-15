@@ -26,13 +26,14 @@ trait BenchmarkImplementation {
   def verifyTitleBasics(): IO[Unit]
 
   def get(id: String): IO[TitleAka]
+  def findByTitleId(titleId: String): IO[List[TitleAka]]
 
   implicit class MapExtras(map: Map[String, String]) {
     def option(key: String): Option[String] = map.get(key) match {
       case Some("") | None => None
       case Some(s) => Some(s)
     }
-    def value(key: String): String = option(key).getOrElse(throw new RuntimeException(s"Key not found: $key in ${map.keySet}"))
+    def value(key: String): String = option(key).getOrElse("")
     def int(key: String, default: Int = 0): Int = option(key).map(_.toInt).getOrElse(default)
     def list(key: String): List[String] = option(key).map(_.split(' ').toList).getOrElse(Nil)
     def bool(key: String): Boolean = if (int(key) == 0) false else true
