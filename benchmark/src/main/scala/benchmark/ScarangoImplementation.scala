@@ -1,11 +1,12 @@
 package benchmark
 
 import cats.effect.IO
-import com.outr.arango.{Document, DocumentCollection, DocumentModel, Field, Graph, Id, Index, Serialization}
+import com.outr.arango.query.AQLInterpolator
+import com.outr.arango.{Document, DocumentCollection, DocumentModel, Field, Graph, Id, Index, Pagination, Serialization}
 import lightdb.util.FlushingBacklog
 
 import java.util.concurrent.{Executor, Executors}
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 object ScarangoImplementation extends BenchmarkImplementation {
   override type TitleAka = TitleAkaADB
@@ -66,16 +67,39 @@ object ScarangoImplementation extends BenchmarkImplementation {
   override def titleIdFor(t: TitleAkaADB): String = t.titleId
 
   override def streamTitleAka(): fs2.Stream[IO, TitleAkaADB] = {
-    db.titleAka.all.batchSize(1000).paged
+    def recursivePagination(paginationFuture: => Future[Pagination[TitleAkaADB]]): fs2.Stream[IO, TitleAkaADB] = {
+      fs2.Stream.eval(IO.fromFuture(IO(paginationFuture))).flatMap { page =>
+        val results = fs2.Stream.emits(page.results)
+        if (page.hasNext) {
+          results ++ recursivePagination(page.next())
+        } else {
+          results
+        }
+      }
+    }
+
+    recursivePagination(db.titleAka.all.batchSize(1000).paged)
   }
 
-  override def verifyTitleAka(): IO[Unit] = ???
+  override def verifyTitleAka(): IO[Unit] = IO.fromFuture(IO(db.titleAka
+    .query(aql"FOR d IN $TitleAkaADB COLLECT WITH COUNT INTO length RETURN length")
+    .as[Int]
+    .one)).map { count =>
+      scribe.info(s"TitleAka counts -- $count")
+    }
 
-  override def verifyTitleBasics(): IO[Unit] = ???
+  override def verifyTitleBasics(): IO[Unit] = IO.fromFuture(IO(db.titleAka
+    .query(aql"FOR d IN $TitleBasicsADB COLLECT WITH COUNT INTO length RETURN length")
+    .as[Int]
+    .one)).map { count =>
+      scribe.info(s"TitleBasics counts -- $count")
+    }
 
-  override def get(id: String): IO[TitleAkaADB] = ???
+  override def get(id: String): IO[TitleAkaADB] = IO.fromFuture(IO(db.titleAka(TitleAkaADB.id(id))))
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaADB]] = ???
+  override def findByTitleId(titleId: String): IO[List[TitleAkaADB]] = IO.fromFuture(IO(db.titleAka
+    .query(aql"FOR d IN $TitleAkaADB FILTER ${TitleAkaADB.titleId} == $titleId RETURN d")
+    .results))
 
   object db extends Graph("imdb") {
     val titleAka: DocumentCollection[TitleAkaADB] = vertex[TitleAkaADB]
