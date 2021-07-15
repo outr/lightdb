@@ -158,6 +158,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.mongodb" % "mongodb-driver-sync" % "4.2.3",
 			"org.postgresql" % "postgresql" % "42.2.22",
 			"com.arangodb" % "arangodb-java-driver" % "6.12.3",
-			"com.arangodb" % "jackson-dataformat-velocypack" % "2.0.0"
+			"com.arangodb" % "jackson-dataformat-velocypack" % "2.0.0",
+			"com.outr" %% "scarango-driver" % "2.4.3"
 		)
 	)
