@@ -113,6 +113,6 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def verifyTitleBasics(): IO[Unit] = IO {
     val docs = titleBasics.countDocuments()
-    scribe.info(s"TitleAka counts -- $docs")
+    scribe.info(s"TitleBasics counts -- $docs")
   }
 }
