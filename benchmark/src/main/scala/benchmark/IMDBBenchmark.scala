@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 // PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = MongoDBImplementation
+  val implementation: BenchmarkImplementation = ArangoDBImplementation
 
   private var ids: List[Ids] = Nil
 
@@ -45,11 +45,11 @@ object IMDBBenchmark { // extends IOApp {
     val io = for {
       _ <- implementation.init()
       _ = scribe.info("--- Stage 1 ---")
-      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneHundredThousand)
+      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneMillion)
       _ = scribe.info("--- Stage 2 ---")
       totalAka <- process(akasFile, implementation.map2TitleAka, implementation.persistTitleAka)
       _ = scribe.info("--- Stage 3 ---")
-      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneHundredThousand)
+      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneMillion)
       _ = scribe.info("--- Stage 4 ---")
       totalBasics <- process(basicsFile, implementation.map2TitleBasics, implementation.persistTitleBasics)
       _ = scribe.info("--- Stage 5 ---")

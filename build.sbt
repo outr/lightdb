@@ -65,7 +65,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 	.settings(
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
-			"com.outr" %%% "scribe-slf4j" % scribeVersion,
+			"com.outr" %%% "scribe" % scribeVersion,
 			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
 			"com.outr" %%% "fabric-parse" % fabricVersion,
 			"co.fs2" %%% "fs2-core" % fs2Version,
@@ -114,6 +114,7 @@ lazy val halo = project.in(file("halo"))
 	.settings(
 		name := s"$projectName-halo",
 		libraryDependencies ++= Seq(
+			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"com.oath.halodb" % "halodb" % haloDBVersion,
 			"com.outr" %% "testy" % testyVersion % Test
 		),
@@ -155,6 +156,8 @@ lazy val benchmark = project.in(file("benchmark"))
 		libraryDependencies ++= Seq(
 			"co.fs2" %%% "fs2-io" % fs2Version,
 			"org.mongodb" % "mongodb-driver-sync" % "4.2.3",
-			"org.postgresql" % "postgresql" % "42.2.22"
+			"org.postgresql" % "postgresql" % "42.2.22",
+			"com.arangodb" % "arangodb-java-driver" % "6.12.3",
+			"com.arangodb" % "jackson-dataformat-velocypack" % "2.0.0"
 		)
 	)
