@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 // PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = ArangoDBImplementation
+  val implementation: BenchmarkImplementation = ArangoDBAsyncImplementation
 
   private var ids: List[Ids] = Nil
 
