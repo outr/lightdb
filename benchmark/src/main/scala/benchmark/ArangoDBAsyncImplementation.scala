@@ -2,7 +2,7 @@ package benchmark
 
 import cats.effect.IO
 import com.arangodb.ArangoDB
-import com.arangodb.async.ArangoDBAsync
+import com.arangodb.async.{ArangoCollectionAsync, ArangoDBAsync}
 import com.arangodb.entity.BaseDocument
 import com.arangodb.mapping.ArangoJack
 import com.arangodb.model.PersistentIndexOptions
@@ -18,12 +18,12 @@ object ArangoDBAsyncImplementation extends BenchmarkImplementation {
 
   override def name: String = "ArangoDB"
 
-  private lazy val db = new ArangoDBAsync.Builder()
+  private lazy val db: ArangoDBAsync = new ArangoDBAsync.Builder()
     .serializer(new ArangoJack())
     .password("root")
     .build()
 
-  private lazy val titleAka = db.db("imdb").collection("titleAka")
+  private lazy val titleAka: ArangoCollectionAsync = db.db("imdb").collection("titleAka")
   private lazy val titleBasics = db.db("imdb").collection("titleBasics")
 
   private lazy val backlogAka = new FlushingBacklog[BaseDocument](1000, 10000) {

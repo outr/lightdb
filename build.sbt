@@ -1,5 +1,5 @@
 // Scala versions
-val scala213 = "2.13.5"
+val scala213 = "2.13.7"
 val scala212 = "2.12.13"
 val scala3 = "3.0.0"
 val scala2 = List(scala213, scala212)
@@ -42,13 +42,13 @@ ThisBuild / developers := List(
 	Developer(id=developerId, name=developerName, email=email, url=url(developerURL))
 )
 
-val collectionCompatVersion: String = "2.4.4"
+val collectionCompatVersion: String = "2.6.0"
 val haloDBVersion: String = "0.5.6"
-val catsEffectVersion: String = "3.1.1"
-val fabricVersion: String = "1.0.8"
+val catsEffectVersion: String = "3.3.0"
+val fabricVersion: String = "1.1.1"
 val lucene4sVersion: String = "1.11.1"
-val fs2Version: String = "3.0.4"
-val scribeVersion: String = "3.5.5"
+val fs2Version: String = "3.2.2"
+val scribeVersion: String = "3.6.3"
 
 val testyVersion: String = "1.0.7"
 
