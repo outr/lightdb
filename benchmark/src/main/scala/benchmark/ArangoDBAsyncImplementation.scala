@@ -16,7 +16,7 @@ object ArangoDBAsyncImplementation extends BenchmarkImplementation {
   override type TitleAka = BaseDocument
   override type TitleBasics = BaseDocument
 
-  override def name: String = "ArangoDB"
+  override def name: String = "ArangoDB Async"
 
   private lazy val db: ArangoDBAsync = new ArangoDBAsync.Builder()
     .serializer(new ArangoJack())
@@ -44,11 +44,13 @@ object ArangoDBAsyncImplementation extends BenchmarkImplementation {
     def toIO: IO[T] = IO.fromFuture(IO(cf.asScala))
   }
 
-  override def init(): IO[Unit] = IO {
-    db.createDatabase("imdb")
-    db.db("imdb").createCollection("titleAka")
-    db.db("imdb").createCollection("titleBasics")
-    db.db("imdb").collection("titleAka").ensurePersistentIndex(List("titleId").asJava, new PersistentIndexOptions)
+  override def init(): IO[Unit] = for {
+    _ <- db.createDatabase("imdb").toIO
+    _ <- db.db("imdb").createCollection("titleAka").toIO
+    _ <- db.db("imdb").createCollection("titleBasics").toIO
+    _ <- db.db("imdb").collection("titleAka").ensurePersistentIndex(List("titleId").asJava, new PersistentIndexOptions).toIO
+  } yield {
+    ()
   }
 
   override def map2TitleAka(map: Map[String, String]): BaseDocument = {

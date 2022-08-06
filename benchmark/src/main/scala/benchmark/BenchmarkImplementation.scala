@@ -28,15 +28,19 @@ trait BenchmarkImplementation {
   def get(id: String): IO[TitleAka]
   def findByTitleId(titleId: String): IO[List[TitleAka]]
 
+  private val excludeChars = Set(2.toChar)
+
   implicit class MapExtras(map: Map[String, String]) {
     def option(key: String): Option[String] = map.get(key) match {
       case Some("") | None => None
-      case Some(s) => Some(s)
+      case Some(s) => Some(filtered(s))
     }
     def value(key: String): String = option(key).getOrElse("")
     def int(key: String, default: Int = 0): Int = option(key).map(_.toInt).getOrElse(default)
     def list(key: String): List[String] = option(key).map(_.split(' ').toList).getOrElse(Nil)
     def bool(key: String): Boolean = if (int(key) == 0) false else true
     def boolOption(key: String): Option[Boolean] = option(key).map(s => if (s.toInt == 0) false else true)
+
+    private def filtered(s: String): String = s.filterNot(excludeChars.contains)
   }
 }

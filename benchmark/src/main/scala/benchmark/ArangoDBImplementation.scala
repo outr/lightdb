@@ -15,7 +15,7 @@ object ArangoDBImplementation extends BenchmarkImplementation {
   override type TitleAka = BaseDocument
   override type TitleBasics = BaseDocument
 
-  override def name: String = "ArangoDB"
+  override def name: String = "ArangoDB Sync"
 
   private lazy val db = new ArangoDB.Builder()
     .serializer(new ArangoJack())

@@ -1,47 +1,44 @@
 package benchmark
 
 import cats.effect.IO
-import com.outr.arango.query.AQLInterpolator
-import com.outr.arango.{Document, DocumentCollection, DocumentModel, Field, Graph, Id, Index, Pagination}
+import com.outr.arango.collection.DocumentCollection
+import com.outr.arango.query._
+import com.outr.arango.{Document, DocumentModel, Field, Graph, Id, Index}
 import fabric.rw.{ReaderWriter, ccRW}
 import lightdb.util.FlushingBacklog
-
-import java.util.concurrent.{Executor, Executors}
-import scala.concurrent.{ExecutionContext, Future}
 
 // TODO: Update Scarango for latest versions of dependencies
 object ScarangoImplementation extends BenchmarkImplementation {
   override type TitleAka = TitleAkaADB
   override type TitleBasics = TitleBasicsADB
 
-  private implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(32))
-
   private lazy val backlogAka = new FlushingBacklog[TitleAkaADB](1000, 10000) {
-    override protected def write(list: List[TitleAkaADB]): IO[Unit] = IO.fromFuture(IO {
-      db.titleAka.insert(list).map(_ => ())
-    })
+    override protected def write(list: List[TitleAkaADB]): IO[Unit] = db.titleAka.batch.insert(list).map(_ => ())
   }
 
   private lazy val backlogBasics = new FlushingBacklog[TitleBasicsADB](1000, 10000) {
-    override protected def write(list: List[TitleBasicsADB]): IO[Unit] = IO.fromFuture(IO {
-      db.titleBasics.insert(list).map(_ => ())
-    })
+    override protected def write(list: List[TitleBasicsADB]): IO[Unit] =
+      db.titleBasics.batch.insert(list).map(_ => ())
   }
 
   override def name: String = "Scarango"
 
-  override def init(): IO[Unit] = IO.fromFuture(IO(db.init()))
+  override def init(): IO[Unit] = db.init()
 
-  override def map2TitleAka(map: Map[String, String]): TitleAkaADB = TitleAkaADB(
-    titleId = map.value("titleId"),
-    ordering = map.int("ordering"),
-    title = map.value("title"),
-    region = map.option("region"),
-    language = map.option("language"),
-    types = map.list("types"),
-    attributes = map.list("attributes"),
-    isOriginalTitle = map.boolOption("isOriginalTitle")
-  )
+  override def map2TitleAka(map: Map[String, String]): TitleAkaADB = {
+    val title = map.value("title")
+    val attributes = map.list("attributes")
+    TitleAkaADB(
+      titleId = map.value("titleId"),
+      ordering = map.int("ordering"),
+      title = title,
+      region = map.option("region"),
+      language = map.option("language"),
+      types = map.list("types"),
+      attributes = attributes,
+      isOriginalTitle = map.boolOption("isOriginalTitle")
+    )
+  }
 
   override def map2TitleBasics(map: Map[String, String]): TitleBasicsADB = TitleBasicsADB(
     tconst = map.value("tconst"),
@@ -70,44 +67,33 @@ object ScarangoImplementation extends BenchmarkImplementation {
 
   override def titleIdFor(t: TitleAkaADB): String = t.titleId
 
-  override def streamTitleAka(): fs2.Stream[IO, TitleAkaADB] = {
-    def recursivePagination(paginationFuture: => Future[Pagination[TitleAkaADB]]): fs2.Stream[IO, TitleAkaADB] = {
-      fs2.Stream.eval(IO.fromFuture(IO(paginationFuture))).flatMap { page =>
-        val results = fs2.Stream.emits(page.results)
-        if (page.hasNext) {
-          results ++ recursivePagination(page.next())
-        } else {
-          results
-        }
-      }
-    }
+  override def streamTitleAka(): fs2.Stream[IO, TitleAkaADB] = db.titleAka.query.stream
 
-    recursivePagination(db.titleAka.all.batchSize(1000).paged)
-  }
-
-  override def verifyTitleAka(): IO[Unit] = IO.fromFuture(IO(db.titleAka
+  override def verifyTitleAka(): IO[Unit] = db.titleAka
     .query(aql"FOR d IN titleAka COLLECT WITH COUNT INTO length RETURN length")
     .as[Int]
-    .one)).map { count =>
+    .one
+    .map { count =>
       scribe.info(s"TitleAka counts -- $count")
     }
 
-  override def verifyTitleBasics(): IO[Unit] = IO.fromFuture(IO(db.titleAka
+  override def verifyTitleBasics(): IO[Unit] = db.titleAka
     .query(aql"FOR d IN titleBasics COLLECT WITH COUNT INTO length RETURN length")
     .as[Int]
-    .one)).map { count =>
+    .one
+    .map { count =>
       scribe.info(s"TitleBasics counts -- $count")
     }
 
-  override def get(id: String): IO[TitleAkaADB] = IO.fromFuture(IO(db.titleAka(TitleAkaADB.id(id))))
+  override def get(id: String): IO[TitleAkaADB] = db.titleAka(TitleAkaADB.id(id))
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaADB]] = IO.fromFuture(IO(db.titleAka
+  override def findByTitleId(titleId: String): IO[List[TitleAkaADB]] = db.titleAka
     .query(aql"FOR d IN titleAka FILTER d.${TitleAkaADB.titleId} == $titleId RETURN d")
-    .results))
+    .all
 
   object db extends Graph("imdb") {
-    val titleAka: DocumentCollection[TitleAkaADB] = vertex[TitleAkaADB]
-    val titleBasics: DocumentCollection[TitleBasicsADB] = vertex[TitleBasicsADB]
+    val titleAka: DocumentCollection[TitleAkaADB] = vertex[TitleAkaADB](TitleAkaADB)
+    val titleBasics: DocumentCollection[TitleBasicsADB] = vertex[TitleBasicsADB](TitleBasicsADB)
   }
 
   case class TitleAkaADB(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAkaADB] = TitleAkaADB.id()) extends Document[TitleAkaADB]
