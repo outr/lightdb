@@ -6,12 +6,12 @@ import fabric.rw._
 class JsonDataManager[T: ReaderWriter] extends DataManager[T] {
   override def fromArray(array: Array[Byte]): T = {
     val jsonString = new String(array, "UTF-8")
-    Json.parse(jsonString).as[T]
+    JsonParser.parse(jsonString).as[T]
   }
 
   override def toArray(value: T): Array[Byte] = {
-    val v = value.toValue
-    val jsonString = Json.format(v)
+    val v = value.json
+    val jsonString = JsonParser.format(v)
     jsonString.getBytes("UTF-8")
   }
 }

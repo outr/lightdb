@@ -16,6 +16,13 @@ import scala.annotation.tailrec
 import sys.process._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
+// ArangoDB Sync - Total Akas: 999999 and Total Basics: 999999 in 94.616 seconds (21138.1 per second)
+// ArangoDB Async - Total Akas: 999999 and Total Basics: 999999 in 71.579 seconds (27941.1 per second)
+// Scarango - Total Akas: 999999 and Total Basics: 999999 in 198.089 seconds (10096.5 per second)
+// Scarango - Total Akas: 999999 and Total Basics: 999999 in 158.873 seconds (12588.7 per second) - with rewrite
+// MongoDB - Total Akas: 999999 and Total Basics: 999999 in 69.857 seconds (28629.9 per second)
+
+
 // PostgreSQL - Total: 26838043 in 547.247 seconds (49041.9 per second)
 // MongoDB - Total: 26838043 in 605.694 seconds (44309.6 per second)
 // LightDB - Total: 26838043 in 280.04 seconds (95836.5 per second) - (HaloDB / NullIndexer)
@@ -28,6 +35,19 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 // MongoDB    - Total: 999999 in 19.165 seconds (52178.4 per second)
 // PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
+
+/*
+[info] 2022.08.06 08:43:21:265 io-compute-17 INFO benchmark.IMDBBenchmark.io:90
+[info]     Scarango - Total Akas: Elapsed(999999,31.505) and Total Basics: Elapsed(999999,32.743) in 159.61 seconds (12530.5 per second)
+[info]       akasFile: 0.012s, akasProcess: 31.505s, basicsFile: 0.001s, basicsProcess: 32.743
+[info]       flushing: 0.06s, verifiedAka: 0.145s, verifiedBasics: 0.134s, cycle: 12.378s
+[info]       validateIds: 14.69s, validateTitles: 67.129s
+
+[info]     ArangoDB Async - Total Akas: 999999 and Total Basics: 999999 in 66.557 seconds (30049.4 per second)
+[info]       akasFile: 0.008s, akasProcess: 6.429s, basicsFile: 0.001s, basicsProcess: 6.762
+[info]       flushing: 0.012s, verifiedAka: 0.003s, verifiedBasics: 0.002s, cycle: 6.324s
+[info]       validateIds: 13.934s, validateTitles: 32.540s
+ */
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
   val implementation: BenchmarkImplementation = ArangoDBAsyncImplementation
@@ -36,44 +56,55 @@ object IMDBBenchmark { // extends IOApp {
 
   type TitleAka = implementation.TitleAka
 
+  // TODO: Create Elapsed convenience class
+  implicit class ElapsedIO[Return](io: IO[Return]) {
+    def elapsed: IO[Elapsed[Return]] = {
+      val start = System.currentTimeMillis()
+      io.map { r =>
+        Elapsed(r, (System.currentTimeMillis() - start) / 1000.0)
+      }
+    }
+
+    def elapsedValue: IO[Double] = elapsed.map(_.elapsed)
+  }
+
+  case class Elapsed[Return](value: Return, elapsed: Double)
+
   def main(args: Array[String]): Unit = {
     Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
 
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
-    var now = System.currentTimeMillis()
     val io = for {
       _ <- implementation.init()
       _ = scribe.info("--- Stage 1 ---")
-      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneMillion)
+      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneMillion).elapsed
       _ = scribe.info("--- Stage 2 ---")
-      totalAka <- process(akasFile, implementation.map2TitleAka, implementation.persistTitleAka)
+      totalAka <- process(akasFile.value, implementation.map2TitleAka, implementation.persistTitleAka).elapsed
       _ = scribe.info("--- Stage 3 ---")
-      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneMillion)
+      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneMillion).elapsed
       _ = scribe.info("--- Stage 4 ---")
-      totalBasics <- process(basicsFile, implementation.map2TitleBasics, implementation.persistTitleBasics)
+      totalBasics <- process(basicsFile.value, implementation.map2TitleBasics, implementation.persistTitleBasics).elapsed
       _ = scribe.info("--- Stage 5 ---")
-      _ <- implementation.flush()
+      flushingTime <- implementation.flush().elapsedValue
       _ = scribe.info("--- Stage 6 ---")
-      _ <- implementation.verifyTitleAka()
-      _ <- implementation.verifyTitleBasics()
+      verifiedTitleAkaTime <- implementation.verifyTitleAka().elapsedValue
+      verifiedTitleBasicsTime <- implementation.verifyTitleBasics().elapsedValue
       _ = scribe.info("--- Stage 7 ---")
-      _ = now = System.currentTimeMillis()
-      _ <- cycleThroughEntireCollection(10)
+      cycleTime <- cycleThroughEntireCollection(10).elapsedValue
       _ = scribe.info("--- Stage 8 ---")
-      _ = scribe.info(s"Processed entire collection in ${(System.currentTimeMillis() - now) / 1000.0} seconds. Id list of ${ids.length}")
-      _ = now = System.currentTimeMillis()
-      _ <- validateIds(ids)
+      validationTime <- validateIds(ids).elapsedValue
       _ = scribe.info("--- Stage 9 ---")
-      _ = scribe.info(s"Validated ${ids.length} in ${(System.currentTimeMillis() - now) / 1000.0} seconds.")
-      _ = now = System.currentTimeMillis()
-      _ <- validateTitleIds(ids)
+      validateTitleTime <- validateTitleIds(ids).elapsedValue
       _ = scribe.info("--- Stage 10 ---")
-      _ = scribe.info(s"Validated ${ids.length} titleIds in ${(System.currentTimeMillis() - now) / 1000.0} seconds.")
     } yield {
       val elapsed = (System.currentTimeMillis() - start) / 1000.0
-      val perSecond = (totalAka + totalBasics) / elapsed
-      scribe.info(s"${implementation.name} - Total Akas: $totalAka and Total Basics: $totalBasics in $elapsed seconds (${perSecond.f(f = 1)} per second)")
+      val perSecond = (totalAka.value + totalBasics.value) / elapsed
+      scribe.info(
+        s"""${implementation.name} - Total Akas: ${totalAka.value} and Total Basics: ${totalBasics.value} in $elapsed seconds (${perSecond.f(f = 1)} per second)
+           |  akasFile: ${akasFile.elapsed.f(f = 3)}s, akasProcess: ${totalAka.elapsed.f(f = 3)}s, basicsFile: ${basicsFile.elapsed.f(f = 3)}s, basicsProcess: ${totalBasics.elapsed.f(f = 3)}
+           |  flushing: ${flushingTime.f(f = 3)}s, verifiedAka: ${verifiedTitleAkaTime.f(f = 3)}s, verifiedBasics: ${verifiedTitleBasicsTime.f(f = 3)}s, cycle: ${cycleTime.f(f = 3)}s
+           |  validateIds: ${validationTime.f(f = 3)}s, validateTitles: ${validateTitleTime.f(f = 3)}s""".stripMargin)
     }
     io.unsafeRunSync()
     sys.exit(0)
@@ -113,7 +144,6 @@ object IMDBBenchmark { // extends IOApp {
 
       val io = iterator.stream(concurrency) { t =>
         counter.incrementAndGet()
-        val start = System.currentTimeMillis()
         persist(t)
       }
 
@@ -274,11 +304,12 @@ object IMDBBenchmark { // extends IOApp {
 
   private def processTSV(file: File): Stream[IO, Map[String, String]] = {
 //    io.readInputStream[IO](IO(new GZIPInputStream(new FileInputStream(file))), 4096)
-    Files[IO].readAll(file.toPath, 4096)
+    Files[IO].readAll(Path.fromNioPath(file.toPath), 4096, Flags.Read)
 //      .through(Compression[IO].inflate(InflateParams(bufferSize = 4096, header = ZLibParams.Header.GZIP)))
-      .through(text.utf8Decode)
+      .through(text.utf8.decode)
       .through(text.lines)
-      .pull.uncons1
+      .pull
+      .uncons1
       .flatMap {
         case None => Pull.done
         case Some((header, rows)) => rows.map(header.split('\t').toList -> _).pull.echo
