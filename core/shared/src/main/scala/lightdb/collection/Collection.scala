@@ -16,6 +16,8 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
 
   def get(id: Id[D]): IO[Option[D]] = data.get(id)
 
+  def fromArray(array: Array[Byte]): D = data.fromArray(array)
+
   def apply(id: Id[D]): IO[D] = data(id)
 
   def put(value: D): IO[D] = for {

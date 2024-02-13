@@ -11,9 +11,9 @@ class Id[T](val value: String) extends AnyVal {
 }
 
 object Id {
-  private lazy val _rw: ReaderWriter[Id[_]] = ReaderWriter[Id[_]](id => str(id.value), v => Id(v.asStr.value))
+  private lazy val _rw: RW[Id[_]] = RW.string(_.value, Id.apply)
 
-  implicit def rw[T]: ReaderWriter[Id[T]] = _rw.asInstanceOf[ReaderWriter[Id[T]]]
+  implicit def rw[T]: RW[Id[T]] = _rw.asInstanceOf[RW[Id[T]]]
 
   def apply[T](value: String = Unique()): Id[T] = new Id[T](value)
 

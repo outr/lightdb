@@ -1,8 +1,7 @@
 // Scala versions
-val scala213 = "2.13.8"
-val scala212 = "2.12.16"
-val scala3 = "3.1.3"
-val scala2 = List(scala213, scala212)
+val scala213 = "2.13.12"
+val scala3 = "3.3.1"
+val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
 // Variables
@@ -38,16 +37,19 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / resolvers += Resolver.mavenLocal
+ThisBuild / resolvers += "jitpack" at "https://jitpack.io"
 
-val collectionCompatVersion: String = "2.6.0"
-val haloDBVersion: String = "0.5.6"
-val catsEffectVersion: String = "3.3.14"
-val fabricVersion: String = "1.3.0"
+ThisBuild / outputStrategy := Some(StdoutOutput)
+
+val collectionCompatVersion: String = "2.11.0"
+val haloDBVersion: String = "v0.5.6"
+val catsEffectVersion: String = "3.5.3"
+val fabricVersion: String = "1.13.1"
 val lucene4sVersion: String = "1.11.1"
-val fs2Version: String = "3.2.11"
-val scribeVersion: String = "3.10.1"
+val fs2Version: String = "3.9.4"
+val scribeVersion: String = "3.13.0"
 
-val scalaTestVersion: String = "3.2.13"
+val scalaTestVersion: String = "3.2.18"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.js, core.jvm, lucene, halo, mapdb, all)
@@ -64,7 +66,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
 			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
-			"com.outr" %%% "fabric-parse" % fabricVersion,
+			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"co.fs2" %%% "fs2-core" % fs2Version,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
@@ -102,7 +104,7 @@ lazy val halo = project.in(file("halo"))
 		name := s"$projectName-halo",
 		libraryDependencies ++= Seq(
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
-			"com.oath.halodb" % "halodb" % haloDBVersion,
+			"com.github.yahoo" % "HaloDB" % haloDBVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
 		fork := true
@@ -113,7 +115,7 @@ lazy val mapdb = project.in(file("mapdb"))
 	.settings(
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
-			"org.mapdb" % "mapdb" % "3.0.8",
+			"org.mapdb" % "mapdb" % "3.1.0",
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
 		fork := true
@@ -136,10 +138,10 @@ lazy val benchmark = project.in(file("benchmark"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"co.fs2" %%% "fs2-io" % fs2Version,
-			"org.mongodb" % "mongodb-driver-sync" % "4.7.1",
-			"org.postgresql" % "postgresql" % "42.4.1",
-			"com.arangodb" % "arangodb-java-driver" % "6.18.0",
-			"com.arangodb" % "jackson-dataformat-velocypack" % "3.0.1",
-			"com.outr" %% "scarango-driver" % "3.6.1-SNAPSHOT"
+			"org.mongodb" % "mongodb-driver-sync" % "4.11.1",
+			"org.postgresql" % "postgresql" % "42.7.1",
+//			"com.arangodb" % "arangodb-java-driver" % "7.4.0",
+//			"com.arangodb" % "jackson-dataformat-velocypack" % "4.2.0",
+			"com.outr" %% "scarango-driver" % "3.19.1"
 		)
 	)

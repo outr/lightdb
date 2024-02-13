@@ -69,7 +69,7 @@
 //case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
 //
 //object Person {
-//  implicit val rw: ReaderWriter[Person] = ccRW
+//  implicit val rw: RW[Person] = ccRW
 //}
 //
 //trait PersonFields extends Fields[Person] {

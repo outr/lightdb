@@ -11,7 +11,7 @@ import fs2.io.file._
 import perfolation._
 import scribe.{Level, Logger}
 
-import java.net.URL
+import java.net.{URI, URL}
 import scala.annotation.tailrec
 import sys.process._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
@@ -38,10 +38,10 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 /*
 [info] 2022.08.06 08:43:21:265 io-compute-17 INFO benchmark.IMDBBenchmark.io:90
-[info]     Scarango - Total Akas: Elapsed(999999,31.505) and Total Basics: Elapsed(999999,32.743) in 159.61 seconds (12530.5 per second)
-[info]       akasFile: 0.012s, akasProcess: 31.505s, basicsFile: 0.001s, basicsProcess: 32.743
-[info]       flushing: 0.06s, verifiedAka: 0.145s, verifiedBasics: 0.134s, cycle: 12.378s
-[info]       validateIds: 14.69s, validateTitles: 67.129s
+[info]     Scarango - Total Akas: 999999 and Total Basics: 999999 in 162.301 seconds (12322.8 per second)
+[info]       akasFile: 0.011s, akasProcess: 32.025s, basicsFile: 0.002s, basicsProcess: 31.846
+[info]       flushing: 0.054s, verifiedAka: 0.125s, verifiedBasics: 0.131s, cycle: 12.752s
+[info]       validateIds: 14.551s, validateTitles: 69.982s
 
 [info]     ArangoDB Async - Total Akas: 999999 and Total Basics: 999999 in 66.557 seconds (30049.4 per second)
 [info]       akasFile: 0.008s, akasProcess: 6.429s, basicsFile: 0.001s, basicsProcess: 6.762
@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
  */
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = ArangoDBAsyncImplementation
+  val implementation: BenchmarkImplementation = LightDBImplementation
 
   private var ids: List[Ids] = Nil
 
@@ -244,7 +244,7 @@ object IMDBBenchmark { // extends IOApp {
       file.getParentFile.mkdirs()
       val fileName = s"${file.getName}.gz"
       val gz = new File(file.getParentFile, fileName)
-      val url = new URL(s"https://datasets.imdbws.com/$fileName")
+      val url = new URI(s"https://datasets.imdbws.com/$fileName").toURL
       (url #> gz).!!
 
       scribe.info(s"Unzipping ${file.getName}...")
