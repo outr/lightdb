@@ -2,7 +2,7 @@ package benchmark
 
 import cats.effect.IO
 import cats.implicits.toTraverseOps
-import fabric.rw.{ReaderWriter, ccRW}
+import fabric.rw.RW
 import lightdb.{Document, Id, JsonMapping, LightDB}
 import lightdb.collection.Collection
 import lightdb.index.lucene.LuceneIndexerSupport
@@ -84,7 +84,7 @@ object LightDBImplementation extends BenchmarkImplementation {
   case class TitleAkaLDB(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAka]) extends Document[TitleAka]
 
   object TitleAkaLDB extends JsonMapping[TitleAkaLDB] {
-    override implicit val rw: ReaderWriter[TitleAkaLDB] = ccRW
+    override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
     val titleId: FD[String] = field("titleId", _.titleId).indexed()
     val ordering: FD[Int] = field("ordering", _.ordering).indexed()
@@ -94,7 +94,7 @@ object LightDBImplementation extends BenchmarkImplementation {
   case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]
 
   object TitleBasicsLDB extends JsonMapping[TitleBasicsLDB] {
-    override implicit val rw: ReaderWriter[TitleBasicsLDB] = ccRW
+    override implicit val rw: RW[TitleBasicsLDB] = RW.gen
 
     val tconst: FD[String] = field("tconst", _.tconst).indexed()
     val primaryTitle: FD[String] = field("primaryTitle", _.primaryTitle).indexed()
