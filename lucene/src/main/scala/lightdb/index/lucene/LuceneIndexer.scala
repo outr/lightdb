@@ -80,7 +80,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
     IndexedField[F](luceneField, field)
   }
 
-  private def filter2Lucene(filter: Filter): SearchTerm = {
+  private def filter2Lucene(filter: Filter[D]): SearchTerm = {
     def fieldAndValue(field: Field[D, Any], value: Any): FieldAndValue[Any] = this.field[Any](field.name).luceneField(value)
     filter match {
       case Filter.Equals(field, value) =>

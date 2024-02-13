@@ -3,8 +3,9 @@ package benchmark
 import cats.effect.IO
 import com.outr.arango.collection.DocumentCollection
 import com.outr.arango.query._
+import com.outr.arango.query.dsl.ref2Wrapped
 import com.outr.arango.{Document, DocumentModel, Field, Graph, Id, Index}
-import fabric.rw.{ReaderWriter, ccRW}
+import fabric.rw.RW
 import lightdb.util.FlushingBacklog
 
 // TODO: Update Scarango for latest versions of dependencies
@@ -67,7 +68,7 @@ object ScarangoImplementation extends BenchmarkImplementation {
 
   override def titleIdFor(t: TitleAkaADB): String = t.titleId
 
-  override def streamTitleAka(): fs2.Stream[IO, TitleAkaADB] = db.titleAka.query.stream
+  override def streamTitleAka(): fs2.Stream[IO, TitleAkaADB] = db.titleAka.query.stream()
 
   override def verifyTitleAka(): IO[Unit] = db.titleAka
     .query(aql"FOR d IN titleAka COLLECT WITH COUNT INTO length RETURN length")
@@ -88,18 +89,19 @@ object ScarangoImplementation extends BenchmarkImplementation {
   override def get(id: String): IO[TitleAkaADB] = db.titleAka(TitleAkaADB.id(id))
 
   override def findByTitleId(titleId: String): IO[List[TitleAkaADB]] = db.titleAka
-    .query(aql"FOR d IN titleAka FILTER d.${TitleAkaADB.titleId} == $titleId RETURN d")
-    .all
+    .query
+    .byFilter(ref => ref.titleId === titleId)
+    .toList
 
   object db extends Graph("imdb") {
-    val titleAka: DocumentCollection[TitleAkaADB] = vertex[TitleAkaADB](TitleAkaADB)
-    val titleBasics: DocumentCollection[TitleBasicsADB] = vertex[TitleBasicsADB](TitleBasicsADB)
+    val titleAka: DocumentCollection[TitleAkaADB, TitleAkaADB.type] = vertex(TitleAkaADB)
+    val titleBasics: DocumentCollection[TitleBasicsADB, TitleBasicsADB.type] = vertex(TitleBasicsADB)
   }
 
   case class TitleAkaADB(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAkaADB] = TitleAkaADB.id()) extends Document[TitleAkaADB]
 
   object TitleAkaADB extends DocumentModel[TitleAkaADB] {
-    override implicit val rw: ReaderWriter[TitleAkaADB] = ccRW
+    override implicit val rw: RW[TitleAkaADB] = RW.gen
 
     val titleId: Field[String] = field("titleId")
     val ordering: Field[Int] = field("ordering")
@@ -113,7 +115,7 @@ object ScarangoImplementation extends BenchmarkImplementation {
   case class TitleBasicsADB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasicsADB] = TitleBasicsADB.id()) extends Document[TitleBasicsADB]
 
   object TitleBasicsADB extends DocumentModel[TitleBasicsADB] {
-    override implicit val rw: ReaderWriter[TitleBasicsADB] = ccRW
+    override implicit val rw: RW[TitleBasicsADB] = RW.gen
 
     val tconst: Field[String] = field("tconst")
     val primaryTitle: Field[String] = field("primaryTitle")

@@ -9,7 +9,9 @@ case class CollectionData[D <: Document[D]](collection: Collection[D]) {
 
   protected def dataManager: DataManager[D] = collection.mapping.dataManager
 
-  def get(id: Id[D]): IO[Option[D]] = collection.store.get(id).map(_.map(dataManager.fromArray))
+  def fromArray(array: Array[Byte]): D = dataManager.fromArray(array)
+
+  def get(id: Id[D]): IO[Option[D]] = collection.store.get(id).map(_.map(fromArray))
 
   def apply(id: Id[D]): IO[D] = get(id).map(_.getOrElse(throw new RuntimeException(s"Not found by id: $id")))
 

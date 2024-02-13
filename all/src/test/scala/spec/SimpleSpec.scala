@@ -2,7 +2,7 @@ package spec
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import fabric.rw.{ReaderWriter, ccRW}
+import fabric.rw.{RW, ccRW}
 import lightdb.collection.Collection
 import lightdb.data.{DataManager, JsonDataManager}
 import lightdb.field.Field
@@ -161,7 +161,7 @@ class SimpleSpec extends Spec {
   case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
 
   object Person extends JsonMapping[Person] {
-    override implicit val rw: ReaderWriter[Person] = ccRW
+    override implicit val rw: RW[Person] = ccRW
 
     val name: FD[String] = field("name", _.name).indexed()
     val age: FD[Int] = field("age", _.age).indexed()
