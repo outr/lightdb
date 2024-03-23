@@ -1,12 +1,9 @@
 package lightdb.index
 
-import com.outr.lucene4s.ImplicitValueSupport
-import com.outr.lucene4s.field.FieldType
-import com.outr.lucene4s.field.value.support.{StringBackedValueSupport, ValueSupport}
 import lightdb.{Document, Id}
 import lightdb.field.Field
 
-package object lucene extends ImplicitValueSupport {
+package object lucene {
   private object _idSupport extends StringBackedValueSupport[Id[Any]] {
     override def toString(value: Id[Any]): String = value.value
 
