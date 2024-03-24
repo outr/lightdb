@@ -66,6 +66,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
+			"com.outr" %%% "scribe-cats" % scribeVersion,
 			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"co.fs2" %%% "fs2-core" % fs2Version,
@@ -144,7 +145,7 @@ lazy val benchmark = project.in(file("benchmark"))
 		name := s"$projectName-benchmark",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"co.fs2" %%% "fs2-io" % fs2Version,
+			"co.fs2" %% "fs2-io" % fs2Version,
 			"org.mongodb" % "mongodb-driver-sync" % "4.11.1",
 			"org.postgresql" % "postgresql" % "42.7.1",
 			"com.outr" %% "scarango-driver" % "3.19.1"

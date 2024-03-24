@@ -2,10 +2,11 @@ package spec
 
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
+import lighdb.storage.mapdb.SharedMapDBSupport
 import lightdb.collection.Collection
 import lightdb.index.lucene._
 import lightdb.query._
-import lightdb.store.halo.SharedHaloSupport
+import lightdb.store.halo.{MultiHaloSupport, SharedHaloSupport}
 import lightdb.{Document, Id, JsonMapping, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -144,7 +145,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
   }
 
-  object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with SharedHaloSupport {
+  object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with SharedMapDBSupport {
     override protected def autoCommit: Boolean = true
 
     val people: Collection[Person] = collection("people", Person)
