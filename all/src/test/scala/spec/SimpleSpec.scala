@@ -125,10 +125,10 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         p.age should be(20)
       }
     }
-    "commit data" in {
+    "commit new data" in {
       db.people.commit()
     }
-    "list all documents" in {
+    "list new documents" in {
       db.people.query.search().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
