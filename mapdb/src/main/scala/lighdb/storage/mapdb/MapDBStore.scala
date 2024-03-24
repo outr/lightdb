@@ -42,11 +42,3 @@ case class MapDBStore(directory: Option[Path]) extends ObjectStore {
 
   override def truncate(): IO[Unit] = IO(map.clear())
 }
-
-trait SharedMapDBSupport extends ObjectStoreSupport {
-  this: LightDB =>
-
-  private lazy val shared: MapDBStore = MapDBStore(directory.map(_.resolve("store")))
-
-  override def store[D <: Document[D]](collection: Collection[D]): ObjectStore = shared
-}
