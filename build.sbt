@@ -45,12 +45,12 @@ val collectionCompatVersion: String = "2.11.0"
 val haloDBVersion: String = "v0.5.6"
 val catsEffectVersion: String = "3.5.4"
 val fabricVersion: String = "1.14.1"
-//val lucene4sVersion: String = "1.11.1"
 val fs2Version: String = "3.10.0"
 val scribeVersion: String = "3.13.2"
 val luceneVersion: String = "9.10.0"
 
 val scalaTestVersion: String = "3.2.18"
+val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.js, core.jvm, lucene, halo, mapdb, all)
@@ -69,7 +69,8 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"co.fs2" %%% "fs2-core" % fs2Version,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
+			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		libraryDependencies ++= (
 			if (scalaVersion.value.startsWith("3.")) {
@@ -96,7 +97,8 @@ lazy val lucene = project.in(file("lucene"))
 		libraryDependencies ++= Seq(
 			"org.apache.lucene" % "lucene-core" % luceneVersion,
 			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		)
 	)
 
@@ -107,7 +109,8 @@ lazy val halo = project.in(file("halo"))
 		libraryDependencies ++= Seq(
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"com.github.yahoo" % "HaloDB" % haloDBVersion,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
+			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		fork := true
 	)
@@ -118,7 +121,8 @@ lazy val mapdb = project.in(file("mapdb"))
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
 			"org.mapdb" % "mapdb" % "3.1.0",
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		fork := true
 	)
@@ -128,7 +132,8 @@ lazy val all = project.in(file("all"))
 	.settings(
 		name := s"$projectName-all",
 		libraryDependencies ++= Seq(
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		fork := true
 	)
@@ -142,8 +147,6 @@ lazy val benchmark = project.in(file("benchmark"))
 			"co.fs2" %%% "fs2-io" % fs2Version,
 			"org.mongodb" % "mongodb-driver-sync" % "4.11.1",
 			"org.postgresql" % "postgresql" % "42.7.1",
-//			"com.arangodb" % "arangodb-java-driver" % "7.4.0",
-//			"com.arangodb" % "jackson-dataformat-velocypack" % "4.2.0",
 			"com.outr" %% "scarango-driver" % "3.19.1"
 		)
 	)
