@@ -1,20 +1,19 @@
 package lightdb.index.lucene
 
 import cats.effect.IO
-import lightdb.{Document, Id}
 import lightdb.collection.Collection
 import lightdb.index.{Indexer, SearchResult}
 import lightdb.query.{Filter, Query}
+import lightdb.{Document, Id}
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
-import org.apache.lucene.index.{DirectoryReader, IndexReader, IndexWriter, IndexWriterConfig, StoredFields}
-import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory, MMapDirectory}
 import org.apache.lucene.document.{Field, IntField, TextField, Document => LuceneDocument}
+import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, StoredFields}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager}
+import org.apache.lucene.search._
+import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
 
-import java.nio.file.{Files, Path}
-import java.util.Comparator
+import java.nio.file.Path
 import scala.collection.immutable.ArraySeq
 
 trait LuceneIndexerSupport {
@@ -25,7 +24,8 @@ trait LuceneIndexerSupport {
 
 case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
                                            autoCommit: Boolean = false,
-                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] { i =>
+                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] {
+  i =>
   private var disposed = false
   private lazy val path: Option[Path] = collection.db.directory.map(_.resolve(collection.collectionName))
   private lazy val directory = path
@@ -37,6 +37,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
 
   private var _indexSearcher: IndexSearcher = _
   private lazy val searcherManager = new SearcherManager(indexWriter, new SearcherFactory)
+
   private def indexSearcher: IndexSearcher = synchronized {
     if (_indexSearcher == null) {
       _indexSearcher = searcherManager.acquire()
@@ -71,6 +72,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
       }
       _indexSearcher = null
     }
+    searcherManager.maybeRefreshBlocking()
   }
 
   override def count(): IO[Long] = IO {
@@ -96,21 +98,11 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
     val storedFields = indexSearcher.storedFields()
     fs2.Stream[IO, ScoreDoc](ArraySeq.unsafeWrapArray(hits): _*)
       .map { sd =>
-        LuceneSearchResult(sd, total, query, storedFields)
+        LuceneSearchResult(sd, total, collection, query, storedFields)
       }
   }
 
-  override def truncate(): IO[Unit] = for {
-    _ <- close()
-    _ <- IO {
-      path.foreach { p =>
-        Files.walk(p)
-          .sorted(Comparator.reverseOrder())
-          .map(_.toFile)
-          .forEach(f => f.delete())
-      }
-    }
-  } yield ()
+  override def truncate(): IO[Unit] = IO(indexWriter.deleteAll())
 
   def close(): IO[Unit] = IO {
     indexWriter.flush()
@@ -124,18 +116,5 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
 
   override def dispose(): IO[Unit] = close().map { _ =>
     disposed = true
-  }
-
-  private case class LuceneSearchResult(scoreDoc: ScoreDoc,
-                                        total: Long,
-                                        query: Query[D],
-                                        storedFields: StoredFields) extends SearchResult[D] {
-    private lazy val document = storedFields.document(scoreDoc.doc)
-    private lazy val doc = collection(id)
-
-    lazy val id: Id[D] = Id[D](document.get("_id"))
-
-    override def get(): IO[D] = doc
-    override def apply[F](field: _root_.lightdb.field.Field[D, F]): F = ???
   }
 }
