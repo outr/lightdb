@@ -113,7 +113,7 @@ object IMDBBenchmark { // extends IOApp {
   private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO {
     val reader = new BufferedReader(new FileReader(file))
     val counter = new AtomicInteger(0)
-    val concurrency = 16
+    val concurrency = 32
     try {
       val keys = reader.readLine().split('\t').toList
 

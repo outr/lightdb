@@ -98,7 +98,7 @@ lazy val lucene = project.in(file("lucene"))
 			"org.apache.lucene" % "lucene-core" % luceneVersion,
 			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		)
 	)
 
@@ -109,8 +109,8 @@ lazy val halo = project.in(file("halo"))
 		libraryDependencies ++= Seq(
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"com.github.yahoo" % "HaloDB" % haloDBVersion,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		fork := true
 	)
@@ -122,7 +122,7 @@ lazy val mapdb = project.in(file("mapdb"))
 		libraryDependencies ++= Seq(
 			"org.mapdb" % "mapdb" % "3.1.0",
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		fork := true
 	)
@@ -133,7 +133,7 @@ lazy val all = project.in(file("all"))
 		name := s"$projectName-all",
 		libraryDependencies ++= Seq(
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		fork := true
 	)

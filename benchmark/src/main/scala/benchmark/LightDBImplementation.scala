@@ -78,7 +78,7 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   object db extends LightDB(directory = Some(Paths.get("imdb"))) with LuceneIndexerSupport with MultiHaloSupport {
     override protected def haloIndexThreads: Int = 10
-    override protected def haloMaxFileSize: Int = 1024 * 1024 * 10    // 10 meg
+    override protected def haloMaxFileSize: Int = 1024 * 1024 * 100    // 100 meg
 
     val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
     val titleBasics: Collection[TitleBasicsLDB] = collection("titleBasics", TitleBasicsLDB)
