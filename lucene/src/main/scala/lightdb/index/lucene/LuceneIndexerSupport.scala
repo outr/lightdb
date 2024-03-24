@@ -32,16 +32,10 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
     .map(p => FSDirectory.open(p))
     .getOrElse(new ByteBuffersDirectory())
 
-  private var _writer: LuceneWriter = _
+  private lazy val config = new IndexWriterConfig(analyzer)
+  private lazy val indexWriter = new IndexWriter(directory, config)
   private var _reader: LuceneReader = _
 
-  private def writer: LuceneWriter = synchronized {
-    if (disposed) throw new RuntimeException("LuceneIndexer is already disposed")
-    if (_writer == null) {
-      _writer = new LuceneWriter
-    }
-    _writer
-  }
   private def reader: LuceneReader = synchronized {
     if (disposed) throw new RuntimeException("LuceneIndexer is already disposed")
     if (_reader == null) {
@@ -61,7 +55,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
       }
     }
     if (document.iterator().hasNext) {
-      writer.add(document)
+      indexWriter.addDocument(document)
     }
     value
   }
@@ -69,8 +63,8 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
   override def delete(id: Id[D]): IO[Unit] = IO.unit
 
   override def commit(): IO[Unit] = IO {
-    writer.flush()
-    writer.commit()
+    indexWriter.flush()
+    indexWriter.commit()
   }
 
   override def count(): IO[Long] = IO {
@@ -92,11 +86,9 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
   } yield ()
 
   def close(): IO[Unit] = IO {
-    if (_writer != null) {
-      _writer.flush()
-      _writer.commit()
-      _writer.close()
-    }
+    indexWriter.flush()
+    indexWriter.commit()
+    indexWriter.close()
     if (_reader != null) {
       _reader.close()
     }
@@ -104,19 +96,6 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
 
   override def dispose(): IO[Unit] = close().map { _ =>
     disposed = true
-  }
-
-  class LuceneWriter {
-    private lazy val config = new IndexWriterConfig(analyzer)
-    private lazy val indexWriter = new IndexWriter(directory, config)
-
-    def add(document: LuceneDocument): Unit = indexWriter.addDocument(document)
-    def flush(): Unit = indexWriter.flush()
-    def commit(): Unit = indexWriter.commit()
-    def close(): Unit = {
-      indexWriter.close()
-      _writer = null
-    }
   }
 
   class LuceneReader {
