@@ -78,11 +78,11 @@ object IMDBBenchmark { // extends IOApp {
     val io = for {
       _ <- implementation.init()
       _ = scribe.info("--- Stage 1 ---")
-      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneHundredThousand).elapsed
+      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneMillion).elapsed
       _ = scribe.info("--- Stage 2 ---")
       totalAka <- process(akasFile.value, implementation.map2TitleAka, implementation.persistTitleAka).elapsed
       _ = scribe.info("--- Stage 3 ---")
-      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneHundredThousand).elapsed
+      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneMillion).elapsed
       _ = scribe.info("--- Stage 4 ---")
       totalBasics <- process(basicsFile.value, implementation.map2TitleBasics, implementation.persistTitleBasics).elapsed
       _ = scribe.info("--- Stage 5 ---")
@@ -198,7 +198,12 @@ object IMDBBenchmark { // extends IOApp {
   } else {
     val ids = idsList.head
     implementation.findByTitleId(ids.titleId).flatMap { titleAkas =>
-      titleAkas.find(ta => implementation.idFor(ta) == ids.id).getOrElse(throw new RuntimeException(s"Unable to find id match (${ids.id}) for: $titleAkas"))
+      val results = titleAkas.map(ta => implementation.titleIdFor(ta))
+      if (titleAkas.isEmpty) {
+        throw new RuntimeException("Empty!")
+      } else if (!results.forall(id => id == ids.titleId)) {
+        throw new RuntimeException(s"Not all titleIds match the query: $results")
+      }
       validateTitleIds(idsList.tail)
     }
   }

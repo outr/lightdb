@@ -91,7 +91,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D], autoCommit
   override def search(query: Query[D]): fs2.Stream[IO, SearchResult[D]] = {
     val parser = new QueryParser("_id", analyzer)
     val filters = query.filters.map {
-      case Filter.Equals(field, value) => s"${field.name}:\"$value\""
+      case Filter.Equals(field, value) => s"${field.name}:$value"
       case f => throw new UnsupportedOperationException(s"Unsupported filter: $f")
     }
     val filterString = filters match {
