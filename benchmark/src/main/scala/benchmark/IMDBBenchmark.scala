@@ -56,7 +56,6 @@ object IMDBBenchmark { // extends IOApp {
 
   type TitleAka = implementation.TitleAka
 
-  // TODO: Create Elapsed convenience class
   implicit class ElapsedIO[Return](io: IO[Return]) {
     def elapsed: IO[Elapsed[Return]] = {
       val start = System.currentTimeMillis()

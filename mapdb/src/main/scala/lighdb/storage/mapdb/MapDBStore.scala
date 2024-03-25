@@ -31,7 +31,7 @@ case class MapDBStore(directory: Option[Path]) extends ObjectStore {
   override def count(): IO[Long] = IO(map.size())
 
   override def all[T](chunkSize: Int): fs2.Stream[IO, ObjectData[T]] = fs2.Stream
-    .fromBlockingIterator[IO](map.entrySet().iterator().asScala, chunkSize)   // TODO: figure out how to get an iterator that doesn't load everything into memory
+    .fromBlockingIterator[IO](map.entrySet().iterator().asScala, chunkSize)
     .map { pair =>
       val id = Id[T](pair.getKey)
       val value = pair.getValue
