@@ -21,7 +21,7 @@ object LightDBImplementation extends BenchmarkImplementation {
   override def map2TitleAka(map: Map[String, String]): TitleAkaLDB = TitleAkaLDB(
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
-    title = map.value("title"),
+    title = map.value("title").replace("\\N", "N"),
     region = map.option("region"),
     language = map.option("language"),
     types = map.list("types"),
@@ -57,7 +57,10 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = db.titleAka.query.filter(TitleAkaLDB.titleId === titleId).search().compile.toList.flatMap(_.map(_.get()).sequence)
 
-  override def flush(): IO[Unit] = db.titleAka.commit()
+  override def flush(): IO[Unit] = for {
+    _ <- db.titleAka.commit()
+    _ <- db.titleBasics.commit()
+  } yield ()
 
   override def verifyTitleAka(): IO[Unit] = for {
     haloCount <- db.titleAka.store.count()
@@ -75,7 +78,7 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   object db extends LightDB(directory = Some(Paths.get("imdb"))) with LuceneIndexerSupport with MultiHaloSupport {
     override protected def haloIndexThreads: Int = 10
-    override protected def haloMaxFileSize: Int = 1024 * 1024 * 10    // 10 meg
+    override protected def haloMaxFileSize: Int = 1024 * 1024 * 100    // 100 meg
 
     val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
     val titleBasics: Collection[TitleBasicsLDB] = collection("titleBasics", TitleBasicsLDB)
@@ -86,9 +89,9 @@ object LightDBImplementation extends BenchmarkImplementation {
   object TitleAkaLDB extends JsonMapping[TitleAkaLDB] {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
-    val titleId: FD[String] = field("titleId", _.titleId).indexed()
-    val ordering: FD[Int] = field("ordering", _.ordering).indexed()
-    val title: FD[String] = field("title", _.title).indexed()
+    val titleId: FD[String] = field("titleId", _.titleId)
+    val ordering: FD[Int] = field("ordering", _.ordering)
+    val title: FD[String] = field("title", _.title)
   }
 
   case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]
@@ -96,8 +99,8 @@ object LightDBImplementation extends BenchmarkImplementation {
   object TitleBasicsLDB extends JsonMapping[TitleBasicsLDB] {
     override implicit val rw: RW[TitleBasicsLDB] = RW.gen
 
-    val tconst: FD[String] = field("tconst", _.tconst).indexed()
-    val primaryTitle: FD[String] = field("primaryTitle", _.primaryTitle).indexed()
-    val originalTitle: FD[String] = field("originalTitle", _.originalTitle).indexed()
+    val tconst: FD[String] = field("tconst", _.tconst)
+    val primaryTitle: FD[String] = field("primaryTitle", _.primaryTitle)
+    val originalTitle: FD[String] = field("originalTitle", _.originalTitle)
   }
 }

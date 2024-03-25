@@ -113,7 +113,7 @@ object IMDBBenchmark { // extends IOApp {
   private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO {
     val reader = new BufferedReader(new FileReader(file))
     val counter = new AtomicInteger(0)
-    val concurrency = 16
+    val concurrency = 32
     try {
       val keys = reader.readLine().split('\t').toList
 
@@ -198,7 +198,12 @@ object IMDBBenchmark { // extends IOApp {
   } else {
     val ids = idsList.head
     implementation.findByTitleId(ids.titleId).flatMap { titleAkas =>
-      titleAkas.find(ta => implementation.idFor(ta) == ids.id).getOrElse(throw new RuntimeException(s"Unable to find id match (${ids.id}) for: $titleAkas"))
+      val results = titleAkas.map(ta => implementation.titleIdFor(ta))
+      if (titleAkas.isEmpty) {
+        throw new RuntimeException("Empty!")
+      } else if (!results.forall(id => id == ids.titleId)) {
+        throw new RuntimeException(s"Not all titleIds match the query: $results")
+      }
       validateTitleIds(idsList.tail)
     }
   }
