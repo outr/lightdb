@@ -3,7 +3,7 @@ package lightdb.store.halo
 import cats.effect.IO
 import fs2.Stream
 import com.oath.halodb.{HaloDB, HaloDBOptions}
-import lightdb.store.ObjectStore
+import lightdb.store.{ObjectData, ObjectStore}
 import lightdb.Id
 
 import java.nio.file.{Files, Path}
@@ -32,9 +32,9 @@ case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 
     }
   }
 
-  override def all[T](chunkSize: Int = 512): Stream[IO, (Id[T], Array[Byte])] = Stream
+  override def all[T](chunkSize: Int = 512): Stream[IO, ObjectData[T]] = Stream
     .fromBlockingIterator[IO](halo.newIterator().asScala, chunkSize)
-    .map(r => Id[T](new String(r.getKey, "UTF-8")) -> r.getValue)
+    .map(r => ObjectData(Id[T](new String(r.getKey, "UTF-8")), r.getValue))
 
   override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO {
     halo.newIterator()
@@ -58,6 +58,6 @@ case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 
   override def dispose(): IO[Unit] = IO(halo.close())
 
   override def truncate(): IO[Unit] = all[Any]().evalMap {
-    case (id, _) => delete(id)
+    case ObjectData(id, _) => delete(id)
   }.compile.drain
 }

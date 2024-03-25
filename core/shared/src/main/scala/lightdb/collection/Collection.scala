@@ -29,7 +29,7 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
 
   def all(chunkSize: Int = 512, maxConcurrent: Int = 16): fs2.Stream[IO, D] = store
     .all[D](chunkSize)
-    .mapAsync(maxConcurrent)(t => IO(dataManager.fromArray(t._2)))
+    .mapAsync(maxConcurrent)(t => IO(dataManager.fromArray(t.data)))
 
   def modify(id: Id[D])(f: Option[D] => Option[D]): IO[Option[D]] = for {
     result <- data.modify(id)(f)

@@ -13,9 +13,9 @@ case class HaloIndexer[D <: Document[D]](collection: Collection[D]) extends Inde
   override def commit(): IO[Unit] = IO.unit
   override def count(): IO[Long] = collection.store.all().compile.count
   override def search(query: Query[D]): fs2.Stream[IO, SearchResult[D]] = collection.store
-    .all()
-    .map[D] { t: (Id[D], Array[Byte]) =>
-      collection.fromArray(t._2)
+    .all[D]()
+    .map { t =>
+      collection.fromArray(t.data)
     }
     .filter(query.matches)
     .map { document =>

@@ -1,6 +1,6 @@
 // Scala versions
 val scala213 = "2.13.13"
-val scala3 = "3.3.1"
+val scala3 = "3.3.3"
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.2.0-SNAPSHOT1"
+ThisBuild / version := "0.3.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -45,7 +45,7 @@ val collectionCompatVersion: String = "2.11.0"
 val haloDBVersion: String = "v0.5.6"
 val catsEffectVersion: String = "3.5.4"
 val fabricVersion: String = "1.14.1"
-val fs2Version: String = "3.10.0"
+val fs2Version: String = "3.10.1"
 val scribeVersion: String = "3.13.2"
 val luceneVersion: String = "9.10.0"
 
