@@ -100,7 +100,16 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
       }
       parser.parse(filterString)
     }
-    val topDocs = indexSearcher.search(q, query.batchSize)
+    // TODO Sort
+    query.sort.map {
+      case lightdb.query.Sort.BestMatch => SortField.FIELD_SCORE
+      case lightdb.query.Sort.IndexOrder => SortField.FIELD_DOC
+      case lightdb.query.Sort.ByField(field, reverse) =>
+        field.
+        new SortField(field.name, sortType, reverse)
+    }
+    // TODO: Offset
+    val topDocs = indexSearcher.search(q, query.limit, sort, query.scoreDocs)
     val hits = topDocs.scoreDocs
     val total = topDocs.totalHits.value
     val storedFields = indexSearcher.storedFields()
