@@ -6,7 +6,11 @@ import fabric.rw._
 class JsonDataManager[T: RW] extends DataManager[T] {
   override def fromArray(array: Array[Byte]): T = {
     val jsonString = new String(array, "UTF-8")
-    JsonParser(jsonString).as[T]
+    try {
+      JsonParser(jsonString).as[T]
+    } catch {
+      case t: Throwable => throw new RuntimeException(s"Unable to parse: [$jsonString]", t)
+    }
   }
 
   override def toArray(value: T): Array[Byte] = {

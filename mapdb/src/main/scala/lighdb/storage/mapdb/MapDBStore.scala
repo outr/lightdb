@@ -12,10 +12,9 @@ import java.nio.file.Path
 
 case class MapDBStore(directory: Option[Path]) extends ObjectStore {
   private val maker: DBMaker.Maker = directory match {
-    case Some(path) => {
+    case Some(path) =>
       path.toFile.getParentFile.mkdirs()
       DBMaker.fileDB(path.toFile)
-    }
     case None => DBMaker.memoryDB()
   }
   private val db: DB = maker.make()
@@ -42,12 +41,4 @@ case class MapDBStore(directory: Option[Path]) extends ObjectStore {
   override def commit(): IO[Unit] = IO(db.commit())
 
   override def truncate(): IO[Unit] = IO(map.clear())
-}
-
-trait SharedMapDBSupport extends ObjectStoreSupport {
-  this: LightDB =>
-
-  private lazy val shared: MapDBStore = MapDBStore(directory.map(_.resolve("store")))
-
-  override def store[D <: Document[D]](collection: Collection[D]): ObjectStore = shared
 }

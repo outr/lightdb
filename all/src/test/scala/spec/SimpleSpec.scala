@@ -1,26 +1,19 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.unsafe.IORuntime
-import fabric.rw.{RW, ccRW}
+import cats.effect.testing.scalatest.AsyncIOSpec
+import fabric.rw._
+import lighdb.storage.mapdb.SharedMapDBSupport
 import lightdb.collection.Collection
-import lightdb.data.{DataManager, JsonDataManager}
-import lightdb.field.Field
 import lightdb.index.lucene._
 import lightdb.query._
-import lightdb.store.halo.SharedHaloSupport
-import lightdb.{Document, Id, JsonMapping, LightDB, ObjectMapping}
-import testy.{AsyncSupport, Spec}
+import lightdb.store.halo.{MultiHaloSupport, SharedHaloSupport}
+import lightdb.{Document, Id, JsonMapping, LightDB}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AsyncWordSpec
 
 import java.nio.file.Paths
-import scala.concurrent.Future
 
-class SimpleSpec extends Spec {
-  private object IOAsyncSupport extends AsyncSupport[IO[Any]] {
-    override def apply(async: IO[Any]): Future[Unit] = async.unsafeToFuture()(IORuntime.global).asInstanceOf[Future[Unit]]
-  }
-  implicit def asyncSupport[T]: AsyncSupport[IO[T]] = IOAsyncSupport.asInstanceOf[AsyncSupport[IO[T]]]
-
+class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   private val id1 = Id[Person]("john")
   private val id2 = Id[Person]("jane")
 
@@ -28,7 +21,7 @@ class SimpleSpec extends Spec {
   private val p2 = Person("Jane Doe", 19, id2)
 
   "Simple database" should {
-    "clear data if any exists" async {
+    "clear data if any exists" in {
       for {
         _ <- db.truncate()
         _ <- db.people.commit()
@@ -39,40 +32,40 @@ class SimpleSpec extends Spec {
         indexCount should be(0)
       }
     }
-    "store John Doe" async {
+    "store John Doe" in {
       db.people.put(p1).map { p =>
         p._id should be(id1)
       }
     }
-    "verify John Doe exists" async {
+    "verify John Doe exists" in {
       db.people.get(id1).map { o =>
         o should be(Some(p1))
       }
     }
-    "storage Jane Doe" async {
+    "storage Jane Doe" in {
       db.people.put(p2).map { p =>
         p._id should be(id2)
       }
     }
-    "verify Jane Doe exists" async {
+    "verify Jane Doe exists" in {
       db.people.get(id2).map { o =>
         o should be(Some(p2))
       }
     }
-    "verify exactly two objects in data" async {
+    "verify exactly two objects in data" in {
       db.people.store.count().map { size =>
         size should be(2)
       }
     }
-    "flush data" async {
+    "flush data" in {
       db.people.commit()
     }
-    "verify exactly two objects in index" async {
+    "verify exactly two objects in index" in {
       db.people.indexer.count().map { size =>
         size should be(2)
       }
     }
-    "verify exactly two objects in the store" async {
+    "verify exactly two objects in the store" in {
       db.people.store.all[Person]()
         .compile
         .toList
@@ -81,7 +74,7 @@ class SimpleSpec extends Spec {
           ids.toSet should be(Set(id1, id2))
         }
     }
-    "search by name for positive result" async {
+    "search by name for positive result" in {
       db.people.query.filter(Person.name === "Jane Doe").search().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
@@ -90,23 +83,23 @@ class SimpleSpec extends Spec {
         doc(Person.age) should be(19)
       }
     }
-    "delete John" async {
+    "delete John" in {
       db.people.delete(id1)
     }
-    "verify exactly one object in data" async {
+    "verify exactly one object in data" in {
       db.people.store.count().map { size =>
         size should be(1)
       }
     }
-    "commit data" async {
+    "commit data" in {
       db.people.commit()
     }
-    "verify exactly one object in index" async {
+    "verify exactly one object in index" in {
       db.people.indexer.count().map { size =>
         size should be(1)
       }
     }
-    "list all documents" async {
+    "list all documents" in {
       db.people.query.search().compile.toList.flatMap { results =>
         results.length should be(1)
         val doc = results.head
@@ -121,7 +114,7 @@ class SimpleSpec extends Spec {
       }
     }
     // TODO: search for an item by name and by age range
-    "replace Jane Doe" async {
+    "replace Jane Doe" in {
       db.people.put(Person("Jan Doe", 20, id2)).map { p =>
         p._id should be(id2)
       }
@@ -133,10 +126,10 @@ class SimpleSpec extends Spec {
         p.age should be(20)
       }
     }
-    "commit data" async {
+    "commit new data" in {
       db.people.commit()
     }
-    "list all documents" async {
+    "list new documents" in {
       db.people.query.search().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
@@ -147,12 +140,12 @@ class SimpleSpec extends Spec {
     }
     // TODO: support multiple item types (make sure queries don't return different types)
     // TODO: test batch operations: insert, replace, and delete
-    "dispose" async {
+    "dispose" in {
       db.dispose()
     }
   }
 
-  object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with SharedHaloSupport {
+  object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with SharedMapDBSupport {
     override protected def autoCommit: Boolean = true
 
     val people: Collection[Person] = collection("people", Person)
@@ -161,9 +154,9 @@ class SimpleSpec extends Spec {
   case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
 
   object Person extends JsonMapping[Person] {
-    override implicit val rw: RW[Person] = ccRW
+    override implicit val rw: RW[Person] = RW.gen
 
-    val name: FD[String] = field("name", _.name).indexed()
-    val age: FD[Int] = field("age", _.age).indexed()
+    val name: FD[String] = field("name", _.name)
+    val age: FD[Int] = field("age", _.age)
   }
 }
