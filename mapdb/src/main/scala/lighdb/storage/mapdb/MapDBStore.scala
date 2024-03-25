@@ -3,7 +3,7 @@ package lighdb.storage.mapdb
 import cats.effect.IO
 import lightdb.collection.Collection
 import lightdb.{Document, Id, LightDB}
-import lightdb.store.{ObjectStore, ObjectStoreSupport}
+import lightdb.store.{ObjectData, ObjectStore, ObjectStoreSupport}
 import org.eclipse.collections.impl.map.mutable.ConcurrentHashMap
 import org.mapdb.{DB, DBMaker, DataInput2, DataOutput2, HTreeMap, Serializer}
 
@@ -30,12 +30,12 @@ case class MapDBStore(directory: Option[Path]) extends ObjectStore {
 
   override def count(): IO[Long] = IO(map.size())
 
-  override def all[T](chunkSize: Int): fs2.Stream[IO, (Id[T], Array[Byte])] = fs2.Stream
+  override def all[T](chunkSize: Int): fs2.Stream[IO, ObjectData[T]] = fs2.Stream
     .fromBlockingIterator[IO](map.entrySet().iterator().asScala, chunkSize)   // TODO: figure out how to get an iterator that doesn't load everything into memory
     .map { pair =>
       val id = Id[T](pair.getKey)
       val value = pair.getValue
-      id -> value
+      ObjectData(id, value)
     }
 
   override def commit(): IO[Unit] = IO(db.commit())

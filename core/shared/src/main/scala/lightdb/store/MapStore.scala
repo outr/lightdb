@@ -7,10 +7,10 @@ import lightdb.Id
 class MapStore extends ObjectStore {
   private var map = Map.empty[Id[_], Array[Byte]]
 
-  override def all[T](chunkSize: Int = 512): fs2.Stream[IO, (Id[T], Array[Byte])] = fs2.Stream
+  override def all[T](chunkSize: Int = 512): fs2.Stream[IO, ObjectData[T]] = fs2.Stream
     .fromBlockingIterator[IO](map.iterator, chunkSize)
     .map {
-      case (id, value) => id.asInstanceOf[Id[T]] -> value
+      case (id, data) => ObjectData(id.asInstanceOf[Id[T]], data)
     }
 
   override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO.pure(map.get(id))

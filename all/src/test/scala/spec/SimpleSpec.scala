@@ -6,8 +6,7 @@ import lighdb.storage.mapdb.SharedMapDBSupport
 import lightdb.collection.Collection
 import lightdb.index.lucene._
 import lightdb.query._
-import lightdb.store.halo.{MultiHaloSupport, SharedHaloSupport}
-import lightdb.{Document, Id, JsonMapping, LightDB}
+import lightdb._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
@@ -69,13 +68,13 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       db.people.store.all[Person]()
         .compile
         .toList
-        .map(_.map(_._1))
+        .map(_.map(_.id))
         .map { ids =>
           ids.toSet should be(Set(id1, id2))
         }
     }
     "search by name for positive result" in {
-      db.people.query.filter(Person.name === "Jane Doe").search().compile.toList.map { results =>
+      db.people.query.filter(Person.name is "Jane Doe").search().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
         doc.id should be(id2)

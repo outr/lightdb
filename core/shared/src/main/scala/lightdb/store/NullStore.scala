@@ -14,7 +14,7 @@ object NullStore extends ObjectStore {
 
   override def count(): IO[Long] = IO.pure(0L)
 
-  override def all[T](chunkSize: Int): fs2.Stream[IO, (Id[T], Array[Byte])] = fs2.Stream.empty
+  override def all[T](chunkSize: Int): fs2.Stream[IO, ObjectData[T]] = fs2.Stream.empty
 
   override def commit(): IO[Unit] = IO.unit
 
