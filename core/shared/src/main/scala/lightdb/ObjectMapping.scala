@@ -1,5 +1,6 @@
 package lightdb
 
+import fabric.rw.RW
 import lightdb.data.DataManager
 import lightdb.field.Field
 
@@ -17,8 +18,9 @@ trait ObjectMapping[D <: Document[D]] { om =>
   object field {
     def get[F](name: String): Option[FD[F]] = _fields.find(_.name == name).map(_.asInstanceOf[Field[D, F]])
 
-    def apply[F](name: String, getter: D => F): FD[F] = {
-      replace(Field[D, F](name, getter, Nil, om))
+    def apply[F](name: String, getter: D => F)
+                (implicit rw: RW[F]): FD[F] = {
+      replace(Field[D, F](name, getter, om))
     }
 
     def replace[F](field: Field[D, F]): FD[F] = om.synchronized {

@@ -1,17 +1,18 @@
 package lightdb.index.lucene
 
 import cats.effect.IO
+import fabric.define.DefType
 import lightdb.collection.Collection
 import lightdb.index.{Indexer, SearchResult}
-import lightdb.query.{Filter, Query}
+import lightdb.query.{Condition, Filter, Query}
 import lightdb.{Document, Id}
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search._
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, PhraseQuery, ScoreDoc, SearcherFactory, SearcherManager, Sort, SortField, TermQuery, Query => LuceneQuery}
 import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
-import org.apache.lucene.document.{Field, IntField, TextField, Document => LuceneDocument}
+import org.apache.lucene.document.{Field, IntField, IntRange, TextField, Document => LuceneDocument}
 
 import java.nio.file.Path
 import scala.collection.immutable.ArraySeq
@@ -44,10 +45,12 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
   override def put(value: D): IO[D] = IO {
     val document = new LuceneDocument
     collection.mapping.fields.foreach { field =>
+      def textFieldType = if (field.stored) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED
+      def fieldStore = if (field.stored) Field.Store.YES else Field.Store.NO
       field.getter(value) match {
-        case id: Id[_] => document.add(new Field(field.name, id.value, TextField.TYPE_STORED))
-        case s: String => document.add(new Field(field.name, s, TextField.TYPE_STORED))
-        case i: Int => document.add(new IntField(field.name, i, Field.Store.YES))
+        case id: Id[_] => document.add(new Field(field.name, id.value, textFieldType))
+        case s: String => document.add(new Field(field.name, s, textFieldType))
+        case i: Int => document.add(new IntField(field.name, i, fieldStore))
         case value => throw new RuntimeException(s"Unsupported value: $value (${value.getClass})")
       }
     }
@@ -63,11 +66,11 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
     doAutoCommit()
   }
 
-  protected def doAutoCommit(): Unit = if (autoCommit) {
+  private def doAutoCommit(): Unit = if (autoCommit) {
     commitBlocking()
   }
 
-  protected def commitBlocking(): Unit = {
+  private def commitBlocking(): Unit = {
     indexWriter.flush()
     indexWriter.commit()
     i.synchronized {
@@ -85,31 +88,55 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
     indexSearcher.count(new MatchAllDocsQuery)
   }
 
-  override def search(query: Query[D]): fs2.Stream[IO, SearchResult[D]] = {
-    val filters = query.filters.map {
-      case Filter.Equals(field, value) => s"${field.name}:$value"
-      case f => throw new UnsupportedOperationException(s"Unsupported filter: $f")
-    }
-    // TODO: Support filtering better
-    val q = if (filters.isEmpty) {
-      new MatchAllDocsQuery
-    } else {
-      val filterString = filters match {
-        case f :: Nil => f
-        case list => list.mkString("(", " AND ", ")")
+  private def condition2Lucene(condition: Condition): BooleanClause.Occur = condition match {
+    case Condition.Filter => BooleanClause.Occur.FILTER
+    case Condition.Must => BooleanClause.Occur.MUST
+    case Condition.MustNot => BooleanClause.Occur.MUST_NOT
+    case Condition.Should => BooleanClause.Occur.SHOULD
+  }
+
+  private def filter2Query(filter: Filter[D]): LuceneQuery = filter match {
+    case Filter.GroupedFilter(minimumNumberShouldMatch, filters) =>
+      val b = new BooleanQuery.Builder
+      b.setMinimumNumberShouldMatch(minimumNumberShouldMatch)
+      if (filters.forall(_._2 == Condition.MustNot)) {           // Work-around for all negative groups, something must match
+        b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
       }
-      parser.parse(filterString)
+      filters.foreach {
+        case (filter, condition) => b.add(filter2Query(filter), condition2Lucene(condition))
+      }
+      b.build()
+    case Filter.Equals(field, value) => value match {
+      case s: String =>
+        val b = new PhraseQuery.Builder
+        s.toLowerCase.split(' ').foreach { word =>
+          b.add(new Term(field.name, word))
+        }
+        b.setSlop(0)
+        b.build()
+      case i: Int => IntField.newExactQuery(field.name, i)
+      case _ => throw new UnsupportedOperationException(s"Unsupported: $value (${field.name})")
     }
-    // TODO Sort
-    query.sort.map {
-      case lightdb.query.Sort.BestMatch => SortField.FIELD_SCORE
-      case lightdb.query.Sort.IndexOrder => SortField.FIELD_DOC
-      case lightdb.query.Sort.ByField(field, reverse) =>
-        field.
-        new SortField(field.name, sortType, reverse)
+  }
+
+  override def search(query: Query[D]): fs2.Stream[IO, SearchResult[D]] = {
+    val q = query.filter.map(filter2Query).getOrElse(new MatchAllDocsQuery)
+    val sortFields = if (query.sort.isEmpty) {
+      List(SortField.FIELD_SCORE)
+    } else {
+      query.sort.map {
+        case lightdb.query.Sort.BestMatch => SortField.FIELD_SCORE
+        case lightdb.query.Sort.IndexOrder => SortField.FIELD_DOC
+        case lightdb.query.Sort.ByField(field, reverse) =>
+          val sortType = field.rw.definition match {
+            case DefType.Str => SortField.Type.STRING
+            case d => throw new RuntimeException(s"Unsupported DefType: $d")
+          }
+          new SortField(field.name, sortType, reverse)
+      }
     }
     // TODO: Offset
-    val topDocs = indexSearcher.search(q, query.limit, sort, query.scoreDocs)
+    val topDocs = indexSearcher.search(q, query.limit, new Sort(sortFields: _*), query.scoreDocs)
     val hits = topDocs.scoreDocs
     val total = topDocs.totalHits.value
     val storedFields = indexSearcher.storedFields()
