@@ -82,6 +82,15 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         doc(Person.age) should be(19)
       }
     }
+    "search by age for positive result" in {
+      db.people.query.filter(Person.age is 19).search().compile.toList.map { results =>
+        results.length should be(1)
+        val doc = results.head
+        doc.id should be(id2)
+        doc(Person.name) should be("Jane Doe")
+        doc(Person.age) should be(19)
+      }
+    }
     "delete John" in {
       db.people.delete(id1)
     }
