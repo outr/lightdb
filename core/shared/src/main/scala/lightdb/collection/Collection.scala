@@ -14,52 +14,74 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
   lazy val indexer: Indexer[D] = db.indexer(this)
   lazy val query: Query[D] = Query[D](this)
 
-  def get(id: Id[D]): IO[Option[D]] = data.get(id)
+  def get(id: Id[D]): IO[Option[D]] = {
+    db.verifyInitialized()
+    data.get(id)
+  }
 
   def fromArray(array: Array[Byte]): D = data.fromArray(array)
 
   def apply(id: Id[D]): IO[D] = data(id)
 
-  def put(value: D): IO[D] = for {
-    _ <- data.put(value._id, value)
-    _ <- indexer.put(value)
-  } yield {
-    value
+  def put(value: D): IO[D] = {
+    db.verifyInitialized()
+    for {
+      _ <- data.put(value._id, value)
+      _ <- indexer.put(value)
+    } yield {
+      value
+    }
   }
 
-  def all(chunkSize: Int = 512, maxConcurrent: Int = 16): fs2.Stream[IO, D] = store
-    .all[D](chunkSize)
-    .mapAsync(maxConcurrent)(t => IO(dataManager.fromArray(t.data)))
-
-  def modify(id: Id[D])(f: Option[D] => Option[D]): IO[Option[D]] = for {
-    result <- data.modify(id)(f)
-    _ <- result.map(indexer.put).getOrElse(IO.unit)
-  } yield {
-    result
+  def all(chunkSize: Int = 512, maxConcurrent: Int = 16): fs2.Stream[IO, D] = {
+    db.verifyInitialized()
+    store
+      .all[D](chunkSize)
+      .mapAsync(maxConcurrent)(t => IO(dataManager.fromArray(t.data)))
   }
 
-  def delete(id: Id[D]): IO[Unit] = for {
-    _ <- data.delete(id)
-    _ <- indexer.delete(id)
-  } yield {
-    ()
+  def modify(id: Id[D])(f: Option[D] => Option[D]): IO[Option[D]] = {
+    db.verifyInitialized()
+    for {
+      result <- data.modify(id)(f)
+      _ <- result.map(indexer.put).getOrElse(IO.unit)
+    } yield {
+      result
+    }
   }
 
-  def commit(): IO[Unit] = for {
-    _ <- data.commit()
-    _ <- indexer.commit()
-  } yield {
-    ()
+  def delete(id: Id[D]): IO[Unit] = {
+    db.verifyInitialized()
+    for {
+      _ <- data.delete(id)
+      _ <- indexer.delete(id)
+    } yield {
+      ()
+    }
   }
 
-  def truncate(): IO[Unit] = for {
-    _ <- store.truncate()
-    _ <- indexer.truncate()
-  } yield {
-    ()
+  def commit(): IO[Unit] = {
+    db.verifyInitialized()
+    for {
+      _ <- data.commit()
+      _ <- indexer.commit()
+    } yield {
+      ()
+    }
+  }
+
+  def truncate(): IO[Unit] = {
+    db.verifyInitialized()
+    for {
+      _ <- store.truncate()
+      _ <- indexer.truncate()
+    } yield {
+      ()
+    }
   }
 
   def dispose(): IO[Unit] = {
+    db.verifyInitialized()
     indexer.dispose()
   }
 

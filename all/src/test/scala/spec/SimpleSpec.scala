@@ -7,6 +7,7 @@ import lightdb.collection.Collection
 import lightdb.index.lucene._
 import lightdb.query._
 import lightdb._
+import lightdb.store.halo.MultiHaloSupport
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
@@ -20,16 +21,8 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   private val p2 = Person("Jane Doe", 19, id2)
 
   "Simple database" should {
-    "clear data if any exists" in {
-      for {
-        _ <- db.truncate()
-        _ <- db.people.commit()
-        storeCount <- db.people.store.count()
-        indexCount <- db.people.indexer.count()
-      } yield {
-        storeCount should be(0)
-        indexCount should be(0)
-      }
+    "initialize the database" in {
+      db.init(truncate = true)
     }
     "store John Doe" in {
       db.people.put(p1).map { p =>
@@ -89,6 +82,15 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         doc.id should be(id2)
         doc(Person.name) should be("Jane Doe")
         doc(Person.age) should be(19)
+      }
+    }
+    "search by id for John" in {
+      db.people.query.filter(Person._id is id1).search().compile.toList.map { results =>
+        results.length should be(1)
+        val doc = results.head
+        doc.id should be(id1)
+        doc(Person.name) should be("John Doe")
+        doc(Person.age) should be(21)
       }
     }
     "delete John" in {
@@ -153,7 +155,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
   }
 
-  object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with SharedMapDBSupport {
+  object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with MultiHaloSupport {
     override protected def autoCommit: Boolean = true
 
     val people: Collection[Person] = collection("people", Person)

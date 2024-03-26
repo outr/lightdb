@@ -9,4 +9,10 @@ package object query {
     def includes(values: Seq[F]): Filter[D] = Filter.Includes(field, values)
     def excludes(values: Seq[F]): Filter[D] = Filter.Excludes(field, values)
   }
+
+  implicit class FilterExtras[D <: Document[D]](val filter: Filter[D]) extends AnyVal {
+    def &&(that: Filter[D]): Filter[D] = Filter.GroupedFilter(0, List(
+      filter -> Condition.Must, that -> Condition.Must
+    ))
+  }
 }

@@ -17,7 +17,10 @@ object Condition {
 }
 
 object Filter {
-  case class GroupedFilter[D <: Document[D], F](minimumNumberShouldMatch: Int,
+  case class ParsableSearchTerm[D <: Document[D]](query: String, allowLeadingWildcard: Boolean) extends Filter[D] {
+    override def matches(document: D): Boolean = throw new UnsupportedOperationException("ParsableSearchTerm not supported")
+  }
+  case class GroupedFilter[D <: Document[D]](minimumNumberShouldMatch: Int,
                                              filters: List[(Filter[D], Condition)]) extends Filter[D] {
     override def matches(document: D): Boolean = {
       var should = 0
