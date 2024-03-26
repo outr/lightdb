@@ -164,13 +164,13 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
   }
 
   def close(): IO[Unit] = IO {
+    searcherManager.close()
     indexWriter.flush()
     indexWriter.commit()
     indexWriter.close()
     if (_indexSearcher != null) {
       searcherManager.release(_indexSearcher)
     }
-    searcherManager.close()
   }
 
   override def dispose(): IO[Unit] = close().map { _ =>
