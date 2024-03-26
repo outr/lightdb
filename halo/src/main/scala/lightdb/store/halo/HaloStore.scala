@@ -24,11 +24,10 @@ case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 
   private def halo: HaloDB = synchronized {
     _instance match {
       case Some(db) => db
-      case None => {
+      case None =>
         val db = createInstance()
         _instance = Some(db)
         db
-      }
     }
   }
 
@@ -59,5 +58,10 @@ case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 
 
   override def truncate(): IO[Unit] = all[Any]().evalMap {
     case ObjectData(id, _) => delete(id)
-  }.compile.drain
+  }.compile.drain.flatMap { _ =>
+    count().flatMap {
+      case 0L => IO.unit
+      case _ => truncate()    // Work-around for truncate not always capturing all records
+    }
+  }
 }
