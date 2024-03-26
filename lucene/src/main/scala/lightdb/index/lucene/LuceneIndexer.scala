@@ -12,7 +12,7 @@ import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, PhraseQuery, ScoreDoc, SearcherFactory, SearcherManager, Sort, SortField, TermQuery, Query => LuceneQuery}
 import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
-import org.apache.lucene.document.{Field, IntField, IntRange, TextField, Document => LuceneDocument}
+import org.apache.lucene.document.{Field, IntField, IntRange, LongField, StringField, TextField, Document => LuceneDocument}
 
 import java.nio.file.Path
 import scala.collection.immutable.ArraySeq
@@ -42,17 +42,23 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
     _indexSearcher
   }
 
+  private def addField(document: LuceneDocument, field: lightdb.field.Field[D, _], value: Any): Unit = {
+    def textFieldType = if (field.stored) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED
+    def fieldStore: Field.Store = if (field.stored) Field.Store.YES else Field.Store.NO
+    value match {
+      case id: Id[_] => document.add(new StringField(field.name, id.value, fieldStore))
+      case s: String => document.add(new Field(field.name, s, textFieldType))
+      case i: Int => document.add(new IntField(field.name, i, fieldStore))
+      case l: Long => document.add(new LongField(field.name, l, fieldStore))
+      case Some(value) => addField(document, field, value)
+      case value => throw new RuntimeException(s"Unsupported value: $value (${value.getClass})")
+    }
+  }
+
   override def put(value: D): IO[D] = IO {
     val document = new LuceneDocument
     collection.mapping.fields.foreach { field =>
-      def textFieldType = if (field.stored) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED
-      def fieldStore = if (field.stored) Field.Store.YES else Field.Store.NO
-      field.getter(value) match {
-        case id: Id[_] => document.add(new Field(field.name, id.value, textFieldType))
-        case s: String => document.add(new Field(field.name, s, textFieldType))
-        case i: Int => document.add(new IntField(field.name, i, fieldStore))
-        case value => throw new RuntimeException(s"Unsupported value: $value (${value.getClass})")
-      }
+      addField(document, field, field.getter(value))
     }
     if (document.iterator().hasNext) {
       indexWriter.updateDocument(new Term("_id", value._id.value), document)
@@ -96,6 +102,9 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
   }
 
   private def filter2Query(filter: Filter[D]): LuceneQuery = filter match {
+    case Filter.ParsableSearchTerm(query, allowLeadingWildcard) =>
+      parser.setAllowLeadingWildcard(allowLeadingWildcard)
+      parser.parse(query)
     case Filter.GroupedFilter(minimumNumberShouldMatch, filters) =>
       val b = new BooleanQuery.Builder
       b.setMinimumNumberShouldMatch(minimumNumberShouldMatch)
@@ -115,8 +124,11 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
         b.setSlop(0)
         b.build()
       case i: Int => IntField.newExactQuery(field.name, i)
+      case id: Id[_] => new TermQuery(new Term(field.name, id.value))
       case _ => throw new UnsupportedOperationException(s"Unsupported: $value (${field.name})")
     }
+    case Filter.NotEquals(field, value) =>
+      filter2Query(Filter.GroupedFilter(0, List(Filter.Equals(field, value) -> Condition.MustNot)))
   }
 
   override def search(query: Query[D]): fs2.Stream[IO, SearchResult[D]] = {
