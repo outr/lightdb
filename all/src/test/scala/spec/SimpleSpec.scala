@@ -1,5 +1,6 @@
 package spec
 
+import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lighdb.storage.mapdb.SharedMapDBSupport
@@ -8,6 +9,7 @@ import lightdb.index.lucene._
 import lightdb.query._
 import lightdb._
 import lightdb.store.halo.MultiHaloSupport
+import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
@@ -67,7 +69,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         }
     }
     "search by name for positive result" in {
-      db.people.query.filter(Person.name is "Jane Doe").search().compile.toList.map { results =>
+      db.people.query.filter(Person.name is "Jane Doe").stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
         doc.id should be(id2)
@@ -76,7 +78,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       }
     }
     "search by age for positive result" in {
-      db.people.query.filter(Person.age is 19).search().compile.toList.map { results =>
+      db.people.query.filter(Person.age is 19).stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
         doc.id should be(id2)
@@ -85,7 +87,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       }
     }
     "search by id for John" in {
-      db.people.query.filter(Person._id is id1).search().compile.toList.map { results =>
+      db.people.query.filter(Person._id is id1).stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
         doc.id should be(id1)
@@ -110,7 +112,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       }
     }
     "list all documents" in {
-      db.people.query.search().compile.toList.flatMap { results =>
+      db.people.query.stream().compile.toList.flatMap { results =>
         results.length should be(1)
         val doc = results.head
         doc.id should be(id2)
@@ -140,12 +142,17 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       db.people.commit()
     }
     "list new documents" in {
-      db.people.query.search().compile.toList.map { results =>
+      db.people.query.stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
         doc.id should be(id2)
         doc(Person.name) should be("Jan Doe")
         doc(Person.age) should be(20)
+      }
+    }
+    "verify start time has been set" in {
+      db.startTime.get().map { startTime =>
+        startTime should be > 0L
       }
     }
     // TODO: support multiple item types (make sure queries don't return different types)
@@ -158,7 +165,11 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   object db extends LightDB(directory = Some(Paths.get("testdb"))) with LuceneIndexerSupport with MultiHaloSupport {
     override protected def autoCommit: Boolean = true
 
+    val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
+
     val people: Collection[Person] = collection("people", Person)
+
+    override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
   }
 
   case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
@@ -168,5 +179,13 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
     val name: FD[String] = field("name", _.name)
     val age: FD[Int] = field("age", _.age)
+  }
+
+  object InitialSetupUpgrade extends DatabaseUpgrade {
+    override def applyToNew: Boolean = true
+    override def blockStartup: Boolean = true
+    override def alwaysRun: Boolean = false
+
+    override def upgrade(ldb: LightDB): IO[Unit] = db.startTime.set(System.currentTimeMillis()).map(_ => ())
   }
 }

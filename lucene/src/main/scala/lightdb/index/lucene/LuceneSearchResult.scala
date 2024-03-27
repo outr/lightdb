@@ -11,9 +11,7 @@ import org.apache.lucene.index.StoredFields
 import org.apache.lucene.search.ScoreDoc
 
 case class LuceneSearchResult[D <: Document[D]](scoreDoc: ScoreDoc,
-                                                total: Long,
                                                 collection: Collection[D],
-                                                query: Query[D],
                                                 storedFields: StoredFields) extends SearchResult[D] {
   private lazy val document = storedFields.document(scoreDoc.doc)
   private lazy val doc = collection(id)

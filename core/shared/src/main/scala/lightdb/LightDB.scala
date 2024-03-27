@@ -30,6 +30,7 @@ abstract class LightDB(val directory: Option[Path]) {
 
   def init(truncate: Boolean = false): IO[Unit] = if (_initialized.compareAndSet(false, true)) {
     for {
+      _ <- logger.info(s"LightDB initializing...")
       // Truncate the database before we do anything if specified
       _ <- this.truncate().whenA(truncate)
       // Determine if this is an uninitialized database
@@ -38,7 +39,7 @@ abstract class LightDB(val directory: Option[Path]) {
       applied <- appliedUpgrades.get()
       // Determine upgrades that need to be applied
       upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label)) match {
-        case list if !dbInitialized => list.filterNot(_.applyToNew)
+        case list if !dbInitialized => list.filter(_.applyToNew)
         case list => list
       }
       _ <- (for {
