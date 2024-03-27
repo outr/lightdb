@@ -17,7 +17,7 @@ trait Indexer[D <: Document[D]] {
 
   def count(): IO[Long]
 
-  def search(query: Query[D]): Stream[IO, SearchResult[D]]
+  def search(query: Query[D]): IO[SearchResults[D]]
 
   def truncate(): IO[Unit]
 

@@ -1,9 +1,12 @@
 package lightdb.index.lucene
 
 import cats.effect.IO
+import fabric._
 import fabric.define.DefType
+import fabric.io.JsonFormatter
+import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.index.{Indexer, SearchResult}
+import lightdb.index.{Indexer, SearchResult, SearchResults}
 import lightdb.query.{Condition, Filter, Query}
 import lightdb.{Document, Id}
 import org.apache.lucene.analysis.Analyzer
@@ -12,15 +15,14 @@ import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, PhraseQuery, ScoreDoc, SearcherFactory, SearcherManager, Sort, SortField, TermQuery, Query => LuceneQuery}
 import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
-import org.apache.lucene.document.{Field, IntField, IntRange, LongField, StringField, TextField, Document => LuceneDocument}
+import org.apache.lucene.document.{DoubleField, Field, FloatField, IntField, IntRange, LongField, StringField, TextField, Document => LuceneDocument}
 
 import java.nio.file.Path
 import scala.collection.immutable.ArraySeq
 
 case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
                                            autoCommit: Boolean = false,
-                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] {
-  i =>
+                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] { i =>
   private var disposed = false
   private lazy val path: Option[Path] = collection.db.directory.map(_.resolve(collection.collectionName))
   private lazy val directory = path
@@ -50,8 +52,20 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
       case s: String => document.add(new Field(field.name, s, textFieldType))
       case i: Int => document.add(new IntField(field.name, i, fieldStore))
       case l: Long => document.add(new LongField(field.name, l, fieldStore))
+      case f: Float => document.add(new FloatField(field.name, f, fieldStore))
+      case d: Double => document.add(new DoubleField(field.name, d, fieldStore))
+      case bd: BigDecimal => document.add(new StringField(field.name, bd.asString, fieldStore))
       case Some(value) => addField(document, field, value)
-      case value => throw new RuntimeException(s"Unsupported value: $value (${value.getClass})")
+      case Str(s, _) => addField(document, field, s)          // TODO: Should this store as a StringField instead? Maybe add something to field for tokenize?
+      case NumDec(bd, _) => addField(document, field, bd)
+      case NumInt(i, _) => addField(document, field, i)
+      case obj: Obj =>
+        val jsonString = JsonFormatter.Compact(obj)
+        document.add(new StringField(field.name, jsonString, fieldStore))
+      case null | Null => // Ignore null
+      case value =>
+        val json = field.rw.asInstanceOf[RW[Any]].read(value)
+        addField(document, field, json)
     }
   }
 
@@ -125,13 +139,15 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
         b.build()
       case i: Int => IntField.newExactQuery(field.name, i)
       case id: Id[_] => new TermQuery(new Term(field.name, id.value))
+      case json: Json => new TermQuery(new Term(field.name, JsonFormatter.Compact(json)))
       case _ => throw new UnsupportedOperationException(s"Unsupported: $value (${field.name})")
     }
     case Filter.NotEquals(field, value) =>
       filter2Query(Filter.GroupedFilter(0, List(Filter.Equals(field, value) -> Condition.MustNot)))
+    case _ => throw new RuntimeException(s"Unsupported filter: $filter")
   }
 
-  override def search(query: Query[D]): fs2.Stream[IO, SearchResult[D]] = {
+  override def search(query: Query[D]): IO[SearchResults[D]] = IO {
     val q = query.filter.map(filter2Query).getOrElse(new MatchAllDocsQuery)
     val sortFields = if (query.sort.isEmpty) {
       List(SortField.FIELD_SCORE)
@@ -150,12 +166,13 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
     // TODO: Offset
     val topDocs = indexSearcher.search(q, query.limit, new Sort(sortFields: _*), query.scoreDocs)
     val hits = topDocs.scoreDocs
-    val total = topDocs.totalHits.value
+    val total = topDocs.totalHits.value.toInt
     val storedFields = indexSearcher.storedFields()
-    fs2.Stream[IO, ScoreDoc](ArraySeq.unsafeWrapArray(hits): _*)
+    val stream = fs2.Stream[IO, ScoreDoc](ArraySeq.unsafeWrapArray(hits): _*)
       .map { sd =>
-        LuceneSearchResult(sd, total, collection, query, storedFields)
+        LuceneSearchResult(sd, collection, storedFields)
       }
+    SearchResults(query, total, stream)
   }
 
   override def truncate(): IO[Unit] = IO {
