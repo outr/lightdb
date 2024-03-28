@@ -1,8 +1,14 @@
 package lightdb
 
 import lightdb.field.Field
+import lightdb.query.Filter.GroupedFilter
+
+import scala.language.implicitConversions
 
 package object query {
+  implicit def conditionTuple2Filter[D <: Document[D]](tuple: (Filter[D], Condition)): Filter[D] =
+    GroupedFilter(0, List(tuple))
+
   implicit class FieldQueryExtras[D <: Document[D], F](val field: Field[D, F]) extends AnyVal {
     def ===(value: F): Filter[D] = Filter.Equals(field, value)
     def is(value: F): Filter[D] = Filter.Equals(field, value)

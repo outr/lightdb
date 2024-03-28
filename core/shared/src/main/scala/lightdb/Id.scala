@@ -1,12 +1,11 @@
 package lightdb
 
-import fabric._
 import fabric.rw._
 
 class Id[T](val value: String) extends AnyVal {
   def bytes: Array[Byte] = {
     val b = toString.getBytes("UTF-8")
-    assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length}")
+    assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length} ($value)")
     b
   }
   def parts: Vector[String] = value.split('/').toVector
