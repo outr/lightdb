@@ -8,7 +8,6 @@ class Id[T](val value: String) extends AnyVal {
     assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length} ($value)")
     b
   }
-  def parts: Vector[String] = value.split('/').toVector
 
   override def toString: String = value
 }
