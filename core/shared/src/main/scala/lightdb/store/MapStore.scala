@@ -25,7 +25,7 @@ class MapStore extends ObjectStore {
     IO.unit
   }
 
-  override def count(): IO[Long] = IO.pure(map.size)
+  override def count(): IO[Int] = IO.pure(map.size)
 
   override def commit(): IO[Unit] = IO.unit
 

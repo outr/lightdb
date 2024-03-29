@@ -20,5 +20,8 @@ package object query {
     def &&(that: Filter[D]): Filter[D] = Filter.GroupedFilter(0, List(
       filter -> Condition.Must, that -> Condition.Must
     ))
+    def ||(that: Filter[D]): Filter[D] = Filter.GroupedFilter(1, List(
+      filter -> Condition.Should, that -> Condition.Should
+    ))
   }
 }

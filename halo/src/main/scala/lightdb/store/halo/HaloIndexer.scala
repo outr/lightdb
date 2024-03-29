@@ -11,7 +11,7 @@ case class HaloIndexer[D <: Document[D]](collection: Collection[D]) extends Inde
   override def put(value: D): IO[D] = IO.pure(value)
   override def delete(id: Id[D]): IO[Unit] = IO.unit
   override def commit(): IO[Unit] = IO.unit
-  override def count(): IO[Long] = collection.store.all().compile.count
+  override def count(): IO[Int] = collection.store.all().compile.count.map(_.toInt)
   override def search(query: Query[D]): IO[SearchResults[D]] = IO {
     val stream = collection.store
       .all[D]()
