@@ -15,7 +15,7 @@ trait Indexer[D <: Document[D]] {
 
   def commit(): IO[Unit]
 
-  def count(): IO[Long]
+  def count(): IO[Int]
 
   def search(query: Query[D]): IO[SearchResults[D]]
 

@@ -48,8 +48,8 @@ case class HaloStore(directory: Path, indexThreads: Int = 2, maxFileSize: Int = 
     halo.delete(id.bytes)
   }
 
-  override def count(): IO[Long] = IO {
-    halo.size()
+  override def count(): IO[Int] = IO {
+    halo.size().toInt
   }
 
   override def commit(): IO[Unit] = IO.unit

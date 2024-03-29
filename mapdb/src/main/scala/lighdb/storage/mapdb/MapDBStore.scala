@@ -28,7 +28,7 @@ case class MapDBStore(directory: Option[Path]) extends ObjectStore {
 
   override def dispose(): IO[Unit] = IO(db.close())
 
-  override def count(): IO[Long] = IO(map.size())
+  override def count(): IO[Int] = IO(map.size())
 
   override def all[T](chunkSize: Int): fs2.Stream[IO, ObjectData[T]] = fs2.Stream
     .fromBlockingIterator[IO](map.entrySet().iterator().asScala, chunkSize)

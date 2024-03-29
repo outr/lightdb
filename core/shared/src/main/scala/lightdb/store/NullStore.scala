@@ -12,7 +12,7 @@ object NullStore extends ObjectStore {
 
   override def dispose(): IO[Unit] = IO.unit
 
-  override def count(): IO[Long] = IO.pure(0L)
+  override def count(): IO[Int] = IO.pure(0)
 
   override def all[T](chunkSize: Int): fs2.Stream[IO, ObjectData[T]] = fs2.Stream.empty
 

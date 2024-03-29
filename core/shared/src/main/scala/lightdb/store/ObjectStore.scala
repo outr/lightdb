@@ -27,7 +27,7 @@ trait ObjectStore {
     }
   }
 
-  def count(): IO[Long]
+  def count(): IO[Int]
 
   def all[T](chunkSize: Int = 512): Stream[IO, ObjectData[T]]
 

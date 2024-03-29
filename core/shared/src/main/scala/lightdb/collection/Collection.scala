@@ -1,6 +1,7 @@
 package lightdb.collection
 
 import cats.effect.IO
+import cats.implicits.toTraverseOps
 import lightdb.data.DataManager
 import lightdb.index.Indexer
 import lightdb.query.Query
@@ -33,6 +34,10 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
     }
   }
 
+  def putAll(values: Seq[D]): IO[Seq[D]] = values.map(put).sequence
+
+  def putStream(stream: fs2.Stream[IO, D]): IO[Int] = stream.evalMap(put).compile.count.map(_.toInt)
+
   def all(chunkSize: Int = 512, maxConcurrent: Int = 16): fs2.Stream[IO, D] = {
     db.verifyInitialized()
     store
@@ -60,6 +65,10 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
     }
   }
 
+  def deleteAll(ids: Seq[Id[D]]): IO[Unit] = ids.map(delete).sequence.map(_ => ())
+
+  def deleteStream(stream: fs2.Stream[IO, Id[D]]): IO[Int] = stream.evalMap(delete).compile.count.map(_.toInt)
+
   def commit(): IO[Unit] = {
     db.verifyInitialized()
     for {
@@ -80,9 +89,13 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
     }
   }
 
-  def dispose(): IO[Unit] = {
-    db.verifyInitialized()
-    indexer.dispose()
+  def dispose(): IO[Unit] = if (db.initialized) {
+    for {
+      _ <- store.dispose()
+      _ <- indexer.dispose()
+    } yield ()
+  } else {
+    IO.unit
   }
 
   protected lazy val data: CollectionData[D] = CollectionData(this)

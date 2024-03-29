@@ -12,7 +12,7 @@ case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Inde
 
   override def commit(): IO[Unit] = IO.unit
 
-  override def count(): IO[Long] = IO.pure(0L)
+  override def count(): IO[Int] = IO.pure(0)
 
   override def search(query: Query[D]): IO[SearchResults[D]] = IO.pure(SearchResults(query, 0, fs2.Stream.empty))
 
