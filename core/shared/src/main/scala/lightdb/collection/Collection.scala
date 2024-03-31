@@ -20,6 +20,12 @@ case class Collection[D <: Document[D]](db: LightDB, mapping: ObjectMapping[D], 
     data.get(id)
   }
 
+  def getAll(ids: fs2.Stream[IO, Id[D]]): fs2.Stream[IO, D] = ids.evalMap(get).collect {
+    case Some(d) => d
+  }
+
+  def getAll(ids: List[Id[D]]): IO[List[D]] = getAll(fs2.Stream(ids: _*)).compile.toList
+
   def fromArray(array: Array[Byte]): D = data.fromArray(array)
 
   def apply(id: Id[D]): IO[D] = data(id)
