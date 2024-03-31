@@ -144,6 +144,10 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
     }
     case Filter.NotEquals(field, value) =>
       filter2Query(Filter.GroupedFilter(0, List(Filter.Equals(field, value) -> Condition.MustNot)))
+    case Filter.Includes(field, values) =>
+      filter2Query(Filter.GroupedFilter(1, values.map(v => Filter.Equals(field, v) -> Condition.Should).toList))
+    case Filter.Excludes(field, values) =>
+      filter2Query(Filter.GroupedFilter(0, values.map(v => Filter.Equals(field, v) -> Condition.MustNot).toList))
     case _ => throw new RuntimeException(s"Unsupported filter: $filter")
   }
 
