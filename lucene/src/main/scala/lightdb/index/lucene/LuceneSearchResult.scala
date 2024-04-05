@@ -13,7 +13,7 @@ import org.apache.lucene.search.ScoreDoc
 case class LuceneSearchResult[D <: Document[D]](scoreDoc: ScoreDoc,
                                                 collection: Collection[D],
                                                 storedFields: StoredFields) extends SearchResult[D] {
-  private lazy val document = storedFields.document(scoreDoc.doc)
+  private val document = storedFields.document(scoreDoc.doc)
   private lazy val doc = collection(id)
 
   lazy val id: Id[D] = Id[D](document.get("_id"))

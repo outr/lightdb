@@ -37,11 +37,11 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
 
   private lazy val parser = new QueryParser("_id", analyzer)
 
-  private def indexSearcher: IndexSearcher = synchronized {
+  private def withIndexSearcher[Return](f: IndexSearcher => Return) = synchronized {
     if (_indexSearcher == null) {
       _indexSearcher = searcherManager.acquire()
     }
-    _indexSearcher
+    f(_indexSearcher)
   }
 
   private def addField(document: LuceneDocument, field: lightdb.field.Field[D, _], value: Any): Unit = {
@@ -55,7 +55,6 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
       case f: Float => document.add(new FloatField(field.name, f, fieldStore))
       case d: Double => document.add(new DoubleField(field.name, d, fieldStore))
       case bd: BigDecimal => document.add(new StringField(field.name, bd.asString, fieldStore))
-      case Some(value) => addField(document, field, value)
       case Str(s, _) => addField(document, field, s)          // TODO: Should this store as a StringField instead? Maybe add something to field for tokenize?
       case NumDec(bd, _) => addField(document, field, bd)
       case NumInt(i, _) => addField(document, field, i)
@@ -105,7 +104,7 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
   override def commit(): IO[Unit] = IO(commitBlocking())
 
   override def count(): IO[Int] = IO {
-    indexSearcher.count(new MatchAllDocsQuery)
+    withIndexSearcher(_.count(new MatchAllDocsQuery))
   }
 
   private def condition2Lucene(condition: Condition): BooleanClause.Occur = condition match {
@@ -168,10 +167,13 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
       }
     }
     // TODO: Offset
-    val topDocs = indexSearcher.search(q, query.limit, new Sort(sortFields: _*), query.scoreDocs)
-    val hits = topDocs.scoreDocs
-    val total = topDocs.totalHits.value.toInt
-    val storedFields = indexSearcher.storedFields()
+    val (hits, storedFields, total) = withIndexSearcher { indexSearcher =>
+      val topDocs = indexSearcher.search(q, query.limit, new Sort(sortFields: _*), query.scoreDocs)
+      val hits = topDocs.scoreDocs
+      val total = topDocs.totalHits.value.toInt
+      val storedFields = indexSearcher.storedFields()
+      (hits, storedFields, total)
+    }
     val stream = fs2.Stream[IO, ScoreDoc](ArraySeq.unsafeWrapArray(hits): _*)
       .map { sd =>
         LuceneSearchResult(sd, collection, storedFields)
