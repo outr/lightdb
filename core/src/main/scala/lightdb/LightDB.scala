@@ -16,13 +16,14 @@ abstract class LightDB(directory: Path,
 
   private var stores = List.empty[Store]
 
-  protected lazy val backingStore = new Collection[KeyValue]("_backingStore", this)
+  protected lazy val backingStore: Collection[KeyValue] = Collection[KeyValue]("_backingStore", this)
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
   def initialized: Boolean = _initialized.get()
 
-  def collections: List[Collection[_]] = Nil
+  def collections: List[Collection[_]]
+  def upgrades: List[DatabaseUpgrade]
 
   protected[lightdb] def verifyInitialized(): Unit = if (!initialized) throw new RuntimeException("Database not initialized!")
 
@@ -57,8 +58,6 @@ abstract class LightDB(directory: Path,
     stores = store :: stores
     store
   }
-
-  def upgrades: List[DatabaseUpgrade] = Nil
 
   def truncate(): IO[Unit] = collections.map(_.truncate()).parSequence.map(_ => ())
 
