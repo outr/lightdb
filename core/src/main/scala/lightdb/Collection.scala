@@ -3,12 +3,8 @@ package lightdb
 import cats.effect.IO
 import fabric.rw.RW
 
-abstract class Collection[D <: Document[D]](implicit val rw: RW[D]) {
-  protected lazy val defaultCollectionName: String = getClass.getSimpleName.replace("$", "")
+class Collection[D <: Document[D]](val collectionName: String, db: LightDB)(implicit val rw: RW[D]) {
   protected lazy val store: Store = db.createStore(collectionName)
-
-  protected def db: LightDB
-  protected def collectionName: String = defaultCollectionName
 
   private var _indexedLinks = List.empty[IndexedLinks[_, D]]
 
@@ -24,6 +20,8 @@ abstract class Collection[D <: Document[D]](implicit val rw: RW[D]) {
       case None => IO.pure(None)
     }
   }
+  def delete(id: Id[D]): IO[Unit] = store.delete(id)
+  def truncate(): IO[Unit] = store.truncate()
 
   def get(id: Id[D]): IO[Option[D]] = store.getJson(id)
   def apply(id: Id[D]): IO[D] = get(id)
@@ -43,6 +41,8 @@ abstract class Collection[D <: Document[D]](implicit val rw: RW[D]) {
     }
     il
   }
+
+  def dispose(): IO[Unit] = IO.unit
 }
 
 case class IndexedLinks[V, D <: Document[D]](createKey: V => String,
