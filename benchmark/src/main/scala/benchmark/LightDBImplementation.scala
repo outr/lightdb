@@ -18,6 +18,8 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def name: String = "LightDB"
 
+  override def init(): IO[Unit] = db.init(truncate = true)
+
   override def map2TitleAka(map: Map[String, String]): TitleAkaLDB = TitleAkaLDB(
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
@@ -55,7 +57,7 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def get(id: String): IO[TitleAkaLDB] = db.titleAka.get(Id[TitleAkaLDB](id)).map(_.getOrElse(throw new RuntimeException(s"$id not found")))
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = db.titleAka.query.filter(TitleAkaLDB.titleId === titleId).search().compile.toList.flatMap(_.map(_.get()).sequence)
+  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = db.titleAka.query.filter(TitleAkaLDB.titleId === titleId).documentsStream().compile.toList
 
   override def flush(): IO[Unit] = for {
     _ <- db.titleAka.commit()

@@ -77,11 +77,11 @@ object IMDBBenchmark { // extends IOApp {
     val io = for {
       _ <- implementation.init()
       _ = scribe.info("--- Stage 1 ---")
-      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.Unlimited).elapsed
+      akasFile <- downloadFile(new File(baseDirectory, "title.akas.tsv"), Limit.OneMillion).elapsed
       _ = scribe.info("--- Stage 2 ---")
       totalAka <- process(akasFile.value, implementation.map2TitleAka, implementation.persistTitleAka).elapsed
       _ = scribe.info("--- Stage 3 ---")
-      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.Unlimited).elapsed
+      basicsFile <- downloadFile(new File(baseDirectory, "title.basics.tsv"), Limit.OneMillion).elapsed
       _ = scribe.info("--- Stage 4 ---")
       totalBasics <- process(basicsFile.value, implementation.map2TitleBasics, implementation.persistTitleBasics).elapsed
       _ = scribe.info("--- Stage 5 ---")
