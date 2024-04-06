@@ -113,7 +113,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
     // TODO: search for an item by name and by age range
     "replace Jane Doe" in {
-      Person.set(Person("Jane Doe", 20, id2)).map { p =>
+      Person.set(Person("Jan Doe", 20, id2)).map { p =>
         p._id should be(id2)
       }
     }
