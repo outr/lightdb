@@ -92,8 +92,6 @@ object LightDBImplementation extends BenchmarkImplementation {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
     val titleId: FD[String] = field("titleId", _.titleId)
-    val ordering: FD[Int] = field("ordering", _.ordering)
-    val title: FD[String] = field("title", _.title)
   }
 
   case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]

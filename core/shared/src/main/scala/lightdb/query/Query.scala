@@ -10,7 +10,7 @@ case class Query[D <: Document[D]](collection: Collection[D],
                                    sort: List[Sort] = Nil,
                                    scoreDocs: Boolean = false,
                                    offset: Int = 0,
-                                   limit: Int = 1_000_000) {
+                                   limit: Int = 1_000) {
   // TODO: Pagination support to lower the limit!
   def filter(filter: Filter[D]): Query[D] = copy(filter = Some(filter))
   def clearFilter: Query[D] = copy(filter = None)
