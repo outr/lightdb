@@ -85,7 +85,9 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       }
     }
     "delete John" in {
-      Person.delete(id1)
+      Person.delete(id1).map { deleted =>
+        deleted should not be empty
+      }
     }
     "verify exactly one object in data" in {
       Person.size.map { size =>
