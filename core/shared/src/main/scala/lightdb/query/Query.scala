@@ -26,6 +26,8 @@ case class Query[D <: Document[D]](collection: Collection[D],
     .map { searchResults =>
       fs2.Stream[IO, Id[D]](searchResults.ids: _*).evalMap(searchResults.get)
     })
+  def idList(): IO[List[Id[D]]] = search().map(_.ids)
+  def list(): IO[List[D]] = stream().compile.toList
 
   def matches(document: D): Boolean = filter.forall(_.matches(document))
 }
