@@ -6,7 +6,7 @@ import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.index.{Indexer, SearchResult, SearchResults}
+import lightdb.index.{Indexer, SearchResults}
 import lightdb.query.{Condition, Filter, Query}
 import lightdb.{Document, Id}
 import org.apache.lucene.analysis.Analyzer
@@ -45,22 +45,20 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
   }
 
   private def addField(document: LuceneDocument, field: lightdb.field.Field[D, _], value: Any): Unit = {
-    def textFieldType = if (field.stored) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED
-    def fieldStore: Field.Store = if (field.stored) Field.Store.YES else Field.Store.NO
     value match {
-      case id: Id[_] => document.add(new StringField(field.name, id.value, fieldStore))
-      case s: String => document.add(new Field(field.name, s, textFieldType))
-      case i: Int => document.add(new IntField(field.name, i, fieldStore))
-      case l: Long => document.add(new LongField(field.name, l, fieldStore))
-      case f: Float => document.add(new FloatField(field.name, f, fieldStore))
-      case d: Double => document.add(new DoubleField(field.name, d, fieldStore))
-      case bd: BigDecimal => document.add(new StringField(field.name, bd.asString, fieldStore))
+      case id: Id[_] => document.add(new StringField(field.name, id.value, if (field.name == "_id") Field.Store.YES else Field.Store.NO))
+      case s: String => document.add(new Field(field.name, s, TextField.TYPE_NOT_STORED))
+      case i: Int => document.add(new IntField(field.name, i, Field.Store.NO))
+      case l: Long => document.add(new LongField(field.name, l, Field.Store.NO))
+      case f: Float => document.add(new FloatField(field.name, f, Field.Store.NO))
+      case d: Double => document.add(new DoubleField(field.name, d, Field.Store.NO))
+      case bd: BigDecimal => document.add(new StringField(field.name, bd.asString, Field.Store.NO))
       case Str(s, _) => addField(document, field, s)          // TODO: Should this store as a StringField instead? Maybe add something to field for tokenize?
       case NumDec(bd, _) => addField(document, field, bd)
       case NumInt(i, _) => addField(document, field, i)
       case obj: Obj =>
         val jsonString = JsonFormatter.Compact(obj)
-        document.add(new StringField(field.name, jsonString, fieldStore))
+        document.add(new StringField(field.name, jsonString, Field.Store.NO))
       case null | Null => // Ignore null
       case value =>
         val json = field.rw.asInstanceOf[RW[Any]].read(value)
@@ -167,18 +165,19 @@ case class LuceneIndexer[D <: Document[D]](collection: Collection[D],
       }
     }
     // TODO: Offset
-    val (hits, storedFields, total) = withIndexSearcher { indexSearcher =>
+    withIndexSearcher { indexSearcher =>
       val topDocs = indexSearcher.search(q, query.limit, new Sort(sortFields: _*), query.scoreDocs)
-      val hits = topDocs.scoreDocs
+      val hits = topDocs.scoreDocs.toList
       val total = topDocs.totalHits.value.toInt
       val storedFields = indexSearcher.storedFields()
-      (hits, storedFields, total)
+      val ids = hits.map(scoreDoc => Id[D](storedFields.document(scoreDoc.doc).get("_id")))
+      SearchResults(
+        query = query,
+        total = total,
+        ids = ids,
+        get = collection.apply
+      )
     }
-    val stream = fs2.Stream[IO, ScoreDoc](ArraySeq.unsafeWrapArray(hits): _*)
-      .map { sd =>
-        LuceneSearchResult(sd, collection, storedFields)
-      }
-    SearchResults(query, total, stream)
   }
 
   override def truncate(): IO[Unit] = IO {

@@ -14,7 +14,8 @@ case class NullIndexer[D <: Document[D]](collection: Collection[D]) extends Inde
 
   override def count(): IO[Int] = IO.pure(0)
 
-  override def search(query: Query[D]): IO[SearchResults[D]] = IO.pure(SearchResults(query, 0, fs2.Stream.empty))
+  override def search(query: Query[D]): IO[SearchResults[D]] =
+    IO.pure(SearchResults(query, 0, Nil, _ => IO.raiseError(new RuntimeException("NullIndexer"))))
 
   override def truncate(): IO[Unit] = IO.unit
 

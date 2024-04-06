@@ -72,27 +72,27 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       db.people.query.filter(Person.name is "Jane Doe").stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
-        doc.id should be(id2)
-        doc(Person.name) should be("Jane Doe")
-        doc(Person.age) should be(19)
+        doc._id should be(id2)
+        doc.name should be("Jane Doe")
+        doc.age should be(19)
       }
     }
     "search by age for positive result" in {
       db.people.query.filter(Person.age is 19).stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
-        doc.id should be(id2)
-        doc(Person.name) should be("Jane Doe")
-        doc(Person.age) should be(19)
+        doc._id should be(id2)
+        doc.name should be("Jane Doe")
+        doc.age should be(19)
       }
     }
     "search by id for John" in {
       db.people.query.filter(Person._id is id1).stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
-        doc.id should be(id1)
-        doc(Person.name) should be("John Doe")
-        doc(Person.age) should be(21)
+        doc._id should be(id1)
+        doc.name should be("John Doe")
+        doc.age should be(21)
       }
     }
     "delete John" in {
@@ -112,17 +112,12 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       }
     }
     "list all documents" in {
-      db.people.query.stream().compile.toList.flatMap { results =>
+      db.people.query.stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
-        doc.id should be(id2)
-        doc(Person.name) should be("Jane Doe")
-        doc(Person.age) should be(19)
-        doc.get().map { person =>
-          person._id should be(id2)
-          person.name should be("Jane Doe")
-          person.age should be(19)
-        }
+        doc._id should be(id2)
+        doc.name should be("Jane Doe")
+        doc.age should be(19)
       }
     }
     // TODO: search for an item by name and by age range
@@ -145,9 +140,9 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       db.people.query.stream().compile.toList.map { results =>
         results.length should be(1)
         val doc = results.head
-        doc.id should be(id2)
-        doc(Person.name) should be("Jan Doe")
-        doc(Person.age) should be(20)
+        doc._id should be(id2)
+        doc.name should be("Jan Doe")
+        doc.age should be(20)
       }
     }
     "verify start time has been set" in {
