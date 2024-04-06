@@ -1,6 +1,7 @@
 package lightdb
 
 import cats.effect.IO
+import cats.implicits.toTraverseOps
 import fabric.rw.RW
 
 abstract class Collection[D <: Document[D]](val collectionName: String, db: LightDB) {
@@ -19,15 +20,47 @@ abstract class Collection[D <: Document[D]](val collectionName: String, db: Ligh
    */
   protected def preSet(doc: D): IO[D] = IO.pure(doc)
 
-  def set(doc: D): IO[D] = preSet(doc).flatMap(store.putJson(_)(rw))
+  /**
+   * Called after set
+   */
+  protected def postSet(doc: D): IO[Unit] = for {
+    // Update IndexedLinks
+    _ <- _indexedLinks.map(_.add(doc)).sequence
+  } yield ()
+
+  protected def preDelete(id: Id[D]): IO[Id[D]] = IO.pure(id)
+
+  protected def postDelete(doc: D): IO[Unit] = for {
+    // Update IndexedLinks
+    _ <- _indexedLinks.map(_.remove(doc)).sequence
+  } yield ()
+
+  def set(doc: D): IO[D] = preSet(doc)
+    .flatMap(store.putJson(_)(rw))
+    .flatMap { doc =>
+      postSet(doc).map(_ => doc)
+    }
   def modify(id: Id[D])(f: Option[D] => IO[Option[D]]): IO[Option[D]] = get(id).flatMap { option =>
     f(option).flatMap {
       case Some(doc) => set(doc).map(Some.apply)
       case None => IO.pure(None)
     }
   }
-  def delete(id: Id[D]): IO[Unit] = store.delete(id)
-  def truncate(): IO[Unit] = store.truncate()
+  def delete(id: Id[D]): IO[Option[D]] = for {
+    modifiedId <- preDelete(id)
+    deleted <- get(modifiedId).flatMap {
+      case Some(d) => store.delete(id).map(_ => Some(d))
+      case None => IO.pure(None)
+    }
+    _ <- deleted match {
+      case Some(doc) => postDelete(doc)
+      case None => IO.unit
+    }
+  } yield deleted
+  def truncate(): IO[Unit] = for {
+    _ <- store.truncate()
+    _ <- _indexedLinks.map(_.store.truncate()).sequence
+  } yield ()
 
   def get(id: Id[D]): IO[Option[D]] = store.getJson(id)
   def apply(id: Id[D]): IO[D] = get(id)
