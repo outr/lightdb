@@ -57,7 +57,7 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def get(id: String): IO[TitleAkaLDB] = db.titleAka.get(Id[TitleAkaLDB](id)).map(_.getOrElse(throw new RuntimeException(s"$id not found")))
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = db.titleAka.query.filter(TitleAkaLDB.titleId === titleId).documentsStream().compile.toList
+  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = db.titleAka.query.filter(TitleAkaLDB.titleId === titleId).stream().compile.toList
 
   override def flush(): IO[Unit] = for {
     _ <- db.titleAka.commit()
