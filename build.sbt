@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.3.0-SNAPSHOT"
+ThisBuild / version := "1.0.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -53,25 +53,26 @@ val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.js, core.jvm, lucene, halo, mapdb, all)
+	.aggregate(core)
 	.settings(
 		name := projectName,
 		publish := {},
 		publishLocal := {}
 	)
 
-lazy val core = crossProject(JSPlatform, JVMPlatform)
-	.crossType(CrossType.Full)
+lazy val core = project.in(file("core"))
 	.settings(
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
-			"com.outr" %%% "scribe" % scribeVersion,
-			"com.outr" %%% "scribe-cats" % scribeVersion,
-			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
-			"org.typelevel" %%% "fabric-io" % fabricVersion,
-			"co.fs2" %%% "fs2-core" % fs2Version,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"com.outr" %% "scribe" % scribeVersion,
+			"com.outr" %% "scribe-cats" % scribeVersion,
+			"org.typelevel" %% "cats-effect" % catsEffectVersion,
+			"org.typelevel" %% "fabric-io" % fabricVersion,
+			"co.fs2" %% "fs2-core" % fs2Version,
+			"com.outr" %% "scribe-slf4j" % scribeVersion,
+			"com.github.yahoo" % "HaloDB" % haloDBVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
 		libraryDependencies ++= (
 			if (scalaVersion.value.startsWith("3.")) {
@@ -91,56 +92,8 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
 		}
 	)
 
-lazy val lucene = project.in(file("lucene"))
-	.dependsOn(core.jvm)
-	.settings(
-		name := s"$projectName-lucene",
-		libraryDependencies ++= Seq(
-			"org.apache.lucene" % "lucene-core" % luceneVersion,
-			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
-		)
-	)
-
-lazy val halo = project.in(file("halo"))
-	.dependsOn(core.jvm)
-	.settings(
-		name := s"$projectName-halo",
-		libraryDependencies ++= Seq(
-			"com.outr" %% "scribe-slf4j" % scribeVersion,
-			"com.github.yahoo" % "HaloDB" % haloDBVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
-		),
-		fork := true
-	)
-
-lazy val mapdb = project.in(file("mapdb"))
-	.dependsOn(core.jvm)
-	.settings(
-		name := s"$projectName-mapdb",
-		libraryDependencies ++= Seq(
-			"org.mapdb" % "mapdb" % "3.1.0",
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
-		),
-		fork := true
-	)
-
-lazy val all = project.in(file("all"))
-	.dependsOn(lucene, halo, mapdb)
-	.settings(
-		name := s"$projectName-all",
-		libraryDependencies ++= Seq(
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
-		),
-		fork := true
-	)
-
 lazy val benchmark = project.in(file("benchmark"))
-	.dependsOn(all)
+	.dependsOn(core)
 	.settings(
 		name := s"$projectName-benchmark",
 		fork := true,
