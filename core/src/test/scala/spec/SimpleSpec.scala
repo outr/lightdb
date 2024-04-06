@@ -141,7 +141,6 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         startTime should be > 0L
       }
     }
-    // TODO: support multiple item types (make sure queries don't return different types)
     // TODO: test batch operations: insert, replace, and delete
     "dispose" in {
       DB.dispose()
