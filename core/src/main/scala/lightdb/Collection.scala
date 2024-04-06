@@ -6,51 +6,104 @@ import fabric.rw.RW
 abstract class Collection[D <: Document[D]](implicit val rw: RW[D]) {
   protected lazy val defaultCollectionName: String = getClass.getSimpleName.replace("$", "")
   protected lazy val store: Store = db.createStore(collectionName)
-  protected lazy val indexStore: Store = db.createStore(s"$collectionName.indexes")
 
   protected def db: LightDB
   protected def collectionName: String = defaultCollectionName
 
-  object triggers {
-    lazy val beforeSet: Triggers[BeforeSet[D]] = new Triggers
-    lazy val afterSet: Triggers[AfterSet[D]] = new Triggers
-    lazy val beforeDelete: Triggers[BeforeDelete[D]] = new Triggers
-    lazy val afterDelete: Triggers[AfterDelete[D]] = new Triggers
-  }
-  // TODO: Triggers
-  // TODO: set, modify, delete, get, apply
-}
+  private var _indexedLinks = List.empty[IndexedLinks[_, D]]
 
-class Triggers[T] {
-  private var _list = List.empty[T]
-  def list: List[T] = _list
+  /**
+   * Called before set
+   */
+  protected def preSet(doc: D): IO[D] = IO.pure(doc)
 
-  def add(triggers: T*): Unit = synchronized {
-    _list = _list ::: triggers.toList
+  def set(doc: D): IO[D] = preSet(doc).flatMap(store.putJson(_)(rw))
+  def modify(id: Id[D])(f: Option[D] => IO[Option[D]]): IO[Option[D]] = get(id).flatMap { option =>
+    f(option).flatMap {
+      case Some(doc) => set(doc).map(Some.apply)
+      case None => IO.pure(None)
+    }
   }
 
-  def remove(triggers: T*): Unit = synchronized {
-    val set = triggers.toSet
-    _list = _list.filterNot(t => set.contains(t))
+  def get(id: Id[D]): IO[Option[D]] = store.getJson(id)
+  def apply(id: Id[D]): IO[D] = get(id)
+    .map(_.getOrElse(throw new RuntimeException(s"$id not found in $collectionName")))
+
+  def indexedLinks[V](name: String,
+                      createKey: V => String,
+                      createV: D => V): IndexedLinks[V, D] = {
+    val il = IndexedLinks[V, D](
+      createKey = createKey,
+      createV = createV,
+      store = db.createStore(s"$collectionName.indexed.$name"),
+      this
+    )
+    synchronized {
+      _indexedLinks = il :: _indexedLinks
+    }
+    il
+  }
+}
+
+case class IndexedLinks[V, D <: Document[D]](createKey: V => String,
+                                             createV: D => V,
+                                             store: Store,
+                                             collection: Collection[D]) {
+  protected[lightdb] def add(doc: D): IO[Unit] = {
+    val v = createV(doc)
+    for {
+      existing <- link(v)
+      updated = existing match {
+        case Some(l) => l.copy(links = l.links ::: List(doc._id))
+        case None =>
+          val key = createKey(v)
+          val id = Id[IndexedLink[D]](key)
+          IndexedLink(_id = id, links = List(doc._id))
+      }
+      _ <- store.putJson(updated)
+    } yield ()
   }
 
-  def +=(trigger: T): Unit = add(trigger)
+  protected[lightdb] def remove(doc: D): IO[Unit] = {
+    val v = createV(doc)
+    for {
+      existing <- link(v)
+      updated = existing match {
+        case Some(l) =>
+          val updatedLinks = l.links.filterNot(_ == doc._id)
+          if (updatedLinks.isEmpty) {
+            None
+          } else {
+            Some(l.copy(links = updatedLinks))
+          }
+        case None => None
+      }
+      _ <- updated match {
+        case Some(l) => store.putJson(l)
+        case None => IO.unit
+      }
+    } yield ()
+  }
 
-  def -=(trigger: T): Unit = remove(trigger)
+  protected[lightdb] def link(value: V): IO[Option[IndexedLink[D]]] = {
+    val key = createKey(value)
+    val id = Id[IndexedLink[D]](key)
+    store.getJson(id)
+  }
+
+  def query(value: V): fs2.Stream[IO, D] = {
+    val io = link(value).map {
+      case Some(link) => fs2.Stream[IO, Id[D]](link.links: _*)
+        .evalMap(collection.apply)
+      case None => fs2.Stream.empty
+    }
+    fs2.Stream.force[IO, D](io)
+  }
 }
 
-trait BeforeSet[D <: Document[D]] {
-  def apply(document: D): IO[Option[D]]
-}
+case class IndexedLink[D <: Document[D]](_id: Id[IndexedLink[D]],
+                                         links: List[Id[D]]) extends Document[IndexedLink[D]]
 
-trait AfterSet[D <: Document[D]] {
-  def apply(document: D): IO[Unit]
-}
-
-trait BeforeDelete[D <: Document[D]] {
-  def apply(id: Id[D]): IO[Option[Id[D]]]
-}
-
-trait AfterDelete[D <: Document[D]] {
-  def apply(id: Id[D]): IO[Unit]
+object IndexedLink {
+  implicit def rw[D <: Document[D]]: RW[IndexedLink[D]] = RW.gen
 }
