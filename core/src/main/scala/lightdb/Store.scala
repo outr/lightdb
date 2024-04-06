@@ -31,6 +31,13 @@ case class Store(directory: Path,
       Id[D](key) -> record.getValue
     }
 
+  def streamJson[D: RW]: fs2.Stream[IO, D] = stream[D].map {
+    case (_, bytes) =>
+      val jsonString = bytes.string
+      val json = JsonParser(jsonString)
+      json.as[D]
+  }
+
   def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO {
     Option(instance.get(id.bytes))
   }

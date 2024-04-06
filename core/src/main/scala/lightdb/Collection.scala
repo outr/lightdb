@@ -3,10 +3,16 @@ package lightdb
 import cats.effect.IO
 import fabric.rw.RW
 
-class Collection[D <: Document[D]](val collectionName: String, db: LightDB)(implicit val rw: RW[D]) {
+abstract class Collection[D <: Document[D]](val collectionName: String, db: LightDB) {
+  implicit val rw: RW[D]
+
   protected lazy val store: Store = db.createStore(collectionName)
 
   private var _indexedLinks = List.empty[IndexedLinks[_, D]]
+
+  def idStream: fs2.Stream[IO, Id[D]] = store.keyStream
+
+  def stream: fs2.Stream[IO, D] = store.streamJson[D]
 
   /**
    * Called before set
@@ -42,7 +48,17 @@ class Collection[D <: Document[D]](val collectionName: String, db: LightDB)(impl
     il
   }
 
+  def size: IO[Int] = store.size
+
+  def commit(): IO[Unit] = IO.unit
+
   def dispose(): IO[Unit] = IO.unit
+}
+
+object Collection {
+  def apply[D <: Document[D]](collectionName: String, db: LightDB)(implicit docRW: RW[D]): Collection[D] = new Collection[D](collectionName, db) {
+    override implicit val rw: RW[D] = docRW
+  }
 }
 
 case class IndexedLinks[V, D <: Document[D]](createKey: V => String,
