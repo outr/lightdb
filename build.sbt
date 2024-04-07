@@ -99,8 +99,9 @@ lazy val benchmark = project.in(file("benchmark"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"co.fs2" %% "fs2-io" % fs2Version,
-			"org.mongodb" % "mongodb-driver-sync" % "4.11.1",
-			"org.postgresql" % "postgresql" % "42.7.1",
-			"com.outr" %% "scarango-driver" % "3.19.1"
+			"org.mongodb" % "mongodb-driver-sync" % "5.0.1",
+			"org.postgresql" % "postgresql" % "42.7.3",
+			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
+			"com.outr" %% "scarango-driver" % "3.20.0"
 		)
 	)

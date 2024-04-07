@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
  */
 object IMDBBenchmark { // extends IOApp {
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = LightDBImplementation
+  val implementation: BenchmarkImplementation = MariaDBImplementation
 
   private var ids: List[Ids] = Nil
 
