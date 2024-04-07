@@ -3,7 +3,7 @@ package benchmark
 import cats.effect.IO
 import fabric.rw.RW
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Collection, Document, Id, IndexedLinks, LightDB}
+import lightdb.{Collection, Document, Id, IndexedLinks, LightDB, MaxLinks}
 
 import java.nio.file.Paths
 
@@ -90,7 +90,7 @@ object LightDBImplementation extends BenchmarkImplementation {
   object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
-    val titleId: IndexedLinks[String, TitleAkaLDB] = indexedLinks[String]("titleId", identity, _.titleId)
+    val titleId: IndexedLinks[String, TitleAkaLDB] = indexedLinks[String]("titleId", identity, _.titleId, MaxLinks.OverflowTrim(100))
   }
 
   case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]

@@ -68,12 +68,15 @@ abstract class Collection[D <: Document[D]](val collectionName: String, db: Ligh
 
   def indexedLinks[V](name: String,
                       createKey: V => String,
-                      createV: D => V): IndexedLinks[V, D] = {
+                      createV: D => V,
+                      maxLinks: MaxLinks = MaxLinks.OverflowTrim()): IndexedLinks[V, D] = {
     val il = IndexedLinks[V, D](
+      name = name,
       createKey = createKey,
       createV = createV,
       store = db.createStore(s"$collectionName.indexed.$name"),
-      this
+      collection = this,
+      maxLinks = maxLinks
     )
     synchronized {
       _indexedLinks = il :: _indexedLinks
