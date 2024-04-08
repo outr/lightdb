@@ -102,6 +102,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.mongodb" % "mongodb-driver-sync" % "5.0.1",
 			"org.postgresql" % "postgresql" % "42.7.3",
 			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
+			"org.xerial" % "sqlite-jdbc" % "3.45.2.0",
 			"com.outr" %% "scarango-driver" % "3.20.0"
 		)
 	)
