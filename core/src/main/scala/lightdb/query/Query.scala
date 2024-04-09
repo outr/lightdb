@@ -2,11 +2,10 @@ package lightdb.query
 
 import cats.effect.IO
 import lightdb.index.IndexSupport
-import lightdb.{Collection, Document, Id}
-import org.apache.lucene.index.StoredFields
-import org.apache.lucene.search.{MatchAllDocsQuery, ScoreDoc, SortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
+import lightdb.Document
 
-case class Query[D <: Document[D]](filter: Option[Filter[D]] = None,
+case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
+                                   filter: Option[Filter[D]] = None,
                                    sort: List[Sort] = Nil,
                                    scoreDocs: Boolean = false,
                                    pageSize: Int = 1_000) {
@@ -16,7 +15,8 @@ case class Query[D <: Document[D]](filter: Option[Filter[D]] = None,
   def scoreDocs(b: Boolean): Query[D] = copy(scoreDocs = b)
   def pageSize(size: Int): Query[D] = copy(pageSize = size)
 
-  def search()(implicit context: SearchContext[D]): IO[PagedResults[D]] = doSearch(
+  def search()(implicit context: SearchContext[D]): IO[PagedResults[D]] = indexSupport.doSearch(
+    query = this,
     context = context,
     offset = 0,
     after = None
@@ -29,38 +29,5 @@ case class Query[D <: Document[D]](filter: Option[Filter[D]] = None,
     }
     fs2.Stream.force(io)
       .flatMap(_.stream)
-  }
-
-  private[query] def doSearch(context: SearchContext[D],
-                              offset: Int,
-                              after: Option[ScoreDoc]): IO[PagedResults[D]] = IO {
-    val q = filter.map(_.asQuery).getOrElse(new MatchAllDocsQuery)
-    val sortFields = sort match {
-      case Nil => List(SortField.FIELD_SCORE)
-      case _ => sort.map(sort2SortField)
-    }
-    val s = new LuceneSort(sortFields: _*)
-    val topFieldDocs: TopFieldDocs = after match {
-      case Some(scoreDoc) => context.indexSearcher.searchAfter(scoreDoc, q, pageSize, s, this.scoreDocs)
-      case None => context.indexSearcher.search(q, pageSize, s, this.scoreDocs)
-    }
-    val scoreDocs: List[ScoreDoc] = topFieldDocs.scoreDocs.toList
-    val total: Int = topFieldDocs.totalHits.value.toInt
-    val storedFields: StoredFields = context.indexSearcher.storedFields()
-    val ids: List[Id[D]] = scoreDocs.map(doc => Id[D](storedFields.document(doc.doc).get("_id")))
-    PagedResults(
-      query = this,
-      context = context,
-      offset = offset,
-      total = total,
-      ids = ids,
-      lastScoreDoc = scoreDocs.lastOption
-    )
-  }
-
-  private[query] def sort2SortField(sort: Sort): SortField = sort match {
-    case Sort.BestMatch => SortField.FIELD_SCORE
-    case Sort.IndexOrder => SortField.FIELD_DOC
-    case Sort.ByField(field, reverse) => new SortField(field.fieldName, field.sortType, reverse)
   }
 }

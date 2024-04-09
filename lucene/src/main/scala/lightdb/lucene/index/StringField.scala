@@ -1,7 +1,6 @@
 package lightdb.lucene.index
 
-import lightdb.index.IndexedField
-import lightdb.lucene.LuceneIndexedField
+import lightdb.lucene.{LuceneFilter, LuceneIndexedField}
 import lightdb.query.Filter
 import lightdb.{Collection, Document}
 import org.apache.lucene.index.Term
@@ -14,15 +13,15 @@ case class StringField[D <: Document[D]](fieldName: String,
                                          store: Boolean) extends LuceneIndexedField[String, D] {
   def ===(value: String): Filter[D] = is(value)
 
-  def is(value: String): Filter[D] = Filter(new TermQuery(new Term(fieldName, value)))
+  def is(value: String): Filter[D] = LuceneFilter(() => new TermQuery(new Term(fieldName, value)))
 
   def includedIn(values: Seq[String]): Filter[D] = {
     val b = new BooleanQuery.Builder
     b.setMinimumNumberShouldMatch(1)
     values.foreach { value =>
-      b.add(is(value).asQuery, BooleanClause.Occur.SHOULD)
+      b.add(is(value).asInstanceOf[LuceneFilter[D]].asQuery(), BooleanClause.Occur.SHOULD)
     }
-    Filter(b.build())
+    LuceneFilter(() => b.build())
   }
 
   override protected[lightdb] def createFields(doc: D): List[ld.Field] = List(
