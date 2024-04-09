@@ -2,16 +2,17 @@ package lightdb.query
 
 import cats.effect.IO
 import cats.implicits.toTraverseOps
-import lightdb.index.SearchContext
 import lightdb.{Document, Id}
-import org.apache.lucene.search.ScoreDoc
+
+trait IndexContext[D <: Document[D]] {
+  def nextPage(): IO[Option[PagedResults[D]]]
+}
 
 case class PagedResults[D <: Document[D]](query: Query[D],
-                                          context: SearchContext[D],
+                                          context: IndexContext[D],
                                           offset: Int,
                                           total: Int,
-                                          ids: List[Id[D]],
-                                          private val lastScoreDoc: Option[ScoreDoc]) {
+                                          ids: List[Id[D]]) {
   lazy val page: Int = offset / query.pageSize
   lazy val pages: Int = math.ceil(total.toDouble / query.pageSize.toDouble).toInt
 
@@ -22,13 +23,5 @@ case class PagedResults[D <: Document[D]](query: Query[D],
 
   def hasNext: Boolean = pages > (page + 1)
 
-  def next(): IO[Option[PagedResults[D]]] = if (hasNext) {
-    query.doSearch(
-      context = context,
-      offset = offset + query.pageSize,
-      after = lastScoreDoc
-    ).map(Some.apply)
-  } else {
-    IO.pure(None)
-  }
+  def next(): IO[Option[PagedResults[D]]] = context.nextPage()
 }

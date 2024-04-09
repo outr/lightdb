@@ -1,13 +1,12 @@
 package lightdb.query
 
 import cats.effect.IO
-import lightdb.index.SearchContext
+import lightdb.index.IndexSupport
 import lightdb.{Collection, Document, Id}
 import org.apache.lucene.index.StoredFields
 import org.apache.lucene.search.{MatchAllDocsQuery, ScoreDoc, SortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 
-case class Query[D <: Document[D]](collection: Collection[D],
-                                   filter: Option[Filter[D]] = None,
+case class Query[D <: Document[D]](filter: Option[Filter[D]] = None,
                                    sort: List[Sort] = Nil,
                                    scoreDocs: Boolean = false,
                                    pageSize: Int = 1_000) {

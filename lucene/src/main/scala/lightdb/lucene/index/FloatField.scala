@@ -1,5 +1,7 @@
-package lightdb.index
+package lightdb.lucene.index
 
+import lightdb.index.IndexedField
+import lightdb.lucene.LuceneIndexedField
 import lightdb.{Collection, Document}
 import org.apache.lucene.document.Field
 import org.apache.lucene.search.SortField
@@ -7,7 +9,7 @@ import org.apache.lucene.{document => ld}
 
 case class FloatField[D <: Document[D]](fieldName: String,
                                         collection: Collection[D],
-                                        get: D => Float) extends IndexedField[Float, D] {
+                                        get: D => Float) extends LuceneIndexedField[Float, D] {
   override protected[lightdb] def createFields(doc: D): List[Field] = List(
     new ld.FloatField(fieldName, get(doc), Field.Store.NO)
   )

@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
-import lightdb.index.{IntField, StringField}
 import lightdb.query._
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers

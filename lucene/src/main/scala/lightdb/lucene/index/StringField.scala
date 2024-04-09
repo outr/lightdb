@@ -1,5 +1,7 @@
-package lightdb.index
+package lightdb.lucene.index
 
+import lightdb.index.IndexedField
+import lightdb.lucene.LuceneIndexedField
 import lightdb.query.Filter
 import lightdb.{Collection, Document}
 import org.apache.lucene.index.Term
@@ -9,7 +11,7 @@ import org.apache.lucene.{document => ld}
 case class StringField[D <: Document[D]](fieldName: String,
                                          collection: Collection[D],
                                          get: D => String,
-                                         store: Boolean) extends IndexedField[String, D] {
+                                         store: Boolean) extends LuceneIndexedField[String, D] {
   def ===(value: String): Filter[D] = is(value)
 
   def is(value: String): Filter[D] = Filter(new TermQuery(new Term(fieldName, value)))
