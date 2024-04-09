@@ -9,6 +9,7 @@ import lightdb.query._
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import scribe.{Level, Logger}
 
 import java.nio.file.Paths
 
@@ -21,6 +22,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   "Simple database" should {
     "initialize the database" in {
+      Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
       DB.init(truncate = true)
     }
     "store John Doe" in {
