@@ -63,6 +63,7 @@ lazy val root = project.in(file("."))
 lazy val core = project.in(file("core"))
 	.settings(
 		name := s"$projectName-core",
+		fork := true,
 		libraryDependencies ++= Seq(
 			"com.outr" %% "scribe" % scribeVersion,
 			"com.outr" %% "scribe-cats" % scribeVersion,
@@ -71,6 +72,8 @@ lazy val core = project.in(file("core"))
 			"co.fs2" %% "fs2-core" % fs2Version,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"com.github.yahoo" % "HaloDB" % haloDBVersion,
+			"org.apache.lucene" % "lucene-core" % luceneVersion,
+			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
