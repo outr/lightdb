@@ -117,6 +117,36 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           }
       }
     }
+    "do paginated search" in {
+      Person.withSearchContext { implicit context =>
+        Person.query.pageSize(1).search().flatMap { page1 =>
+          page1.page should be(0)
+          page1.pages should be(2)
+          page1.hasNext should be(true)
+          page1.docs.flatMap { people1 =>
+            people1.length should be(1)
+            page1.next().flatMap {
+              case Some(page2) =>
+                page2.page should be(1)
+                page2.pages should be(2)
+                page2.hasNext should be(false)
+                page2.docs.map { people2 =>
+                  people2.length should be(1)
+                }
+              case None => fail("Should have a second page")
+            }
+          }
+        }
+      }
+    }
+    "do paginated search as a stream" in {
+      Person.withSearchContext { implicit context =>
+        Person.query.pageSize(1).stream.compile.toList.map { people =>
+          people.length should be(2)
+          people.map(_.name).toSet should be(Set("John Doe", "Jane Doe"))
+        }
+      }
+    }
     "delete John" in {
       Person.delete(id1).map { deleted =>
         deleted should not be empty

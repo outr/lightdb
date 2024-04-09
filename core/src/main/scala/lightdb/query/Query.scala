@@ -1,7 +1,6 @@
 package lightdb.query
 
 import cats.effect.IO
-import cats.implicits.toTraverseOps
 import lightdb.index.SearchContext
 import lightdb.{Collection, Document, Id}
 import org.apache.lucene.index.StoredFields
@@ -13,11 +12,25 @@ case class Query[D <: Document[D]](collection: Collection[D],
                                    scoreDocs: Boolean = false,
                                    pageSize: Int = 1_000) {
   def filter(filter: Filter[D]): Query[D] = copy(filter = Some(filter))
+  def sort(sort: Sort*): Query[D] = copy(sort = this.sort ::: sort.toList)
+  def clearSort: Query[D] = copy(sort = Nil)
+  def scoreDocs(b: Boolean): Query[D] = copy(scoreDocs = b)
+  def pageSize(size: Int): Query[D] = copy(pageSize = size)
+
   def search()(implicit context: SearchContext[D]): IO[PagedResults[D]] = doSearch(
     context = context,
     offset = 0,
     after = None
   )
+  def stream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = {
+    val io = search().map { page1 =>
+      fs2.Stream.emit(page1) ++ fs2.Stream.unfoldEval(page1) { page =>
+        page.next().map(_.map(p => p -> p))
+      }
+    }
+    fs2.Stream.force(io)
+      .flatMap(_.stream)
+  }
 
   private[query] def doSearch(context: SearchContext[D],
                               offset: Int,
@@ -50,42 +63,5 @@ case class Query[D <: Document[D]](collection: Collection[D],
     case Sort.BestMatch => SortField.FIELD_SCORE
     case Sort.IndexOrder => SortField.FIELD_DOC
     case Sort.ByField(field, reverse) => new SortField(field.fieldName, field.sortType, reverse)
-  }
-}
-
-case class PagedResults[D <: Document[D]](query: Query[D],
-                                          context: SearchContext[D],
-                                          offset: Int,
-                                          total: Int,
-                                          ids: List[Id[D]],
-                                          private val lastScoreDoc: Option[ScoreDoc]) {
-  lazy val page: Int = offset / query.pageSize
-  lazy val pages: Int = math.ceil(total.toDouble / query.pageSize.toDouble).toInt
-
-  def stream: fs2.Stream[IO, D] = fs2.Stream(ids: _*)
-    .evalMap(id => query.collection(id))
-
-  def docs: IO[List[D]] = ids.map(id => query.collection(id)).sequence
-
-  def hasNext: Boolean = pages > (page + 1)
-
-  def next(): IO[Option[PagedResults[D]]] = if (hasNext) {
-    query.doSearch(
-      context = context,
-      offset = offset + query.pageSize,
-      after = lastScoreDoc
-    ).map(Some.apply)
-  } else {
-    IO.pure(None)
-  }
-}
-
-trait Filter[D <: Document[D]] {
-  protected[lightdb] def asQuery: LuceneQuery
-}
-
-object Filter {
-  def apply[D <: Document[D]](f: => LuceneQuery): Filter[D] = new Filter[D] {
-    override protected[lightdb] def asQuery: LuceneQuery = f
   }
 }

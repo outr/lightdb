@@ -2,6 +2,7 @@ package benchmark
 
 import cats.effect.IO
 import fabric.rw.RW
+import lightdb.index.StringField
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Collection, Document, Id, IndexedLinks, LightDB, MaxLinks}
 
@@ -52,8 +53,17 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def get(id: String): IO[TitleAkaLDB] = TitleAkaLDB(Id[TitleAkaLDB](id))
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] =
-    TitleAkaLDB.titleId.query(titleId).compile.toList
+  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.withSearchContext { implicit context =>
+    TitleAkaLDB
+      .query
+      .pageSize(100)
+      .filter(TitleAkaLDB.titleId === titleId)
+      .search()
+      .flatMap { page =>
+        page.docs
+      }
+  }
+//    TitleAkaLDB.titleId.query(titleId).compile.toList
 
   override def flush(): IO[Unit] = for {
     _ <- TitleAkaLDB.commit()
@@ -90,7 +100,8 @@ object LightDBImplementation extends BenchmarkImplementation {
   object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
-    val titleId: IndexedLinks[String, TitleAkaLDB] = indexedLinks[String]("titleId", identity, _.titleId, MaxLinks.OverflowTrim(100))
+//    val titleId: IndexedLinks[String, TitleAkaLDB] = indexedLinks[String]("titleId", identity, _.titleId, MaxLinks.OverflowTrim(100))
+    val titleId: StringField[TitleAkaLDB] = index("titleId").string(_.titleId)
   }
 
   case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]
