@@ -9,9 +9,9 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import scribe.cats.{io => logger}
 
-abstract class LightDB(directory: Path,
-                       indexThreads: Int = 2,
-                       maxFileSize: Int = 1024 * 1024) {
+abstract class LightDB(val directory: Path,
+                       val indexThreads: Int = 2,
+                       val maxFileSize: Int = 1024 * 1024) {
   private val _initialized = new AtomicBoolean(false)
 
   private var stores = List.empty[Store]

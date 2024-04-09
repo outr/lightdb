@@ -4,6 +4,8 @@ import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
+import lightdb.index.{IntField, StringField}
+import lightdb.query._
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -49,27 +51,41 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "flush data" in {
       Person.commit()
     }
-//    "verify exactly two objects in index" in {
-//      db.people.indexer.count().map { size =>
-//        size should be(2)
-//      }
-//    }
+    "verify exactly two objects in index" in {
+      Person.index.indexer.count().map { size =>
+        size should be(2)
+      }
+    }
     "verify exactly two objects in the store" in {
       Person.idStream.compile.toList.map { ids =>
         ids.toSet should be(Set(id1, id2))
       }
     }
     "search by name for positive result" in {
-      Person.name.query("Jane Doe").compile.toList.map { people =>
-        people.length should be(1)
-        val p = people.head
-        p._id should be(id2)
-        p.name should be("Jane Doe")
-        p.age should be(19)
+      Person.withSearchContext { implicit context =>
+        Person
+          .query
+          .filter(Person.name.is("Jane Doe"))
+          .search()
+          .flatMap { page =>
+            page.page should be(0)
+            page.pages should be(1)
+            page.offset should be(0)
+            page.total should be(1)
+            page.ids should be(List(id2))
+            page.hasNext should be(false)
+            page.docs.map { people =>
+              people.length should be(1)
+              val p = people.head
+              p._id should be(id2)
+              p.name should be("Jane Doe")
+              p.age should be(19)
+            }
+          }
       }
     }
     "search by age for positive result" in {
-      Person.age.query(19).compile.toList.map { people =>
+      Person.ageLinks.query(19).compile.toList.map { people =>
         people.length should be(1)
         val p = people.head
         p._id should be(id2)
@@ -82,6 +98,23 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         person._id should be(id1)
         person.name should be("John Doe")
         person.age should be(21)
+      }
+    }
+    "search for age range" in {
+      Person.withSearchContext { implicit context =>
+        Person
+          .query
+          .filter(Person.age.between(19, 21))
+          .search()
+          .flatMap { results =>
+            results.docs.map { people =>
+              people.length should be(2)
+              val names = people.map(_.name).toSet
+              names should be(Set("John Doe", "Jane Doe"))
+              val ages = people.map(_.age).toSet
+              ages should be(Set(21, 19))
+            }
+          }
       }
     }
     "delete John" in {
@@ -97,11 +130,11 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "commit data" in {
       Person.commit()
     }
-//    "verify exactly one object in index" in {
-//      db.people.indexer.count().map { size =>
-//        size should be(1)
-//      }
-//    }
+    "verify exactly one object in index" in {
+      Person.index.indexer.count().map { size =>
+        size should be(1)
+      }
+    }
     "list all documents" in {
       Person.stream.compile.toList.map { people =>
         people.length should be(1)
@@ -111,7 +144,6 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         p.age should be(19)
       }
     }
-    // TODO: search for an item by name and by age range
     "replace Jane Doe" in {
       Person.set(Person("Jan Doe", 20, id2)).map { p =>
         p._id should be(id2)
@@ -141,7 +173,6 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         startTime should be > 0L
       }
     }
-    // TODO: test batch operations: insert, replace, and delete
     "dispose" in {
       DB.dispose()
     }
@@ -166,8 +197,9 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   object Person extends Collection[Person]("people", DB) {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: IndexedLinks[String, Person] = indexedLinks[String]("names", identity, _.name)
-    val age: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
+    val name: StringField[Person] = index("name").string(_.name)
+    val age: IntField[Person] = index("age").int(_.age)
+    val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
