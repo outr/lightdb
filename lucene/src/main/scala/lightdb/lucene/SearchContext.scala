@@ -1,4 +1,4 @@
-package lightdb.index
+package lightdb.lucene
 
 import lightdb.{Collection, Document}
 import org.apache.lucene.search.IndexSearcher

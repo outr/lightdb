@@ -2,7 +2,6 @@ package benchmark
 
 import cats.effect.IO
 import fabric.rw.RW
-import lightdb.index.StringField
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Collection, Document, Id, IndexedLinks, LightDB, MaxLinks}
 

@@ -53,7 +53,7 @@ val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core)
+	.aggregate(core, lucene)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -72,8 +72,6 @@ lazy val core = project.in(file("core"))
 			"co.fs2" %% "fs2-core" % fs2Version,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"com.github.yahoo" % "HaloDB" % haloDBVersion,
-			"org.apache.lucene" % "lucene-core" % luceneVersion,
-			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
@@ -93,6 +91,19 @@ lazy val core = project.in(file("core"))
 				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
 			)
 		}
+	)
+
+lazy val lucene = project.in(file("lucene"))
+	.dependsOn(core)
+	.settings(
+		name := s"$projectName-lucene",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.apache.lucene" % "lucene-core" % luceneVersion,
+			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
 	)
 
 lazy val benchmark = project.in(file("benchmark"))
