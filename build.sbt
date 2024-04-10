@@ -45,15 +45,16 @@ val collectionCompatVersion: String = "2.11.0"
 val haloDBVersion: String = "v0.5.6"
 val catsEffectVersion: String = "3.5.4"
 val fabricVersion: String = "1.14.2"
-val fs2Version: String = "3.10.1"
+val fs2Version: String = "3.10.2"
 val scribeVersion: String = "3.13.2"
 val luceneVersion: String = "9.10.0"
+val sqliteVersion: String = "3.45.2.0"
 
 val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core, lucene)
+	.aggregate(core, lucene, sqlite)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -106,6 +107,18 @@ lazy val lucene = project.in(file("lucene"))
 		)
 	)
 
+lazy val sqlite = project.in(file("sqlite"))
+	.dependsOn(core)
+	.settings(
+		name := s"$projectName-sqlite",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
+	)
+
 lazy val benchmark = project.in(file("benchmark"))
 	.dependsOn(core)
 	.settings(
@@ -116,7 +129,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.mongodb" % "mongodb-driver-sync" % "5.0.1",
 			"org.postgresql" % "postgresql" % "42.7.3",
 			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
-			"org.xerial" % "sqlite-jdbc" % "3.45.2.0",
+			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"com.outr" %% "scarango-driver" % "3.20.0"
 		)
 	)
