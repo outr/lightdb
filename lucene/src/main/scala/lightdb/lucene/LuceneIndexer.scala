@@ -2,6 +2,7 @@ package lightdb.lucene
 
 import cats.effect.IO
 import lightdb.index.{IndexSupport, Indexer}
+import lightdb.lucene.index.{BigDecimalField, DoubleField, FloatField, IntField, LongField, StringField, TokenizedField}
 import lightdb.query.SearchContext
 import lightdb.{Document, Id}
 import org.apache.lucene.analysis.Analyzer
@@ -64,9 +65,21 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
     searcherManager.maybeRefreshBlocking()
   }
 
+  def apply(name: String): IndexedFieldBuilder = IndexedFieldBuilder(name)
+
   override def commit(): IO[Unit] = IO(commitBlocking())
 
   override def count(): IO[Int] = withSearchContext { context =>
     IO(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
+  }
+
+  case class IndexedFieldBuilder(fieldName: String) {
+    def tokenized(f: D => String): TokenizedField[D] = TokenizedField(fieldName, indexSupport, f)
+    def string(f: D => String, store: Boolean = false): StringField[D] = StringField(fieldName, indexSupport, f, store)
+    def int(f: D => Int): IntField[D] = IntField(fieldName, indexSupport, f)
+    def long(f: D => Long): LongField[D] = LongField(fieldName, indexSupport, f)
+    def float(f: D => Float): FloatField[D] = FloatField(fieldName, indexSupport, f)
+    def double(f: D => Double): DoubleField[D] = DoubleField(fieldName, indexSupport, f)
+    def bigDecimal(f: D => BigDecimal): BigDecimalField[D] = BigDecimalField(fieldName, indexSupport, f)
   }
 }

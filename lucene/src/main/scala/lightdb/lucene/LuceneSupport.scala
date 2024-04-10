@@ -2,7 +2,7 @@ package lightdb.lucene
 
 import cats.effect.IO
 import lightdb._
-import lightdb.index.{IndexManager, IndexSupport, IndexedField, Indexer}
+import lightdb.index.{IndexSupport, IndexedField, Indexer}
 import lightdb.lucene.index._
 import lightdb.query.{Filter, IndexContext, PagedResults, Query, SearchContext, Sort}
 import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
@@ -18,14 +18,13 @@ import java.nio.file.{Files, Path}
 import java.util.concurrent.ConcurrentHashMap
 
 trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
-  override protected[lucene] lazy val indexer: LuceneIndexer[D] = LuceneIndexer[D](this)
-  override lazy val index: LuceneIndexManager[D] = LuceneIndexManager(this)
+  override lazy val index: LuceneIndexer[D] = LuceneIndexer(this)
 
   val _id: StringField[D] = index("_id").string(_._id.value, store = true)
 
-  protected[lucene] def indexSearcher(context: SearchContext[D]): IndexSearcher = indexer.contextMapping.get(context)
+  protected[lucene] def indexSearcher(context: SearchContext[D]): IndexSearcher = index.contextMapping.get(context)
 
-  def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return] = indexer.withSearchContext(f)
+  def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return] = index.withSearchContext(f)
 
   private def sort2SortField(sort: Sort): SortField = sort match {
     case Sort.BestMatch => SortField.FIELD_SCORE
@@ -71,11 +70,11 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
     fields <- IO(index.fields.flatMap { field =>
       field.asInstanceOf[LuceneIndexedField[_, D]].createFields(doc)
     })
-    _ = indexer.addDoc(doc._id, fields)
+    _ = index.addDoc(doc._id, fields)
     _ <- super.postSet(doc)
   } yield ()
 
-  override protected def postDelete(doc: D): IO[Unit] = indexer.delete(doc._id).flatMap { _ =>
+  override protected def postDelete(doc: D): IO[Unit] = index.delete(doc._id).flatMap { _ =>
     super.postDelete(doc)
   }
 }
