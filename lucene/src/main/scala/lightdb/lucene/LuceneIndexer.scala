@@ -74,12 +74,24 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
   }
 
   case class IndexedFieldBuilder(fieldName: String) {
-    def tokenized(f: D => String): TokenizedField[D] = TokenizedField(fieldName, indexSupport, f)
-    def string(f: D => String, store: Boolean = false): StringField[D] = StringField(fieldName, indexSupport, f, store)
-    def int(f: D => Int): IntField[D] = IntField(fieldName, indexSupport, f)
-    def long(f: D => Long): LongField[D] = LongField(fieldName, indexSupport, f)
-    def float(f: D => Float): FloatField[D] = FloatField(fieldName, indexSupport, f)
-    def double(f: D => Double): DoubleField[D] = DoubleField(fieldName, indexSupport, f)
-    def bigDecimal(f: D => BigDecimal): BigDecimalField[D] = BigDecimalField(fieldName, indexSupport, f)
+    private def o[F](f: D => F): D => Option[F] = doc => Some(f(doc))
+    def tokenized(f: D => String): TokenizedField[D] = TokenizedField(fieldName, indexSupport, o(f))
+    def string(f: D => String, store: Boolean = false): StringField[D] = StringField(fieldName, indexSupport, o(f), store)
+    def id[T](f: D => Id[T], store: Boolean = false): StringField[D] = StringField(fieldName, indexSupport, o(doc => f(doc).value), store)
+    def int(f: D => Int): IntField[D] = IntField(fieldName, indexSupport, o(f))
+    def long(f: D => Long): LongField[D] = LongField(fieldName, indexSupport, o(f))
+    def float(f: D => Float): FloatField[D] = FloatField(fieldName, indexSupport, o(f))
+    def double(f: D => Double): DoubleField[D] = DoubleField(fieldName, indexSupport, o(f))
+    def bigDecimal(f: D => BigDecimal): BigDecimalField[D] = BigDecimalField(fieldName, indexSupport, o(f))
+    object option {
+      def tokenized(f: D => Option[String]): TokenizedField[D] = TokenizedField(fieldName, indexSupport, f)
+      def string(f: D => Option[String], store: Boolean = false): StringField[D] = StringField(fieldName, indexSupport, f, store)
+      def id[T](f: D => Option[Id[T]], store: Boolean = false): StringField[D] = StringField(fieldName, indexSupport, doc => f(doc).map(_.value), store)
+      def int(f: D => Option[Int]): IntField[D] = IntField(fieldName, indexSupport, f)
+      def long(f: D => Option[Long]): LongField[D] = LongField(fieldName, indexSupport, f)
+      def float(f: D => Option[Float]): FloatField[D] = FloatField(fieldName, indexSupport, f)
+      def double(f: D => Option[Double]): DoubleField[D] = DoubleField(fieldName, indexSupport, f)
+      def bigDecimal(f: D => Option[BigDecimal]): BigDecimalField[D] = BigDecimalField(fieldName, indexSupport, f)
+    }
   }
 }

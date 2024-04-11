@@ -9,10 +9,10 @@ import org.apache.lucene.{document => ld}
 
 case class LongField[D <: Document[D]](fieldName: String,
                                        collection: Collection[D],
-                                       get: D => Long) extends LuceneIndexedField[Long, D] {
-  override protected[lightdb] def createFields(doc: D): List[Field] = List(
-    new ld.LongField(fieldName, get(doc), Field.Store.NO)
-  )
+                                       get: D => Option[Long]) extends LuceneIndexedField[Long, D] {
+  override protected[lightdb] def createFields(doc: D): List[Field] = get(doc).toList.map { value =>
+    new ld.LongField(fieldName, value, Field.Store.NO)
+  }
 
   override protected[lightdb] def sortType: SortField.Type = SortField.Type.LONG
 }

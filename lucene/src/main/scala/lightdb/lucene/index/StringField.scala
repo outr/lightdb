@@ -9,7 +9,7 @@ import org.apache.lucene.{document => ld}
 
 case class StringField[D <: Document[D]](fieldName: String,
                                          collection: Collection[D],
-                                         get: D => String,
+                                         get: D => Option[String],
                                          store: Boolean) extends LuceneIndexedField[String, D] {
   def ===(value: String): Filter[D] = is(value)
 
@@ -24,9 +24,9 @@ case class StringField[D <: Document[D]](fieldName: String,
     LuceneFilter(() => b.build())
   }
 
-  override protected[lightdb] def createFields(doc: D): List[ld.Field] = List(
-    new ld.StringField(fieldName, get(doc), if (store) ld.Field.Store.YES else ld.Field.Store.NO)
-  )
+  override protected[lightdb] def createFields(doc: D): List[ld.Field] = get(doc).toList.map { value =>
+    new ld.StringField(fieldName, value, if (store) ld.Field.Store.YES else ld.Field.Store.NO)
+  }
 
   override protected[lightdb] def sortType: SortField.Type = SortField.Type.STRING
 }
