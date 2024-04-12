@@ -9,6 +9,4 @@ trait LuceneIndexedField[F, D <: Document[D]] extends IndexedField[F, D] {
   protected[lightdb] def createFields(doc: D): List[ld.Field]
 
   protected[lightdb] def sortType: SortField.Type
-
-  collection.asInstanceOf[LuceneSupport[D]].index.register(this)
 }

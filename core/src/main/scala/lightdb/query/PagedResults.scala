@@ -5,7 +5,7 @@ import cats.implicits.toTraverseOps
 import lightdb.{Document, Id}
 
 case class PagedResults[D <: Document[D]](query: Query[D],
-                                          context: IndexContext[D],
+                                          context: PageContext[D],
                                           offset: Int,
                                           total: Int,
                                           ids: List[Id[D]]) {
