@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scribe.cats.{io => logger}
 
 abstract class LightDB(val directory: Path,
-                       val indexThreads: Int = 2,
+                       val indexThreads: Int = Runtime.getRuntime.availableProcessors(),
                        val maxFileSize: Int = 1024 * 1024) {
   private val _initialized = new AtomicBoolean(false)
 
@@ -54,7 +54,7 @@ abstract class LightDB(val directory: Path,
 
   protected[lightdb] def createStore(name: String): Store = synchronized {
     verifyInitialized()
-    val store = Store(directory.resolve(name), indexThreads, maxFileSize)
+    val store = HaloStore(directory.resolve(name), indexThreads, maxFileSize)
     stores = store :: stores
     store
   }

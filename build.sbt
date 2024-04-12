@@ -122,7 +122,7 @@ lazy val sqlite = project.in(file("sqlite"))
 	)
 
 lazy val benchmark = project.in(file("benchmark"))
-	.dependsOn(core)
+	.dependsOn(core, lucene, sqlite)
 	.settings(
 		name := s"$projectName-benchmark",
 		fork := true,
