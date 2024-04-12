@@ -41,6 +41,8 @@ ThisBuild / resolvers += "jitpack" at "https://jitpack.io"
 
 ThisBuild / outputStrategy := Some(StdoutOutput)
 
+ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
+
 val collectionCompatVersion: String = "2.11.0"
 val haloDBVersion: String = "v0.5.6"
 val catsEffectVersion: String = "3.5.4"
