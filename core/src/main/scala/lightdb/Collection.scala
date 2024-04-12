@@ -4,7 +4,6 @@ import cats.effect.IO
 import cats.implicits.{catsSyntaxApplicativeByName, toTraverseOps}
 import fabric.rw.RW
 import lightdb.index._
-import lightdb.query.Query
 
 abstract class Collection[D <: Document[D]](val collectionName: String,
                                             protected[lightdb] val db: LightDB,

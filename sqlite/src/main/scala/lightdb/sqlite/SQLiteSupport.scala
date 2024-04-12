@@ -4,9 +4,12 @@ import cats.effect.IO
 import lightdb.{Collection, Document, Id}
 import lightdb.index.{IndexSupport, IndexedField, Indexer}
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext}
+import lightdb.util.FlushingBacklog
 
 import java.nio.file.{Files, Path}
 import java.sql.{Connection, DriverManager, PreparedStatement, Types}
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.IntUnaryOperator
 
 trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   private lazy val path: Path = db.directory.resolve(collectionName).resolve("sqlite.db")
@@ -17,6 +20,12 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     val s = c.createStatement()
     try {
       s.executeUpdate(s"CREATE TABLE IF NOT EXISTS $collectionName(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
+      index.fields.foreach { f =>
+        if (f.fieldName != "_id") {
+          val indexName = s"${f.fieldName}_idx"
+          s.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON $collectionName(${f.fieldName})")
+        }
+      }
     } finally {
       s.close()
     }
@@ -27,6 +36,24 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
 
   val _id: SQLIndexedField[Id[D], D] = index("_id", doc => Some(doc._id))
 
+  private lazy val backlog = new FlushingBacklog[D](10_000, 100_000) {
+    override protected def write(list: List[D]): IO[Unit] = IO {
+      val sql = s"INSERT OR REPLACE INTO $collectionName(${index.fields.map(_.fieldName).mkString(", ")}) VALUES (${index.fields.map(_ => "?").mkString(", ")})"
+      val ps = connection.prepareStatement(sql)
+      try {
+        list.foreach { doc =>
+          index.fields.map(_.get(doc)).zipWithIndex.foreach {
+            case (value, index) => setValue(ps, index + 1, value)
+          }
+          ps.addBatch()
+        }
+        ps.executeBatch()
+      } finally {
+        ps.close()
+      }
+    }
+  }
+
   override def doSearch(query: Query[D],
                         context: SearchContext[D],
                         offset: Int,
@@ -36,21 +63,25 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       case Some(f) =>
         val filter = f.asInstanceOf[SQLFilter[_, D]]
         params = Some(filter.value) :: params
-        s"WHERE ${filter.fieldName} ${filter.condition} ?"
+        s"WHERE\n  ${filter.fieldName} ${filter.condition} ?"
       case None => ""
     }
-    val sqlCount = s"""SELECT
-                      |  COUNT(*)
-                      |FROM
-                      |  $collectionName
-                      |$filters
-                      |""".stripMargin
-    val countPs = prepare(sqlCount, params.reverse)
-    val total = try {
-      val rs = countPs.executeQuery()
-      rs.getInt(1)
-    } finally {
-      countPs.close()
+    val total = if (query.countTotal) {
+      val sqlCount = s"""SELECT
+                        |  COUNT(*)
+                        |FROM
+                        |  $collectionName
+                        |$filters
+                        |""".stripMargin
+      val countPs = prepare(sqlCount, params.reverse)
+      try {
+        val rs = countPs.executeQuery()
+        rs.getInt(1)
+      } finally {
+        countPs.close()
+      }
+    } else {
+      -1
     }
     // TODO: Add sort
     val sql = s"""SELECT
@@ -58,15 +89,17 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
                  |FROM
                  |  $collectionName
                  |$filters
-                 |LIMIT ${query.pageSize}
-                 |OFFSET $offset
+                 |LIMIT
+                 |  ${query.pageSize}
+                 |OFFSET
+                 |  $offset
                  |""".stripMargin
+//    scribe.info(sql)
     val ps = prepare(sql, params.reverse)
     val rs = ps.executeQuery()
     try {
       val iterator = new Iterator[Id[D]] {
         override def hasNext: Boolean = rs.next()
-
         override def next(): Id[D] = Id[D](rs.getString(1))
       }
       val ids = iterator.toList
@@ -78,17 +111,16 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
         ids = ids
       )
     } finally {
+      rs.close()
       ps.close()
     }
   }
 
-  override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] = IO {
-    val sql = s"INSERT OR REPLACE INTO $collectionName(${fields.map(_.fieldName).mkString(", ")}) VALUES (${fields.map(_ => "?").mkString(", ")})"
-    val values = fields.map(_.get(doc))
-    val ps = prepare(sql, values)
-    ps.executeUpdate()
-    ps.close()
-  }
+  private val batchSize = new AtomicInteger(0)
+  private val maxBatchSize = 10_000
+
+  override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] =
+    backlog.enqueue(doc).map(_ => ())
 
   private def prepare(sql: String, params: List[Option[Any]]): PreparedStatement = {
     val ps = connection.prepareStatement(sql)
@@ -106,6 +138,10 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       case _ => throw new RuntimeException(s"Unsupported value for $collectionName (index: $index): $value")
     }
     case None => ps.setNull(index, Types.NULL)
+  }
+
+  override def commit(): IO[Unit] = super.commit().flatMap { _ =>
+    backlog.flush()
   }
 
   override def dispose(): IO[Unit] = super.dispose().map { _ =>

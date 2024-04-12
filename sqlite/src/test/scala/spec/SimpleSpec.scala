@@ -66,6 +66,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       Person.withSearchContext { implicit context =>
         Person
           .query
+          .countTotal(true)
           .filter(Person.name.is("Jane Doe"))
           .search()
           .flatMap { page =>
@@ -120,7 +121,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 //    }
     "do paginated search" in {
       Person.withSearchContext { implicit context =>
-        Person.query.pageSize(1).search().flatMap { page1 =>
+        Person.query.pageSize(1).countTotal(true).search().flatMap { page1 =>
           page1.page should be(0)
           page1.pages should be(2)
           page1.hasNext should be(true)
@@ -142,7 +143,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
     "do paginated search as a stream" in {
       Person.withSearchContext { implicit context =>
-        Person.query.pageSize(1).stream.compile.toList.map { people =>
+        Person.query.pageSize(1).countTotal(true).stream.compile.toList.map { people =>
           people.length should be(2)
           people.map(_.name).toSet should be(Set("John Doe", "Jane Doe"))
         }

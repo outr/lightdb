@@ -39,20 +39,27 @@ abstract class FlushingBacklog[T](val batchSize: Int, val maxSize: Int) {
     }
   }
 
-  private def prepareWrite(): IO[Unit] = IO {
-    val pollingIterator = new Iterator[T] {
-      override def hasNext: Boolean = !queue.isEmpty
-
-      override def next(): T = {
-        val value = queue.poll()
-        if (value != null) {
-          FlushingBacklog.this.size.decrementAndGet()
+  private def prepareWrite(): IO[Unit] = fs2.Stream
+    .repeatEval(IO {
+      val o = Option(queue.poll())
+      if (o.nonEmpty) {
+        val s = size.decrementAndGet()
+        if (s < 0) {
+          scribe.warn("Size fell below zero!")
+          size.set(0)
         }
-        value
       }
+      o
+    })
+    .unNoneTerminate
+    .compile
+    .toList
+    .flatMap { list =>
+      writeBatched(list)
     }
-    pollingIterator.toList
-  }.flatMap(writeBatched).map(_ => flushing.set(false))
+    .map { _ =>
+      flushing.set(false)
+    }
 
   private def writeBatched(list: List[T]): IO[Unit] = {
     val (current, more) = list.splitAt(batchSize)

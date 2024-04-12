@@ -1,45 +1,35 @@
 package lightdb
 
 import cats.effect.IO
+import cats.implicits.{catsSyntaxParallelSequence1, toTraverseOps}
 import com.oath.halodb.{HaloDB, HaloDBOptions}
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 
 import java.nio.file.{Files, Path}
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.jdk.CollectionConverters._
 
-case class Store(directory: Path,
-                 indexThreads: Int,
-                 maxFileSize: Int) {
-  private lazy val instance: HaloDB = {
-    val opts = new HaloDBOptions
-    opts.setBuildIndexThreads(indexThreads)
-    opts.setMaxFileSize(maxFileSize)
+trait Store {
+  def keyStream[D]: fs2.Stream[IO, Id[D]]
 
-    Files.createDirectories(directory.getParent)
-    HaloDB.open(directory.toAbsolutePath.toString, opts)
-  }
+  def stream[D]: fs2.Stream[IO, (Id[D], Array[Byte])]
 
-  def keyStream[D]: fs2.Stream[IO, Id[D]] = fs2.Stream.fromBlockingIterator[IO](instance.newKeyIterator().asScala, 1024)
-    .map { record =>
-      Id[D](record.getBytes.string)
-    }
+  def get[D](id: Id[D]): IO[Option[Array[Byte]]]
 
-  def stream[D]: fs2.Stream[IO, (Id[D], Array[Byte])] = fs2.Stream.fromBlockingIterator[IO](instance.newIterator().asScala, 1024)
-    .map { record =>
-      val key = record.getKey.string
-      Id[D](key) -> record.getValue
-    }
+  def put[D](id: Id[D], value: Array[Byte]): IO[Boolean]
+
+  def delete[D](id: Id[D]): IO[Unit]
+
+  def size: IO[Int]
+
+  def dispose(): IO[Unit]
 
   def streamJson[D: RW]: fs2.Stream[IO, D] = stream[D].map {
     case (_, bytes) =>
       val jsonString = bytes.string
       val json = JsonParser(jsonString)
       json.as[D]
-  }
-
-  def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO {
-    Option(instance.get(id.bytes))
   }
 
   def getJson[D: RW](id: Id[D]): IO[Option[D]] = get(id)
@@ -49,10 +39,6 @@ case class Store(directory: Path,
       json.as[D]
     })
 
-  def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO {
-    instance.put(id.bytes, value)
-  }
-
   def putJson[D <: Document[D]](doc: D)
                                (implicit rw: RW[D]): IO[D] = IO {
     val json = doc.json
@@ -60,12 +46,6 @@ case class Store(directory: Path,
   }.flatMap { jsonString =>
     put(doc._id, jsonString.getBytes).map(_ => doc)
   }
-
-  def delete[D](id: Id[D]): IO[Unit] = IO {
-    instance.delete(id.bytes)
-  }
-
-  def size: IO[Int] = IO(instance.size().toInt)
 
   def truncate(): IO[Unit] = keyStream[Any]
     .evalMap { id =>
@@ -79,6 +59,52 @@ case class Store(directory: Path,
         case _ => truncate()
       }
     }
+}
 
-  def dispose(): IO[Unit] = IO(instance.close())
+case class HaloStore(directory: Path,
+                 indexThreads: Int,
+                 maxFileSize: Int) extends Store {
+  private lazy val instance: HaloDB = {
+    val opts = new HaloDBOptions
+    opts.setBuildIndexThreads(indexThreads)
+    opts.setMaxFileSize(maxFileSize)
+    opts.setUseMemoryPool(true)
+    opts.setMemoryPoolChunkSize(2 * 1024 * 1024)
+    opts.setFixedKeySize(32)
+    opts.setFlushDataSizeBytes(10 * 1024 * 1024)
+    opts.setCompactionThresholdPerFile(0.9)
+    opts.setCompactionJobRate(50 * 1024 * 1024)
+    opts.setNumberOfRecords(100_000_000)
+    opts.setCleanUpTombstonesDuringOpen(true)
+
+    Files.createDirectories(directory.getParent)
+    HaloDB.open(directory.toAbsolutePath.toString, opts)
+  }
+
+  override def keyStream[D]: fs2.Stream[IO, Id[D]] = fs2.Stream.fromBlockingIterator[IO](instance.newKeyIterator().asScala, 1024)
+    .map { record =>
+      Id[D](record.getBytes.string)
+    }
+
+  override def stream[D]: fs2.Stream[IO, (Id[D], Array[Byte])] = fs2.Stream.fromBlockingIterator[IO](instance.newIterator().asScala, 1024)
+    .map { record =>
+      val key = record.getKey.string
+      Id[D](key) -> record.getValue
+    }
+
+  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO {
+    Option(instance.get(id.bytes))
+  }
+
+  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO {
+    instance.put(id.bytes, value)
+  }
+
+  override def delete[D](id: Id[D]): IO[Unit] = IO {
+    instance.delete(id.bytes)
+  }
+
+  override def size: IO[Int] = IO(instance.size().toInt)
+
+  override def dispose(): IO[Unit] = IO(instance.close())
 }
