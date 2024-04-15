@@ -54,7 +54,8 @@ abstract class LightDB(val directory: Path,
 
   protected[lightdb] def createStore(name: String): Store = synchronized {
     verifyInitialized()
-    val store = HaloStore(directory.resolve(name), indexThreads, maxFileSize)
+//    val store = HaloStore(directory.resolve(name), indexThreads, maxFileSize)
+    val store = RocksDBStore(directory.resolve(name))
     stores = store :: stores
     store
   }
