@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
+import lightdb.halo.HaloDBSupport
 import lightdb.sqlite.{SQLIndexedField, SQLiteSupport}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -12,7 +13,7 @@ import scribe.{Level, Logger}
 
 import java.nio.file.Paths
 
-class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   private val id1 = Id[Person]("john")
   private val id2 = Id[Person]("jane")
 
@@ -102,23 +103,23 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         person.age should be(21)
       }
     }
-//    "search for age range" in {
-//      Person.withSearchContext { implicit context =>
-//        Person
-//          .query
-//          .filter(Person.age.between(19, 21))
-//          .search()
-//          .flatMap { results =>
-//            results.docs.map { people =>
-//              people.length should be(2)
-//              val names = people.map(_.name).toSet
-//              names should be(Set("John Doe", "Jane Doe"))
-//              val ages = people.map(_.age).toSet
-//              ages should be(Set(21, 19))
-//            }
-//          }
-//      }
-//    }
+    "search for age range" in {
+      Person.withSearchContext { implicit context =>
+        Person
+          .query
+          .filter(Person.age.between(19, 21))
+          .search()
+          .flatMap { results =>
+            results.docs.map { people =>
+              people.length should be(2)
+              val names = people.map(_.name).toSet
+              names should be(Set("John Doe", "Jane Doe"))
+              val ages = people.map(_.age).toSet
+              ages should be(Set(21, 19))
+            }
+          }
+      }
+    }
     "do paginated search" in {
       Person.withSearchContext { implicit context =>
         Person.query.pageSize(1).countTotal(true).search().flatMap { page1 =>
@@ -210,7 +211,7 @@ class SimpleSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
   }
 
-  object DB extends LightDB(directory = Paths.get("testdb")) {
+  object DB extends LightDB(directory = Paths.get("testdb")) with HaloDBSupport {
 //    override protected def autoCommit: Boolean = true
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
