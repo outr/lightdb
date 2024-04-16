@@ -2,11 +2,13 @@ package benchmark
 
 import cats.effect.IO
 import fabric.rw.RW
-import lightdb.sqlite.{SQLIndexedField, SQLiteSupport}
+import lightdb.halo.HaloDBSupport
+import lightdb.sqlite.{SQLData, SQLIndexedField, SQLiteSupport}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Collection, Document, Id, IndexedLinks, LightDB, MaxLinks}
 
 import java.nio.file.Paths
+import java.sql.ResultSet
 
 object LightDBImplementation extends BenchmarkImplementation {
   override type TitleAka = TitleAkaLDB
@@ -53,17 +55,17 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def get(id: String): IO[TitleAkaLDB] = TitleAkaLDB(Id[TitleAkaLDB](id))
 
-//  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.withSearchContext { implicit context =>
-//    TitleAkaLDB
-//      .query
-//      .pageSize(100)
-//      .filter(TitleAkaLDB.titleId === titleId)
-//      .search()
-//      .flatMap { page =>
-//        page.docs
-//      }
-//  }
-  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.titleId.query(titleId).compile.toList
+  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.withSearchContext { implicit context =>
+    TitleAkaLDB
+      .query
+      .pageSize(100)
+      .filter(TitleAkaLDB.titleId === titleId)
+      .search()
+      .flatMap { page =>
+        page.docs
+      }
+  }
+//  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.titleId.query(titleId).compile.toList
 
   override def flush(): IO[Unit] = for {
     _ <- TitleAkaLDB.commit()
@@ -84,8 +86,11 @@ object LightDBImplementation extends BenchmarkImplementation {
     scribe.info(s"TitleBasic counts -- Halo: $haloCount") //, Lucene: $luceneCount")
   }
 
-  object DB extends LightDB(directory = Paths.get("imdb"), maxFileSize = 1024 * 1024 * 1024) {
-//    val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
+//  object DB extends LightDB(directory = Paths.get("imdb"), maxFileSize = 1024 * 1024 * 1024) {
+  object DB extends LightDB(directory = Paths.get("imdb")) with HaloDBSupport {
+    override def maxFileSize: Int = 1024 * 1024 * 1024
+
+  //    val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
 //    val titleBasics: Collection[TitleBasicsLDB] = collection("titleBasics", TitleBasicsLDB)
 
     override def collections: List[Collection[_]] = List(
@@ -95,14 +100,50 @@ object LightDBImplementation extends BenchmarkImplementation {
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
 
-  case class TitleAkaLDB(titleId: String, ordering: Int, title: String, region: Option[String], language: Option[String], types: List[String], attributes: List[String], isOriginalTitle: Option[Boolean], _id: Id[TitleAka]) extends Document[TitleAka]
+  case class TitleAkaLDB(titleId: String,
+                         ordering: Int,
+                         title: String,
+                         region: Option[String],
+                         language: Option[String],
+                         types: List[String],
+                         attributes: List[String],
+                         isOriginalTitle: Option[Boolean],
+                         _id: Id[TitleAka]) extends Document[TitleAka]
 
-  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) {// with SQLiteSupport[TitleAkaLDB] {
+  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with SQLiteSupport[TitleAkaLDB] {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
-    val titleId: IndexedLinks[String, TitleAkaLDB] = indexedLinks[String]("titleId", identity, _.titleId, MaxLinks.OverflowTrim(100))
+//    val titleId: IndexedLinks[String, TitleAkaLDB] = indexedLinks[String]("titleId", identity, _.titleId, MaxLinks.OverflowTrim(100))
 //    val titleId: StringField[TitleAkaLDB] = index("titleId").string(_.titleId)
-//    val titleId: SQLIndexedField[String, TitleAkaLDB] = index("titleId", doc => Some(doc.titleId))
+    val titleId: SQLIndexedField[String, TitleAkaLDB] = index("titleId", doc => Some(doc.titleId))
+    val ordering: SQLIndexedField[Int, TitleAkaLDB] = index("ordering", doc => Some(doc.ordering))
+    val title: SQLIndexedField[String, TitleAkaLDB] = index("title", doc => Some(doc.title))
+//    val region: SQLIndexedField[String, TitleAkaLDB] = index("region", _.region)
+//    val language: SQLIndexedField[String, TitleAkaLDB] = index("language", _.language)
+//    val types: SQLIndexedField[String, TitleAkaLDB] = index("types", doc => Some(doc.types.mkString("|")))
+//    val attributes: SQLIndexedField[String, TitleAkaLDB] = index("attributes", doc => Some(doc.attributes.mkString("|")))
+//    val isOriginalTitle: SQLIndexedField[Boolean, TitleAkaLDB] = index("isOriginalTitle", doc => doc.isOriginalTitle)
+
+    override protected def data(rs: ResultSet): SQLData[TitleAkaLDB] = {
+      val iterator = new Iterator[TitleAkaLDB] {
+        override def hasNext: Boolean = rs.next()
+        override def next(): TitleAkaLDB = TitleAkaLDB(
+          titleId = rs.getString("titleId"),
+          ordering = rs.getInt("ordering"),
+          title = rs.getString("title"),
+          region = None, //Option(rs.getString("region")),
+          language = None, //Option(rs.getString("language")),
+          types = Nil, //rs.getString("types").split('|').toList,
+          attributes = Nil, //rs.getString("attributes").split('|').toList,
+          isOriginalTitle = None,
+          _id = Id[TitleAkaLDB](rs.getString("_id"))
+        )
+      }
+      val list = iterator.toList
+      val ids = list.map(_._id)
+      val map = list.map(t => t._id -> t).toMap
+      SQLData(ids, Some(id => IO(map(id))))
+    }
   }
 
   case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]
