@@ -1,8 +1,6 @@
 package lightdb.sqlite
 
 import cats.effect.IO
-import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw.{Asable, Convertible}
 import lightdb.{Document, Id}
 import lightdb.index.{IndexSupport, IndexedField}
 import lightdb.query.{PagedResults, Query, SearchContext}
@@ -61,9 +59,9 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     var params = List.empty[Option[Any]]
     val filters = query.filter match {
       case Some(f) =>
-        val filter = f.asInstanceOf[SQLFilter[_, D]]
-        params = Some(filter.value) :: params
-        s"WHERE\n  ${filter.fieldName} ${filter.condition} ?"
+        val filter = f.asInstanceOf[SQLPart]
+        params = params ::: filter.args.map(Option.apply)
+        s"WHERE\n  ${filter.sql}"
       case None => ""
     }
     val total = if (query.countTotal) {
@@ -73,7 +71,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
                         |  $collectionName
                         |$filters
                         |""".stripMargin
-      val countPs = prepare(sqlCount, params.reverse)
+      val countPs = prepare(sqlCount, params)
       try {
         val rs = countPs.executeQuery()
         rs.getInt(1)
@@ -95,7 +93,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
                  |  $offset
                  |""".stripMargin
 //    scribe.info(sql)
-    val ps = prepare(sql, params.reverse)
+    val ps = prepare(sql, params)
     val rs = ps.executeQuery()
     try {
       val data = this.data(rs)
@@ -116,7 +114,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   protected def data(rs: ResultSet): SQLData[D] = {
     val iterator = new Iterator[Id[D]] {
       override def hasNext: Boolean = rs.next()
-      override def next(): Id[D] = Id[D](rs.getString(1))
+      override def next(): Id[D] = Id[D](rs.getString("_id"))
     }
     val ids = iterator.toList
     SQLData(ids, None)
