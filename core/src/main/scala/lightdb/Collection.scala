@@ -12,7 +12,7 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
 
   implicit val rw: RW[D]
 
-  protected lazy val store: Store = db.createStore(collectionName)
+  protected lazy val store: Store = db.createStoreInternal(collectionName)
 
   private var _indexedLinks = List.empty[IndexedLinks[_, D]]
 
@@ -85,7 +85,7 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
       name = name,
       createKey = createKey,
       createV = createV,
-      store = db.createStore(s"$collectionName.indexed.$name"),
+      store = db.createStoreInternal(s"$collectionName.indexed.$name"),
       collection = this,
       maxLinks = maxLinks
     )
@@ -97,7 +97,7 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
 
   def size: IO[Int] = store.size
 
-  def commit(): IO[Unit] = IO.unit
+  def commit(): IO[Unit] = store.commit()
 
   def dispose(): IO[Unit] = IO.unit
 }

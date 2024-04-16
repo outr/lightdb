@@ -57,7 +57,7 @@ val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core, lucene, sqlite)
+	.aggregate(core, halodb, rocksdb, mapdb, lucene, sqlite, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -75,8 +75,6 @@ lazy val core = project.in(file("core"))
 			"org.typelevel" %% "fabric-io" % fabricVersion,
 			"co.fs2" %% "fs2-core" % fs2Version,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
-			"com.github.yahoo" % "HaloDB" % haloDBVersion,
-			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
@@ -96,6 +94,42 @@ lazy val core = project.in(file("core"))
 				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
 			)
 		}
+	)
+
+lazy val halodb = project.in(file("halodb"))
+	.dependsOn(core)
+	.settings(
+		name := s"$projectName-halo",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"com.github.yahoo" % "HaloDB" % haloDBVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
+	)
+
+lazy val rocksdb = project.in(file("rocksdb"))
+	.dependsOn(core)
+	.settings(
+		name := s"$projectName-rocks",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
+	)
+
+lazy val mapdb = project.in(file("mapdb"))
+	.dependsOn(core)
+	.settings(
+		name := s"$projectName-mapdb",
+		libraryDependencies ++= Seq(
+			"org.mapdb" % "mapdb" % "3.1.0",
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		),
+		fork := true
 	)
 
 lazy val lucene = project.in(file("lucene"))
@@ -123,8 +157,19 @@ lazy val sqlite = project.in(file("sqlite"))
 		)
 	)
 
+lazy val all = project.in(file("all"))
+	.dependsOn(core, halodb, rocksdb, mapdb, lucene, sqlite)
+	.settings(
+		name := s"$projectName-all",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
+	)
+
 lazy val benchmark = project.in(file("benchmark"))
-	.dependsOn(core, lucene, sqlite)
+	.dependsOn(all)
 	.settings(
 		name := s"$projectName-benchmark",
 		fork := true,

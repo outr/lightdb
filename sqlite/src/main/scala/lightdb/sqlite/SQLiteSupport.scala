@@ -1,15 +1,15 @@
 package lightdb.sqlite
 
 import cats.effect.IO
-import lightdb.{Collection, Document, Id}
-import lightdb.index.{IndexSupport, IndexedField, Indexer}
-import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext}
+import fabric.io.{JsonFormatter, JsonParser}
+import fabric.rw.{Asable, Convertible}
+import lightdb.{Document, Id}
+import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.query.{PagedResults, Query, SearchContext}
 import lightdb.util.FlushingBacklog
 
-import java.nio.file.{Files, Path}
-import java.sql.{Connection, DriverManager, PreparedStatement, Types}
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.function.IntUnaryOperator
+import java.nio.file.Path
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
 
 trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   private lazy val path: Path = db.directory.resolve(collectionName).resolve("sqlite.db")
@@ -85,7 +85,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     }
     // TODO: Add sort
     val sql = s"""SELECT
-                 |  _id
+                 |  *
                  |FROM
                  |  $collectionName
                  |$filters
@@ -98,17 +98,14 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     val ps = prepare(sql, params.reverse)
     val rs = ps.executeQuery()
     try {
-      val iterator = new Iterator[Id[D]] {
-        override def hasNext: Boolean = rs.next()
-        override def next(): Id[D] = Id[D](rs.getString(1))
-      }
-      val ids = iterator.toList
+      val data = this.data(rs)
       PagedResults(
         query = query,
         context = SQLPageContext(context),
         offset = offset,
         total = total,
-        ids = ids
+        ids = data.ids,
+        getter = data.lookup
       )
     } finally {
       rs.close()
@@ -116,8 +113,14 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
-  private val batchSize = new AtomicInteger(0)
-  private val maxBatchSize = 10_000
+  protected def data(rs: ResultSet): SQLData[D] = {
+    val iterator = new Iterator[Id[D]] {
+      override def hasNext: Boolean = rs.next()
+      override def next(): Id[D] = Id[D](rs.getString(1))
+    }
+    val ids = iterator.toList
+    SQLData(ids, None)
+  }
 
   override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] =
     backlog.enqueue(doc).map(_ => ())
@@ -134,6 +137,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     case Some(v) => v match {
       case s: String => ps.setString(index, s)
       case i: Int => ps.setInt(index, i)
+      case b: Boolean => ps.setBoolean(index, b)
       case id: Id[_] => ps.setString(index, id.value)
       case _ => throw new RuntimeException(s"Unsupported value for $collectionName (index: $index): $value")
     }
@@ -149,49 +153,4 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   }
 }
 
-case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D]) extends Indexer[D] {
-  override def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return] = {
-    val context = SearchContext(indexSupport)
-    f(context)
-  }
-
-  def apply[F](name: String, get: D => Option[F]): SQLIndexedField[F, D] = SQLIndexedField(
-    fieldName = name,
-    collection = indexSupport,
-    get = get
-  )
-
-  override def count(): IO[Int] = IO {
-    val ps = indexSupport.connection.prepareStatement(s"SELECT COUNT(_id) FROM ${indexSupport.collectionName}")
-    try {
-      val rs = ps.executeQuery()
-      rs.next()
-      rs.getInt(1)
-    } finally {
-      ps.close()
-    }
-  }
-
-  override private[lightdb] def delete(id: Id[D]): IO[Unit] = IO {
-    val ps = indexSupport.connection.prepareStatement(s"DELETE FROM ${indexSupport.collectionName} WHERE _id = ?")
-    try {
-      ps.setString(1, id.value)
-      ps.executeUpdate()
-    } finally {
-      ps.close()
-    }
-  }
-
-  override def commit(): IO[Unit] = IO.unit
-}
-
-case class SQLIndexedField[F, D <: Document[D]](fieldName: String,
-                                                collection: Collection[D],
-                                                get: D => Option[F]) extends IndexedField[F, D] {
-  def ===(value: F): Filter[D] = is(value)
-  def is(value: F): Filter[D] = SQLFilter[F, D](fieldName, "=", value)
-}
-
-case class SQLFilter[F, D <: Document[D]](fieldName: String, condition: String, value: F) extends Filter[D]
-
-case class SQLPageContext[D <: Document[D]](context: SearchContext[D]) extends PageContext[D]
+case class SQLData[D <: Document[D]](ids: List[Id[D]], lookup: Option[Id[D] => IO[D]])

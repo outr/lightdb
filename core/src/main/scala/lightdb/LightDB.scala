@@ -9,9 +9,7 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import scribe.cats.{io => logger}
 
-abstract class LightDB(val directory: Path,
-                       val indexThreads: Int = Runtime.getRuntime.availableProcessors(),
-                       val maxFileSize: Int = 1024 * 1024) {
+abstract class LightDB(val directory: Path) {
   private val _initialized = new AtomicBoolean(false)
 
   private var stores = List.empty[Store]
@@ -52,13 +50,15 @@ abstract class LightDB(val directory: Path,
     IO.unit
   }
 
-  protected[lightdb] def createStore(name: String): Store = synchronized {
+  protected[lightdb] def createStoreInternal(name: String): Store = synchronized {
     verifyInitialized()
 //    val store = HaloStore(directory.resolve(name), indexThreads, maxFileSize)
-    val store = RocksDBStore(directory.resolve(name))
+    val store = createStore(name)
     stores = store :: stores
     store
   }
+
+  protected def createStore(name: String): Store
 
   def truncate(): IO[Unit] = collections.map(_.truncate()).parSequence.map(_ => ())
 
