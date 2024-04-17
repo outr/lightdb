@@ -1,10 +1,21 @@
 # lightdb
-Prototype database concept using Lucene and HaloDB
+Prototype database concept using pluggable store + indexer
 
-First working release with minimal functionality in `0.1.0`
+## Provided Stores
+- Yahoo's HaloDB (https://github.com/yahoo/HaloDB) - Preferred for performance
+- MapDB (https://mapdb.org)
+- Facebook's RocksDB (https://rocksdb.org)
 
-## 0.2 TODO
-- [X] Support ObjectStore.all to iterate over the entire database
+## Provided Indexers
+- Apache Lucene (https://lucene.apache.org) - Most featureful
+- SQLite (https://www.sqlite.org) - Fastest
+
+## 1.0 TODO
+- [ ] Full implementations for indexers
+  - [ ] Apache Lucene index types
+  - [ ] SQLite index types
+- [ ] More performance improvements to SQLite integration
+- [ ] Better RocksDB performance
 - [ ] Create backup and restore features
     - [ ] Real-time backup (write changes to incremental file)
     - [ ] Complete dump and restore
@@ -13,8 +24,3 @@ First working release with minimal functionality in `0.1.0`
 - [ ] Data integrity checks
     - [ ] Verify data identical between store and index
     - [ ] Rebuild index from store
-
-## 1.0 TODO
-- [ ] Complete Lucene type support
-- [ ] Create benchmark tool to evaluate performance of basic operations to see how well this performs
-- [ ] Create an SBT plugin to update base traits for case classes (ex. Person would generate PersonFields trait to be mixed into Person companion)
