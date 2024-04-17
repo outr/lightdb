@@ -1,6 +1,6 @@
 package lightdb
 
-import fabric.rw.RW
+import fabric.rw._
 
 case class IndexedLink[D <: Document[D]](_id: Id[IndexedLink[D]],
                                          links: List[Id[D]]) extends Document[IndexedLink[D]]

@@ -1,0 +1,7 @@
+-Xms1024M
+-Xmx4096M
+-Xss512M
+-XX:MaxMetaspaceSize=4096M
+-XX:ReservedCodeCacheSize=500M
+-XX:+TieredCompilation
+-XX:-UseGCOverheadLimit
