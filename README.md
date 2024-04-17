@@ -18,6 +18,7 @@ Computationally focused database using pluggable store + indexer
   - [ ] SQLite index types
 - [ ] More performance improvements to SQLite integration
 - [ ] Better RocksDB performance
+- [ ] Automated generation of performance bar charts
 - [ ] Create backup and restore features
     - [ ] Real-time backup (write changes to incremental file)
     - [ ] Complete dump and restore

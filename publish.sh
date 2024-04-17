@@ -1,3 +1,10 @@
 #!/usr/bin/env bash
 
-sbt +clean +test +coreJS/publishSigned +coreJVM/publishSigned +halo/publishSigned +lucene/publishSigned sonatypeRelease
+set -e
+
+sbt +clean
+sbt +compile
+sbt +test
+#sbt docs/mdoc
+sbt +publishSigned
+sbt sonatypeBundleRelease
