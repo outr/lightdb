@@ -5,9 +5,11 @@ import cats.effect.IO
 case class IndexedLinks[V, D <: Document[D]](name: String,
                                              createKey: V => String,
                                              createV: D => V,
-                                             store: Store,
+                                             loadStore: () => Store,
                                              collection: Collection[D],
                                              maxLinks: MaxLinks) {
+  lazy val store: Store = loadStore()
+
   protected[lightdb] def add(doc: D): IO[Unit] = {
     val v = createV(doc)
     for {

@@ -85,7 +85,7 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
       name = name,
       createKey = createKey,
       createV = createV,
-      store = db.createStoreInternal(s"$collectionName.indexed.$name"),
+      loadStore = () => db.createStoreInternal(s"$collectionName.indexed.$name"),
       collection = this,
       maxLinks = maxLinks
     )
