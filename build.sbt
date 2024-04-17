@@ -1,6 +1,6 @@
 // Scala versions
 val scala213 = "2.13.13"
-val scala3 = "3.3.3"
+val scala3 = "3.4.1"
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
@@ -18,7 +18,7 @@ ThisBuild / organization := org
 ThisBuild / version := "0.4.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
-ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
+ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-decode-stacktraces")
 ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
 
 ThisBuild / publishTo := sonatypePublishTo.value
@@ -43,7 +43,7 @@ ThisBuild / outputStrategy := Some(StdoutOutput)
 
 ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
 
-val collectionCompatVersion: String = "2.11.0"
+val collectionCompatVersion: String = "2.12.0"
 val haloDBVersion: String = "0.5.6"
 val rocksDBVersion: String = "9.0.0"
 val catsEffectVersion: String = "3.5.4"
@@ -51,7 +51,7 @@ val fabricVersion: String = "1.14.2"
 val fs2Version: String = "3.10.2"
 val scribeVersion: String = "3.13.2"
 val luceneVersion: String = "9.10.0"
-val sqliteVersion: String = "3.45.2.0"
+val sqliteVersion: String = "3.45.3.0"
 
 val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"

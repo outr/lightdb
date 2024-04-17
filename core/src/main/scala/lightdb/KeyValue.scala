@@ -1,7 +1,7 @@
 package lightdb
 
 import fabric.Json
-import fabric.rw.RW
+import fabric.rw._
 
 case class KeyValue(_id: Id[KeyValue], value: Json) extends Document[KeyValue]
 

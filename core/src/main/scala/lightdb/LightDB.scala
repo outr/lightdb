@@ -2,7 +2,7 @@ package lightdb
 
 import cats.effect.IO
 import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1}
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.upgrade.DatabaseUpgrade
 
 import java.nio.file.Path
