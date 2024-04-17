@@ -51,7 +51,7 @@ val fabricVersion: String = "1.14.2"
 val fs2Version: String = "3.10.2"
 val scribeVersion: String = "3.13.2"
 val luceneVersion: String = "9.10.0"
-val sqliteVersion: String = "3.45.2.0"
+val sqliteVersion: String = "3.45.3.0"
 
 val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
