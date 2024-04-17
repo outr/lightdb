@@ -1,5 +1,7 @@
 # lightdb
-Prototype database concept using pluggable store + indexer
+[![CI](https://github.com/outr/lightdb/actions/workflows/ci.yml/badge.svg)](https://github.com/outr/lightdb/actions/workflows/ci.yml)
+
+Computationally focused database using pluggable store + indexer
 
 ## Provided Stores
 - Yahoo's HaloDB (https://github.com/yahoo/HaloDB) - Preferred for performance
