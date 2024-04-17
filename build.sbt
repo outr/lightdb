@@ -18,7 +18,7 @@ ThisBuild / organization := org
 ThisBuild / version := "0.4.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
-ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-decode-stacktraces")
+ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
 ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
 
 ThisBuild / publishTo := sonatypePublishTo.value
