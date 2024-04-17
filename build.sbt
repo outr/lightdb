@@ -1,6 +1,6 @@
 // Scala versions
 val scala213 = "2.13.13"
-val scala3 = "3.3.3"
+val scala3 = "3.4.1"
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
@@ -18,7 +18,7 @@ ThisBuild / organization := org
 ThisBuild / version := "0.4.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
-ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
+ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-decode-stacktraces")
 ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
 
 ThisBuild / publishTo := sonatypePublishTo.value
