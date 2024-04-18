@@ -17,7 +17,6 @@ case class HaloDBStore(directory: Path,
     opts.setMaxFileSize(maxFileSize)
     opts.setUseMemoryPool(true)
     opts.setMemoryPoolChunkSize(10 * 1024 * 1024)
-    opts.setFixedKeySize(32)
     opts.setFlushDataSizeBytes(100 * 1024 * 1024)
     opts.setCompactionThresholdPerFile(0.9)
     opts.setCompactionJobRate(50 * 1024 * 1024)

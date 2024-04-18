@@ -13,7 +13,9 @@ case class PagedResults[D <: Document[D]](query: Query[D],
   lazy val page: Int = offset / query.pageSize
   lazy val pages: Int = math.ceil(total.toDouble / query.pageSize.toDouble).toInt
 
-  def stream: fs2.Stream[IO, D] = fs2.Stream(ids: _*)
+  def idStream: fs2.Stream[IO, Id[D]] = fs2.Stream(ids: _*)
+
+  def stream: fs2.Stream[IO, D] = idStream
     .evalMap { id =>
       getter match {
         case Some(g) => g(id)

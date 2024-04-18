@@ -21,13 +21,13 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
           val updatedLinks = maxLinks match {
             case MaxLinks.NoMax => links
             case MaxLinks.OverflowError(max) => if (count > max) {
-              throw new RuntimeException(s"Link overflow for $name ($max)")
+              throw new RuntimeException(s"Link overflow for $name: ${createKey(v)} ($max)")
             } else {
               links
             }
             case MaxLinks.OverflowWarn(max) =>
-              if (count > max) {
-                scribe.warn(s"Link overflow for $name (max: $max, count: $count)")
+              if (count == max) {
+                scribe.warn(s"Link overflow for $name: ${createKey(v)} (max: $max)")
               }
               links
             case MaxLinks.OverflowTrim(max) => if (count > max) {
