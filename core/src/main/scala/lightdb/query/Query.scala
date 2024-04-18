@@ -2,7 +2,7 @@ package lightdb.query
 
 import cats.effect.IO
 import lightdb.index.IndexSupport
-import lightdb.Document
+import lightdb.{Document, Id}
 
 case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
                                    filter: Option[Filter[D]] = None,
@@ -23,13 +23,15 @@ case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
     offset = 0,
     after = None
   )
-  def stream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = {
+
+  def pageStream(implicit context: SearchContext[D]): fs2.Stream[IO, PagedResults[D]] = {
     val io = search().map { page1 =>
       fs2.Stream.emit(page1) ++ fs2.Stream.unfoldEval(page1) { page =>
         page.next().map(_.map(p => p -> p))
       }
     }
     fs2.Stream.force(io)
-      .flatMap(_.stream)
   }
+  def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
+  def stream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.stream)
 }
