@@ -150,6 +150,32 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         }
       }
     }
+    "verify the number of records" in {
+      Person.index.count().map { size =>
+        size should be(2)
+      }
+    }
+    "modify John" in {
+      Person.modify(id1) {
+        case Some(john) => IO(Some(john.copy(name = "Johnny Doe")))
+        case None => throw new RuntimeException("John not found!")
+      }.map { person =>
+        person.get.name should be("Johnny Doe")
+      }
+    }
+    "commit modified data" in {
+      Person.commit()
+    }
+    "verify the number of records has not changed after modify" in {
+      Person.index.count().map { size =>
+        size should be(2)
+      }
+    }
+    "verify John was modified" in {
+      Person(id1).map { person =>
+        person.name should be("Johnny Doe")
+      }
+    }
     "delete John" in {
       Person.delete(id1).map { deleted =>
         deleted should not be empty
