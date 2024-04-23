@@ -1,7 +1,7 @@
 package lightdb
 
 import cats.effect.IO
-import fabric.Json
+import fabric._
 
 abstract class RecordDocumentCollection[D <: RecordDocument[D]](collectionName: String, db: LightDB) extends Collection[D](collectionName, db) {
   override protected def preSetJson(json: Json): IO[Json] = IO {
