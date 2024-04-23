@@ -47,7 +47,7 @@ ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF
 
 val collectionCompatVersion: String = "2.12.0"
 val haloDBVersion: String = "0.5.6"
-val rocksDBVersion: String = "9.0.0"
+val rocksDBVersion: String = "9.0.1"
 val catsEffectVersion: String = "3.5.4"
 val fabricVersion: String = "1.14.2"
 val fs2Version: String = "3.10.2"
