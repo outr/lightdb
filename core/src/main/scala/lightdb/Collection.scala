@@ -1,29 +1,48 @@
 package lightdb
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits.{catsSyntaxApplicativeByName, toTraverseOps}
+import fabric.Json
 import fabric.rw.RW
+import io.chrisdavenport.keysemaphore.KeySemaphore
 import lightdb.index._
+
+sealed trait DocLock[D <: Document[D]] extends Any
+
+object DocLock {
+  case class Set[D <: Document[D]](id: Id[D]) extends DocLock[D]
+  class Empty[D <: Document[D]] extends DocLock[D]
+}
 
 abstract class Collection[D <: Document[D]](val collectionName: String,
                                             protected[lightdb] val db: LightDB,
-                                            val autoCommit: Boolean = false) {
+                                            val autoCommit: Boolean = false,
+                                            val atomic: Boolean = true) {
   type Field[F] = IndexedField[F, D]
 
   implicit val rw: RW[D]
 
   protected lazy val store: Store = db.createStoreInternal(collectionName)
 
+  // Id-level locking
+  private lazy val sem = KeySemaphore.of[IO, Id[D]](_ => 1L).unsafeRunSync()
+
   private var _indexedLinks = List.empty[IndexedLinks[_, D]]
 
   def idStream: fs2.Stream[IO, Id[D]] = store.keyStream
 
-  def stream: fs2.Stream[IO, D] = store.streamJson[D]
+  def stream: fs2.Stream[IO, D] = store.streamJsonDocs[D]
 
   /**
-   * Called before set
+   * Called before preSetJson and before the data is set to the database
    */
   protected def preSet(doc: D): IO[D] = IO.pure(doc)
+
+  /**
+   * Called after preSet and before the data is set to the database
+   */
+  protected def preSetJson(json: Json): IO[Json] = IO.pure(json)
 
   /**
    * Called after set
@@ -42,34 +61,65 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
     _ <- commit().whenA(autoCommit)
   } yield ()
 
-  def set(doc: D): IO[D] = preSet(doc)
-    .flatMap(store.putJson(_)(rw))
-    .flatMap { doc =>
-      postSet(doc).map(_ => doc)
-    }
-  def modify(id: Id[D])(f: Option[D] => IO[Option[D]]): IO[Option[D]] = get(id).flatMap { option =>
-    f(option).flatMap {
-      case Some(doc) => set(doc).map(Some.apply)
-      case None => IO.pure(None)
+  def set(doc: D)(implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[D] = withLock(doc._id) { _ =>
+    for {
+      modified <- preSet(doc)
+      json <- preSetJson(rw.read(doc))
+      _ <- store.putJson(doc._id, json)
+      _ <- postSet(doc)
+    } yield modified
+  }
+
+  def withLock[Return](id: Id[D])(f: DocLock[D] => IO[Return])
+                      (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Return] = {
+    if (atomic && existingLock.isInstanceOf[DocLock.Empty[_]]) {
+      val lock: DocLock[D] = existingLock match {
+        case DocLock.Set(currentId) =>
+          assert(currentId == id, s"Different Id used for lock! Existing: $currentId, New: $id")
+          existingLock
+        case _ => DocLock.Set[D](id)
+      }
+      val s = sem(id)
+      s
+        .acquire
+        .flatMap(_ => f(lock))
+        .guarantee(s.release)
+    } else {
+      f(existingLock)
     }
   }
-  def delete(id: Id[D]): IO[Option[D]] = for {
-    modifiedId <- preDelete(id)
-    deleted <- get(modifiedId).flatMap {
-      case Some(d) => store.delete(id).map(_ => Some(d))
-      case None => IO.pure(None)
+
+  def modify(id: Id[D])
+            (f: Option[D] => IO[Option[D]])
+            (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Option[D]] = withLock(id) { implicit lock =>
+    get(id).flatMap { option =>
+      f(option).flatMap {
+        case Some(doc) => set(doc)(lock).map(Some.apply)
+        case None => IO.pure(None)
+      }
     }
-    _ <- deleted match {
-      case Some(doc) => postDelete(doc)
-      case None => IO.unit
-    }
-  } yield deleted
+  }
+  def delete(id: Id[D])
+            (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Option[D]] = withLock(id) { implicit lock =>
+    for {
+      modifiedId <- preDelete(id)
+      deleted <- get(modifiedId).flatMap {
+        case Some(d) => store.delete(id).map(_ => Some(d))
+        case None => IO.pure(None)
+      }
+      _ <- deleted match {
+        case Some(doc) => postDelete(doc)
+        case None => IO.unit
+      }
+    } yield deleted
+  }
+
   def truncate(): IO[Unit] = for {
     _ <- store.truncate()
     _ <- _indexedLinks.map(_.store.truncate()).sequence
   } yield ()
 
-  def get(id: Id[D]): IO[Option[D]] = store.getJson(id)
+  def get(id: Id[D]): IO[Option[D]] = store.getJsonDoc(id)
   def apply(id: Id[D]): IO[D] = get(id)
     .map(_.getOrElse(throw new RuntimeException(s"$id not found in $collectionName")))
 

@@ -42,7 +42,7 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
           val id = Id[IndexedLink[D]](key)
           IndexedLink(_id = id, links = List(doc._id))
       }
-      _ <- store.putJson(updated)
+      _ <- store.putJsonDoc(updated)
     } yield ()
   }
 
@@ -61,7 +61,7 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
         case None => None
       }
       _ <- updated match {
-        case Some(l) => store.putJson(l)
+        case Some(l) => store.putJsonDoc(l)
         case None => IO.unit
       }
     } yield ()
@@ -70,7 +70,7 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
   protected[lightdb] def link(value: V): IO[Option[IndexedLink[D]]] = {
     val key = createKey(value)
     val id = Id[IndexedLink[D]](key)
-    store.getJson(id)
+    store.getJsonDoc(id)
   }
 
   def queryIds(value: V): fs2.Stream[IO, Id[D]] = {

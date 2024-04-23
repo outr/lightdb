@@ -1,6 +1,7 @@
 package lightdb
 
 import cats.effect.IO
+import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 
@@ -21,27 +22,28 @@ trait Store {
 
   def dispose(): IO[Unit]
 
-  def streamJson[D: RW]: fs2.Stream[IO, D] = stream[D].map {
+  def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = stream[D].map {
     case (_, bytes) =>
       val jsonString = bytes.string
       val json = JsonParser(jsonString)
       json.as[D]
   }
 
-  def getJson[D: RW](id: Id[D]): IO[Option[D]] = get(id)
+  def getJsonDoc[D: RW](id: Id[D]): IO[Option[D]] = get(id)
     .map(_.map { bytes =>
       val jsonString = bytes.string
       val json = JsonParser(jsonString)
       json.as[D]
     })
 
-  def putJson[D <: Document[D]](doc: D)
-                               (implicit rw: RW[D]): IO[D] = IO {
-    val json = doc.json
-    JsonFormatter.Compact(json)
-  }.flatMap { jsonString =>
-    put(doc._id, jsonString.getBytes).map(_ => doc)
-  }
+  def putJsonDoc[D <: Document[D]](doc: D)
+                                  (implicit rw: RW[D]): IO[D] = IO(doc.json)
+    .flatMap(json => putJson(doc._id, json).map(_ => doc))
+
+  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] = IO(JsonFormatter.Compact(json))
+    .flatMap { jsonString =>
+      put(id, jsonString.getBytes).map(_ => ())
+    }
 
   def truncate(): IO[Unit] = keyStream[Any]
     .evalMap { id =>

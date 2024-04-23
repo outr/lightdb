@@ -1,7 +1,12 @@
 package lightdb
 
 import cats.effect.IO
+import fabric.Json
 
 abstract class RecordDocumentCollection[D <: RecordDocument[D]](collectionName: String, db: LightDB) extends Collection[D](collectionName, db) {
-  override protected def preSet(doc: D): IO[D] = super.preSet(doc.modify())
+  override protected def preSetJson(json: Json): IO[Json] = IO {
+    json.modify("modified") { _ =>
+      System.currentTimeMillis()
+    }
+  }
 }

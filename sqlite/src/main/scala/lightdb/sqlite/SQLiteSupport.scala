@@ -9,6 +9,7 @@ import lightdb.util.FlushingBacklog
 import java.nio.file.Path
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
 
+// TODO: Solve for uncommitted records being deleted leading to them being recreated at commit
 trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   private lazy val path: Path = db.directory.resolve(collectionName).resolve("sqlite.db")
   // TODO: Should each collection have a connection?
@@ -150,5 +151,3 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     connection.close()
   }
 }
-
-case class SQLData[D <: Document[D]](ids: List[Id[D]], lookup: Option[Id[D] => IO[D]])
