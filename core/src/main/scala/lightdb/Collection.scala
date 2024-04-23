@@ -8,13 +8,6 @@ import fabric.rw.RW
 import io.chrisdavenport.keysemaphore.KeySemaphore
 import lightdb.index._
 
-sealed trait DocLock[D <: Document[D]] extends Any
-
-object DocLock {
-  case class Set[D <: Document[D]](id: Id[D]) extends DocLock[D]
-  class Empty[D <: Document[D]] extends DocLock[D]
-}
-
 abstract class Collection[D <: Document[D]](val collectionName: String,
                                             protected[lightdb] val db: LightDB,
                                             val autoCommit: Boolean = false,
