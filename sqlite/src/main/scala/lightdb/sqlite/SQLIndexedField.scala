@@ -12,4 +12,6 @@ case class SQLIndexedField[F, D <: Document[D]](fieldName: String,
   def is(value: F): Filter[D] = SQLFilter[D](s"$fieldName = ?", List(value))
 
   def between(v1: F, v2: F): Filter[D] = SQLFilter[D](s"$fieldName BETWEEN ? AND ?", List(v1, v2))
+
+  def IN(values: Seq[F]): Filter[D] = SQLFilter[D](s"$fieldName IN (${values.map(_ => "?").mkString(", ")})", values.toList)
 }

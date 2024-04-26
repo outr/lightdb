@@ -1,7 +1,7 @@
 package lightdb
 
 import cats.effect.IO
-import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1}
+import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1, toTraverseOps}
 import fabric.rw._
 import lightdb.upgrade.DatabaseUpgrade
 
@@ -22,6 +22,8 @@ abstract class LightDB(val directory: Path) {
 
   def collections: List[Collection[_]]
   def upgrades: List[DatabaseUpgrade]
+
+  def commit(): IO[Unit] = collections.map(_.commit()).sequence.map(_ => ())
 
   protected[lightdb] def verifyInitialized(): Unit = if (!initialized) throw new RuntimeException("Database not initialized!")
 
