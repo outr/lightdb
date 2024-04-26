@@ -9,7 +9,7 @@ case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
                                    sort: List[Sort] = Nil,
                                    scoreDocs: Boolean = false,
                                    pageSize: Int = 1_000,
-                                   countTotal: Boolean = false) {
+                                   countTotal: Boolean = true) {
   def filter(filter: Filter[D]): Query[D] = copy(filter = Some(filter))
   def sort(sort: Sort*): Query[D] = copy(sort = this.sort ::: sort.toList)
   def clearSort: Query[D] = copy(sort = Nil)
@@ -34,4 +34,16 @@ case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
   }
   def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.stream)
+
+  def toIdList: IO[List[Id[D]]] = indexSupport.withSearchContext { implicit context =>
+    idStream.compile.toList
+  }
+
+  def toList: IO[List[D]] = indexSupport.withSearchContext { implicit context =>
+    stream.compile.toList
+  }
+
+  def count: IO[Int] = indexSupport.withSearchContext { implicit context =>
+    idStream.compile.count.map(_.toInt)
+  }
 }
