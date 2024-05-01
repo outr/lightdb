@@ -2,7 +2,8 @@ package lightdb.lucene.index
 
 import lightdb.index.IndexedField
 import lightdb.lucene.LuceneIndexedField
-import lightdb.{Collection, Document}
+import lightdb.Document
+import lightdb.model.Collection
 import org.apache.lucene.search.SortField
 import org.apache.lucene.{document => ld}
 

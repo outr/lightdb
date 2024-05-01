@@ -1,12 +1,13 @@
 package lightdb
 
 import cats.effect.IO
+import lightdb.model.AbstractCollection
 
 case class IndexedLinks[V, D <: Document[D]](name: String,
                                              createKey: V => String,
                                              createV: D => V,
                                              loadStore: () => Store,
-                                             collection: Collection[D],
+                                             collection: AbstractCollection[D],
                                              maxLinks: MaxLinks) {
   lazy val store: Store = loadStore()
 

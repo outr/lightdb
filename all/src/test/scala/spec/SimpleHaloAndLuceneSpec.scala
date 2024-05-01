@@ -7,6 +7,7 @@ import lightdb._
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.LuceneSupport
 import lightdb.lucene.index.{IntField, StringField}
+import lightdb.model.Collection
 import lightdb.sqlite.{SQLIndexedField, SQLiteSupport}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers

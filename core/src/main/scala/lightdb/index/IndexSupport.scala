@@ -1,8 +1,9 @@
 package lightdb.index
 
 import cats.effect.IO
+import lightdb.model.{AbstractCollection, Collection}
 import lightdb.query.{PagedResults, Query, SearchContext}
-import lightdb.{Collection, Document}
+import lightdb.Document
 
 trait IndexSupport[D <: Document[D]] extends Collection[D] {
   lazy val query: Query[D] = Query(this)
@@ -18,13 +19,13 @@ trait IndexSupport[D <: Document[D]] extends Collection[D] {
                offset: Int,
                after: Option[PagedResults[D]]): IO[PagedResults[D]]
 
-  override protected def postSet(doc: D): IO[Unit] = for {
+  override def postSet(doc: D, collection: AbstractCollection[D]): IO[Unit] = for {
     _ <- indexDoc(doc, index.fields)
-    _ <- super.postSet(doc)
+    _ <- super.postSet(doc, collection)
   } yield ()
 
-  override protected def postDelete(doc: D): IO[Unit] = index.delete(doc._id).flatMap { _ =>
-    super.postDelete(doc)
+  override def postDelete(doc: D, collection: AbstractCollection[D]): IO[Unit] = index.delete(doc._id).flatMap { _ =>
+    super.postDelete(doc, collection)
   }
 
   protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit]

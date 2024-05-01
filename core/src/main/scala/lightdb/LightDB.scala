@@ -3,6 +3,7 @@ package lightdb
 import cats.effect.IO
 import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1, toTraverseOps}
 import fabric.rw._
+import lightdb.model.Collection
 import lightdb.upgrade.DatabaseUpgrade
 
 import java.nio.file.Path
