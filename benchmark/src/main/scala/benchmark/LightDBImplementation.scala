@@ -3,9 +3,10 @@ package benchmark
 import cats.effect.IO
 import fabric.rw.RW
 import lightdb.halo.HaloDBSupport
+import lightdb.model.Collection
 import lightdb.sqlite.{SQLData, SQLIndexedField, SQLiteSupport}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Collection, Document, Id, IndexedLinks, LightDB, MaxLinks}
+import lightdb.{Document, Id, IndexedLinks, LightDB, MaxLinks}
 
 import java.nio.file.Paths
 import java.sql.ResultSet

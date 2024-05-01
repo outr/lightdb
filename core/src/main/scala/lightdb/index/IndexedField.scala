@@ -1,6 +1,7 @@
 package lightdb.index
 
-import lightdb.{Collection, Document}
+import lightdb.Document
+import lightdb.model.Collection
 
 trait IndexedField[F, D <: Document[D]] {
   def fieldName: String

@@ -1,67 +1,30 @@
-package lightdb
+package lightdb.model
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import cats.implicits.{catsSyntaxApplicativeByName, toTraverseOps}
-import fabric.Json
-import fabric.rw.RW
+import cats.implicits.toTraverseOps
 import io.chrisdavenport.keysemaphore.KeySemaphore
-import lightdb.index._
+import lightdb.{DocLock, Document, Id, IndexedLinks, LightDB, MaxLinks, Store}
 
-abstract class Collection[D <: Document[D]](val collectionName: String,
-                                            protected[lightdb] val db: LightDB,
-                                            val autoCommit: Boolean = false,
-                                            val atomic: Boolean = true) {
-  type Field[F] = IndexedField[F, D]
-
-  implicit val rw: RW[D]
-
-  protected lazy val store: Store = db.createStoreInternal(collectionName)
-
+trait AbstractCollection[D <: Document[D]] {
   // Id-level locking
   private lazy val sem = KeySemaphore.of[IO, Id[D]](_ => 1L).unsafeRunSync()
 
-  private var _indexedLinks = List.empty[IndexedLinks[_, D]]
+  def model: DocumentModel[D]
+
+  def collectionName: String
+
+  def autoCommit: Boolean
+
+  def atomic: Boolean
+
+  protected[lightdb] def db: LightDB
+
+  protected lazy val store: Store = db.createStoreInternal(collectionName)
 
   def idStream: fs2.Stream[IO, Id[D]] = store.keyStream
 
-  def stream: fs2.Stream[IO, D] = store.streamJsonDocs[D]
-
-  /**
-   * Called before preSetJson and before the data is set to the database
-   */
-  protected def preSet(doc: D): IO[D] = IO.pure(doc)
-
-  /**
-   * Called after preSet and before the data is set to the database
-   */
-  protected def preSetJson(json: Json): IO[Json] = IO.pure(json)
-
-  /**
-   * Called after set
-   */
-  protected def postSet(doc: D): IO[Unit] = for {
-    // Update IndexedLinks
-    _ <- _indexedLinks.map(_.add(doc)).sequence
-    _ <- commit().whenA(autoCommit)
-  } yield ()
-
-  protected def preDelete(id: Id[D]): IO[Id[D]] = IO.pure(id)
-
-  protected def postDelete(doc: D): IO[Unit] = for {
-    // Update IndexedLinks
-    _ <- _indexedLinks.map(_.remove(doc)).sequence
-    _ <- commit().whenA(autoCommit)
-  } yield ()
-
-  def set(doc: D)(implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[D] = withLock(doc._id) { _ =>
-    for {
-      modified <- preSet(doc)
-      json <- preSetJson(rw.read(doc))
-      _ <- store.putJson(doc._id, json)
-      _ <- postSet(doc)
-    } yield modified
-  }
+  def stream: fs2.Stream[IO, D] = store.streamJsonDocs[D](model.rw)
 
   def withLock[Return](id: Id[D])(f: DocLock[D] => IO[Return])
                       (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Return] = {
@@ -82,6 +45,15 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
     }
   }
 
+  def set(doc: D)(implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[D] = withLock(doc._id) { _ =>
+    for {
+      modified <- model.preSet(doc, this)
+      json <- model.preSetJson(model.rw.read(doc), this)
+      _ <- store.putJson(doc._id, json)
+      _ <- model.postSet(doc, this)
+    } yield modified
+  }
+
   def modify(id: Id[D])
             (f: Option[D] => IO[Option[D]])
             (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Option[D]] = withLock(id) { implicit lock =>
@@ -92,16 +64,17 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
       }
     }
   }
+
   def delete(id: Id[D])
             (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Option[D]] = withLock(id) { implicit lock =>
     for {
-      modifiedId <- preDelete(id)
+      modifiedId <- model.preDelete(id, this)
       deleted <- get(modifiedId).flatMap {
         case Some(d) => store.delete(id).map(_ => Some(d))
         case None => IO.pure(None)
       }
       _ <- deleted match {
-        case Some(doc) => postDelete(doc)
+        case Some(doc) => model.postDelete(doc, this)
         case None => IO.unit
       }
     } yield deleted
@@ -109,12 +82,19 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
 
   def truncate(): IO[Unit] = for {
     _ <- store.truncate()
-    _ <- _indexedLinks.map(_.store.truncate()).sequence
+    _ <- model.indexedLinks.map(_.store.truncate()).sequence
   } yield ()
 
-  def get(id: Id[D]): IO[Option[D]] = store.getJsonDoc(id)
+  def get(id: Id[D]): IO[Option[D]] = store.getJsonDoc(id)(model.rw)
+
   def apply(id: Id[D]): IO[D] = get(id)
     .map(_.getOrElse(throw new RuntimeException(s"$id not found in $collectionName")))
+
+  def size: IO[Int] = store.size
+
+  def commit(): IO[Unit] = store.commit()
+
+  def dispose(): IO[Unit] = IO.unit
 
   /**
    * Creates a key/value stored object with a list of links. This can be incredibly efficient for small lists, but much
@@ -133,23 +113,8 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
       maxLinks = maxLinks
     )
     synchronized {
-      _indexedLinks = il :: _indexedLinks
+      model._indexedLinks = il :: model._indexedLinks
     }
     il
   }
-
-  def size: IO[Int] = store.size
-
-  def commit(): IO[Unit] = store.commit()
-
-  def dispose(): IO[Unit] = IO.unit
-}
-
-object Collection {
-  def apply[D <: Document[D]](collectionName: String,
-                              db: LightDB,
-                              autoCommit: Boolean = false)(implicit docRW: RW[D]): Collection[D] =
-    new Collection[D](collectionName, db, autoCommit = autoCommit) {
-      override implicit val rw: RW[D] = docRW
-    }
 }

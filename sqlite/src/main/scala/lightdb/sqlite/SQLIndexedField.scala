@@ -2,7 +2,8 @@ package lightdb.sqlite
 
 import lightdb.index.IndexedField
 import lightdb.query.Filter
-import lightdb.{Collection, Document}
+import lightdb.Document
+import lightdb.model.Collection
 
 case class SQLIndexedField[F, D <: Document[D]](fieldName: String,
                                                 collection: Collection[D],

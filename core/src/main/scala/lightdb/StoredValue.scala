@@ -2,6 +2,7 @@ package lightdb
 
 import cats.effect.IO
 import fabric.rw._
+import lightdb.model.Collection
 
 case class StoredValue[T](key: String,
                           collection: Collection[KeyValue],

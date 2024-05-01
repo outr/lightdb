@@ -1,8 +1,9 @@
 package lightdb.index
 
 import cats.effect.IO
+import lightdb.model.Collection
 import lightdb.query.SearchContext
-import lightdb.{Collection, Document, Id, query}
+import lightdb.{Document, Id, query}
 
 trait Indexer[D <: Document[D]] {
   protected var _fields = List.empty[IndexedField[_, D]]
