@@ -1,6 +1,7 @@
 package lightdb.sqlite
 
 import cats.effect.IO
+import fabric.rw.RW
 import lightdb.{Document, Id}
 import lightdb.index.Indexer
 import lightdb.query.SearchContext
@@ -11,7 +12,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D]) exten
     f(context)
   }
 
-  def apply[F](name: String, get: D => Option[F]): SQLIndexedField[F, D] = SQLIndexedField(
+  def apply[F](name: String, get: D => Option[F])(implicit rw: RW[F]): SQLIndexedField[F, D] = SQLIndexedField(
     fieldName = name,
     collection = indexSupport,
     get = get

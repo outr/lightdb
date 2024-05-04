@@ -1,6 +1,8 @@
 package lightdb.sqlite
 
 import cats.effect.IO
+import fabric._
+import fabric.io.JsonFormatter
 import lightdb.{Document, Id}
 import lightdb.index.{IndexSupport, IndexedField}
 import lightdb.query.{PagedResults, Query, SearchContext}
@@ -41,7 +43,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       val ps = connection.prepareStatement(sql)
       try {
         list.foreach { doc =>
-          index.fields.map(_.get(doc)).zipWithIndex.foreach {
+          index.fields.map(_.getJson(doc)).zipWithIndex.foreach {
             case (value, index) => setValue(ps, index + 1, value)
           }
           ps.addBatch()
@@ -57,11 +59,11 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
                         context: SearchContext[D],
                         offset: Int,
                         after: Option[PagedResults[D]]): IO[PagedResults[D]] = IO {
-    var params = List.empty[Option[Any]]
+    var params = List.empty[Json]
     val filters = query.filter match {
       case Some(f) =>
         val filter = f.asInstanceOf[SQLPart]
-        params = params ::: filter.args.map(Option.apply)
+        params = params ::: filter.args
         s"WHERE\n  ${filter.sql}"
       case None => ""
     }
@@ -124,7 +126,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] =
     backlog.enqueue(doc).map(_ => ())
 
-  private def prepare(sql: String, params: List[Option[Any]]): PreparedStatement = {
+  private def prepare(sql: String, params: List[Json]): PreparedStatement = {
     val ps = connection.prepareStatement(sql)
     params.zipWithIndex.foreach {
       case (value, index) => setValue(ps, index + 1, value)
@@ -132,15 +134,13 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     ps
   }
 
-  private def setValue(ps: PreparedStatement, index: Int, value: Option[Any]): Unit = value match {
-    case Some(v) => v match {
-      case s: String => ps.setString(index, s)
-      case i: Int => ps.setInt(index, i)
-      case b: Boolean => ps.setBoolean(index, b)
-      case id: Id[_] => ps.setString(index, id.value)
-      case _ => throw new RuntimeException(s"Unsupported value for $collectionName (index: $index): $value")
-    }
-    case None => ps.setNull(index, Types.NULL)
+  private def setValue(ps: PreparedStatement, index: Int, value: Json): Unit = value match {
+    case Null => ps.setNull(index, Types.NULL)
+    case Str(s, _) => ps.setString(index, s)
+    case Bool(b, _) => ps.setBoolean(index, b)
+    case NumInt(l, _) => ps.setLong(index, l)
+    case NumDec(bd, _) => ps.setBigDecimal(index, bd.bigDecimal)
+    case _ => ps.setString(index, JsonFormatter.Compact(value))
   }
 
   override def commit(): IO[Unit] = super.commit().flatMap { _ =>

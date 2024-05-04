@@ -10,7 +10,9 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import scribe.cats.{io => logger}
 
-abstract class LightDB(val directory: Path) {
+abstract class LightDB {
+  def directory: Path
+
   private val _initialized = new AtomicBoolean(false)
 
   private var stores = List.empty[Store]
@@ -30,7 +32,7 @@ abstract class LightDB(val directory: Path) {
 
   def init(truncate: Boolean = false): IO[Unit] = if (_initialized.compareAndSet(false, true)) {
     for {
-      _ <- logger.info(s"LightDB initializing...")
+      _ <- logger.info(s"LightDB initializing ${directory.getFileName.toString}...")
       // Truncate the database before we do anything if specified
       _ <- this.truncate().whenA(truncate)
       // Determine if this is an uninitialized database

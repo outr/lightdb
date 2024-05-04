@@ -14,7 +14,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import scribe.{Level, Logger}
 
-import java.nio.file.Paths
+import java.nio.file.{Path, Paths}
 
 class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   private val id1 = Id[Person]("john")
@@ -214,7 +214,8 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
   }
 
-  object DB extends LightDB(directory = Paths.get("testdb")) with HaloDBSupport {
+  object DB extends LightDB with HaloDBSupport {
+    override lazy val directory: Path = Paths.get("testdb")
 //    override protected def autoCommit: Boolean = true
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
