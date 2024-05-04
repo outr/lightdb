@@ -1,7 +1,9 @@
 package lightdb.sqlite
 
+import fabric.Json
+
 trait SQLPart {
   def sql: String
 
-  def args: List[Any]
+  def args: List[Json]
 }

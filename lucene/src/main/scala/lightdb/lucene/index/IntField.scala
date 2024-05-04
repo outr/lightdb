@@ -1,5 +1,6 @@
 package lightdb.lucene.index
 
+import fabric.rw.RW
 import lightdb.lucene.{LuceneFilter, LuceneIndexedField}
 import lightdb.query.Filter
 import lightdb.Document
@@ -10,7 +11,8 @@ import org.apache.lucene.{document => ld}
 
 case class IntField[D <: Document[D]](fieldName: String,
                                       collection: Collection[D],
-                                      get: D => Option[Int]) extends LuceneIndexedField[Int, D] {
+                                      get: D => Option[Int])
+                                     (implicit val rw: RW[Int]) extends LuceneIndexedField[Int, D] {
   def ===(value: Int): Filter[D] = is(value)
 
   def is(value: Int): Filter[D] = LuceneFilter(() => ld.IntField.newExactQuery(fieldName, value))
