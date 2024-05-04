@@ -1,7 +1,7 @@
 package lightdb.model
 
 import cats.effect.IO
-import fabric.Json
+import fabric._
 import lightdb.RecordDocument
 
 trait RecordDocumentModel[D <: RecordDocument[D]] extends DocumentModel[D] {
