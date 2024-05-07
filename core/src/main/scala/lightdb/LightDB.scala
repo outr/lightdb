@@ -28,7 +28,7 @@ abstract class LightDB {
 
   def commit(): IO[Unit] = collections.map(_.commit()).sequence.map(_ => ())
 
-  protected[lightdb] def verifyInitialized(): Unit = if (!initialized) throw new RuntimeException("Database not initialized!")
+  protected[lightdb] def verifyInitialized(): Unit = if (!initialized) throw new RuntimeException(s"Database not initialized ($directory)!")
 
   def init(truncate: Boolean = false): IO[Unit] = if (_initialized.compareAndSet(false, true)) {
     for {

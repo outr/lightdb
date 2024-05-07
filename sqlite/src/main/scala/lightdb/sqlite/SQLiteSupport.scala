@@ -5,7 +5,7 @@ import fabric._
 import fabric.io.JsonFormatter
 import lightdb.{Document, Id}
 import lightdb.index.{IndexSupport, IndexedField}
-import lightdb.query.{PagedResults, Query, SearchContext}
+import lightdb.query.{PagedResults, Query, SearchContext, Sort}
 import lightdb.util.FlushingBacklog
 
 import java.nio.file.Path
@@ -84,12 +84,20 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     } else {
       -1
     }
-    // TODO: Add sort
+    val sort = query.sort.collect {
+      case Sort.ByField(field, reverse) =>
+        val dir = if (reverse) "DESC" else "ASC"
+        s"${field.fieldName} $dir"
+    } match {
+      case Nil => ""
+      case list => list.mkString("ORDER BY ", ", ", "")
+    }
     val sql = s"""SELECT
                  |  *
                  |FROM
                  |  $collectionName
                  |$filters
+                 |$sort
                  |LIMIT
                  |  ${query.pageSize}
                  |OFFSET
@@ -126,12 +134,14 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] =
     backlog.enqueue(doc).map(_ => ())
 
-  private def prepare(sql: String, params: List[Json]): PreparedStatement = {
+  private def prepare(sql: String, params: List[Json]): PreparedStatement = try {
     val ps = connection.prepareStatement(sql)
     params.zipWithIndex.foreach {
       case (value, index) => setValue(ps, index + 1, value)
     }
     ps
+  } catch {
+    case t: Throwable => throw new RuntimeException(s"Error handling SQL query: $sql (params: ${params.mkString(", ")})", t)
   }
 
   private def setValue(ps: PreparedStatement, index: Int, value: Json): Unit = value match {

@@ -2,7 +2,7 @@ package lightdb.model
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import cats.implicits.toTraverseOps
+import cats.implicits._
 import io.chrisdavenport.keysemaphore.KeySemaphore
 import lightdb.{DocLock, Document, Id, IndexedLinks, LightDB, MaxLinks, Store}
 
@@ -83,6 +83,7 @@ trait AbstractCollection[D <: Document[D]] {
   def truncate(): IO[Unit] = for {
     _ <- store.truncate()
     _ <- model.indexedLinks.map(_.store.truncate()).sequence
+    _ <- commit().whenA(autoCommit)
   } yield ()
 
   def get(id: Id[D]): IO[Option[D]] = store.getJsonDoc(id)(model.rw)
