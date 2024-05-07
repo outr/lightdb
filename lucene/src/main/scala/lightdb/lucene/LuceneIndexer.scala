@@ -15,6 +15,7 @@ import org.apache.lucene.document.{Document => LuceneDocument, Field => LuceneFi
 
 import java.nio.file.{Files, Path}
 import java.util.concurrent.ConcurrentHashMap
+import fabric.rw._
 
 case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
                                            persistent: Boolean = true,
