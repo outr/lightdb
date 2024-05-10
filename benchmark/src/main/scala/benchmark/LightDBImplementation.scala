@@ -8,7 +8,7 @@ import lightdb.sqlite.{SQLData, SQLIndexedField, SQLiteSupport}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Document, Id, IndexedLinks, LightDB, MaxLinks}
 
-import java.nio.file.Paths
+import java.nio.file.{Path, Paths}
 import java.sql.ResultSet
 
 object LightDBImplementation extends BenchmarkImplementation {
@@ -88,8 +88,10 @@ object LightDBImplementation extends BenchmarkImplementation {
   }
 
 //  object DB extends LightDB(directory = Paths.get("imdb"), maxFileSize = 1024 * 1024 * 1024) {
-  object DB extends LightDB(directory = Paths.get("imdb")) with HaloDBSupport {
-    override def maxFileSize: Int = 1024 * 1024 * 1024
+  object DB extends LightDB with HaloDBSupport {
+  override def directory: Path = Paths.get("imdb")
+
+  override def maxFileSize: Int = 1024 * 1024 * 1024
 
   //    val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
 //    val titleBasics: Collection[TitleBasicsLDB] = collection("titleBasics", TitleBasicsLDB)
