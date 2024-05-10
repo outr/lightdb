@@ -1,6 +1,7 @@
 package lightdb.model
 
 import cats.effect.IO
+import cats.implicits.toTraverseOps
 
 class UnitActions {
   private var list = List.empty[() => IO[Unit]]

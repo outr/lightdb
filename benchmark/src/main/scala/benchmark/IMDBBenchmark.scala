@@ -16,43 +16,11 @@ import scala.annotation.tailrec
 import sys.process._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
-// ArangoDB Sync - Total Akas: 999999 and Total Basics: 999999 in 94.616 seconds (21138.1 per second)
-// ArangoDB Async - Total Akas: 999999 and Total Basics: 999999 in 71.579 seconds (27941.1 per second)
-// Scarango - Total Akas: 999999 and Total Basics: 999999 in 198.089 seconds (10096.5 per second)
-// Scarango - Total Akas: 999999 and Total Basics: 999999 in 158.873 seconds (12588.7 per second) - with rewrite
-// MongoDB - Total Akas: 999999 and Total Basics: 999999 in 69.857 seconds (28629.9 per second)
-
-
-// PostgreSQL - Total: 26838043 in 547.247 seconds (49041.9 per second)
-// MongoDB - Total: 26838043 in 605.694 seconds (44309.6 per second)
-// LightDB - Total: 26838043 in 280.04 seconds (95836.5 per second) - (HaloDB / NullIndexer)
-// LightDB - Total: 26838043 in 9016.418 seconds (2976.6 per second) - (HaloDB / Lucene)
-
-// LightDB    - Total: 999999 in 186.082 seconds (5374.0 per second) - 16 threads (HaloDB / Lucene)
-// LightDB    - Total: 999999 in 261.31 seconds (3826.9 per second) - 16 threads (MapDB / Lucene)
-// LightDB    - Total: 999999 in 183.937 seconds (5436.6 per second) - 16 threads (NullStore / Lucene)
-// LightDB    - Total: 999999 in 11.715 seconds (85360.6 per second) - 16 threads (HaloDB / NullIndexer)
-
-// MongoDB    - Total: 999999 in 19.165 seconds (52178.4 per second)
-// PostgreSQL - Total: 999999 in 15.947 seconds (62707.7 per second)
-
-/*
-[info] 2022.08.06 08:43:21:265 io-compute-17 INFO benchmark.IMDBBenchmark.io:90
-[info]     Scarango - Total Akas: 999999 and Total Basics: 999999 in 162.301 seconds (12322.8 per second)
-[info]       akasFile: 0.011s, akasProcess: 32.025s, basicsFile: 0.002s, basicsProcess: 31.846
-[info]       flushing: 0.054s, verifiedAka: 0.125s, verifiedBasics: 0.131s, cycle: 12.752s
-[info]       validateIds: 14.551s, validateTitles: 69.982s
-
-[info]     ArangoDB Async - Total Akas: 999999 and Total Basics: 999999 in 66.557 seconds (30049.4 per second)
-[info]       akasFile: 0.008s, akasProcess: 6.429s, basicsFile: 0.001s, basicsProcess: 6.762
-[info]       flushing: 0.012s, verifiedAka: 0.003s, verifiedBasics: 0.002s, cycle: 6.324s
-[info]       validateIds: 13.934s, validateTitles: 32.540s
- */
 object IMDBBenchmark { // extends IOApp {
-  val limit: Limit = Limit.Unlimited
+  val limit: Limit = Limit.OneMillion
 
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = LightDBImplementation
+  val implementation: BenchmarkImplementation = SQLiteImplementation
 
   private var ids: List[Ids] = Nil
 
