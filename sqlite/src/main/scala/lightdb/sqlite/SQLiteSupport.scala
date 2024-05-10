@@ -12,7 +12,6 @@ import lightdb.util.FlushingBacklog
 import java.nio.file.Path
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
 
-// TODO: Solve for uncommitted records being deleted leading to them being recreated at commit
 trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   private lazy val path: Path = collection.db.directory.resolve(collection.collectionName).resolve("sqlite.db")
   // TODO: Should each collection have a connection?
@@ -38,7 +37,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
 
   val _id: SQLIndexedField[Id[D], D] = index("_id", doc => Some(doc._id))
 
-  private lazy val backlog = new FlushingBacklog[D](10_000, 100_000) {
+  private[sqlite] lazy val backlog = new FlushingBacklog[Id[D], D](10_000, 100_000) {
     override protected def write(list: List[D]): IO[Unit] = IO {
       val sql = s"INSERT OR REPLACE INTO ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}) VALUES (${index.fields.map(_ => "?").mkString(", ")})"
       val ps = connection.prepareStatement(sql)
@@ -133,7 +132,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   }
 
   override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] =
-    backlog.enqueue(doc).map(_ => ())
+    backlog.enqueue(doc._id, doc).map(_ => ())
 
   private def prepare(sql: String, params: List[Json]): PreparedStatement = try {
     val ps = connection.prepareStatement(sql)

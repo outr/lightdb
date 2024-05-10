@@ -54,7 +54,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
     ).asJava)
   }
 
-  private lazy val backlogAka = new FlushingBacklog[Document](1000, 10000) {
+  private lazy val backlogAka = new FlushingBacklog[String, Document](1000, 10000) {
     override protected def write(list: List[Document]): IO[Unit] = IO {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)
@@ -63,7 +63,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
     }
   }
 
-  private lazy val backlogBasics = new FlushingBacklog[Document](1000, 10000) {
+  private lazy val backlogBasics = new FlushingBacklog[String, Document](1000, 10000) {
     override protected def write(list: List[Document]): IO[Unit] = IO {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)
@@ -76,9 +76,9 @@ object MongoDBImplementation extends BenchmarkImplementation {
     titleAka.createIndex(Indexes.ascending("titleId"))
   }
 
-  override def persistTitleAka(t: Document): IO[Unit] = backlogAka.enqueue(t).map(_ => ())
+  override def persistTitleAka(t: Document): IO[Unit] = backlogAka.enqueue(t.getString("_id"), t).map(_ => ())
 
-  override def persistTitleBasics(t: Document): IO[Unit] = backlogBasics.enqueue(t).map(_ => ())
+  override def persistTitleBasics(t: Document): IO[Unit] = backlogBasics.enqueue(t.getString("_id"), t).map(_ => ())
 
   override def streamTitleAka(): fs2.Stream[IO, Document] = {
     val iterator: Iterator[Document] = titleAka.find().iterator().asScala

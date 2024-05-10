@@ -18,7 +18,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     c
   }
 
-  private lazy val backlogAka = new FlushingBacklog[TitleAka](1000, 10000) {
+  private lazy val backlogAka = new FlushingBacklog[String, TitleAka](1000, 10000) {
     override protected def write(list: List[TitleAkaPG]): IO[Unit] = IO {
       val ps = connection.prepareStatement("INSERT INTO title_aka(id, titleId, ordering, title, region, language, types, attributes, isOriginalTitle) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
@@ -41,7 +41,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     }
   }
 
-  private lazy val backlogBasics = new FlushingBacklog[TitleBasics](1000, 10000) {
+  private lazy val backlogBasics = new FlushingBacklog[String, TitleBasics](1000, 10000) {
     override protected def write(list: List[TitleBasicsPG]): IO[Unit] = IO {
       val ps = connection.prepareStatement("INSERT INTO title_basics(id, tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genres) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
@@ -100,9 +100,9 @@ object PostgresImplementation extends BenchmarkImplementation {
     genres = map.value("genres")
   )
 
-  override def persistTitleAka(t: TitleAka): IO[Unit] = backlogAka.enqueue(t).map(_ => ())
+  override def persistTitleAka(t: TitleAka): IO[Unit] = backlogAka.enqueue(t.id, t).map(_ => ())
 
-  override def persistTitleBasics(t: TitleBasicsPG): IO[Unit] = backlogBasics.enqueue(t).map(_ => ())
+  override def persistTitleBasics(t: TitleBasicsPG): IO[Unit] = backlogBasics.enqueue(t.id, t).map(_ => ())
 
   private def fromRS(rs: ResultSet): TitleAkaPG = TitleAkaPG(
     id = rs.getString("id"),
