@@ -20,7 +20,7 @@ object IMDBBenchmark { // extends IOApp {
   val limit: Limit = Limit.OneMillion
 
   implicit val runtime: IORuntime = IORuntime.global
-  val implementation: BenchmarkImplementation = SQLiteImplementation
+  val implementation: BenchmarkImplementation = LightDBImplementation
 
   private var ids: List[Ids] = Nil
 

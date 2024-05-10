@@ -31,6 +31,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
   }
 
   override private[lightdb] def delete(id: Id[D]): IO[Unit] = IO {
+    indexSupport.backlog.remove(id)
     val ps = indexSupport.connection.prepareStatement(s"DELETE FROM ${collection().collectionName} WHERE _id = ?")
     try {
       ps.setString(1, id.value)

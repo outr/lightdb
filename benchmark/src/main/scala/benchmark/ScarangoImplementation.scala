@@ -12,11 +12,11 @@ object ScarangoImplementation extends BenchmarkImplementation {
   override type TitleAka = TitleAkaADB
   override type TitleBasics = TitleBasicsADB
 
-  private lazy val backlogAka = new FlushingBacklog[TitleAkaADB](1000, 10000) {
+  private lazy val backlogAka = new FlushingBacklog[Id[TitleAkaADB], TitleAkaADB](1000, 10000) {
     override protected def write(list: List[TitleAkaADB]): IO[Unit] = db.titleAka.batch.insert(list).map(_ => ())
   }
 
-  private lazy val backlogBasics = new FlushingBacklog[TitleBasicsADB](1000, 10000) {
+  private lazy val backlogBasics = new FlushingBacklog[Id[TitleBasicsADB], TitleBasicsADB](1000, 10000) {
     override protected def write(list: List[TitleBasicsADB]): IO[Unit] =
       db.titleBasics.batch.insert(list).map(_ => ())
   }
@@ -52,9 +52,9 @@ object ScarangoImplementation extends BenchmarkImplementation {
     genres = map.list("genres")
   )
 
-  override def persistTitleAka(t: TitleAkaADB): IO[Unit] = backlogAka.enqueue(t).map(_ => ())
+  override def persistTitleAka(t: TitleAkaADB): IO[Unit] = backlogAka.enqueue(t._id, t).map(_ => ())
 
-  override def persistTitleBasics(t: TitleBasicsADB): IO[Unit] = backlogBasics.enqueue(t).map(_ => ())
+  override def persistTitleBasics(t: TitleBasicsADB): IO[Unit] = backlogBasics.enqueue(t._id, t).map(_ => ())
 
   override def flush(): IO[Unit] = for {
     _ <- backlogAka.flush()
