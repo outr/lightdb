@@ -4,13 +4,14 @@ import fabric.rw.RW
 import lightdb.lucene.{LuceneFilter, LuceneIndexedField}
 import lightdb.query.Filter
 import lightdb.Document
-import lightdb.model.Collection
+import lightdb.index.IndexSupport
+import lightdb.model.{AbstractCollection, Collection}
 import org.apache.lucene.index.Term
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, SortField, TermQuery}
 import org.apache.lucene.{document => ld}
 
 case class StringField[D <: Document[D]](fieldName: String,
-                                         collection: Collection[D],
+                                         indexSupport: IndexSupport[D],
                                          get: D => Option[String],
                                          store: Boolean)
                                         (implicit val rw: RW[String]) extends LuceneIndexedField[String, D] {

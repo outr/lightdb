@@ -3,13 +3,14 @@ package lightdb.lucene.index
 import fabric.rw.RW
 import lightdb.lucene.LuceneIndexedField
 import lightdb.Document
-import lightdb.model.Collection
+import lightdb.index.IndexSupport
+import lightdb.model.{AbstractCollection, Collection}
 import org.apache.lucene.document.Field
 import org.apache.lucene.search.SortField
 import org.apache.lucene.{document => ld}
 
 case class DoubleField[D <: Document[D]](fieldName: String,
-                                         collection: Collection[D],
+                                         indexSupport: IndexSupport[D],
                                          get: D => Option[Double])
                                         (implicit val rw: RW[Double]) extends LuceneIndexedField[Double, D] {
   override protected[lightdb] def createFields(doc: D): List[Field] = get(doc).toList.map { value =>

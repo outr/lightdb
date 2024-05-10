@@ -5,6 +5,7 @@ import fabric._
 import fabric.io.JsonFormatter
 import lightdb.{Document, Id}
 import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.model.AbstractCollection
 import lightdb.query.{PagedResults, Query, SearchContext, Sort}
 import lightdb.util.FlushingBacklog
 
@@ -13,18 +14,18 @@ import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
 
 // TODO: Solve for uncommitted records being deleted leading to them being recreated at commit
 trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
-  private lazy val path: Path = db.directory.resolve(collectionName).resolve("sqlite.db")
+  private lazy val path: Path = collection.db.directory.resolve(collection.collectionName).resolve("sqlite.db")
   // TODO: Should each collection have a connection?
   private[sqlite] lazy val connection: Connection = {
     val c = DriverManager.getConnection(s"jdbc:sqlite:${path.toFile.getCanonicalPath}")
     c.setAutoCommit(false)
     val s = c.createStatement()
     try {
-      s.executeUpdate(s"CREATE TABLE IF NOT EXISTS $collectionName(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
+      s.executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
       index.fields.foreach { f =>
         if (f.fieldName != "_id") {
           val indexName = s"${f.fieldName}_idx"
-          s.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON $collectionName(${f.fieldName})")
+          s.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON ${collection.collectionName}(${f.fieldName})")
         }
       }
     } finally {
@@ -33,13 +34,13 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     c
   }
 
-  override lazy val index: SQLiteIndexer[D] = SQLiteIndexer(this)
+  override lazy val index: SQLiteIndexer[D] = SQLiteIndexer(this, () => collection)
 
   val _id: SQLIndexedField[Id[D], D] = index("_id", doc => Some(doc._id))
 
   private lazy val backlog = new FlushingBacklog[D](10_000, 100_000) {
     override protected def write(list: List[D]): IO[Unit] = IO {
-      val sql = s"INSERT OR REPLACE INTO $collectionName(${index.fields.map(_.fieldName).mkString(", ")}) VALUES (${index.fields.map(_ => "?").mkString(", ")})"
+      val sql = s"INSERT OR REPLACE INTO ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}) VALUES (${index.fields.map(_ => "?").mkString(", ")})"
       val ps = connection.prepareStatement(sql)
       try {
         list.foreach { doc =>
@@ -71,7 +72,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       val sqlCount = s"""SELECT
                         |  COUNT(*)
                         |FROM
-                        |  $collectionName
+                        |  ${collection.collectionName}
                         |$filters
                         |""".stripMargin
       val countPs = prepare(sqlCount, params)
@@ -95,7 +96,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     val sql = s"""SELECT
                  |  *
                  |FROM
-                 |  $collectionName
+                 |  ${collection.collectionName}
                  |$filters
                  |$sort
                  |LIMIT
@@ -153,11 +154,9 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     case _ => ps.setString(index, JsonFormatter.Compact(value))
   }
 
-  override def commit(): IO[Unit] = super.commit().flatMap { _ =>
-    backlog.flush()
-  }
-
-  override def dispose(): IO[Unit] = super.dispose().map { _ =>
-    connection.close()
+  override protected[lightdb] def initModel(collection: AbstractCollection[D]): Unit = {
+    super.initModel(collection)
+    collection.commitActions.add(backlog.flush())
+    collection.disposeActions.add(IO(connection.close()))
   }
 }

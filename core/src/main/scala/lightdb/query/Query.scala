@@ -2,9 +2,11 @@ package lightdb.query
 
 import cats.effect.IO
 import lightdb.index.IndexSupport
+import lightdb.model.AbstractCollection
 import lightdb.{Document, Id}
 
 case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
+                                   collection: AbstractCollection[D],
                                    filter: Option[Filter[D]] = None,
                                    sort: List[Sort] = Nil,
                                    scoreDocs: Boolean = false,

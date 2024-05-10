@@ -1,14 +1,30 @@
 package lightdb.index
 
 import cats.effect.IO
-import lightdb.model.{AbstractCollection, Collection}
+import lightdb.model.{AbstractCollection, Collection, DocumentAction, DocumentListener, DocumentModel}
 import lightdb.query.{PagedResults, Query, SearchContext}
 import lightdb.Document
 
-trait IndexSupport[D <: Document[D]] extends Collection[D] {
-  lazy val query: Query[D] = Query(this)
+trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
+  private var _collection: Option[AbstractCollection[D]] = None
+  protected def collection: AbstractCollection[D] = this match {
+    case c: AbstractCollection[_] => c.asInstanceOf[AbstractCollection[D]]
+    case _ => _collection.getOrElse(throw new RuntimeException("DocumentModel not initialized with Collection (yet)"))
+  }
 
-  override def commit(): IO[Unit] = super.commit().flatMap(_ => index.commit())
+  lazy val query: Query[D] = Query(this, collection)
+
+  override protected[lightdb] def initModel(collection: AbstractCollection[D]): Unit = {
+    super.initModel(collection)
+    _collection = Some(collection)
+    collection.commitActions += index.commit()
+    collection.postSet += ((action: DocumentAction, doc: D, collection: AbstractCollection[D]) => {
+      indexDoc(doc, index.fields).map(_ => Some(doc))
+    })
+    collection.postDelete += ((action: DocumentAction, doc: D, collection: AbstractCollection[D]) => {
+      index.delete(doc._id).map(_ => Some(doc))
+    })
+  }
 
   def index: Indexer[D]
 
@@ -18,15 +34,6 @@ trait IndexSupport[D <: Document[D]] extends Collection[D] {
                context: SearchContext[D],
                offset: Int,
                after: Option[PagedResults[D]]): IO[PagedResults[D]]
-
-  override def postSet(doc: D, collection: AbstractCollection[D]): IO[Unit] = for {
-    _ <- indexDoc(doc, index.fields)
-    _ <- super.postSet(doc, collection)
-  } yield ()
-
-  override def postDelete(doc: D, collection: AbstractCollection[D]): IO[Unit] = index.delete(doc._id).flatMap { _ =>
-    super.postDelete(doc, collection)
-  }
 
   protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit]
 }

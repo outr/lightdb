@@ -4,9 +4,10 @@ import cats.effect.IO
 import fabric.rw.RW
 import lightdb.{Document, Id}
 import lightdb.index.Indexer
+import lightdb.model.AbstractCollection
 import lightdb.query.SearchContext
 
-case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D]) extends Indexer[D] {
+case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], collection: () => AbstractCollection[D]) extends Indexer[D] {
   override def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return] = {
     val context = SearchContext(indexSupport)
     f(context)
@@ -14,12 +15,12 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D]) exten
 
   def apply[F](name: String, get: D => Option[F])(implicit rw: RW[F]): SQLIndexedField[F, D] = SQLIndexedField(
     fieldName = name,
-    collection = indexSupport,
+    indexSupport = indexSupport,
     get = get
   )
 
   override def count(): IO[Int] = IO {
-    val ps = indexSupport.connection.prepareStatement(s"SELECT COUNT(_id) FROM ${indexSupport.collectionName}")
+    val ps = indexSupport.connection.prepareStatement(s"SELECT COUNT(_id) FROM ${collection().collectionName}")
     try {
       val rs = ps.executeQuery()
       rs.next()
@@ -30,7 +31,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D]) exten
   }
 
   override private[lightdb] def delete(id: Id[D]): IO[Unit] = IO {
-    val ps = indexSupport.connection.prepareStatement(s"DELETE FROM ${indexSupport.collectionName} WHERE _id = ?")
+    val ps = indexSupport.connection.prepareStatement(s"DELETE FROM ${collection().collectionName} WHERE _id = ?")
     try {
       ps.setString(1, id.value)
       ps.executeUpdate()

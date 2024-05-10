@@ -16,12 +16,14 @@ import org.apache.lucene.document.{Document => LuceneDocument, Field => LuceneFi
 import java.nio.file.{Files, Path}
 import java.util.concurrent.ConcurrentHashMap
 import fabric.rw._
+import lightdb.model.AbstractCollection
 
 case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
+                                           collection: AbstractCollection[D],
                                            persistent: Boolean = true,
                                            analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] {
   private lazy val path: Option[Path] = if (persistent) {
-    val p = indexSupport.db.directory.resolve(indexSupport.collectionName).resolve("index")
+    val p = collection.db.directory.resolve(collection.collectionName).resolve("index")
     Files.createDirectories(p)
     Some(p)
   } else {

@@ -155,7 +155,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "delete John" in {
       Person.delete(id1).map { deleted =>
-        deleted should not be empty
+        deleted should be(id1)
       }
     }
     "verify exactly one object in data" in {

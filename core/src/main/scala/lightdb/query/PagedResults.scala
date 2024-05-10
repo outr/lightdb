@@ -19,11 +19,11 @@ case class PagedResults[D <: Document[D]](query: Query[D],
     .evalMap { id =>
       getter match {
         case Some(g) => g(id)
-        case None => query.indexSupport(id)
+        case None => query.collection(id)
       }
     }
 
-  def docs: IO[List[D]] = ids.map(id => query.indexSupport(id)).sequence
+  def docs: IO[List[D]] = ids.map(id => query.collection(id)).sequence
 
   def hasNext: Boolean = pages > (page + 1)
 
