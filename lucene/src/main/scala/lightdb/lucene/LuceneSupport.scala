@@ -18,7 +18,7 @@ import java.nio.file.{Files, Path}
 import java.util.concurrent.ConcurrentHashMap
 
 trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
-  override lazy val index: LuceneIndexer[D] = LuceneIndexer(this)
+  override lazy val index: LuceneIndexer[D] = LuceneIndexer(this, collection)
 
   val _id: StringField[D] = index("_id").string(_._id.value, store = true)
 

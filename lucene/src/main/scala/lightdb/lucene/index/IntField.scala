@@ -4,13 +4,14 @@ import fabric.rw.RW
 import lightdb.lucene.{LuceneFilter, LuceneIndexedField}
 import lightdb.query.Filter
 import lightdb.Document
-import lightdb.model.Collection
+import lightdb.index.IndexSupport
+import lightdb.model.{AbstractCollection, Collection}
 import org.apache.lucene.document.Field
 import org.apache.lucene.search.SortField
 import org.apache.lucene.{document => ld}
 
 case class IntField[D <: Document[D]](fieldName: String,
-                                      collection: Collection[D],
+                                      indexSupport: IndexSupport[D],
                                       get: D => Option[Int])
                                      (implicit val rw: RW[Int]) extends LuceneIndexedField[Int, D] {
   def ===(value: Int): Filter[D] = is(value)
