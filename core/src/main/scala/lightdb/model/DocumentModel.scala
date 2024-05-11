@@ -19,14 +19,12 @@ trait DocumentModel[D <: Document[D]] {
       for {
         // Add to IndexedLinks
         _ <- _indexedLinks.map(_.add(doc)).sequence
-        _ <- collection.commit().whenA(collection.autoCommit)
       } yield Some(doc)
     })
     collection.postDelete.add((action: DocumentAction, doc: D, collection: AbstractCollection[D]) => {
       for {
         // Remove from IndexedLinks
         _ <- _indexedLinks.map(_.remove(doc)).sequence
-        _ <- collection.commit().whenA(collection.autoCommit)
       } yield Some(doc)
     })
   }

@@ -15,22 +15,28 @@ import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
 trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   private lazy val path: Path = collection.db.directory.resolve(collection.collectionName).resolve("sqlite.db")
   // TODO: Should each collection have a connection?
-  private[sqlite] lazy val connection: Connection = {
-    val c = DriverManager.getConnection(s"jdbc:sqlite:${path.toFile.getCanonicalPath}")
-    c.setAutoCommit(false)
-    val s = c.createStatement()
-    try {
-      s.executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
-      index.fields.foreach { f =>
-        if (f.fieldName != "_id") {
-          val indexName = s"${f.fieldName}_idx"
-          s.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON ${collection.collectionName}(${f.fieldName})")
+
+  private var _connection: Option[Connection] = None
+  private[sqlite] def connection: Connection = _connection match {
+    case Some(c) => c
+    case None =>
+      val url = s"jdbc:sqlite:${path.toFile.getCanonicalPath}"
+      val c = DriverManager.getConnection(url)
+      c.setAutoCommit(true)
+      val s = c.createStatement()
+      try {
+        s.executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
+        index.fields.foreach { f =>
+          if (f.fieldName != "_id") {
+            val indexName = s"${f.fieldName}_idx"
+            s.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON ${collection.collectionName}(${f.fieldName})")
+          }
         }
+      } finally {
+        s.close()
       }
-    } finally {
-      s.close()
-    }
-    c
+      _connection = Some(c)
+      c
   }
 
   override lazy val index: SQLiteIndexer[D] = SQLiteIndexer(this, () => collection)
@@ -52,6 +58,16 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       } finally {
         ps.close()
       }
+    }
+  }
+
+  private def truncate(): IO[Unit] = IO {
+    val sql = s"DELETE FROM ${collection.collectionName}"
+    val ps = connection.prepareStatement(sql)
+    try {
+      ps.executeUpdate()
+    } finally {
+      ps.close()
     }
   }
 
@@ -103,7 +119,6 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
                  |OFFSET
                  |  $offset
                  |""".stripMargin
-//    scribe.info(sql)
     val ps = prepare(sql, params)
     val rs = ps.executeQuery()
     try {
@@ -156,6 +171,10 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   override protected[lightdb] def initModel(collection: AbstractCollection[D]): Unit = {
     super.initModel(collection)
     collection.commitActions.add(backlog.flush())
-    collection.disposeActions.add(IO(connection.close()))
+    collection.truncateActions.add(truncate())
+    collection.disposeActions.add(IO {
+      connection.close()
+      _connection = None
+    })
   }
 }
