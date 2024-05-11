@@ -13,8 +13,9 @@ abstract class Collection[D <: Document[D]](val collectionName: String,
 object Collection {
   def apply[D <: Document[D]](collectionName: String,
                               db: LightDB,
-                              autoCommit: Boolean = false)(implicit docRW: RW[D]): Collection[D] =
-    new Collection[D](collectionName, db, autoCommit = autoCommit) {
+                              autoCommit: Boolean = false,
+                              atomic: Boolean = true)(implicit docRW: RW[D]): Collection[D] =
+    new Collection[D](collectionName, db, autoCommit = autoCommit, atomic = atomic) {
       override implicit val rw: RW[D] = docRW
     }
 }

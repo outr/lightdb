@@ -14,6 +14,7 @@ trait DocumentActionSupport[D <: Document[D]] {
   val postDelete: DocumentActions[D, D] = DocumentActions[D, D](DocumentAction.PostDelete)
 
   val commitActions: UnitActions = new UnitActions
+  val truncateActions: UnitActions = new UnitActions
   val disposeActions: UnitActions = new UnitActions
 
   protected def doSet(doc: D,

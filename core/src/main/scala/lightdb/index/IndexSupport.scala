@@ -12,7 +12,7 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
     case _ => _collection.getOrElse(throw new RuntimeException("DocumentModel not initialized with Collection (yet)"))
   }
 
-  lazy val query: Query[D] = Query(this, collection)
+  def query: Query[D] = Query(this, collection)
 
   override protected[lightdb] def initModel(collection: AbstractCollection[D]): Unit = {
     super.initModel(collection)

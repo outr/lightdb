@@ -1,6 +1,7 @@
 package lightdb.halo
 
 import lightdb.{LightDB, Store}
+import scribe.{Level, Logger}
 
 trait HaloDBSupport {
   this: LightDB =>
@@ -8,5 +9,8 @@ trait HaloDBSupport {
   def indexThreads: Int = Runtime.getRuntime.availableProcessors()
   def maxFileSize: Int = 1024 * 1024
 
-  override protected def createStore(name: String): Store = HaloDBStore(directory.resolve(name), indexThreads, maxFileSize)
+  Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
+
+  override protected def createStore(name: String): Store =
+    HaloDBStore(directory.resolve(name), indexThreads, maxFileSize)
 }

@@ -55,7 +55,9 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
       doc = doc,
       collection = this,
       set = (id, json) => store.putJson(id, json)
-    )(lock)
+    )(lock).flatMap { doc =>
+      commit().whenA(autoCommit).map(_ => doc)
+    }
   }
 
   def modify(id: Id[D])
@@ -76,12 +78,15 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
       collection = this,
       get = apply,
       delete = id => store.delete(id)
-    )(lock)
+    )(lock).flatMap { id =>
+      commit().whenA(autoCommit).map(_ => id)
+    }
   }
 
   def truncate(): IO[Unit] = for {
     _ <- store.truncate()
     _ <- model.indexedLinks.map(_.store.truncate()).sequence
+    _ <- truncateActions.invoke()
     _ <- commit().whenA(autoCommit)
   } yield ()
 
@@ -120,5 +125,27 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
       model._indexedLinks = il :: model._indexedLinks
     }
     il
+  }
+}
+
+object AbstractCollection {
+  def apply[D <: Document[D]](name: String,
+                              db: LightDB,
+                              model: DocumentModel[D],
+                              autoCommit: Boolean = false,
+                              atomic: Boolean = true)(implicit docRW: RW[D]): AbstractCollection[D] = {
+    val ac = autoCommit
+    val at = atomic
+    val lightDB = db
+    val documentModel = model
+    new AbstractCollection[D] {
+      override def collectionName: String = name
+      override def autoCommit: Boolean = ac
+      override def atomic: Boolean = at
+      override protected[lightdb] def db: LightDB = lightDB
+
+      override implicit val rw: RW[D] = docRW
+      override def model: DocumentModel[D] = documentModel
+    }
   }
 }

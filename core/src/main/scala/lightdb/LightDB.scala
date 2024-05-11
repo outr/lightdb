@@ -3,7 +3,7 @@ package lightdb
 import cats.effect.IO
 import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1, toTraverseOps}
 import fabric.rw._
-import lightdb.model.Collection
+import lightdb.model.{AbstractCollection, Collection, DocumentModel}
 import lightdb.upgrade.DatabaseUpgrade
 
 import java.nio.file.Path
@@ -23,7 +23,7 @@ abstract class LightDB {
 
   def initialized: Boolean = _initialized.get()
 
-  def collections: List[Collection[_]]
+  def collections: List[AbstractCollection[_]]
   def upgrades: List[DatabaseUpgrade]
 
   def commit(): IO[Unit] = collections.map(_.commit()).sequence.map(_ => ())
@@ -32,7 +32,7 @@ abstract class LightDB {
 
   def init(truncate: Boolean = false): IO[Unit] = if (_initialized.compareAndSet(false, true)) {
     for {
-      _ <- logger.info(s"LightDB initializing ${directory.getFileName.toString}...")
+      _ <- logger.info(s"LightDB initializing ${directory.getFileName.toString} collection...")
       // Truncate the database before we do anything if specified
       _ <- this.truncate().whenA(truncate)
       // Determine if this is an uninitialized database
@@ -57,11 +57,22 @@ abstract class LightDB {
 
   protected[lightdb] def createStoreInternal(name: String): Store = synchronized {
     verifyInitialized()
-//    val store = HaloStore(directory.resolve(name), indexThreads, maxFileSize)
     val store = createStore(name)
     stores = store :: stores
     store
   }
+
+  protected def collection[D <: Document[D]](name: String,
+                                             model: DocumentModel[D],
+                                             autoCommit: Boolean = false,
+                                             atomic: Boolean = true)
+                                            (implicit rw: RW[D]): AbstractCollection[D] = AbstractCollection[D](
+    name = name,
+    db = this,
+    model = model,
+    autoCommit = autoCommit,
+    atomic = atomic
+  )
 
   protected def createStore(name: String): Store
 
