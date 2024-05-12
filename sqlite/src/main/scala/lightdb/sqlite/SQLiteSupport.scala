@@ -9,11 +9,15 @@ import lightdb.model.AbstractCollection
 import lightdb.query.{PagedResults, Query, SearchContext, Sort}
 import lightdb.util.FlushingBacklog
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
 
 trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
-  private lazy val path: Path = collection.db.directory.resolve(collection.collectionName).resolve("sqlite.db")
+  private lazy val path: Path = {
+    val p = collection.db.directory.resolve(collection.collectionName).resolve("sqlite.db")
+    Files.createDirectories(p.getParent)
+    p
+  }
   // TODO: Should each collection have a connection?
 
   private var _connection: Option[Connection] = None
