@@ -30,8 +30,12 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       val s = c.createStatement()
       try {
         s.executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
+        val existingColumns = columns(c)
         index.fields.foreach { f =>
           if (f.fieldName != "_id") {
+            if (!existingColumns.contains(f.fieldName)) {
+              s.executeUpdate(s"ALTER TABLE ${collection.collectionName} ADD ${f.fieldName}")
+            }
             val indexName = s"${f.fieldName}_idx"
             s.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON ${collection.collectionName}(${f.fieldName})")
           }
@@ -41,6 +45,19 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       }
       _connection = Some(c)
       c
+  }
+
+  def columns(connection: Connection = connection): Set[String] = {
+    val ps = connection.prepareStatement(s"SELECT * FROM ${collection.collectionName} LIMIT 1")
+    try {
+      val rs = ps.executeQuery()
+      val meta = rs.getMetaData
+      (1 to meta.getColumnCount).map { index =>
+        meta.getColumnName(index)
+      }.toSet
+    } finally {
+      ps.close()
+    }
   }
 
   override lazy val index: SQLiteIndexer[D] = SQLiteIndexer(this, () => collection)
