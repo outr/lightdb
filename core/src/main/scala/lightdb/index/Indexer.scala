@@ -19,7 +19,11 @@ trait Indexer[D <: Document[D]] {
   def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return]
 
   protected[lightdb] def register[F](field: IndexedField[F, D]): Unit = synchronized {
-    _fields = field :: _fields
+    fields.find(_.fieldName == field.fieldName) match {
+      case Some(existing) if existing != field => throw new RuntimeException(s"Index already exists: ${field.fieldName}")
+      case Some(_) => // Don't add again
+      case None => _fields = field :: _fields
+    }
   }
 
   private[lightdb] def delete(id: Id[D]): IO[Unit]
