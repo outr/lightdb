@@ -10,19 +10,21 @@ case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
                                    filter: Option[Filter[D]] = None,
                                    sort: List[Sort] = Nil,
                                    scoreDocs: Boolean = false,
+                                   offset: Int = 0,
                                    pageSize: Int = 1_000,
                                    countTotal: Boolean = true) {
   def filter(filter: Filter[D]): Query[D] = copy(filter = Some(filter))
   def sort(sort: Sort*): Query[D] = copy(sort = this.sort ::: sort.toList)
   def clearSort: Query[D] = copy(sort = Nil)
   def scoreDocs(b: Boolean): Query[D] = copy(scoreDocs = b)
+  def offset(offset: Int): Query[D] = copy(offset = offset)
   def pageSize(size: Int): Query[D] = copy(pageSize = size)
   def countTotal(b: Boolean): Query[D] = copy(countTotal = b)
 
   def search()(implicit context: SearchContext[D]): IO[PagedResults[D]] = indexSupport.doSearch(
     query = this,
     context = context,
-    offset = 0,
+    offset = offset,
     after = None
   )
 
