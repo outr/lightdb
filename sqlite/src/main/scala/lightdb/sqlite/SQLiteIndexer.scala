@@ -16,7 +16,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
   def apply[F](name: String, get: D => Option[F])(implicit rw: RW[F]): SQLIndexedField[F, D] = SQLIndexedField(
     fieldName = name,
     indexSupport = indexSupport,
-    get = get
+    get = doc => get(doc).toList
   )
 
   override def count(): IO[Int] = IO {

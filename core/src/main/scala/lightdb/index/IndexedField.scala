@@ -10,11 +10,8 @@ trait IndexedField[F, D <: Document[D]] {
 
   def fieldName: String
   def indexSupport: IndexSupport[D]
-  def get: D => Option[F]
-  def getJson: D => Json = (doc: D) => get(doc) match {
-    case Some(value) => value.json
-    case None => Null
-  }
+  def get: D => List[F]
+  def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 
   indexSupport.index.register(this)
 }
