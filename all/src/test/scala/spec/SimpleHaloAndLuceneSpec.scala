@@ -5,10 +5,8 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
 import lightdb.halo.HaloDBSupport
-import lightdb.lucene.LuceneSupport
-import lightdb.lucene.index.{IntField, StringField}
+import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.Collection
-import lightdb.sqlite.{SQLIndexedField, SQLiteSupport}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -20,8 +18,8 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   private val id1 = Id[Person]("john")
   private val id2 = Id[Person]("jane")
 
-  private val p1 = Person("John Doe", 21, id1)
-  private val p2 = Person("Jane Doe", 19, id2)
+  private val p1 = Person("John Doe", 21, Set("dog", "cat"), id1)
+  private val p2 = Person("Jane Doe", 19, Set("cat"), id2)
 
   "Simple database" should {
     "initialize the database" in {
@@ -123,6 +121,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
           }
       }
     }
+    "search by tag" in {
+      Person.query.filter(Person.tag === "dog").toList.map { people =>
+        people.map(_.name) should be(List("John Doe"))
+      }
+    }
     "do paginated search" in {
       Person.withSearchContext { implicit context =>
         Person.query.pageSize(1).countTotal(true).search().flatMap { page1 =>
@@ -181,7 +184,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "replace Jane Doe" in {
-      Person.set(Person("Jan Doe", 20, id2)).map { p =>
+      Person.set(Person("Jan Doe", 20, Set("cat", "bear"), id2)).map { p =>
         p._id should be(id2)
       }
     }
@@ -229,14 +232,18 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
   }
 
-  case class Person(name: String, age: Int, _id: Id[Person] = Id()) extends Document[Person]
+  case class Person(name: String,
+                    age: Int,
+                    tags: Set[String],
+                    _id: Id[Person] = Id()) extends Document[Person]
 
   object Person extends Collection[Person]("people", DB) with LuceneSupport[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: StringField[Person] = index("name").string(_.name)
-    val age: IntField[Person] = index("age").int(_.age)
+    val name: LuceneIndex[String, Person] = index.one("name", _.name)
+    val age: LuceneIndex[Int, Person] = index.one("age", _.age)
     val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
+    val tag: LuceneIndex[String, Person] = index("tag", _.tags.toList)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {

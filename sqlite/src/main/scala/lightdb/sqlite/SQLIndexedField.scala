@@ -2,13 +2,11 @@ package lightdb.sqlite
 
 import fabric.rw.{Convertible, RW}
 import lightdb.index.{IndexSupport, IndexedField}
-import lightdb.query.Filter
 import lightdb.Document
-import lightdb.model.{AbstractCollection, Collection}
 
 case class SQLIndexedField[F, D <: Document[D]](fieldName: String,
                                                 indexSupport: IndexSupport[D],
-                                                get: D => Option[F])(implicit val rw: RW[F]) extends IndexedField[F, D] {
+                                                get: D => List[F])(implicit val rw: RW[F]) extends IndexedField[F, D] {
   def ===(value: F): SQLFilter[D] = is(value)
 
   def is(value: F): SQLFilter[D] = SQLFilter[D](s"$fieldName = ?", List(value.json))

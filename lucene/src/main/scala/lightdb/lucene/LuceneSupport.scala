@@ -2,32 +2,22 @@ package lightdb.lucene
 
 import cats.effect.IO
 import lightdb._
-import lightdb.index.{IndexSupport, IndexedField, Indexer}
-import lightdb.lucene.index._
+import lightdb.index.{IndexSupport, IndexedField}
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort}
 import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
-import org.apache.lucene.{document => ld}
-import org.apache.lucene.analysis.Analyzer
-import org.apache.lucene.analysis.standard.StandardAnalyzer
-import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, StoredFields, Term}
-import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
-import org.apache.lucene.document.{Document => LuceneDocument, Field => LuceneField}
-
-import java.nio.file.{Files, Path}
-import java.util.concurrent.ConcurrentHashMap
+import org.apache.lucene.index.StoredFields
 
 trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
   override lazy val index: LuceneIndexer[D] = LuceneIndexer(this, collection)
 
-  val _id: StringField[D] = index("_id").string(_._id.value, store = true)
+  val _id: LuceneIndex[Id[D], D] = index("_id", doc => List(doc._id), store = true)
 
   protected[lucene] def indexSearcher(context: SearchContext[D]): IndexSearcher = index.contextMapping.get(context)
 
   private def sort2SortField(sort: Sort): SortField = sort match {
     case Sort.BestMatch => SortField.FIELD_SCORE
     case Sort.IndexOrder => SortField.FIELD_DOC
-    case Sort.ByField(field, reverse) => new SortField(field.fieldName, field.asInstanceOf[LuceneIndexedField[_, D]].sortType, reverse)
+    case Sort.ByField(field, reverse) => new SortField(field.fieldName, field.asInstanceOf[LuceneIndex[_, D]].sortType, reverse)
   }
 
   override def doSearch(query: Query[D],
@@ -66,7 +56,7 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
 
   override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] = for {
     fields <- IO(fields.flatMap { field =>
-      field.asInstanceOf[LuceneIndexedField[_, D]].createFields(doc)
+      field.asInstanceOf[LuceneIndex[_, D]].createFields(doc)
     })
     _ = index.addDoc(doc._id, fields)
   } yield ()
