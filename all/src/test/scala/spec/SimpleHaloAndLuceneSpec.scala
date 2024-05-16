@@ -7,6 +7,7 @@ import lightdb._
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.Collection
+import lightdb.query.Sort
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -154,6 +155,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
           people.length should be(2)
           people.map(_.name).toSet should be(Set("John Doe", "Jane Doe"))
         }
+      }
+    }
+    "sort by age" in {
+      Person.query.sort(Sort.ByField(Person.age)).toList.map { people =>
+        people.map(_.name) should be(List("Jane Doe", "John Doe"))
       }
     }
     "delete John" in {
