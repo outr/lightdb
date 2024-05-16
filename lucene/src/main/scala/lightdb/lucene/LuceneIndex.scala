@@ -5,10 +5,9 @@ import fabric.define.DefType
 import fabric.rw._
 import lightdb.Document
 import lightdb.index.{IndexSupport, IndexedField}
-import org.apache.lucene.document.Field
 import org.apache.lucene.index.Term
 import org.apache.lucene.search._
-import org.apache.lucene.{document => ld}
+import org.apache.lucene.document._
 
 case class LuceneIndex[F, D <: Document[D]](fieldName: String,
                                             indexSupport: IndexSupport[D],
@@ -32,27 +31,27 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
   }
 
   def between(lower: F, upper: F): LuceneFilter[D] = LuceneFilter(() => (lower.json, upper.json) match {
-    case (NumInt(l, _), NumInt(u, _)) => ld.LongField.newRangeQuery(fieldName, l, u)
+    case (NumInt(l, _), NumInt(u, _)) => LongField.newRangeQuery(fieldName, l, u)
     case _ => throw new RuntimeException(s"Unsupported between for $lower - $upper (${rw.definition})")
   })
 
-  protected[lightdb] def createFields(doc: D): List[ld.Field] = if (tokenized) {
+  protected[lightdb] def createFields(doc: D): List[Field] = if (tokenized) {
     getJson(doc).flatMap {
       case Null => Nil
       case Str(s, _) => List(s)
       case f => throw new RuntimeException(s"Unsupported tokenized value: $f (${rw.definition})")
     }.map { value =>
-      new ld.Field(fieldName, value, if (store) ld.TextField.TYPE_STORED else ld.TextField.TYPE_NOT_STORED)
+      new Field(fieldName, value, if (store) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED)
     }
   } else {
-    def fs: Field.Store = if (store) ld.Field.Store.YES else ld.Field.Store.NO
+    def fs: Field.Store = if (store) Field.Store.YES else Field.Store.NO
 
     getJson(doc).flatMap {
       case Null => None
-      case Str(s, _) => Some(new ld.StringField(fieldName, s, fs))
-      case Bool(b, _) => Some(new ld.StringField(fieldName, b.toString, fs))
-      case NumInt(l, _) => Some(new ld.LongField(fieldName, l, fs))
-      case NumDec(bd, _) => Some(new ld.StringField(fieldName, bd.toString(), fs))
+      case Str(s, _) => Some(new StringField(fieldName, s, fs))
+      case Bool(b, _) => Some(new StringField(fieldName, b.toString, fs))
+      case NumInt(l, _) => Some(new LongField(fieldName, l, fs))
+      case NumDec(bd, _) => Some(new DoubleField(fieldName, bd.toDouble, fs))
       case json => throw new RuntimeException(s"Unsupported JSON: $json (${rw.definition})")
     }
   }

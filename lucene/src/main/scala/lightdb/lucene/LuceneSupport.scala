@@ -1,10 +1,11 @@
 package lightdb.lucene
 
 import cats.effect.IO
+import fabric.define.DefType
 import lightdb._
 import lightdb.index.{IndexSupport, IndexedField}
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort}
-import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.StoredFields
 
 trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
@@ -17,7 +18,13 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
   private def sort2SortField(sort: Sort): SortField = sort match {
     case Sort.BestMatch => SortField.FIELD_SCORE
     case Sort.IndexOrder => SortField.FIELD_DOC
-    case Sort.ByField(field, reverse) => new SortField(field.fieldName, field.asInstanceOf[LuceneIndex[_, D]].sortType, reverse)
+    case Sort.ByField(field, reverse) =>
+      val f = field.asInstanceOf[LuceneIndex[_, D]]
+      f.rw.definition match {
+        case DefType.Int => new SortedNumericSortField(field.fieldName, f.sortType, reverse)
+        case DefType.Str => new SortField(field.fieldName, f.sortType, reverse)
+        case d => throw new RuntimeException(s"Unsupported sort definition: $d")
+      }
   }
 
   override def doSearch(query: Query[D],
