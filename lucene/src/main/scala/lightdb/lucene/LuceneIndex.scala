@@ -5,6 +5,7 @@ import fabric.define.DefType
 import fabric.rw._
 import lightdb.Document
 import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.spatial.GeoPoint
 import org.apache.lucene.index.Term
 import org.apache.lucene.search._
 import org.apache.lucene.document._
@@ -13,8 +14,16 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
                                             indexSupport: IndexSupport[D],
                                             get: D => List[F],
                                             store: Boolean,
+                                            sorted: Boolean,
                                             tokenized: Boolean)
                                            (implicit val rw: RW[F]) extends IndexedField[F, D] {
+  lazy val fieldSortName: String = {
+    val separate = rw.definition.className.collect {
+      case "lightdb.spatial.GeoPoint" => true
+    }.getOrElse(false)
+    if (separate) s"${fieldName}Sort" else fieldName
+  }
+
   def ===(value: F): LuceneFilter[D] = is(value)
   def is(value: F): LuceneFilter[D] = LuceneFilter(() => value.json match {
     case Str(s, _) => new TermQuery(new Term(fieldName, s))
@@ -46,14 +55,30 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
   } else {
     def fs: Field.Store = if (store) Field.Store.YES else Field.Store.NO
 
-    getJson(doc).flatMap {
+    val filterField = getJson(doc).flatMap {
       case Null => None
       case Str(s, _) => Some(new StringField(fieldName, s, fs))
       case Bool(b, _) => Some(new StringField(fieldName, b.toString, fs))
       case NumInt(l, _) => Some(new LongField(fieldName, l, fs))
       case NumDec(bd, _) => Some(new DoubleField(fieldName, bd.toDouble, fs))
+      case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
+        case GeoPoint(latitude, longitude) => Some(new LatLonPoint(fieldName, latitude, longitude))
+        case ref => throw new RuntimeException(s"Unsupported object reference: $ref for JSON: $obj")
+      }
       case json => throw new RuntimeException(s"Unsupported JSON: $json (${rw.definition})")
     }
+    val sortField = if (sorted) {
+      getJson(doc).flatMap {
+        case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
+          case GeoPoint(latitude, longitude) => Some(new LatLonDocValuesField(fieldSortName, latitude, longitude))
+          case _ => None
+        }
+        case _ => None
+      }
+    } else {
+      Nil
+    }
+    filterField ::: sortField
   }
 
   protected[lightdb] def sortType: SortField.Type = rw.definition match {

@@ -39,6 +39,13 @@ case class Query[D <: Document[D]](indexSupport: IndexSupport[D],
   def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.stream)
 
+  object scored {
+    def stream(implicit context: SearchContext[D]): fs2.Stream[IO, (D, Double)] = pageStream.flatMap(_.scoredStream)
+    def toList: IO[List[(D, Double)]] = indexSupport.withSearchContext { implicit context =>
+      stream.compile.toList
+    }
+  }
+
   def toIdList: IO[List[Id[D]]] = indexSupport.withSearchContext { implicit context =>
     idStream.compile.toList
   }
