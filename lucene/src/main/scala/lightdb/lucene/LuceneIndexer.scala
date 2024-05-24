@@ -70,20 +70,23 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
   def apply[F](name: String,
                get: D => List[F],
                store: Boolean = false,
+               sorted: Boolean = false,
                tokenized: Boolean = false)
               (implicit rw: RW[F]): LuceneIndex[F, D] = LuceneIndex(
     fieldName = name,
     indexSupport = indexSupport,
     get = get,
     store = store,
+    sorted = sorted,
     tokenized = tokenized
   )
 
   def one[F](name: String,
              get: D => F,
              store: Boolean = false,
+             sorted: Boolean = false,
              tokenized: Boolean = false)
-            (implicit rw: RW[F]): LuceneIndex[F, D] = apply[F](name, doc => List(get(doc)), store, tokenized)
+            (implicit rw: RW[F]): LuceneIndex[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
 
   override def commit(): IO[Unit] = IO(commitBlocking())
 

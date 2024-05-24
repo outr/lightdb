@@ -149,7 +149,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
         context = SQLPageContext(context),
         offset = offset,
         total = total,
-        ids = data.ids,
+        idsAndScores = data.ids.map(id => id -> 0.0),
         getter = data.lookup
       )
     } finally {

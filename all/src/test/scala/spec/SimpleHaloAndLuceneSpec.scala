@@ -8,7 +8,9 @@ import lightdb.halo.HaloDBSupport
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.Collection
 import lightdb.query.Sort
+import lightdb.spatial.GeoPoint
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.util.DistanceCalculator
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import scribe.{Level, Logger}
@@ -19,8 +21,27 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   private val id1 = Id[Person]("john")
   private val id2 = Id[Person]("jane")
 
-  private val p1 = Person("John Doe", 21, Set("dog", "cat"), id1)
-  private val p2 = Person("Jane Doe", 19, Set("cat"), id2)
+  private val newYorkCity = GeoPoint(40.7142, -74.0119)
+  private val chicago = GeoPoint(41.8119, -87.6873)
+  private val jeffersonValley = GeoPoint(41.3385, -73.7947)
+  private val noble = GeoPoint(35.1417, -97.3409)
+  private val oklahomaCity = GeoPoint(35.5514, -97.4075)
+  private val yonkers = GeoPoint(40.9461, -73.8669)
+
+  private val p1 = Person(
+    name = "John Doe",
+    age = 21,
+    tags = Set("dog", "cat"),
+    point = newYorkCity,
+    _id = id1
+  )
+  private val p2 = Person(
+    name = "Jane Doe",
+    age = 19,
+    tags = Set("cat"),
+    point = noble,
+    _id = id2
+  )
 
   "Simple database" should {
     "initialize the database" in {
@@ -162,6 +183,21 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         people.map(_.name) should be(List("Jane Doe", "John Doe"))
       }
     }
+    "sort by distance from Oklahoma City" in {
+      Person.query
+        .scoreDocs(true)
+        .sort(Sort.ByDistance(Person.point, oklahomaCity))
+        .scored
+        .toList
+        .map { peopleAndScores =>
+          val people = peopleAndScores.map(_._1)
+          val scores = peopleAndScores.map(_._2)
+          people.map(_.name) should be(List("Jane Doe", "John Doe"))
+          scores should be(List(1.0, 1.0))
+          val calculated = people.map(p => DistanceCalculator(oklahomaCity, p.point).toUsMiles)
+          calculated should be(List(28.555228128634383, 1316.1223938032729))
+        }
+    }
     "delete John" in {
       Person.delete(id1).map { deleted =>
         deleted should be(id1)
@@ -190,7 +226,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "replace Jane Doe" in {
-      Person.set(Person("Jan Doe", 20, Set("cat", "bear"), id2)).map { p =>
+      Person.set(Person("Jan Doe", 20, Set("cat", "bear"), chicago, id2)).map { p =>
         p._id should be(id2)
       }
     }
@@ -225,11 +261,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
   object DB extends LightDB with HaloDBSupport {
     override lazy val directory: Path = Paths.get("testdb")
-//    override protected def autoCommit: Boolean = true
+    //    override protected def autoCommit: Boolean = true
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-//    val people: Collection[Person] = collection("people", Person)
+    //    val people: Collection[Person] = collection("people", Person)
 
     override lazy val collections: List[Collection[_]] = List(
       Person
@@ -241,6 +277,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   case class Person(name: String,
                     age: Int,
                     tags: Set[String],
+                    point: GeoPoint,
                     _id: Id[Person] = Id()) extends Document[Person]
 
   object Person extends Collection[Person]("people", DB) with LuceneSupport[Person] {
@@ -250,11 +287,14 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     val age: LuceneIndex[Int, Person] = index.one("age", _.age)
     val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
     val tag: LuceneIndex[String, Person] = index("tag", _.tags.toList)
+    val point: LuceneIndex[GeoPoint, Person] = index.one("point", _.point, sorted = true)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
     override def applyToNew: Boolean = true
+
     override def blockStartup: Boolean = true
+
     override def alwaysRun: Boolean = false
 
     override def upgrade(ldb: LightDB): IO[Unit] = DB.startTime.set(System.currentTimeMillis()).map(_ => ())

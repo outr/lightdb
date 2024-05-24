@@ -5,6 +5,7 @@ import fabric.define.DefType
 import lightdb._
 import lightdb.index.{IndexSupport, IndexedField}
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort}
+import org.apache.lucene.document.LatLonDocValuesField
 import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.StoredFields
 
@@ -25,6 +26,9 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
         case DefType.Str => new SortField(field.fieldName, f.sortType, reverse)
         case d => throw new RuntimeException(s"Unsupported sort definition: $d")
       }
+    case Sort.ByDistance(field, from) =>
+      val f = field.asInstanceOf[LuceneIndex[_, D]]
+      LatLonDocValuesField.newDistanceSort(f.fieldSortName, from.latitude, from.longitude)
   }
 
   override def doSearch(query: Query[D],
@@ -47,7 +51,7 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
     val scoreDocs: List[ScoreDoc] = topFieldDocs.scoreDocs.toList
     val total: Int = topFieldDocs.totalHits.value.toInt
     val storedFields: StoredFields = indexSearcher.storedFields()
-    val ids: List[Id[D]] = scoreDocs.map(doc => Id[D](storedFields.document(doc.doc).get("_id")))
+    val idsAndScores = scoreDocs.map(doc => Id[D](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
     val indexContext = LucenePageContext(
       context = context,
       lastScoreDoc = scoreDocs.lastOption
@@ -57,7 +61,7 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
       context = indexContext,
       offset = offset,
       total = total,
-      ids = ids
+      idsAndScores = idsAndScores
     )
   }
 
