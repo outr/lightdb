@@ -5,9 +5,11 @@ import fabric.define.DefType
 import lightdb._
 import lightdb.index.{IndexSupport, IndexedField}
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort}
-import org.apache.lucene.document.LatLonDocValuesField
+import lightdb.spatial.GeoPoint
+import org.apache.lucene.document.{LatLonDocValuesField, LatLonPoint}
 import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.StoredFields
+import squants.space.Length
 
 trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
   override lazy val index: LuceneIndexer[D] = LuceneIndexer(this, collection)
@@ -31,10 +33,10 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
       LatLonDocValuesField.newDistanceSort(f.fieldSortName, from.latitude, from.longitude)
   }
 
-  override def doSearch(query: Query[D],
-                        context: SearchContext[D],
-                        offset: Int,
-                        after: Option[PagedResults[D]]): IO[PagedResults[D]] = IO {
+  override def doSearch[V](query: Query[D, V],
+                           context: SearchContext[D],
+                           offset: Int,
+                           after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]] = IO {
     val q = query.filter.map(_.asInstanceOf[LuceneFilter[D]].asQuery()).getOrElse(new MatchAllDocsQuery)
     val sortFields = query.sort match {
       case Nil => List(SortField.FIELD_SCORE)
@@ -71,4 +73,7 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
     })
     _ = index.addDoc(doc._id, fields)
   } yield ()
+
+  override def distanceFilter(field: IndexedField[GeoPoint, D], from: GeoPoint, distance: Length): Filter[D] =
+    LuceneFilter(() => LatLonPoint.newDistanceQuery(field.fieldName, from.latitude, from.longitude, distance.toMeters))
 }

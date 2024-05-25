@@ -21,6 +21,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   // TODO: Should each collection have a connection?
 
   private var _connection: Option[Connection] = None
+
   private[sqlite] def connection: Connection = _connection match {
     case Some(c) => c
     case None =>
@@ -92,10 +93,10 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
-  override def doSearch(query: Query[D],
-                        context: SearchContext[D],
-                        offset: Int,
-                        after: Option[PagedResults[D]]): IO[PagedResults[D]] = IO {
+  override def doSearch[V](query: Query[D, V],
+                           context: SearchContext[D],
+                           offset: Int,
+                           after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]] = IO {
     var params = List.empty[Json]
     val filters = query.filter match {
       case Some(f) =>
@@ -105,12 +106,13 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       case None => ""
     }
     val total = if (query.countTotal) {
-      val sqlCount = s"""SELECT
-                        |  COUNT(*)
-                        |FROM
-                        |  ${collection.collectionName}
-                        |$filters
-                        |""".stripMargin
+      val sqlCount =
+        s"""SELECT
+           |  COUNT(*)
+           |FROM
+           |  ${collection.collectionName}
+           |$filters
+           |""".stripMargin
       val countPs = prepare(sqlCount, params)
       try {
         val rs = countPs.executeQuery()
@@ -129,17 +131,18 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       case Nil => ""
       case list => list.mkString("ORDER BY ", ", ", "")
     }
-    val sql = s"""SELECT
-                 |  *
-                 |FROM
-                 |  ${collection.collectionName}
-                 |$filters
-                 |$sort
-                 |LIMIT
-                 |  ${query.pageSize}
-                 |OFFSET
-                 |  $offset
-                 |""".stripMargin
+    val sql =
+      s"""SELECT
+         |  *
+         |FROM
+         |  ${collection.collectionName}
+         |$filters
+         |$sort
+         |LIMIT
+         |  ${query.pageSize}
+         |OFFSET
+         |  $offset
+         |""".stripMargin
     val ps = prepare(sql, params)
     val rs = ps.executeQuery()
     try {
@@ -161,6 +164,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   protected def data(rs: ResultSet): SQLData[D] = {
     val iterator = new Iterator[Id[D]] {
       override def hasNext: Boolean = rs.next()
+
       override def next(): Id[D] = Id[D](rs.getString("_id"))
     }
     val ids = iterator.toList

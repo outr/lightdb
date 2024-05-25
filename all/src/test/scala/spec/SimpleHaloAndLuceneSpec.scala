@@ -14,12 +14,14 @@ import lightdb.util.DistanceCalculator
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import scribe.{Level, Logger}
+import squants.space.LengthConversions.LengthConversions
 
 import java.nio.file.{Path, Paths}
 
 class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   private val id1 = Id[Person]("john")
   private val id2 = Id[Person]("jane")
+  private val id3 = Id[Person]("bob")
 
   private val newYorkCity = GeoPoint(40.7142, -74.0119)
   private val chicago = GeoPoint(41.8119, -87.6873)
@@ -42,6 +44,13 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     point = noble,
     _id = id2
   )
+  private val p3 = Person(
+    name = "Bob Dole",
+    age = 123,
+    tags = Set("dog", "monkey"),
+    point = yonkers,
+    _id = id3
+  )
 
   "Simple database" should {
     "initialize the database" in {
@@ -58,7 +67,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         o should be(Some(p1))
       }
     }
-    "storage Jane Doe" in {
+    "store Jane Doe" in {
       Person.set(p2).map { p =>
         p._id should be(id2)
       }
@@ -73,17 +82,32 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         size should be(2)
       }
     }
+    "store Bob Dole" in {
+      Person.set(p3).map { p =>
+        p._id should be(id3)
+      }
+    }
+    "verify Bob Dole exists" in {
+      Person.get(id3).map { o =>
+        o should be(Some(p3))
+      }
+    }
+    "verify exactly three objects in data" in {
+      Person.size.map { size =>
+        size should be(3)
+      }
+    }
     "flush data" in {
       Person.commit()
     }
-    "verify exactly two objects in index" in {
+    "verify exactly three objects in index" in {
       Person.index.count().map { size =>
-        size should be(2)
+        size should be(3)
       }
     }
-    "verify exactly two objects in the store" in {
+    "verify exactly three objects in the store" in {
       Person.idStream.compile.toList.map { ids =>
-        ids.toSet should be(Set(id1, id2))
+        ids.toSet should be(Set(id1, id2, id3))
       }
     }
     "search by name for positive result" in {
@@ -145,24 +169,34 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "search by tag" in {
       Person.query.filter(Person.tag === "dog").toList.map { people =>
-        people.map(_.name) should be(List("John Doe"))
+        people.map(_.name) should be(List("John Doe", "Bob Dole"))
       }
     }
     "do paginated search" in {
       Person.withSearchContext { implicit context =>
         Person.query.pageSize(1).countTotal(true).search().flatMap { page1 =>
           page1.page should be(0)
-          page1.pages should be(2)
+          page1.pages should be(3)
           page1.hasNext should be(true)
           page1.docs.flatMap { people1 =>
             people1.length should be(1)
             page1.next().flatMap {
               case Some(page2) =>
                 page2.page should be(1)
-                page2.pages should be(2)
-                page2.hasNext should be(false)
-                page2.docs.map { people2 =>
+                page2.pages should be(3)
+                page2.hasNext should be(true)
+                page2.docs.flatMap { people2 =>
                   people2.length should be(1)
+                  page2.next().flatMap {
+                    case Some(page3) =>
+                      page3.page should be(2)
+                      page3.pages should be(3)
+                      page3.hasNext should be(false)
+                      page3.docs.map { people3 =>
+                        people3.length should be(1)
+                      }
+                    case None => fail("Should have a third page")
+                  }
                 }
               case None => fail("Should have a second page")
             }
@@ -170,32 +204,33 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         }
       }
     }
-    "do paginated search as a stream" in {
+    "do paginated search as a stream converting to name" in {
       Person.withSearchContext { implicit context =>
-        Person.query.pageSize(1).countTotal(true).stream.compile.toList.map { people =>
-          people.length should be(2)
-          people.map(_.name).toSet should be(Set("John Doe", "Jane Doe"))
+        Person.query.convert(p => IO.pure(p.name)).pageSize(1).countTotal(true).stream.compile.toList.map { names =>
+          names.length should be(3)
+          names.toSet should be(Set("John Doe", "Jane Doe", "Bob Dole"))
         }
       }
     }
     "sort by age" in {
       Person.query.sort(Sort.ByField(Person.age)).toList.map { people =>
-        people.map(_.name) should be(List("Jane Doe", "John Doe"))
+        people.map(_.name) should be(List("Jane Doe", "John Doe", "Bob Dole"))
       }
     }
     "sort by distance from Oklahoma City" in {
       Person.query
         .scoreDocs(true)
-        .sort(Sort.ByDistance(Person.point, oklahomaCity))
-        .scored
+        .distance(
+          field = Person.point,
+          from = oklahomaCity,
+          radius = Some(1320.miles)
+        )
         .toList
-        .map { peopleAndScores =>
-          val people = peopleAndScores.map(_._1)
-          val scores = peopleAndScores.map(_._2)
+        .map { peopleAndDistances =>
+          val people = peopleAndDistances.map(_.doc)
+          val distances = peopleAndDistances.map(_.distance)
           people.map(_.name) should be(List("Jane Doe", "John Doe"))
-          scores should be(List(1.0, 1.0))
-          val calculated = people.map(p => DistanceCalculator(oklahomaCity, p.point).toUsMiles)
-          calculated should be(List(28.555228128634383, 1316.1223938032729))
+          distances should be(List(28.555228128634383.miles, 1316.1223938032729.miles))
         }
     }
     "delete John" in {
@@ -203,26 +238,23 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         deleted should be(id1)
       }
     }
-    "verify exactly one object in data" in {
+    "verify exactly two objects in data again" in {
       Person.size.map { size =>
-        size should be(1)
+        size should be(2)
       }
     }
     "commit data" in {
       Person.commit()
     }
-    "verify exactly one object in index" in {
+    "verify exactly two objects in index again" in {
       Person.index.count().map { size =>
-        size should be(1)
+        size should be(2)
       }
     }
     "list all documents" in {
       Person.stream.compile.toList.map { people =>
-        people.length should be(1)
-        val p = people.head
-        p._id should be(id2)
-        p.name should be("Jane Doe")
-        p.age should be(19)
+        people.length should be(2)
+        people.map(_._id).toSet should be(Set(id2, id3))
       }
     }
     "replace Jane Doe" in {
@@ -242,11 +274,9 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "list new documents" in {
       Person.stream.compile.toList.map { results =>
-        results.length should be(1)
-        val doc = results.head
-        doc._id should be(id2)
-        doc.name should be("Jan Doe")
-        doc.age should be(20)
+        results.length should be(2)
+        results.map(_.name).toSet should be(Set("Jan Doe", "Bob Dole"))
+        results.map(_.age).toSet should be(Set(20, 123))
       }
     }
     "verify start time has been set" in {
