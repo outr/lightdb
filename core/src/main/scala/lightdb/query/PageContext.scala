@@ -6,7 +6,7 @@ import lightdb.Document
 trait PageContext[D <: Document[D]] {
   def context: SearchContext[D]
 
-  def nextPage(currentPage: PagedResults[D]): IO[Option[PagedResults[D]]] = if (currentPage.hasNext) {
+  def nextPage[V](currentPage: PagedResults[D, V]): IO[Option[PagedResults[D, V]]] = if (currentPage.hasNext) {
     currentPage.query.indexSupport.doSearch(
       query = currentPage.query,
       context = context,
