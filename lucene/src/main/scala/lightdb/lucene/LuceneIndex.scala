@@ -26,6 +26,10 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
 
   def ===(value: F): LuceneFilter[D] = is(value)
   def is(value: F): LuceneFilter[D] = LuceneFilter(() => value.json match {
+    case Str(s, _) if tokenized =>
+      val b = new BooleanQuery.Builder
+      s.split("\\s+").foreach(s => b.add(new TermQuery(new Term(fieldName, s)), BooleanClause.Occur.MUST))
+      b.build()
     case Str(s, _) => new TermQuery(new Term(fieldName, s))
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${rw.definition})")
   })
