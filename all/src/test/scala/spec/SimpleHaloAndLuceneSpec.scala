@@ -233,6 +233,14 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
           distances should be(List(28.555228128634383.miles, 1316.1223938032729.miles))
         }
     }
+    "search using tokenized data" in {
+      Person.query
+        .filter(Person.search === "john 21")
+        .toList
+        .map { results =>
+          results.map(_.name) should be(List("John Doe"))
+        }
+    }
     "delete John" in {
       Person.delete(id1).map { deleted =>
         deleted should be(id1)
@@ -318,6 +326,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
     val tag: LuceneIndex[String, Person] = index("tag", _.tags.toList)
     val point: LuceneIndex[GeoPoint, Person] = index.one("point", _.point, sorted = true)
+    val search: LuceneIndex[String, Person] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
