@@ -233,9 +233,9 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
           distances should be(List(28.555228128634383.miles, 1316.1223938032729.miles))
         }
     }
-    "search using tokenized data" in {
+    "search using tokenized data and a parsed query" in {
       Person.query
-        .filter(Person.search === "john 21")
+        .filter(Person.search parsed "joh% 21")
         .toList
         .map { results =>
           results.map(_.name) should be(List("John Doe"))

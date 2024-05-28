@@ -9,6 +9,7 @@ import lightdb.spatial.GeoPoint
 import org.apache.lucene.index.Term
 import org.apache.lucene.search._
 import org.apache.lucene.document._
+import org.apache.lucene.queryparser.classic.QueryParser
 
 case class LuceneIndex[F, D <: Document[D]](fieldName: String,
                                             indexSupport: IndexSupport[D],
@@ -17,6 +18,8 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
                                             sorted: Boolean,
                                             tokenized: Boolean)
                                            (implicit val rw: RW[F]) extends IndexedField[F, D] {
+  private def lucene: LuceneSupport[D] = indexSupport.asInstanceOf[LuceneSupport[D]]
+
   lazy val fieldSortName: String = {
     val separate = rw.definition.className.collect {
       case "lightdb.spatial.GeoPoint" => true
@@ -33,6 +36,14 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
     case Str(s, _) => new TermQuery(new Term(fieldName, s))
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${rw.definition})")
   })
+
+  def parsed(query: String, allowLeadingWildcard: Boolean = false): LuceneFilter[D] = {
+    LuceneFilter(() => {
+      val parser = new QueryParser(fieldName, lucene.index.analyzer)
+      parser.setAllowLeadingWildcard(allowLeadingWildcard)
+      parser.parse(query)
+    })
+  }
 
   def IN(values: Seq[F]): LuceneFilter[D] = {
     val b = new BooleanQuery.Builder
