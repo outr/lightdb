@@ -206,7 +206,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "do paginated search as a stream converting to name" in {
       Person.withSearchContext { implicit context =>
-        Person.query.convert(p => IO.pure(p.name)).pageSize(1).countTotal(true).stream.compile.toList.map { names =>
+        Person.query.convert(_.name).pageSize(1).countTotal(true).stream.compile.toList.map { names =>
           names.length should be(3)
           names.toSet should be(Set("John Doe", "Jane Doe", "Bob Dole"))
         }
@@ -235,7 +235,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "search using tokenized data and a parsed query" in {
       Person.query
-        .filter(Person.search parsed "joh% 21")
+        .filter(Person.search.words("joh 21"))
         .toList
         .map { results =>
           results.map(_.name) should be(List("John Doe"))

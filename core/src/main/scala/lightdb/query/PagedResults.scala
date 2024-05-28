@@ -11,7 +11,7 @@ case class PagedResults[D <: Document[D], V](query: Query[D, V],
                                              idsAndScores: List[(Id[D], Double)],
                                              getter: Option[Id[D] => IO[D]] = None) {
   lazy val page: Int = offset / query.pageSize
-  lazy val pages: Int = math.ceil(total.toDouble / query.pageSize.toDouble).toInt
+  lazy val pages: Int = math.ceil(query.limit.getOrElse(total).toDouble / query.pageSize.toDouble).toInt
 
   lazy val ids: List[Id[D]] = idsAndScores.map(_._1)
   lazy val scores: List[Double] = idsAndScores.map(_._2)

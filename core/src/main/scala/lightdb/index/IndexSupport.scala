@@ -39,6 +39,7 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
   def doSearch[V](query: Query[D, V],
                   context: SearchContext[D],
                   offset: Int,
+                  limit: Option[Int],
                   after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]]
 
   protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit]

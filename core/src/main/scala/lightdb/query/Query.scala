@@ -16,8 +16,10 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
                                       scoreDocs: Boolean = false,
                                       offset: Int = 0,
                                       pageSize: Int = 1_000,
+                                      limit: Option[Int] = None,
                                       countTotal: Boolean = true) {
-  def convert[T](converter: D => IO[T]): Query[D, T] = copy(convert = converter)
+  def evalConvert[T](converter: D => IO[T]): Query[D, T] = copy(convert = converter)
+  def convert[T](converter: D => T): Query[D, T] = copy(convert = doc => IO(converter(doc)))
 
   def filter(filter: Filter[D], and: Boolean = false): Query[D, V] = {
     if (and && this.filter.nonEmpty) {
@@ -27,13 +29,23 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
     }
   }
 
+  def filters(filters: Filter[D]*): Query[D, V] = if (filters.nonEmpty) {
+    var filter = filters.head
+    filters.tail.foreach { f =>
+      filter = filter && f
+    }
+    this.filter(filter)
+  } else {
+    this
+  }
+
   def sort(sort: Sort*): Query[D, V] = copy(sort = this.sort ::: sort.toList)
 
   def distance(field: IndexedField[GeoPoint, D],
                from: GeoPoint,
                sort: Boolean = true,
                radius: Option[Length] = None): Query[D, DistanceAndDoc[D]] = {
-    var q = convert(doc => IO {
+    var q = convert(doc => {
       DistanceAndDoc(
         doc = doc,
         distance = DistanceCalculator(from, field.get(doc).head)
@@ -60,12 +72,15 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
 
   def pageSize(size: Int): Query[D, V] = copy(pageSize = size)
 
+  def limit(limit: Int): Query[D, V] = copy(limit = Some(limit))
+
   def countTotal(b: Boolean): Query[D, V] = copy(countTotal = b)
 
   def search()(implicit context: SearchContext[D]): IO[PagedResults[D, V]] = indexSupport.doSearch(
     query = this,
     context = context,
     offset = offset,
+    limit = limit,
     after = None
   )
 
@@ -97,6 +112,12 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
   def toList: IO[List[V]] = indexSupport.withSearchContext { implicit context =>
     stream.compile.toList
   }
+
+  def first: IO[Option[V]] = indexSupport.withSearchContext { implicit context =>
+    stream.take(1).compile.last
+  }
+
+  def one: IO[V] = first.map(_.getOrElse(throw new RuntimeException(s"No results for query: $this")))
 
   def count: IO[Int] = indexSupport.withSearchContext { implicit context =>
     idStream.compile.count.map(_.toInt)

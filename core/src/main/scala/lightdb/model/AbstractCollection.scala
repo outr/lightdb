@@ -60,6 +60,8 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
     }
   }
 
+  def set(docs: Seq[D]): IO[Int] = docs.map(set).sequence.map(_.size)
+
   def modify(id: Id[D])
             (f: Option[D] => IO[Option[D]])
             (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Option[D]] = withLock(id) { implicit lock =>
