@@ -11,6 +11,7 @@ trait PageContext[D <: Document[D]] {
       query = currentPage.query,
       context = context,
       offset = currentPage.offset + currentPage.query.pageSize,
+      limit = currentPage.query.limit,
       after = Some(currentPage)
     ).map(Some.apply)
   } else {

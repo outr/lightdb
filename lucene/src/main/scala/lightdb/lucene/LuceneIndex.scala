@@ -41,8 +41,26 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
     LuceneFilter(() => {
       val parser = new QueryParser(fieldName, lucene.index.analyzer)
       parser.setAllowLeadingWildcard(allowLeadingWildcard)
+      parser.setSplitOnWhitespace(true)
       parser.parse(query)
     })
+  }
+
+  def words(s: String,
+            matchStartsWith: Boolean = true,
+            matchEndsWith: Boolean = false): LuceneFilter[D] = {
+    val words = s.split("\\s+").map { w =>
+      if (matchStartsWith && matchEndsWith) {
+        s"%$w%"
+      } else if (matchStartsWith) {
+        s"%$w"
+      } else if (matchEndsWith) {
+        s"$w%"
+      } else {
+        w
+      }
+    }.mkString(" ")
+    parsed(words, allowLeadingWildcard = matchEndsWith)
   }
 
   def IN(values: Seq[F]): LuceneFilter[D] = {

@@ -6,7 +6,7 @@ import fabric.io.JsonFormatter
 import lightdb.{Document, Id}
 import lightdb.index.{IndexSupport, IndexedField}
 import lightdb.model.AbstractCollection
-import lightdb.query.{PagedResults, Query, SearchContext, Sort}
+import lightdb.query.{PagedResults, Query, SearchContext, Sort, SortDirection}
 import lightdb.util.FlushingBacklog
 
 import java.nio.file.{Files, Path}
@@ -96,6 +96,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   override def doSearch[V](query: Query[D, V],
                            context: SearchContext[D],
                            offset: Int,
+                           limit: Option[Int],
                            after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]] = IO {
     var params = List.empty[Json]
     val filters = query.filter match {
@@ -124,8 +125,8 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
       -1
     }
     val sort = query.sort.collect {
-      case Sort.ByField(field, reverse) =>
-        val dir = if (reverse) "DESC" else "ASC"
+      case Sort.ByField(field, direction) =>
+        val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
         s"${field.fieldName} $dir"
     } match {
       case Nil => ""
@@ -139,7 +140,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
          |$filters
          |$sort
          |LIMIT
-         |  ${query.pageSize}
+         |  ${query.limit.getOrElse(query.pageSize)}
          |OFFSET
          |  $offset
          |""".stripMargin
