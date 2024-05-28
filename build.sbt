@@ -53,7 +53,7 @@ val fabricVersion: String = "1.14.4"
 val fs2Version: String = "3.10.2"
 val scribeVersion: String = "3.13.5"
 val luceneVersion: String = "9.10.0"
-val sqliteVersion: String = "3.45.3.0"
+val sqliteVersion: String = "3.46.0.0"
 val keysemaphoreVersion: String = "0.3.0-M1"
 val squantsVersion: String = "1.8.3"
 
