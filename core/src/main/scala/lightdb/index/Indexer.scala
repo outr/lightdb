@@ -12,6 +12,8 @@ trait Indexer[D <: Document[D]] {
 
   def indexSupport: IndexSupport[D]
 
+  def truncate(): IO[Unit]
+
   def commit(): IO[Unit]
 
   def count(): IO[Int]

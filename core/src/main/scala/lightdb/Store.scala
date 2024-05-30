@@ -40,7 +40,7 @@ trait Store {
                                   (implicit rw: RW[D]): IO[D] = IO(doc.json)
     .flatMap(json => putJson(doc._id, json).map(_ => doc))
 
-  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] = IO(JsonFormatter.Compact(json))
+  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] = IO.blocking(JsonFormatter.Compact(json))
     .flatMap { jsonString =>
       put(id, jsonString.getBytes).map(_ => ())
     }

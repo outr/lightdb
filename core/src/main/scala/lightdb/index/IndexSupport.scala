@@ -29,6 +29,15 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
     })
   }
 
+  override def reIndex(collection: AbstractCollection[D]): IO[Unit] = for {
+    _ <- super.reIndex(collection)
+    _ <- index.truncate()
+    _ <- collection.stream.evalMap { doc =>
+      indexDoc(doc, index.fields)
+    }.compile.drain
+    _ <- index.commit()
+  } yield ()
+
   def distanceFilter(field: IndexedField[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
     throw new UnsupportedOperationException("Distance filtering is not supported on this indexer")
 

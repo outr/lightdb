@@ -45,7 +45,7 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
     val context = SearchContext(indexSupport)
     contextMapping.put(context, indexSearcher)
     f(context)
-      .guarantee(IO {
+      .guarantee(IO.blocking {
         contextMapping.remove(context)
         searcherManager.release(indexSearcher)
       })
@@ -57,8 +57,12 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
     indexWriter.updateDocument(new Term("_id", id.value), document)
   }
 
-  private[lightdb] def delete(id: Id[D]): IO[Unit] = IO {
+  private[lightdb] def delete(id: Id[D]): IO[Unit] = IO.blocking {
     indexWriter.deleteDocuments(parser.parse(s"_id:${id.value}"))
+  }
+
+  def truncate(): IO[Unit] = IO.blocking {
+    indexWriter.deleteAll()
   }
 
   private def commitBlocking(): Unit = {
@@ -88,9 +92,9 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
              tokenized: Boolean = false)
             (implicit rw: RW[F]): LuceneIndex[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
 
-  override def commit(): IO[Unit] = IO(commitBlocking())
+  override def commit(): IO[Unit] = IO.blocking(commitBlocking())
 
   override def count(): IO[Int] = withSearchContext { context =>
-    IO(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
+    IO.blocking(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
   }
 }

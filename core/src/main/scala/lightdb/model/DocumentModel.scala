@@ -1,5 +1,6 @@
 package lightdb.model
 
+import cats.effect.IO
 import cats.implicits._
 import lightdb.index.IndexedField
 import lightdb.{Document, Id, IndexedLinks, Unique}
@@ -27,4 +28,6 @@ trait DocumentModel[D <: Document[D]] {
       } yield Some(doc)
     })
   }
+
+  def reIndex(collection: AbstractCollection[D]): IO[Unit] = IO.unit
 }

@@ -19,7 +19,7 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
                                       limit: Option[Int] = None,
                                       countTotal: Boolean = true) {
   def evalConvert[T](converter: D => IO[T]): Query[D, T] = copy(convert = converter)
-  def convert[T](converter: D => T): Query[D, T] = copy(convert = doc => IO(converter(doc)))
+  def convert[T](converter: D => T): Query[D, T] = copy(convert = doc => IO.blocking(converter(doc)))
 
   def filter(filter: Filter[D], and: Boolean = false): Query[D, V] = {
     if (and && this.filter.nonEmpty) {

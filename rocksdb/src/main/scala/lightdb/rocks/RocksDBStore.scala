@@ -18,11 +18,11 @@ case class RocksDBStore(directory: Path) extends Store {
 
   private def createStream[T](f: RocksIterator => Option[T]): fs2.Stream[IO, T] = {
     // TODO: Thread-safety issue causing this to crash?
-    //    val io = IO {
+    //    val io = IO.blocking {
     //      val iterator = db.newIterator()
     //      iterator.seekToFirst()
     //      fs2.Stream
-    //        .repeatEval(IO {
+    //        .repeatEval(IO.blocking {
     //          try {
     //            if (iterator.isValid) {
     //              f(iterator)
@@ -36,7 +36,7 @@ case class RocksDBStore(directory: Path) extends Store {
     //        .unNoneTerminate
     //    }
     //    fs2.Stream.force(io)
-    val io = IO {
+    val io = IO.blocking {
       val iterator = db.newIterator()
       iterator.seekToFirst()
       val list = ListBuffer.empty[T]
@@ -59,14 +59,14 @@ case class RocksDBStore(directory: Path) extends Store {
     Option(i.key()).map(key => Id[D](key.string) -> i.value())
   }
 
-  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO(Option(db.get(id.bytes)))
+  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO.blocking(Option(db.get(id.bytes)))
 
-  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO {
+  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO.blocking {
     db.put(id.bytes, value)
     true
   }
 
-  override def delete[D](id: Id[D]): IO[Unit] = IO {
+  override def delete[D](id: Id[D]): IO[Unit] = IO.blocking {
     db.delete(id.bytes)
   }
 
@@ -74,7 +74,7 @@ case class RocksDBStore(directory: Path) extends Store {
 
   override def commit(): IO[Unit] = IO.unit
 
-  override def dispose(): IO[Unit] = IO {
+  override def dispose(): IO[Unit] = IO.blocking {
     db.close()
   }
 }

@@ -1,6 +1,7 @@
 package lightdb
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1, toTraverseOps}
 import fabric.rw._
 import lightdb.model.{AbstractCollection, Collection, DocumentModel}
@@ -10,10 +11,15 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import scribe.cats.{io => logger}
 
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
+
 abstract class LightDB {
   def directory: Path
 
+  protected def updateFrequency: FiniteDuration = 30.seconds
+
   private val _initialized = new AtomicBoolean(false)
+  private val _disposed = new AtomicBoolean(false)
 
   private var stores = List.empty[Store]
 
@@ -22,6 +28,7 @@ abstract class LightDB {
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
   def initialized: Boolean = _initialized.get()
+  def disposed: Boolean = _disposed.get()
 
   def collections: List[AbstractCollection[_]]
   def upgrades: List[DatabaseUpgrade]
@@ -50,10 +57,21 @@ abstract class LightDB {
       } yield ()).whenA(upgrades.nonEmpty)
       // Set initialized
       _ <- databaseInitialized.set(true)
-    } yield ()
+    } yield {
+      // Start updater
+      recursiveUpdates().unsafeRunAndForget()
+    }
   } else {
     IO.unit
   }
+
+  private def recursiveUpdates(): IO[Unit] = for {
+    _ <- IO.sleep(updateFrequency)
+    _ <- update().recoverWith {
+      case t: Throwable => logger.error(s"Update process threw an error. Continuing...", t)
+    }.whenA(!disposed)
+    _ <- recursiveUpdates().whenA(!disposed)
+  } yield ()
 
   protected[lightdb] def createStoreInternal(name: String): Store = synchronized {
     verifyInitialized()
@@ -64,13 +82,13 @@ abstract class LightDB {
 
   protected def collection[D <: Document[D]](name: String,
                                              model: DocumentModel[D],
-                                             autoCommit: Boolean = false,
+                                             defaultCommitMode: CommitMode = CommitMode.Manual,
                                              atomic: Boolean = true)
                                             (implicit rw: RW[D]): AbstractCollection[D] = AbstractCollection[D](
     name = name,
     db = this,
     model = model,
-    autoCommit = autoCommit,
+    defaultCommitMode = defaultCommitMode,
     atomic = atomic
   )
 
@@ -78,9 +96,12 @@ abstract class LightDB {
 
   def truncate(): IO[Unit] = collections.map(_.truncate()).parSequence.map(_ => ())
 
+  def update(): IO[Unit] = collections.map(_.update()).sequence.map(_ => ())
+
   def dispose(): IO[Unit] = for {
     _ <- collections.map(_.dispose()).parSequence
     _ <- stores.map(_.dispose()).parSequence
+    _ = _disposed.set(true)
   } yield ()
 
   protected object stored {

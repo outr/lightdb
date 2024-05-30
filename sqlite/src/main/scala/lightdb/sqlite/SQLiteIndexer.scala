@@ -19,7 +19,9 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
     get = doc => get(doc).toList
   )
 
-  override def count(): IO[Int] = IO {
+  override def truncate(): IO[Unit] = indexSupport.truncate()
+
+  override def count(): IO[Int] = IO.blocking {
     val ps = indexSupport.connection.prepareStatement(s"SELECT COUNT(_id) FROM ${collection().collectionName}")
     try {
       val rs = ps.executeQuery()
@@ -30,7 +32,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
     }
   }
 
-  override private[lightdb] def delete(id: Id[D]): IO[Unit] = IO {
+  override private[lightdb] def delete(id: Id[D]): IO[Unit] = IO.blocking {
     indexSupport.backlog.remove(id)
     val ps = indexSupport.connection.prepareStatement(s"DELETE FROM ${collection().collectionName} WHERE _id = ?")
     try {

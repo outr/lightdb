@@ -66,7 +66,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
   val _id: SQLIndexedField[Id[D], D] = index("_id", doc => Some(doc._id))
 
   private[sqlite] lazy val backlog = new FlushingBacklog[Id[D], D](10_000, 100_000) {
-    override protected def write(list: List[D]): IO[Unit] = IO {
+    override protected def write(list: List[D]): IO[Unit] = IO.blocking {
       val sql = s"INSERT OR REPLACE INTO ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}) VALUES (${index.fields.map(_ => "?").mkString(", ")})"
       val ps = connection.prepareStatement(sql)
       try {
@@ -83,7 +83,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
-  private def truncate(): IO[Unit] = IO {
+  def truncate(): IO[Unit] = IO.blocking {
     val sql = s"DELETE FROM ${collection.collectionName}"
     val ps = connection.prepareStatement(sql)
     try {
@@ -97,7 +97,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
                            context: SearchContext[D],
                            offset: Int,
                            limit: Option[Int],
-                           after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]] = IO {
+                           after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]] = IO.blocking {
     var params = List.empty[Json]
     val filters = query.filter match {
       case Some(f) =>
@@ -203,7 +203,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     super.initModel(collection)
     collection.commitActions.add(backlog.flush())
     collection.truncateActions.add(truncate())
-    collection.disposeActions.add(IO {
+    collection.disposeActions.add(IO.blocking {
       connection.close()
       _connection = None
     })
