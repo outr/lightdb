@@ -240,11 +240,8 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
   object DB extends LightDB with HaloDBSupport {
     override lazy val directory: Path = Paths.get("testdb")
-//    override protected def autoCommit: Boolean = true
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
-
-//    val people: Collection[Person] = collection("people", Person)
 
     override lazy val collections: List[Collection[_]] = List(
       Person
