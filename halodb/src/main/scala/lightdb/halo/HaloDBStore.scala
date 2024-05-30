@@ -38,21 +38,21 @@ case class HaloDBStore(directory: Path,
       Id[D](key) -> record.getValue
     }
 
-  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO {
+  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO.blocking {
     Option(instance.get(id.bytes))
   }
 
-  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO {
+  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO.blocking {
     instance.put(id.bytes, value)
   }
 
-  override def delete[D](id: Id[D]): IO[Unit] = IO {
+  override def delete[D](id: Id[D]): IO[Unit] = IO.blocking {
     instance.delete(id.bytes)
   }
 
-  override def size: IO[Int] = IO(instance.size().toInt)
+  override def size: IO[Int] = IO.blocking(instance.size().toInt)
 
   override def commit(): IO[Unit] = IO.unit
 
-  override def dispose(): IO[Unit] = IO(instance.close())
+  override def dispose(): IO[Unit] = IO.blocking(instance.close())
 }

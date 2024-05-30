@@ -27,20 +27,20 @@ case class MapDBStore(directory: Option[Path], chunkSize: Int = 1024) extends St
       Id[D](pair.getKey) -> pair.getValue
     }
 
-  override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO(Option(map.getOrDefault(id.value, null)))
+  override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO.blocking(Option(map.getOrDefault(id.value, null)))
 
-  override def put[T](id: Id[T], value: Array[Byte]): IO[Boolean] = IO {
+  override def put[T](id: Id[T], value: Array[Byte]): IO[Boolean] = IO.blocking {
     map.put(id.value, value)
     true
   }
 
-  override def delete[T](id: Id[T]): IO[Unit] = IO(map.remove(id.value))
+  override def delete[T](id: Id[T]): IO[Unit] = IO.blocking(map.remove(id.value))
 
-  override def size: IO[Int] = IO(map.size())
+  override def size: IO[Int] = IO.blocking(map.size())
 
-  override def commit(): IO[Unit] = IO(db.commit())
+  override def commit(): IO[Unit] = IO.blocking(db.commit())
 
-  override def truncate(): IO[Unit] = IO(map.clear())
+  override def truncate(): IO[Unit] = IO.blocking(map.clear())
 
-  override def dispose(): IO[Unit] = IO(db.close())
+  override def dispose(): IO[Unit] = IO.blocking(db.close())
 }

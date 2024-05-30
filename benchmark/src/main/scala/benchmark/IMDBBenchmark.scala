@@ -79,7 +79,7 @@ object IMDBBenchmark { // extends IOApp {
     sys.exit(0)
   }
 
-  private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO {
+  private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO.blocking {
     val reader = new BufferedReader(new FileReader(file))
     val counter = new AtomicInteger(0)
     val concurrency = 32
@@ -100,7 +100,7 @@ object IMDBBenchmark { // extends IOApp {
       }
 
       val iterator = new IOIterator[T] {
-        override def next(): IO[Option[T]] = IO {
+        override def next(): IO[Option[T]] = IO.blocking {
           nextLine()
         }.map(_.map { line =>
           val values = line.split('\t').toList
@@ -213,7 +213,7 @@ object IMDBBenchmark { // extends IOApp {
   private def downloadFile(file: File, limit: Limit): IO[File] = (if (file.exists()) {
     IO.pure(file)
   } else {
-    IO {
+    IO.blocking {
       scribe.info(s"File doesn't exist, downloading ${file.getName}...")
       file.getParentFile.mkdirs()
       val fileName = s"${file.getName}.gz"
@@ -251,7 +251,7 @@ object IMDBBenchmark { // extends IOApp {
   }).flatMap { file =>
     limit match {
       case Limit.Unlimited => IO.pure(file)
-      case _ => IO {
+      case _ => IO.blocking {
         val source = Source.fromFile(file)
         try {
           val (pre, post) = file.getName.splitAt(file.getName.lastIndexOf("."))

@@ -19,7 +19,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogAka = new FlushingBacklog[String, TitleAka](1000, 10000) {
-    override protected def write(list: List[TitleAkaPG]): IO[Unit] = IO {
+    override protected def write(list: List[TitleAkaPG]): IO[Unit] = IO.blocking {
       val ps = connection.prepareStatement("INSERT INTO title_aka(id, titleId, ordering, title, region, language, types, attributes, isOriginalTitle) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
         list.foreach { t =>
@@ -42,7 +42,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogBasics = new FlushingBacklog[String, TitleBasics](1000, 10000) {
-    override protected def write(list: List[TitleBasicsPG]): IO[Unit] = IO {
+    override protected def write(list: List[TitleBasicsPG]): IO[Unit] = IO.blocking {
       val ps = connection.prepareStatement("INSERT INTO title_basics(id, tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genres) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
         list.foreach { t =>
@@ -67,7 +67,7 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   override def name: String = "PostgreSQL"
 
-  override def init(): IO[Unit] = IO {
+  override def init(): IO[Unit] = IO.blocking {
     executeUpdate("DROP TABLE IF EXISTS title_aka")
     executeUpdate("DROP TABLE IF EXISTS title_basics")
     executeUpdate("CREATE TABLE title_aka(id VARCHAR NOT NULL, titleId TEXT, ordering INTEGER, title TEXT, region TEXT, language TEXT, types TEXT, attributes TEXT, isOriginalTitle SMALLINT, PRIMARY KEY (id))")
@@ -137,7 +137,7 @@ object PostgresImplementation extends BenchmarkImplementation {
 
   override def titleIdFor(t: TitleAkaPG): String = t.titleId
 
-  override def get(id: String): IO[TitleAkaPG] = IO {
+  override def get(id: String): IO[TitleAkaPG] = IO.blocking {
     val s = connection.prepareStatement("SELECT * FROM title_aka WHERE id = ?")
     try {
       s.setString(1, id)
@@ -153,7 +153,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaPG]] = IO {
+  override def findByTitleId(titleId: String): IO[List[TitleAkaPG]] = IO.blocking {
     val s = connection.prepareStatement("SELECT * FROM title_aka WHERE titleId = ?")
     try {
       s.setString(1, titleId)
@@ -179,7 +179,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     ()
   }
 
-  override def verifyTitleAka(): IO[Unit] = IO {
+  override def verifyTitleAka(): IO[Unit] = IO.blocking {
     val s = connection.createStatement()
     val rs = s.executeQuery("SELECT COUNT(1) FROM title_aka")
     rs.next()
@@ -187,7 +187,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     scribe.info(s"Counted $count records in title_aka table")
   }
 
-  override def verifyTitleBasics(): IO[Unit] = IO {
+  override def verifyTitleBasics(): IO[Unit] = IO.blocking {
     val s = connection.createStatement()
     val rs = s.executeQuery("SELECT COUNT(1) FROM title_basics")
     rs.next()
