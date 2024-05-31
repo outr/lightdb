@@ -1,9 +1,12 @@
 package lightdb
 
 import cats.effect.IO
-import fabric.Json
+import com.github.pbbl.heap.ByteBufferPool
+import fabric.{Cryo, Json}
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
+
+import java.nio.ByteBuffer
 
 trait Store {
   def keyStream[D]: fs2.Stream[IO, Id[D]]
@@ -31,8 +34,7 @@ trait Store {
 
   def getJsonDoc[D: RW](id: Id[D]): IO[Option[D]] = get(id)
     .map(_.map { bytes =>
-      val jsonString = bytes.string
-      val json = JsonParser(jsonString)
+      val json = bytes2Json(bytes)
       json.as[D]
     })
 
@@ -40,10 +42,23 @@ trait Store {
                                   (implicit rw: RW[D]): IO[D] = IO(doc.json)
     .flatMap(json => putJson(doc._id, json).map(_ => doc))
 
-  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] = IO.blocking(JsonFormatter.Compact(json))
-    .flatMap { jsonString =>
-      put(id, jsonString.getBytes).map(_ => ())
-    }
+  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] =
+    IO.blocking(json2Bytes(json)).map(bytes => put(id, bytes)).map(_ => ())
+
+  private def json2Bytes(json: Json): Array[Byte] = JsonFormatter.Compact(json).getBytes
+
+  private def bytes2Json(bytes: Array[Byte]): Json = {
+    val jsonString = bytes.string
+    JsonParser(jsonString)
+  }
+
+  /*private def json2Bytes(json: Json): Array[Byte] = Store.withPoolBytes { bb =>
+    Cryo.freeze(json, bb)
+  }
+
+  private def bytes2Json(bytes: Array[Byte]): Json = Store.withPool(bytes) { bb =>
+    Cryo.thaw(bb)
+  }*/
 
   def truncate(): IO[Unit] = keyStream[Any]
     .evalMap { id =>
@@ -57,4 +72,33 @@ trait Store {
         case _ => truncate()
       }
     }
+}
+
+object Store {
+  private val ByteBufferPoolSize: Int = 100_000
+  private lazy val bbPool = new ByteBufferPool
+
+  private def withPoolBytes(f: ByteBuffer => Unit): Array[Byte] = {
+    val bb = bbPool.take(ByteBufferPoolSize)
+    try {
+      f(bb)
+      bb.flip()
+      val array = new Array[Byte](bb.remaining())
+      bb.get(array)
+      array
+    } finally {
+      bbPool.give(bb)
+    }
+  }
+
+  private def withPool[Return](bytes: Array[Byte])(f: ByteBuffer => Return): Return = {
+    val bb = bbPool.take(ByteBufferPoolSize)
+    try {
+      bb.put(bytes)
+      bb.flip()
+      f(bb)
+    } finally {
+      bbPool.give(bb)
+    }
+  }
 }

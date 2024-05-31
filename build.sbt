@@ -56,6 +56,7 @@ val luceneVersion: String = "9.10.0"
 val sqliteVersion: String = "3.46.0.0"
 val keysemaphoreVersion: String = "0.3.0-M1"
 val squantsVersion: String = "1.8.3"
+val pbblVersion: String = "1.0.2"
 
 val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
@@ -81,6 +82,7 @@ lazy val core = project.in(file("core"))
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"io.chrisdavenport" %% "keysemaphore" % keysemaphoreVersion,
 			"org.typelevel" %% "squants" % squantsVersion,
+			"com.github.jhg023" % "Pbbl" % pbblVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		),
