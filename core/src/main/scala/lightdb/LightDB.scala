@@ -99,6 +99,7 @@ abstract class LightDB {
   def update(): IO[Unit] = collections.map(_.update()).sequence.map(_ => ())
 
   def dispose(): IO[Unit] = for {
+    _ <- commit()
     _ <- collections.map(_.dispose()).parSequence
     _ <- stores.map(_.dispose()).parSequence
     _ = _disposed.set(true)
