@@ -60,7 +60,9 @@ object IMDBBenchmark { // extends IOApp {
       verifiedTitleAkaTime <- implementation.verifyTitleAka().elapsedValue
       verifiedTitleBasicsTime <- implementation.verifyTitleBasics().elapsedValue
       _ = scribe.info("--- Stage 7 ---")
-      cycleTime <- cycleThroughEntireCollection(10).elapsedValue
+      cycleTime <- cycleThroughEntireCollection(1).elapsedValue
+      count = ids.length
+      _ = assert(count == limit.value - 1, s"Expected ${limit.value - 1}, but received: $count")
       _ = scribe.info("--- Stage 8 ---")
       validationTime <- validateIds(ids).elapsedValue
       _ = scribe.info("--- Stage 9 ---")
