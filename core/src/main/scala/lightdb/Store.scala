@@ -1,8 +1,8 @@
 package lightdb
 
 import cats.effect.IO
-import com.github.pbbl.heap.ByteBufferPool
-import fabric.{Cryo, Json}
+import fabric.Json
+import fabric.cryo.Cryo
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 
@@ -43,7 +43,7 @@ trait Store {
     .flatMap(json => putJson(doc._id, json).map(_ => doc))
 
   def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] =
-    IO.blocking(json2Bytes(json)).map(bytes => put(id, bytes)).map(_ => ())
+    IO.blocking(json2Bytes(json)).flatMap(bytes => put(id, bytes)).map(_ => ())
 
   private def json2Bytes(json: Json): Array[Byte] = JsonFormatter.Compact(json).getBytes
 
@@ -52,13 +52,9 @@ trait Store {
     JsonParser(jsonString)
   }
 
-  /*private def json2Bytes(json: Json): Array[Byte] = Store.withPoolBytes { bb =>
-    Cryo.freeze(json, bb)
-  }
+//  private def json2Bytes(json: Json): Array[Byte] = Cryo.freeze(json)
 
-  private def bytes2Json(bytes: Array[Byte]): Json = Store.withPool(bytes) { bb =>
-    Cryo.thaw(bb)
-  }*/
+//  private def bytes2Json(bytes: Array[Byte]): Json = Cryo.thaw(bytes)
 
   def truncate(): IO[Unit] = keyStream[Any]
     .evalMap { id =>
@@ -72,33 +68,4 @@ trait Store {
         case _ => truncate()
       }
     }
-}
-
-object Store {
-  private val ByteBufferPoolSize: Int = 100_000
-  private lazy val bbPool = new ByteBufferPool
-
-  private def withPoolBytes(f: ByteBuffer => Unit): Array[Byte] = {
-    val bb = bbPool.take(ByteBufferPoolSize)
-    try {
-      f(bb)
-      bb.flip()
-      val array = new Array[Byte](bb.remaining())
-      bb.get(array)
-      array
-    } finally {
-      bbPool.give(bb)
-    }
-  }
-
-  private def withPool[Return](bytes: Array[Byte])(f: ByteBuffer => Return): Return = {
-    val bb = bbPool.take(ByteBufferPoolSize)
-    try {
-      bb.put(bytes)
-      bb.flip()
-      f(bb)
-    } finally {
-      bbPool.give(bb)
-    }
-  }
 }
