@@ -17,38 +17,23 @@ case class RocksDBStore(directory: Path) extends Store {
   }
 
   private def createStream[T](f: RocksIterator => Option[T]): fs2.Stream[IO, T] = {
-    // TODO: Thread-safety issue causing this to crash?
-    //    val io = IO.blocking {
-    //      val iterator = db.newIterator()
-    //      iterator.seekToFirst()
-    //      fs2.Stream
-    //        .repeatEval(IO.blocking {
-    //          try {
-    //            if (iterator.isValid) {
-    //              f(iterator)
-    //            } else {
-    //              None
-    //            }
-    //          } finally {
-    //            iterator.next()
-    //          }
-    //        })
-    //        .unNoneTerminate
-    //    }
-    //    fs2.Stream.force(io)
     val io = IO.blocking {
-      val iterator = db.newIterator()
-      iterator.seekToFirst()
-      val list = ListBuffer.empty[T]
-      while (iterator.isValid) {
-        f(iterator).foreach { t =>
-          list.append(t)
+      val rocksIterator = db.newIterator()
+      rocksIterator.seekToFirst()
+      val iterator = new Iterator[Option[T]] {
+        override def hasNext: Boolean = rocksIterator.isValid
+
+        override def next(): Option[T] = try {
+          f(rocksIterator)
+        } finally {
+          rocksIterator.next()
         }
-        iterator.next()
       }
-      fs2.Stream(list.toList: _*)
+      fs2.Stream.fromBlockingIterator[IO](iterator, 512)
+        .unNoneTerminate
     }
     fs2.Stream.force(io)
+
   }
 
   override def keyStream[D]: fs2.Stream[IO, Id[D]] = createStream { i =>
