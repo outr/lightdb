@@ -57,12 +57,25 @@ abstract class LightDB {
       } yield ()).whenA(upgrades.nonEmpty)
       // Set initialized
       _ <- databaseInitialized.set(true)
+      _ = addShutdownHook()
     } yield {
       // Start updater
       recursiveUpdates().unsafeRunAndForget()
     }
   } else {
     IO.unit
+  }
+
+  private lazy val disposeThread = new Thread {
+    override def run(): Unit = dispose().unsafeRunSync()
+  }
+
+  private def addShutdownHook(): Unit = {
+    Runtime.getRuntime.addShutdownHook(disposeThread)
+  }
+
+  private def removeShutdownHook(): Unit = {
+    Runtime.getRuntime.removeShutdownHook(disposeThread)
   }
 
   private def recursiveUpdates(): IO[Unit] = for {
@@ -102,6 +115,7 @@ abstract class LightDB {
     _ <- commit()
     _ <- collections.map(_.dispose()).parSequence
     _ <- stores.map(_.dispose()).parSequence
+    _ = removeShutdownHook()
     _ = _disposed.set(true)
   } yield ()
 
