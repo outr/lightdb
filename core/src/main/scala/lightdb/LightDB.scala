@@ -46,7 +46,9 @@ abstract class LightDB {
   def initialized: Boolean = _initialized.get()
   def disposed: Boolean = _disposed.get()
 
-  def collections: List[AbstractCollection[_]]
+  def userCollections: List[AbstractCollection[_]]
+
+  final lazy val collections: List[AbstractCollection[_]] = backingStore :: userCollections
   def upgrades: List[DatabaseUpgrade]
 
   def commit(): IO[Unit] = collections.map(_.commit()).sequence.map(_ => ())
