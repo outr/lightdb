@@ -100,8 +100,6 @@ abstract class LightDB {
       Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
       Logger("org.apache.lucene.store").withMinimumLevel(Level.Warn).replace()
     }
-    val julLogger = java.util.logging.LogManager.getLogManager.getLogger("")
-    julLogger.getHandlers.foreach(julLogger.removeHandler)
     Logger.system.installJUL()
   }
 
