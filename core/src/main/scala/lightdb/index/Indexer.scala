@@ -16,7 +16,7 @@ trait Indexer[D <: Document[D]] {
 
   def commit(): IO[Unit]
 
-  def count(): IO[Int]
+  def size: IO[Int]
 
   def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return]
 

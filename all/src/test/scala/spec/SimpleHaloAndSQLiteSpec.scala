@@ -23,7 +23,6 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
   "Simple database" should {
     "initialize the database" in {
-      Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
       DB.init(truncate = true)
     }
     "store John Doe" in {
@@ -55,7 +54,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify exactly two objects in index" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(2)
       }
     }
@@ -152,7 +151,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "verify the number of records" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(2)
       }
     }
@@ -168,7 +167,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify the number of records has not changed after modify" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(2)
       }
     }
@@ -191,7 +190,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify exactly one object in index" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(1)
       }
     }
