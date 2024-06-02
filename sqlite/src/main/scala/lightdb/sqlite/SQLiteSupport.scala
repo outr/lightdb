@@ -27,7 +27,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     case None =>
       val url = s"jdbc:sqlite:${path.toFile.getCanonicalPath}"
       val c = DriverManager.getConnection(url)
-      c.setAutoCommit(true)
+      c.setAutoCommit(false)
       val s = c.createStatement()
       try {
         s.executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
@@ -65,7 +65,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
 
   val _id: SQLIndexedField[Id[D], D] = index("_id", doc => Some(doc._id))
 
-  private[sqlite] lazy val backlog = new FlushingBacklog[Id[D], D](10_000, 100_000) {
+  private[sqlite] lazy val backlog = new FlushingBacklog[Id[D], D](1_000, 10_000) {
     override protected def write(list: List[D]): IO[Unit] = IO.blocking {
       val sql = s"INSERT OR REPLACE INTO ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}) VALUES (${index.fields.map(_ => "?").mkString(", ")})"
       val ps = connection.prepareStatement(sql)

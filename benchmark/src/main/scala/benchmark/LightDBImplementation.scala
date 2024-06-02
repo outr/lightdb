@@ -114,13 +114,13 @@ object LightDBImplementation extends BenchmarkImplementation {
                          isOriginalTitle: Option[Boolean],
                          _id: Id[TitleAka]) extends Document[TitleAka]
 
-//  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with SQLiteSupport[TitleAkaLDB] {
-  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with LuceneSupport[TitleAkaLDB] {
+  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with SQLiteSupport[TitleAkaLDB] {
+//  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with LuceneSupport[TitleAkaLDB] {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
 //    val titleId: IndexedLinks[String, TitleAkaLDB] = indexedLinks[String]("titleId", identity, _.titleId, MaxLinks.OverflowTrim(100))
-    val titleId: LuceneIndex[String, TitleAkaLDB] = index.one("titleId", _.titleId)
-//    val titleId: SQLIndexedField[String, TitleAkaLDB] = index("titleId", doc => Some(doc.titleId))
+//    val titleId: LuceneIndex[String, TitleAkaLDB] = index.one("titleId", _.titleId)
+    val titleId: SQLIndexedField[String, TitleAkaLDB] = index("titleId", doc => Some(doc.titleId))
 //    val ordering: SQLIndexedField[Int, TitleAkaLDB] = index("ordering", doc => Some(doc.ordering))
 //    val title: SQLIndexedField[String, TitleAkaLDB] = index("title", doc => Some(doc.title))
 //    val region: SQLIndexedField[String, TitleAkaLDB] = index("region", _.region)
