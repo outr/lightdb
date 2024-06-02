@@ -15,8 +15,6 @@ Computationally focused database using pluggable store + indexer
 ## 1.0 TODO
 - [ ] More performance improvements to SQLite integration
 - [ ] Automated generation of performance bar charts
-- [ ] Verify index integrity and rebuild on startup if out-of-sync
-- [ ] Benchmark using Fabric Cryo to test performance gains
 - [ ] Create backup and restore features
     - [ ] Real-time backup (write changes to incremental file)
     - [ ] Complete dump and restore
