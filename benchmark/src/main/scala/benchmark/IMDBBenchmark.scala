@@ -179,6 +179,22 @@ object IMDBBenchmark { // extends IOApp {
     }
   }
 
+//  def validateTitleIds(idsList: List[Ids]): IO[Unit] = {
+//    fs2.Stream[IO, Ids](idsList: _*)
+//      .parEvalMap(8) { ids =>
+//        implementation.findByTitleId(ids.titleId).map { titleAkas =>
+//          val results = titleAkas.map(ta => implementation.titleIdFor(ta))
+//          if (titleAkas.isEmpty) {
+//            throw new RuntimeException("Empty!")
+//          } else if (!results.forall(id => id == ids.titleId)) {
+//            throw new RuntimeException(s"Not all titleIds match the query: $results")
+//          }
+//        }
+//      }
+//      .compile
+//      .drain
+//  }
+
 //  override def run(args: List[String]): IO[ExitCode] = {
 //    val baseDirectory = new File("data")
 //    val start = System.currentTimeMillis()
