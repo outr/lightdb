@@ -6,9 +6,9 @@ import fabric.cryo.Cryo
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 
-import java.nio.ByteBuffer
-
 trait Store {
+  def useCryo: Boolean = false
+
   def keyStream[D]: fs2.Stream[IO, Id[D]]
 
   def stream[D]: fs2.Stream[IO, (Id[D], Array[Byte])]
@@ -26,16 +26,25 @@ trait Store {
   def dispose(): IO[Unit]
 
   def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = stream[D].map {
-    case (_, bytes) =>
-      val jsonString = bytes.string
-      val json = JsonParser(jsonString)
-      json.as[D]
+    case (id, bytes) =>
+      try {
+        val json = bytes2Json(bytes)
+        json.as[D]
+      } catch {
+        case t: Throwable =>
+          println(bytes.mkString(","))
+          throw new RuntimeException(s"Failed to read $id with ${bytes.length} bytes.", t)
+      }
   }
 
   def getJsonDoc[D: RW](id: Id[D]): IO[Option[D]] = get(id)
     .map(_.map { bytes =>
-      val json = bytes2Json(bytes)
-      json.as[D]
+      try {
+        val json = bytes2Json(bytes)
+        json.as[D]
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Failed to read $id with ${bytes.length} bytes.", t)
+      }
     })
 
   def putJsonDoc[D <: Document[D]](doc: D)
@@ -45,16 +54,18 @@ trait Store {
   def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] =
     IO.blocking(json2Bytes(json)).flatMap(bytes => put(id, bytes)).map(_ => ())
 
-  private def json2Bytes(json: Json): Array[Byte] = JsonFormatter.Compact(json).getBytes
+  private def json2Bytes(json: Json): Array[Byte] = if (useCryo) {
+    Cryo.freeze(json)
+  } else {
+    JsonFormatter.Compact(json).getBytes
+  }
 
-  private def bytes2Json(bytes: Array[Byte]): Json = {
+  private def bytes2Json(bytes: Array[Byte]): Json = if (useCryo) {
+    Cryo.thaw(bytes)
+  } else {
     val jsonString = bytes.string
     JsonParser(jsonString)
   }
-
-//  private def json2Bytes(json: Json): Array[Byte] = Cryo.freeze(json)
-
-//  private def bytes2Json(bytes: Array[Byte]): Json = Cryo.thaw(bytes)
 
   def truncate(): IO[Unit] = keyStream[Any]
     .evalMap { id =>
