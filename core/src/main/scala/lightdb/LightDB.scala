@@ -4,8 +4,10 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1, toTraverseOps}
 import fabric.rw._
+import lightdb.index.IndexSupport
 import lightdb.model.{AbstractCollection, Collection, DocumentModel}
 import lightdb.upgrade.DatabaseUpgrade
+import scribe.{Level, Logger}
 
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
@@ -16,7 +18,21 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 abstract class LightDB {
   def directory: Path
 
+  /**
+   * How frequently to run background updates. Defaults to every 30 seconds.
+   */
   protected def updateFrequency: FiniteDuration = 30.seconds
+
+  /**
+   * If true, will automatically check the number of indexes vs the number of store entries and if there's a mismatch,
+   * the index will be truncated and rebuilt at startup. Defaults to true.
+   */
+  protected def verifyIndexIntegrityOnStartup: Boolean = true
+
+  /**
+   * Disables extraneous logging from underlying implementations. Defaults to true.
+   */
+  protected def disableExtraneousLogging: Boolean = true
 
   private val _initialized = new AtomicBoolean(false)
   private val _disposed = new AtomicBoolean(false)
@@ -40,6 +56,7 @@ abstract class LightDB {
   def init(truncate: Boolean = false): IO[Unit] = if (_initialized.compareAndSet(false, true)) {
     for {
       _ <- logger.info(s"LightDB initializing ${directory.getFileName.toString} collection...")
+      _ = initLogging()
       // Truncate the database before we do anything if specified
       _ <- this.truncate().whenA(truncate)
       // Determine if this is an uninitialized database
@@ -55,6 +72,18 @@ abstract class LightDB {
         _ <- logger.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
         _ <- doUpgrades(upgrades, stillBlocking = true)
       } yield ()).whenA(upgrades.nonEmpty)
+      // Verify integrity
+      _ <- collections.map { collection =>
+        collection.model match {
+          case indexSupport: IndexSupport[_] => for {
+            storeCount <- collection.size
+            indexCount <- indexSupport.index.size
+            _ <- logger.warn(s"Index and Store out of sync for ${collection.collectionName} (Store: $storeCount, Index: $indexCount). Rebuilding index...").whenA(storeCount != indexCount)
+            _ <- collection.reIndex().whenA(storeCount != indexCount)
+          } yield ()
+          case _ => IO.unit
+        }
+      }.sequence.whenA(verifyIndexIntegrityOnStartup)
       // Set initialized
       _ <- databaseInitialized.set(true)
       _ = addShutdownHook()
@@ -64,6 +93,16 @@ abstract class LightDB {
     }
   } else {
     IO.unit
+  }
+
+  private def initLogging(): Unit = {
+    if (disableExtraneousLogging) {
+      Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
+      Logger("org.apache.lucene.store").withMinimumLevel(Level.Warn).replace()
+    }
+    val julLogger = java.util.logging.LogManager.getLogManager.getLogger("")
+    julLogger.getHandlers.foreach(julLogger.removeHandler)
+    Logger.system.installJUL()
   }
 
   private lazy val disposeThread = new Thread {

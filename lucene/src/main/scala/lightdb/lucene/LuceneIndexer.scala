@@ -94,7 +94,7 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
 
   override def commit(): IO[Unit] = IO.blocking(commitBlocking())
 
-  override def count(): IO[Int] = withSearchContext { context =>
+  override def size: IO[Int] = withSearchContext { context =>
     IO.blocking(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
   }
 }

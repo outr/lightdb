@@ -24,7 +24,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
 
   override def truncate(): IO[Unit] = indexSupport.truncate()
 
-  override def count(): IO[Int] = IO.blocking {
+  override def size: IO[Int] = IO.blocking {
     val ps = indexSupport.connection.prepareStatement(s"SELECT COUNT(_id) FROM ${collection().collectionName}")
     try {
       val rs = ps.executeQuery()

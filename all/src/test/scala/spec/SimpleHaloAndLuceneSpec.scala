@@ -54,7 +54,6 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
   "Simple database" should {
     "initialize the database" in {
-      Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
       DB.init(truncate = true)
     }
     "store John Doe" in {
@@ -101,7 +100,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify exactly three objects in index" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(3)
       }
     }
@@ -255,7 +254,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify exactly two objects in index again" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(2)
       }
     }
