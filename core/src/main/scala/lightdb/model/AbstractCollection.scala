@@ -3,6 +3,7 @@ package lightdb.model
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import fabric.Json
 import fabric.rw.RW
 import io.chrisdavenport.keysemaphore.KeySemaphore
 import lightdb.{CommitMode, DocLock, Document, Id, IndexedLinks, LightDB, MaxLinks, Store}
@@ -37,6 +38,8 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   def idStream: fs2.Stream[IO, Id[D]] = store.keyStream
 
   def stream: fs2.Stream[IO, D] = store.streamJsonDocs[D](rw)
+
+  def jsonStream: fs2.Stream[IO, Json] = store.streamJson
 
   def withLock[Return](id: Id[D])(f: DocLock[D] => IO[Return])
                       (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Return] = {

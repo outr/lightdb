@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
+import lightdb.backup.DatabaseBackup
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.Collection
@@ -16,6 +17,7 @@ import org.scalatest.wordspec.AsyncWordSpec
 import scribe.{Level, Logger}
 import squants.space.LengthConversions.LengthConversions
 
+import java.io.File
 import java.nio.file.{Path, Paths}
 
 class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
@@ -107,6 +109,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     "verify exactly three objects in the store" in {
       Person.idStream.compile.toList.map { ids =>
         ids.toSet should be(Set(id1, id2, id3))
+      }
+    }
+    "do a database backup" in {
+      DatabaseBackup.backup(DB, new File("backup")).map { count =>
+        count should be(3)
       }
     }
     "search by name for positive result" in {
@@ -289,6 +296,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     "verify start time has been set" in {
       DB.startTime.get().map { startTime =>
         startTime should be > 0L
+      }
+    }
+    "restore from the database backup" in {
+      DatabaseBackup.restore(DB, new File("backup")).map { count =>
+        count should be(3)
       }
     }
     "dispose" in {
