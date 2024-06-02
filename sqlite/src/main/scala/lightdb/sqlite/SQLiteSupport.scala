@@ -63,7 +63,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
 
   override lazy val index: SQLiteIndexer[D] = SQLiteIndexer(this, () => collection)
 
-  val _id: SQLIndexedField[Id[D], D] = index("_id", doc => Some(doc._id))
+  val _id: SQLIndexedField[Id[D], D] = index.one("_id", _._id)
 
   private[sqlite] lazy val backlog = new FlushingBacklog[Id[D], D](1_000, 10_000) {
     override protected def write(list: List[D]): IO[Unit] = IO.blocking {

@@ -13,11 +13,14 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
     f(context)
   }
 
-  def apply[F](name: String, get: D => Option[F])(implicit rw: RW[F]): SQLIndexedField[F, D] = SQLIndexedField(
+  def apply[F](name: String, get: D => List[F])(implicit rw: RW[F]): SQLIndexedField[F, D] = SQLIndexedField(
     fieldName = name,
     indexSupport = indexSupport,
-    get = doc => get(doc).toList
+    get = doc => get(doc)
   )
+
+  def one[F](name: String, get: D => F)(implicit rw: RW[F]): SQLIndexedField[F, D] =
+    apply[F](name, doc => List(get(doc)))
 
   override def truncate(): IO[Unit] = indexSupport.truncate()
 

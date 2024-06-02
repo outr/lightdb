@@ -13,11 +13,8 @@ Computationally focused database using pluggable store + indexer
 - SQLite (https://www.sqlite.org) - Fastest
 
 ## 1.0 TODO
-- [ ] Consistent and unified index support between Lucene and SQLite
 - [ ] More performance improvements to SQLite integration
-- [ ] Better RocksDB performance
 - [ ] Automated generation of performance bar charts
-- [ ] Verify commit on shutdown
 - [ ] Verify index integrity and rebuild on startup if out-of-sync
 - [ ] Benchmark using Fabric Cryo to test performance gains
 - [ ] Create backup and restore features
