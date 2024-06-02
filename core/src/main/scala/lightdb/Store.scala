@@ -25,17 +25,18 @@ trait Store {
 
   def dispose(): IO[Unit]
 
-  def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = stream[D].map {
-    case (id, bytes) =>
-      try {
-        val json = bytes2Json(bytes)
-        json.as[D]
+  def streamJson: fs2.Stream[IO, Json] = stream[Json]
+    .map {
+      case (id, bytes) => try {
+        bytes2Json(bytes)
       } catch {
         case t: Throwable =>
           println(bytes.mkString(","))
           throw new RuntimeException(s"Failed to read $id with ${bytes.length} bytes.", t)
       }
-  }
+    }
+
+  def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = streamJson.map(_.as[D])
 
   def getJsonDoc[D: RW](id: Id[D]): IO[Option[D]] = get(id)
     .map(_.map { bytes =>

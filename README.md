@@ -15,8 +15,3 @@ Computationally focused database using pluggable store + indexer
 ## 1.0 TODO
 - [ ] More performance improvements to SQLite integration
 - [ ] Automated generation of performance bar charts
-- [ ] Create backup and restore features
-    - [ ] Real-time backup (write changes to incremental file)
-    - [ ] Complete dump and restore
-    - [ ] Post-restore incremental restore
-    - [ ] Testing of empty database loads from backups if available
