@@ -113,7 +113,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "do a database backup" in {
       DatabaseBackup.backup(DB, new File("backup")).map { count =>
-        count should be(3)
+        count should be(6)
       }
     }
     "search by name for positive result" in {
@@ -300,7 +300,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "restore from the database backup" in {
       DatabaseBackup.restore(DB, new File("backup")).map { count =>
-        count should be(3)
+        count should be(6)
       }
     }
     "dispose" in {
@@ -313,7 +313,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-    override lazy val collections: List[Collection[_]] = List(
+    override lazy val userCollections: List[Collection[_]] = List(
       Person
     )
 

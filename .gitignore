@@ -4,3 +4,4 @@ target/
 testdb/
 benchmark/imdb/
 benchmark/data/
+backup/

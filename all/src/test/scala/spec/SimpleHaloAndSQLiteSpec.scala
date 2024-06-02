@@ -242,7 +242,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-    override lazy val collections: List[Collection[_]] = List(
+    override lazy val userCollections: List[Collection[_]] = List(
       Person
     )
 
