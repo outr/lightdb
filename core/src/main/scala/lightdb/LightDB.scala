@@ -39,7 +39,8 @@ abstract class LightDB {
 
   private var stores = List.empty[Store]
 
-  protected lazy val backingStore: Collection[KeyValue] = Collection[KeyValue]("_backingStore", this)
+  lazy val backingStore: Collection[KeyValue] = Collection[KeyValue]("_backingStore", this)
+
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
