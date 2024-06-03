@@ -61,7 +61,7 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
-  override lazy val index: SQLiteIndexer[D] = SQLiteIndexer(this, () => collection)
+  override lazy val index: SQLiteIndexer[D] = SQLiteIndexer(this)
 
   val _id: SQLIndexedField[Id[D], D] = index.one("_id", _._id)
 
@@ -199,9 +199,12 @@ trait SQLiteSupport[D <: Document[D]] extends IndexSupport[D] {
     case _ => ps.setString(index, JsonFormatter.Compact(value))
   }
 
+  private def commit(): IO[Unit] = IO.blocking(connection.commit())
+
   override protected[lightdb] def initModel(collection: AbstractCollection[D]): Unit = {
     super.initModel(collection)
     collection.commitActions.add(backlog.flush())
+    collection.commitActions.add(commit())
     collection.truncateActions.add(truncate())
     collection.disposeActions.add(IO.blocking {
       connection.close()

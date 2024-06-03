@@ -7,7 +7,7 @@ import lightdb._
 import lightdb.backup.DatabaseBackup
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
-import lightdb.model.Collection
+import lightdb.model.{AbstractCollection, Collection, DocumentModel}
 import lightdb.query.Sort
 import lightdb.spatial.GeoPoint
 import lightdb.upgrade.DatabaseUpgrade
@@ -59,47 +59,47 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       DB.init(truncate = true)
     }
     "store John Doe" in {
-      Person.set(p1).map { p =>
+      DB.people.set(p1).map { p =>
         p._id should be(id1)
       }
     }
     "verify John Doe exists" in {
-      Person.get(id1).map { o =>
+      DB.people.get(id1).map { o =>
         o should be(Some(p1))
       }
     }
     "store Jane Doe" in {
-      Person.set(p2).map { p =>
+      DB.people.set(p2).map { p =>
         p._id should be(id2)
       }
     }
     "verify Jane Doe exists" in {
-      Person.get(id2).map { o =>
+      DB.people.get(id2).map { o =>
         o should be(Some(p2))
       }
     }
     "verify exactly two objects in data" in {
-      Person.size.map { size =>
+      DB.people.size.map { size =>
         size should be(2)
       }
     }
     "store Bob Dole" in {
-      Person.set(p3).map { p =>
+      DB.people.set(p3).map { p =>
         p._id should be(id3)
       }
     }
     "verify Bob Dole exists" in {
-      Person.get(id3).map { o =>
+      DB.people.get(id3).map { o =>
         o should be(Some(p3))
       }
     }
     "verify exactly three objects in data" in {
-      Person.size.map { size =>
+      DB.people.size.map { size =>
         size should be(3)
       }
     }
     "flush data" in {
-      Person.commit()
+      DB.people.commit()
     }
     "verify exactly three objects in index" in {
       Person.index.size.map { size =>
@@ -107,7 +107,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "verify exactly three objects in the store" in {
-      Person.idStream.compile.toList.map { ids =>
+      DB.people.idStream.compile.toList.map { ids =>
         ids.toSet should be(Set(id1, id2, id3))
       }
     }
@@ -140,17 +140,8 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
           }
       }
     }
-    "search by age for positive result" in {
-      Person.ageLinks.query(19).compile.toList.map { people =>
-        people.length should be(1)
-        val p = people.head
-        p._id should be(id2)
-        p.name should be("Jane Doe")
-        p.age should be(19)
-      }
-    }
     "search by id for John" in {
-      Person(id1).map { person =>
+      DB.people(id1).map { person =>
         person._id should be(id1)
         person.name should be("John Doe")
         person.age should be(21)
@@ -248,17 +239,17 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         }
     }
     "delete John" in {
-      Person.delete(id1).map { deleted =>
+      DB.people.delete(id1).map { deleted =>
         deleted should be(id1)
       }
     }
     "verify exactly two objects in data again" in {
-      Person.size.map { size =>
+      DB.people.size.map { size =>
         size should be(2)
       }
     }
     "commit data" in {
-      Person.commit()
+      DB.people.commit()
     }
     "verify exactly two objects in index again" in {
       Person.index.size.map { size =>
@@ -266,28 +257,28 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "list all documents" in {
-      Person.stream.compile.toList.map { people =>
+      DB.people.stream.compile.toList.map { people =>
         people.length should be(2)
         people.map(_._id).toSet should be(Set(id2, id3))
       }
     }
     "replace Jane Doe" in {
-      Person.set(Person("Jan Doe", 20, Set("cat", "bear"), chicago, id2)).map { p =>
+      DB.people.set(Person("Jan Doe", 20, Set("cat", "bear"), chicago, id2)).map { p =>
         p._id should be(id2)
       }
     }
     "verify Jan Doe" in {
-      Person(id2).map { p =>
+      DB.people(id2).map { p =>
         p._id should be(id2)
         p.name should be("Jan Doe")
         p.age should be(20)
       }
     }
     "commit new data" in {
-      Person.commit()
+      DB.people.commit()
     }
     "list new documents" in {
-      Person.stream.compile.toList.map { results =>
+      DB.people.stream.compile.toList.map { results =>
         results.length should be(2)
         results.map(_.name).toSet should be(Set("Jan Doe", "Bob Dole"))
         results.map(_.age).toSet should be(Set(20, 123))
@@ -313,8 +304,10 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-    override lazy val userCollections: List[Collection[_]] = List(
-      Person
+    val people: AbstractCollection[Person] = collection("people", Person)
+
+    override lazy val userCollections: List[AbstractCollection[_]] = List(
+      people
     )
 
     override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
@@ -326,12 +319,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
                     point: GeoPoint,
                     _id: Id[Person] = Id()) extends Document[Person]
 
-  object Person extends Collection[Person]("people", DB) with LuceneSupport[Person] {
-    override implicit val rw: RW[Person] = RW.gen
+  object Person extends DocumentModel[Person] with LuceneSupport[Person] {
+    implicit val rw: RW[Person] = RW.gen
 
     val name: LuceneIndex[String, Person] = index.one("name", _.name)
     val age: LuceneIndex[Int, Person] = index.one("age", _.age)
-    val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
     val tag: LuceneIndex[String, Person] = index("tag", _.tags.toList)
     val point: LuceneIndex[GeoPoint, Person] = index.one("point", _.point, sorted = true)
     val search: LuceneIndex[String, Person] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
