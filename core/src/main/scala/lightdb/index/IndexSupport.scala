@@ -10,7 +10,7 @@ import squants.space.Length
 trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
   private var _collection: Option[AbstractCollection[D]] = None
 
-  protected def collection: AbstractCollection[D] = this match {
+  protected[lightdb] def collection: AbstractCollection[D] = this match {
     case c: AbstractCollection[_] => c.asInstanceOf[AbstractCollection[D]]
     case _ => _collection.getOrElse(throw new RuntimeException("DocumentModel not initialized with Collection (yet)"))
   }

@@ -13,7 +13,7 @@ import org.apache.lucene.index.StoredFields
 import squants.space.Length
 
 trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
-  override lazy val index: LuceneIndexer[D] = LuceneIndexer(this, collection)
+  override lazy val index: LuceneIndexer[D] = LuceneIndexer(this)
 
   val _id: LuceneIndex[Id[D], D] = index("_id", doc => List(doc._id), store = true)
 

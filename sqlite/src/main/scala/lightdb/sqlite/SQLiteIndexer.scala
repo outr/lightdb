@@ -7,7 +7,9 @@ import lightdb.index.Indexer
 import lightdb.model.AbstractCollection
 import lightdb.query.SearchContext
 
-case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], collection: () => AbstractCollection[D]) extends Indexer[D] {
+case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D]) extends Indexer[D] {
+  private def collection: AbstractCollection[D] = indexSupport.collection
+
   override def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return] = {
     val context = SearchContext(indexSupport)
     f(context)
@@ -25,7 +27,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
   override def truncate(): IO[Unit] = indexSupport.truncate()
 
   override def size: IO[Int] = IO.blocking {
-    val ps = indexSupport.connection.prepareStatement(s"SELECT COUNT(_id) FROM ${collection().collectionName}")
+    val ps = indexSupport.connection.prepareStatement(s"SELECT COUNT(_id) FROM ${collection.collectionName}")
     try {
       val rs = ps.executeQuery()
       rs.next()
@@ -37,7 +39,7 @@ case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D], colle
 
   override private[lightdb] def delete(id: Id[D]): IO[Unit] = IO.blocking {
     indexSupport.backlog.remove(id)
-    val ps = indexSupport.connection.prepareStatement(s"DELETE FROM ${collection().collectionName} WHERE _id = ?")
+    val ps = indexSupport.connection.prepareStatement(s"DELETE FROM ${collection.collectionName} WHERE _id = ?")
     try {
       ps.setString(1, id.value)
       ps.executeUpdate()
