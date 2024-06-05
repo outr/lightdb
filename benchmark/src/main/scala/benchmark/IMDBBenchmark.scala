@@ -40,8 +40,6 @@ object IMDBBenchmark { // extends IOApp {
   case class Elapsed[Return](value: Return, elapsed: Double)
 
   def main(args: Array[String]): Unit = {
-    Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
-
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
     val io = for {
