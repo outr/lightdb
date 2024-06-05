@@ -6,11 +6,11 @@ import fabric.rw._
 import lightdb._
 import lightdb.halo.HaloDBSupport
 import lightdb.model.Collection
-import lightdb.sqlite.{SQLIndexedField, SQLiteSupport}
+import lightdb.sql.{SQLIndexedField, SQLSupport}
+import lightdb.sqlite.SQLiteSupport
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import scribe.{Level, Logger}
 
 import java.nio.file.{Path, Paths}
 

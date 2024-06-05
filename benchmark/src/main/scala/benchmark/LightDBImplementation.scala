@@ -5,7 +5,7 @@ import fabric.rw.RW
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.Collection
-import lightdb.sqlite.{SQLData, SQLIndexedField, SQLiteSupport}
+import lightdb.sqlite.{SQLData, SQLIndexedField, SQLSupport}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Document, Id, IndexedLinks, LightDB, MaxLinks}
 
@@ -114,7 +114,7 @@ object LightDBImplementation extends BenchmarkImplementation {
                          isOriginalTitle: Option[Boolean],
                          _id: Id[TitleAka]) extends Document[TitleAka]
 
-  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with SQLiteSupport[TitleAkaLDB] {
+  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with SQLSupport[TitleAkaLDB] {
 //  object TitleAkaLDB extends Collection[TitleAkaLDB]("titleAka", DB) with LuceneSupport[TitleAkaLDB] {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 

@@ -1,4 +1,4 @@
-package lightdb.sqlite
+package lightdb.sql
 
 import fabric.Json
 import lightdb.Document
