@@ -54,5 +54,8 @@ case class HaloDBStore(directory: Path,
 
   override def commit(): IO[Unit] = IO.unit
 
-  override def dispose(): IO[Unit] = IO.blocking(instance.close())
+  override def dispose(): IO[Unit] = IO.blocking {
+    instance.pauseCompaction()
+    instance.close()
+  }
 }

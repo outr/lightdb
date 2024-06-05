@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
-import lightdb.backup.DatabaseBackup
+import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.{AbstractCollection, Collection, DocumentModel}
@@ -111,8 +111,8 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         ids.toSet should be(Set(id1, id2, id3))
       }
     }
-    "do a database backup" in {
-      DatabaseBackup.backup(DB, new File("backup")).map { count =>
+    "do a database backup archive" in {
+      DatabaseBackup.archive(DB).map { count =>
         count should be(6)
       }
     }
@@ -290,7 +290,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "restore from the database backup" in {
-      DatabaseBackup.restore(DB, new File("backup")).map { count =>
+      DatabaseRestore.archive(DB).map { count =>
         count should be(6)
       }
     }
