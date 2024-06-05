@@ -61,7 +61,7 @@ val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core, halodb, rocksdb, mapdb, lucene, sqlite, all)
+	.aggregate(core, halodb, rocksdb, mapdb, lucene, sql, sqlite, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -151,8 +151,19 @@ lazy val lucene = project.in(file("lucene"))
 		)
 	)
 
-lazy val sqlite = project.in(file("sqlite"))
+lazy val sql = project.in(file("sql"))
 	.dependsOn(core)
+	.settings(
+		name := s"$projectName-sql",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
+	)
+
+lazy val sqlite = project.in(file("sqlite"))
+	.dependsOn(sql)
 	.settings(
 		name := s"$projectName-sqlite",
 		fork := true,

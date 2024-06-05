@@ -1,4 +1,4 @@
-package lightdb.sqlite
+package lightdb.sql
 
 import cats.effect.IO
 import fabric.rw.RW
@@ -7,7 +7,7 @@ import lightdb.index.Indexer
 import lightdb.model.AbstractCollection
 import lightdb.query.SearchContext
 
-case class SQLiteIndexer[D <: Document[D]](indexSupport: SQLiteSupport[D]) extends Indexer[D] {
+case class SQLIndexer[D <: Document[D]](indexSupport: SQLSupport[D]) extends Indexer[D] {
   private def collection: AbstractCollection[D] = indexSupport.collection
 
   override def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return] = {

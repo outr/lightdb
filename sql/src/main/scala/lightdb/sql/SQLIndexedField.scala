@@ -1,4 +1,4 @@
-package lightdb.sqlite
+package lightdb.sql
 
 import fabric.rw.{Convertible, RW}
 import lightdb.index.{IndexSupport, IndexedField}

@@ -1,4 +1,4 @@
-package lightdb.sqlite
+package lightdb.sql
 
 import cats.effect.IO
 import lightdb.{Document, Id}
