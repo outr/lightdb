@@ -1,6 +1,6 @@
 // Scala versions
 val scala213 = "2.13.14"
-val scala3 = "3.4.1"
+val scala3 = "3.4.2"
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
@@ -16,7 +16,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 ThisBuild / version := "0.11.0-SNAPSHOT"
-ThisBuild / scalaVersion := scala213
+ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
 ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
