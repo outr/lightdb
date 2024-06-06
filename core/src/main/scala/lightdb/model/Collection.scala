@@ -5,9 +5,11 @@ import lightdb.{CommitMode, Document, LightDB}
 
 abstract class Collection[D <: Document[D]](val collectionName: String,
                                             protected[lightdb] val db: LightDB,
-                                            override val defaultCommitMode: CommitMode = CommitMode.Manual,
+                                            commitMode: CommitMode = CommitMode.Manual,
                                             val atomic: Boolean = true) extends AbstractCollection[D] with DocumentModel[D] {
   override def model: DocumentModel[D] = this
+
+  override def defaultCommitMode: CommitMode = commitMode
 }
 
 object Collection {
