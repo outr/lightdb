@@ -1,6 +1,6 @@
 package lightdb.sql
 
-import fabric.rw.{Convertible, RW}
+import fabric.rw._
 import lightdb.index.{Index, IndexSupport}
 import lightdb.Document
 import lightdb.query.Filter
