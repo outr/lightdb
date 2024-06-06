@@ -5,8 +5,9 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
 import lightdb.halo.HaloDBSupport
+import lightdb.index.Index
 import lightdb.model.Collection
-import lightdb.sql.{SQLIndexedField, SQLSupport}
+import lightdb.sql.{SQLIndex, SQLSupport}
 import lightdb.sqlite.SQLiteSupport
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -107,7 +108,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.withSearchContext { implicit context =>
         Person
           .query
-          .filter(Person.age.between(19, 21))
+          .filter(Person.age BETWEEN 19 -> 21)
           .search()
           .flatMap { results =>
             results.docs.map { people =>
@@ -254,8 +255,8 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   object Person extends Collection[Person]("people", DB) with SQLiteSupport[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: SQLIndexedField[String, Person] = index.one("name", _.name)
-    val age: SQLIndexedField[Int, Person] = index.one("age", _.age)
+    val name: Index[String, Person] = index.one("name", _.name)
+    val age: Index[Int, Person] = index.one("age", _.age)
     val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
   }
 

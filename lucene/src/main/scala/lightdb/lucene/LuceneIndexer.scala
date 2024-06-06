@@ -1,7 +1,7 @@
 package lightdb.lucene
 
 import cats.effect.IO
-import lightdb.index.{IndexSupport, Indexer}
+import lightdb.index.{Index, IndexSupport, Indexer}
 import lightdb.query.SearchContext
 import lightdb.{Document, Id}
 import org.apache.lucene.analysis.Analyzer
@@ -77,7 +77,7 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
                store: Boolean = false,
                sorted: Boolean = false,
                tokenized: Boolean = false)
-              (implicit rw: RW[F]): LuceneIndex[F, D] = LuceneIndex(
+              (implicit rw: RW[F]): Index[F, D] = LuceneIndex(
     fieldName = name,
     indexSupport = indexSupport,
     get = get,
@@ -91,7 +91,7 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
              store: Boolean = false,
              sorted: Boolean = false,
              tokenized: Boolean = false)
-            (implicit rw: RW[F]): LuceneIndex[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
+            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
 
   override def commit(): IO[Unit] = IO.blocking(commitBlocking())
 

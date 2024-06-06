@@ -6,6 +6,7 @@ import fabric.rw._
 import lightdb._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.halo.HaloDBSupport
+import lightdb.index.Index
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.{AbstractCollection, Collection, DocumentModel}
 import lightdb.query.Sort
@@ -151,7 +152,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.withSearchContext { implicit context =>
         Person
           .query
-          .filter(Person.age.between(19, 21))
+          .filter(Person.age BETWEEN 19 -> 21)
           .search()
           .flatMap { results =>
             results.docs.map { people =>
@@ -322,11 +323,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   object Person extends DocumentModel[Person] with LuceneSupport[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val name: LuceneIndex[String, Person] = index.one("name", _.name)
-    val age: LuceneIndex[Int, Person] = index.one("age", _.age)
-    val tag: LuceneIndex[String, Person] = index("tag", _.tags.toList)
-    val point: LuceneIndex[GeoPoint, Person] = index.one("point", _.point, sorted = true)
-    val search: LuceneIndex[String, Person] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
+    val name: Index[String, Person] = index.one("name", _.name)
+    val age: Index[Int, Person] = index.one("age", _.age)
+    val tag: Index[String, Person] = index("tag", _.tags.toList)
+    val point: Index[GeoPoint, Person] = index.one("point", _.point, sorted = true)
+    val search: Index[String, Person] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
