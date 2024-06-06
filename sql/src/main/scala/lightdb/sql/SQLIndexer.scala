@@ -3,7 +3,7 @@ package lightdb.sql
 import cats.effect.IO
 import fabric.rw.RW
 import lightdb.{Document, Id}
-import lightdb.index.Indexer
+import lightdb.index.{Index, Indexer}
 import lightdb.model.AbstractCollection
 import lightdb.query.SearchContext
 
@@ -15,13 +15,13 @@ case class SQLIndexer[D <: Document[D]](indexSupport: SQLSupport[D]) extends Ind
     f(context)
   }
 
-  def apply[F](name: String, get: D => List[F])(implicit rw: RW[F]): SQLIndexedField[F, D] = SQLIndexedField(
+  def apply[F](name: String, get: D => List[F])(implicit rw: RW[F]): Index[F, D] = SQLIndex(
     fieldName = name,
     indexSupport = indexSupport,
     get = doc => get(doc)
   )
 
-  def one[F](name: String, get: D => F)(implicit rw: RW[F]): SQLIndexedField[F, D] =
+  def one[F](name: String, get: D => F)(implicit rw: RW[F]): Index[F, D] =
     apply[F](name, doc => List(get(doc)))
 
   override def truncate(): IO[Unit] = indexSupport.truncate()

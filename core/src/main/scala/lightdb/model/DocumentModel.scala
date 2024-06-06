@@ -2,11 +2,11 @@ package lightdb.model
 
 import cats.effect.IO
 import cats.implicits._
-import lightdb.index.IndexedField
+import lightdb.index.Index
 import lightdb.{Document, Id, IndexedLinks, Unique}
 
 trait DocumentModel[D <: Document[D]] {
-  type Field[F] = IndexedField[F, D]
+  type Field[F] = Index[F, D]
 
   private[lightdb] var _indexedLinks = List.empty[IndexedLinks[_, D]]
 

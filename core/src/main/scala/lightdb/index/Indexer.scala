@@ -1,14 +1,15 @@
 package lightdb.index
 
 import cats.effect.IO
+import fabric.rw.RW
 import lightdb.model.Collection
 import lightdb.query.SearchContext
 import lightdb.{Document, Id, query}
 
 trait Indexer[D <: Document[D]] {
-  protected var _fields = List.empty[IndexedField[_, D]]
+  protected var _fields = List.empty[Index[_, D]]
 
-  def fields: List[IndexedField[_, D]] = _fields
+  def fields: List[Index[_, D]] = _fields
 
   def indexSupport: IndexSupport[D]
 
@@ -20,7 +21,7 @@ trait Indexer[D <: Document[D]] {
 
   def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return]
 
-  protected[lightdb] def register[F](field: IndexedField[F, D]): Unit = synchronized {
+  protected[lightdb] def register[F](field: Index[F, D]): Unit = synchronized {
     fields.find(_.fieldName == field.fieldName) match {
       case Some(existing) if existing != field => throw new RuntimeException(s"Index already exists: ${field.fieldName}")
       case Some(_) => // Don't add again

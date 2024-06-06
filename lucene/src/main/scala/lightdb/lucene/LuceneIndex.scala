@@ -4,12 +4,15 @@ import fabric._
 import fabric.define.DefType
 import fabric.rw._
 import lightdb.Document
-import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.index.{Index, IndexSupport}
+import lightdb.query.Filter
 import lightdb.spatial.GeoPoint
 import org.apache.lucene.index.Term
 import org.apache.lucene.search._
 import org.apache.lucene.document._
 import org.apache.lucene.queryparser.classic.QueryParser
+
+import scala.language.implicitConversions
 
 case class LuceneIndex[F, D <: Document[D]](fieldName: String,
                                             indexSupport: IndexSupport[D],
@@ -17,8 +20,10 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
                                             store: Boolean,
                                             sorted: Boolean,
                                             tokenized: Boolean)
-                                           (implicit val rw: RW[F]) extends IndexedField[F, D] {
+                                           (implicit val rw: RW[F]) extends Index[F, D] {
   private def lucene: LuceneSupport[D] = indexSupport.asInstanceOf[LuceneSupport[D]]
+
+  private implicit def filter2Lucene(filter: Filter[D]): LuceneFilter[D] = filter.asInstanceOf[LuceneFilter[D]]
 
   lazy val fieldSortName: String = {
     val separate = rw.definition.className.collect {
@@ -27,8 +32,7 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
     if (separate) s"${fieldName}Sort" else fieldName
   }
 
-  def ===(value: F): LuceneFilter[D] = is(value)
-  def is(value: F): LuceneFilter[D] = LuceneFilter(() => value.json match {
+  override def is(value: F): Filter[D] = LuceneFilter(() => value.json match {
     case Str(s, _) if tokenized =>
       val b = new BooleanQuery.Builder
       s.split("\\s+").foreach(s => b.add(new TermQuery(new Term(fieldName, s)), BooleanClause.Occur.MUST))
@@ -37,7 +41,28 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${rw.definition})")
   })
 
-  def parsed(query: String, allowLeadingWildcard: Boolean = false): LuceneFilter[D] = {
+  override def IN(values: Seq[F]): LuceneFilter[D] = {
+    val b = new BooleanQuery.Builder
+    b.setMinimumNumberShouldMatch(1)
+    values.foreach { value =>
+      b.add(is(value).asQuery(), BooleanClause.Occur.SHOULD)
+    }
+    LuceneFilter(() => b.build())
+  }
+
+  override protected def rangeLong(from: Long, to: Long): Filter[D] = LuceneFilter(() => LongField.newRangeQuery(
+    fieldName,
+    from,
+    to
+  ))
+
+  override protected def rangeDouble(from: Double, to: Double): Filter[D] = LuceneFilter(() => DoubleField.newRangeQuery(
+    fieldName,
+    from,
+    to
+  ))
+
+  override def parsed(query: String, allowLeadingWildcard: Boolean = false): Filter[D] = {
     LuceneFilter(() => {
       val parser = new QueryParser(fieldName, lucene.index.analyzer)
       parser.setAllowLeadingWildcard(allowLeadingWildcard)
@@ -46,9 +71,9 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
     })
   }
 
-  def words(s: String,
+  override def words(s: String,
             matchStartsWith: Boolean = true,
-            matchEndsWith: Boolean = false): LuceneFilter[D] = {
+            matchEndsWith: Boolean = false): Filter[D] = {
     val words = s.split("\\s+").map { w =>
       if (matchStartsWith && matchEndsWith) {
         s"%$w%"
@@ -62,20 +87,6 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
     }.mkString(" ")
     parsed(words, allowLeadingWildcard = matchEndsWith)
   }
-
-  def IN(values: Seq[F]): LuceneFilter[D] = {
-    val b = new BooleanQuery.Builder
-    b.setMinimumNumberShouldMatch(1)
-    values.foreach { value =>
-      b.add(is(value).asQuery(), BooleanClause.Occur.SHOULD)
-    }
-    LuceneFilter(() => b.build())
-  }
-
-  def between(lower: F, upper: F): LuceneFilter[D] = LuceneFilter(() => (lower.json, upper.json) match {
-    case (NumInt(l, _), NumInt(u, _)) => LongField.newRangeQuery(fieldName, l, u)
-    case _ => throw new RuntimeException(s"Unsupported between for $lower - $upper (${rw.definition})")
-  })
 
   protected[lightdb] def createFields(doc: D): List[Field] = if (tokenized) {
     getJson(doc).flatMap {

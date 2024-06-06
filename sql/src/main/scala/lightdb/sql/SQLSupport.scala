@@ -4,7 +4,7 @@ import cats.effect.IO
 import fabric._
 import fabric.io.JsonFormatter
 import lightdb.{Document, Id}
-import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.index.{IndexSupport, Index}
 import lightdb.model.AbstractCollection
 import lightdb.query.{PagedResults, Query, SearchContext, Sort, SortDirection}
 import lightdb.util.FlushingBacklog
@@ -61,7 +61,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
 
   override lazy val index: SQLIndexer[D] = SQLIndexer(this)
 
-  val _id: SQLIndexedField[Id[D], D] = index.one("_id", _._id)
+  val _id: Index[Id[D], D] = index.one("_id", _._id)
 
   private[lightdb] lazy val backlog = new FlushingBacklog[Id[D], D](1_000, 10_000) {
     override protected def write(list: List[D]): IO[Unit] = IO.blocking {
@@ -170,7 +170,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     SQLData(ids, None)
   }
 
-  override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] =
+  override protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit] =
     backlog.enqueue(doc._id, doc).map(_ => ())
 
   private def prepare(sql: String, params: List[Json]): PreparedStatement = try {

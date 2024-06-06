@@ -1,7 +1,7 @@
 package lightdb.query
 
 import cats.effect.IO
-import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.index.{IndexSupport, Index}
 import lightdb.model.AbstractCollection
 import lightdb.spatial.GeoPoint
 import lightdb.util.DistanceCalculator
@@ -41,7 +41,7 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
 
   def sort(sort: Sort*): Query[D, V] = copy(sort = this.sort ::: sort.toList)
 
-  def distance(field: IndexedField[GeoPoint, D],
+  def distance(field: Index[GeoPoint, D],
                from: GeoPoint,
                sort: Boolean = true,
                radius: Option[Length] = None): Query[D, DistanceAndDoc[D]] = {
