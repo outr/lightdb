@@ -6,7 +6,7 @@ import lightdb.index.Index
 import lightdb.{Document, Id, IndexedLinks, Unique}
 
 trait DocumentModel[D <: Document[D]] {
-  type Field[F] = Index[F, D]
+  type I[F] = Index[F, D]
 
   private[lightdb] var _indexedLinks = List.empty[IndexedLinks[_, D]]
 

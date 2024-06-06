@@ -255,8 +255,8 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   object Person extends Collection[Person]("people", DB) with SQLiteSupport[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: Index[String, Person] = index.one("name", _.name)
-    val age: Index[Int, Person] = index.one("age", _.age)
+    val name: I[String] = index.one("name", _.name)
+    val age: I[Int] = index.one("age", _.age)
     val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
   }
 
