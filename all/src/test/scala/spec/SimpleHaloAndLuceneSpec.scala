@@ -323,11 +323,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   object Person extends DocumentModel[Person] with LuceneSupport[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val name: Index[String, Person] = index.one("name", _.name)
-    val age: Index[Int, Person] = index.one("age", _.age)
-    val tag: Index[String, Person] = index("tag", _.tags.toList)
-    val point: Index[GeoPoint, Person] = index.one("point", _.point, sorted = true)
-    val search: Index[String, Person] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
+    val name: I[String] = index.one("name", _.name)
+    val age: I[Int] = index.one("age", _.age)
+    val tag: I[String] = index("tag", _.tags.toList)
+    val point: I[GeoPoint] = index.one("point", _.point, sorted = true)
+    val search: I[String] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
