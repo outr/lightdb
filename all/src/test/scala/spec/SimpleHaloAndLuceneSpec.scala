@@ -215,6 +215,14 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         people.map(_.name) should be(List("Jane Doe", "John Doe", "Bob Dole"))
       }
     }
+    "group by age" in {
+      Person.withSearchContext { implicit context =>
+        Person.query.grouped(Person.age).compile.toList.map { list =>
+          list.map(_._1) should be(List(19, 21, 123))
+          list.map(_._2.toList.map(_.name)) should be(List(List("Jane Doe"), List("John Doe"), List("Bob Dole")))
+        }
+      }
+    }
     "sort by distance from Oklahoma City" in {
       Person.query
         .scoreDocs(true)
