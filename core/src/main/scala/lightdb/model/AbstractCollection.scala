@@ -140,18 +140,18 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
    * slower for larger sets of data and a standard index would be preferable.
    *
    * @param name the name of the index
-   * @param createKey creates a unique identifier from the value
    * @param createV creates the value from the document
+   * @param createKey creates a unique identifier from the value
    * @param maxLinks determines how to handle maximum number of links
    */
   def indexedLinks[V](name: String,
-                      createKey: V => String,
                       createV: D => V,
+                      createKey: V => String,
                       maxLinks: MaxLinks = MaxLinks.OverflowWarn()): IndexedLinks[V, D] = {
     val il = IndexedLinks[V, D](
       name = name,
-      createKey = createKey,
       createV = createV,
+      createKey = createKey,
       loadStore = () => db.createStoreInternal(s"$collectionName.indexed.$name"),
       collection = this,
       maxLinks = maxLinks

@@ -4,8 +4,8 @@ import cats.effect.IO
 import lightdb.model.AbstractCollection
 
 case class IndexedLinks[V, D <: Document[D]](name: String,
-                                             createKey: V => String,
                                              createV: D => V,
+                                             createKey: V => String,
                                              loadStore: () => Store,
                                              collection: AbstractCollection[D],
                                              maxLinks: MaxLinks) {
