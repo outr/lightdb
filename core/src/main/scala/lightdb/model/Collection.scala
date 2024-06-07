@@ -4,7 +4,7 @@ import fabric.rw.RW
 import lightdb.{CommitMode, Document, LightDB}
 
 abstract class Collection[D <: Document[D]](val collectionName: String,
-                                            protected[lightdb] val db: LightDB,
+                                            val db: LightDB,
                                             commitMode: CommitMode = CommitMode.Manual,
                                             val atomic: Boolean = true) extends AbstractCollection[D] with DocumentModel[D] {
   override def model: DocumentModel[D] = this

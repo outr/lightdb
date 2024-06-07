@@ -257,7 +257,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
     val name: I[String] = index.one("name", _.name)
     val age: I[Int] = index.one("age", _.age)
-    val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.age, _.toString)
+    val ageLinks: IndexedLinks[Int, Person] = IndexedLinks[Int, Person]("age", _.age, _.toString, this)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
