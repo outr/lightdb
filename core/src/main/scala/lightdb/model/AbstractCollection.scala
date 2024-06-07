@@ -105,7 +105,6 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
 
   def truncate(commitMode: CommitMode = defaultCommitMode): IO[Unit] = for {
     _ <- store.truncate()
-    _ <- model.indexedLinks.map(_.store.truncate()).sequence
     _ <- truncateActions.invoke()
     _ <- mayCommit(commitMode)
   } yield ()
@@ -139,6 +138,11 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   /**
    * Creates a key/value stored object with a list of links. This can be incredibly efficient for small lists, but much
    * slower for larger sets of data and a standard index would be preferable.
+   *
+   * @param name the name of the index
+   * @param createKey creates a unique identifier from the value
+   * @param createV creates the value from the document
+   * @param maxLinks determines how to handle maximum number of links
    */
   def indexedLinks[V](name: String,
                       createKey: V => String,
@@ -152,9 +156,13 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
       collection = this,
       maxLinks = maxLinks
     )
-    synchronized {
-      model._indexedLinks = il :: model._indexedLinks
-    }
+    postSet.add((action: DocumentAction, doc: D, collection: AbstractCollection[D]) => {
+      il.add(doc).map(_ => Some(doc))
+    })
+    postDelete.add((action: DocumentAction, doc: D, collection: AbstractCollection[D]) => {
+      il.remove(doc).map(_ => Some(doc))
+    })
+    truncateActions += il.clear()
     il
   }
 }
