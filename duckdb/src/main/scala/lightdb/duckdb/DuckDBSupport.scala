@@ -30,9 +30,7 @@ trait DuckDBSupport[D <: Document[D]] extends SQLSupport[D] {
         s"${i.fieldName} $t"
       }
     }.mkString(", ")
-    val sql = s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}($indexes)"
-    scribe.info(sql)
-    sql
+    s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}($indexes)"
   }
 
   override protected def createConnection(): Connection = {
