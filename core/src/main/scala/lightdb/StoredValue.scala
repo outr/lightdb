@@ -1,6 +1,7 @@
 package lightdb
 
 import cats.effect.IO
+import cats.implicits.catsSyntaxApplicativeByName
 import fabric.rw._
 import lightdb.model.Collection
 
@@ -25,14 +26,20 @@ case class StoredValue[T](key: String,
 
   def exists(): IO[Boolean] = collection.get(id).map(_.nonEmpty)
 
-  def clear(): IO[Unit] = collection.delete(id).map { _ =>
-    if (cache) cached = None
-  }
-
   def set(value: T): IO[T] = collection
     .set(KeyValue(id, value.asJson))
     .map { _ =>
       if (cache) cached = Some(value)
       value
     }
+
+  def modify(f: T => IO[T]): IO[T] = for {
+    current <- get()
+    modified <- f(current)
+    _ <- set(modified).whenA(current != modified)
+  } yield modified
+
+  def clear(): IO[Unit] = collection.delete(id).map { _ =>
+    if (cache) cached = None
+  }
 }
