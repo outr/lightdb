@@ -29,7 +29,7 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
 
   def atomic: Boolean
 
-  protected[lightdb] def db: LightDB
+  def db: LightDB
 
   protected lazy val store: Store = db.createStoreInternal(collectionName)
 
@@ -134,27 +134,6 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   def dispose(): IO[Unit] = store.dispose().flatMap { _ =>
     disposeActions.invoke()
   }
-
-  /**
-   * Creates a key/value stored object with a list of links. This can be incredibly efficient for small lists, but much
-   * slower for larger sets of data and a standard index would be preferable.
-   *
-   * @param name the name of the index
-   * @param createV creates the value from the document
-   * @param createKey creates a unique identifier from the value
-   * @param maxLinks determines how to handle maximum number of links
-   */
-  def indexedLinks[V](name: String,
-                      createV: D => V,
-                      createKey: V => String,
-                      maxLinks: MaxLinks = MaxLinks.OverflowWarn()): IndexedLinks[V, D] = IndexedLinks[V, D](
-    name = name,
-    createV = createV,
-    createKey = createKey,
-    loadStore = () => db.createStoreInternal(s"$collectionName.indexed.$name"),
-    collection = this,
-    maxLinks = maxLinks
-  )
 }
 
 object AbstractCollection {
@@ -171,7 +150,7 @@ object AbstractCollection {
       override def collectionName: String = name
       override def defaultCommitMode: CommitMode = cm
       override def atomic: Boolean = at
-      override protected[lightdb] def db: LightDB = lightDB
+      override def db: LightDB = lightDB
 
       override implicit val rw: RW[D] = docRW
       override def model: DocumentModel[D] = documentModel
