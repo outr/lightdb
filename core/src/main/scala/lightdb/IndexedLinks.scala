@@ -1,7 +1,7 @@
 package lightdb
 
 import cats.effect.IO
-import lightdb.model.AbstractCollection
+import lightdb.model.{AbstractCollection, DocumentAction}
 
 case class IndexedLinks[V, D <: Document[D]](name: String,
                                              createV: D => V,
@@ -9,6 +9,14 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
                                              loadStore: () => Store,
                                              collection: AbstractCollection[D],
                                              maxLinks: MaxLinks) {
+  collection.postSet.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
+    add(doc).map(_ => Some(doc))
+  })
+  collection.postDelete.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
+    remove(doc).map(_ => Some(doc))
+  })
+  collection.truncateActions += clear()
+
   private lazy val store: Store = loadStore()
 
   protected[lightdb] def add(doc: D): IO[Unit] = {
