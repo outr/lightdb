@@ -147,24 +147,14 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   def indexedLinks[V](name: String,
                       createV: D => V,
                       createKey: V => String,
-                      maxLinks: MaxLinks = MaxLinks.OverflowWarn()): IndexedLinks[V, D] = {
-    val il = IndexedLinks[V, D](
-      name = name,
-      createV = createV,
-      createKey = createKey,
-      loadStore = () => db.createStoreInternal(s"$collectionName.indexed.$name"),
-      collection = this,
-      maxLinks = maxLinks
-    )
-    postSet.add((action: DocumentAction, doc: D, collection: AbstractCollection[D]) => {
-      il.add(doc).map(_ => Some(doc))
-    })
-    postDelete.add((action: DocumentAction, doc: D, collection: AbstractCollection[D]) => {
-      il.remove(doc).map(_ => Some(doc))
-    })
-    truncateActions += il.clear()
-    il
-  }
+                      maxLinks: MaxLinks = MaxLinks.OverflowWarn()): IndexedLinks[V, D] = IndexedLinks[V, D](
+    name = name,
+    createV = createV,
+    createKey = createKey,
+    loadStore = () => db.createStoreInternal(s"$collectionName.indexed.$name"),
+    collection = this,
+    maxLinks = maxLinks
+  )
 }
 
 object AbstractCollection {
