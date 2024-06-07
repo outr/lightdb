@@ -18,6 +18,8 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
                                              createKey: V => String,
                                              collection: AbstractCollection[D],
                                              maxLinks: MaxLinks = MaxLinks.OverflowWarn()) {
+  private lazy val store: Store = collection.db.createStoreInternal(s"${collection.collectionName}.indexedLinks.$name")
+
   collection.postSet.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
     add(doc).map(_ => Some(doc))
   })
@@ -25,8 +27,6 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
     remove(doc).map(_ => Some(doc))
   })
   collection.truncateActions += clear()
-
-  private lazy val store: Store = collection.db.createStoreInternal(s"${collection.collectionName}.indexedLinks.$name")
 
   protected[lightdb] def add(doc: D): IO[Unit] = {
     val v = createV(doc)

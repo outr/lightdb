@@ -168,7 +168,7 @@ abstract class LightDB {
     IO.unit
   }
 
-  protected object stored {
+  object stored {
     def apply[T](key: String,
                  default: => T,
                  cache: Boolean = true,
