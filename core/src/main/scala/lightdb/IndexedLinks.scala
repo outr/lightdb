@@ -9,7 +9,7 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
                                              loadStore: () => Store,
                                              collection: AbstractCollection[D],
                                              maxLinks: MaxLinks) {
-  lazy val store: Store = loadStore()
+  private lazy val store: Store = loadStore()
 
   protected[lightdb] def add(doc: D): IO[Unit] = {
     val v = createV(doc)
@@ -83,4 +83,6 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
   }
 
   def query(value: V): fs2.Stream[IO, D] = queryIds(value).evalMap(collection.apply)
+
+  def clear(): IO[Unit] = store.truncate()
 }
