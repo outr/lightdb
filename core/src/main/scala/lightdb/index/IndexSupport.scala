@@ -38,7 +38,7 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
     _ <- index.commit()
   } yield ()
 
-  def distanceFilter(field: IndexedField[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
+  def distanceFilter(field: Index[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
     throw new UnsupportedOperationException("Distance filtering is not supported on this indexer")
 
   def index: Indexer[D]
@@ -51,5 +51,5 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
                   limit: Option[Int],
                   after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]]
 
-  protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit]
+  protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit]
 }

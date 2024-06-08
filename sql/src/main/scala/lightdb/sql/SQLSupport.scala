@@ -4,16 +4,19 @@ import cats.effect.IO
 import fabric._
 import fabric.io.JsonFormatter
 import lightdb.{Document, Id}
-import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.index.{Index, IndexSupport}
 import lightdb.model.AbstractCollection
 import lightdb.query.{PagedResults, Query, SearchContext, Sort, SortDirection}
 import lightdb.util.FlushingBacklog
 
 import java.nio.file.{Files, Path}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
+import scala.util.Try
 
 trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
   private var _connection: Option[Connection] = None
+
+  protected def enableAutoCommit: Boolean = false
 
   protected[lightdb] def connection: Connection = _connection match {
     case Some(c) => c
@@ -26,11 +29,13 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
 
   protected def createConnection(): Connection
 
+  protected def createTable(): String
+
   protected def init(c: Connection): Unit = {
-    c.setAutoCommit(false)
+    c.setAutoCommit(enableAutoCommit)
     val s = c.createStatement()
     try {
-      s.executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.collectionName}(${index.fields.map(_.fieldName).mkString(", ")}, PRIMARY KEY (_id))")
+      s.executeUpdate(createTable())
       val existingColumns = columns(c)
       index.fields.foreach { f =>
         if (f.fieldName != "_id") {
@@ -61,7 +66,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
 
   override lazy val index: SQLIndexer[D] = SQLIndexer(this)
 
-  val _id: SQLIndexedField[Id[D], D] = index.one("_id", _._id)
+  val _id: Index[Id[D], D] = index.one("_id", _._id)
 
   private[lightdb] lazy val backlog = new FlushingBacklog[Id[D], D](1_000, 10_000) {
     override protected def write(list: List[D]): IO[Unit] = IO.blocking {
@@ -81,8 +86,10 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
+  protected def truncateSQL: String = s"DELETE FROM ${collection.collectionName}"
+
   def truncate(): IO[Unit] = IO.blocking {
-    val sql = s"DELETE FROM ${collection.collectionName}"
+    val sql = truncateSQL
     val ps = connection.prepareStatement(sql)
     try {
       ps.executeUpdate()
@@ -107,7 +114,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     val total = if (query.countTotal) {
       val sqlCount =
         s"""SELECT
-           |  COUNT(*)
+           |  COUNT(*) AS count
            |FROM
            |  ${collection.collectionName}
            |$filters
@@ -115,6 +122,8 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
       val countPs = prepare(sqlCount, params)
       try {
         val rs = countPs.executeQuery()
+        rs.next()
+//        scribe.info(s"Columns: ${rs.getMetaData.getColumnType(1)}")
         rs.getInt(1)
       } finally {
         countPs.close()
@@ -170,7 +179,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     SQLData(ids, None)
   }
 
-  override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] =
+  override protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit] =
     backlog.enqueue(doc._id, doc).map(_ => ())
 
   private def prepare(sql: String, params: List[Json]): PreparedStatement = try {
@@ -197,7 +206,10 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     case _ => ps.setString(index, JsonFormatter.Compact(value))
   }
 
-  private def commit(): IO[Unit] = IO.blocking(connection.commit())
+  private def commit(): IO[Unit] = IO.blocking {
+    if (!enableAutoCommit)
+      connection.commit()
+  }
 
   override protected[lightdb] def initModel(collection: AbstractCollection[D]): Unit = {
     super.initModel(collection)

@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scribe.cats.{io => logger}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.util.Try
 
 abstract class LightDB {
   def directory: Path
@@ -107,16 +108,21 @@ abstract class LightDB {
   }
 
   private lazy val disposeThread = new Thread {
-    override def run(): Unit = dispose().unsafeRunSync()
+    override def run(): Unit = Try {
+      try {
+        dispose().unsafeRunSync()
+      } catch {
+        case t: Throwable => scribe.error(s"Failure disposing during shutdown hook", t)
+      }
+    }
   }
 
+  // TODO: Figure out why shutdown hook causes system to get stuck
   private def addShutdownHook(): Unit = {
-    Runtime.getRuntime.addShutdownHook(disposeThread)
+//    Runtime.getRuntime.addShutdownHook(disposeThread)
   }
 
-  private def removeShutdownHook(): Unit = {
-    Runtime.getRuntime.removeShutdownHook(disposeThread)
-  }
+  private def removeShutdownHook(): Unit = {} //Try(Runtime.getRuntime.removeShutdownHook(disposeThread))
 
   private def recursiveUpdates(): IO[Unit] = for {
     _ <- IO.sleep(updateFrequency)
@@ -151,25 +157,38 @@ abstract class LightDB {
 
   def update(): IO[Unit] = collections.map(_.update()).sequence.map(_ => ())
 
-  def dispose(): IO[Unit] = for {
-    _ <- commit()
-    _ <- collections.map(_.dispose()).parSequence
-    _ <- stores.map(_.dispose()).parSequence
-    _ = removeShutdownHook()
-    _ = _disposed.set(true)
-  } yield ()
+  def dispose(): IO[Unit] = if (_disposed.compareAndSet(false, true)) {
+    for {
+      _ <- commit()
+      _ <- collections.map(_.dispose()).parSequence
+      _ <- stores.map(_.dispose()).parSequence
+      _ = removeShutdownHook()
+    } yield ()
+  } else {
+    IO.unit
+  }
 
-  protected object stored {
+  object stored {
     def apply[T](key: String,
                  default: => T,
-                 cache: Boolean = true,
+                 persistence: Persistence = Persistence.Stored,
                  collection: Collection[KeyValue] = backingStore)
-                (implicit rw: RW[T]): StoredValue[T] = StoredValue[T](key, collection, () => default, cache = cache)
+                (implicit rw: RW[T]): StoredValue[T] = StoredValue[T](
+      key = key,
+      collection = collection,
+      default = () => default,
+      persistence = persistence
+    )
 
     def opt[T](key: String,
-               cache: Boolean = true,
+               persistence: Persistence = Persistence.Stored,
                collection: Collection[KeyValue] = backingStore)
-              (implicit rw: RW[T]): StoredValue[Option[T]] = StoredValue[Option[T]](key, collection, () => None, cache = cache)
+              (implicit rw: RW[T]): StoredValue[Option[T]] = StoredValue[Option[T]](
+      key = key,
+      collection = collection,
+      default = () => None,
+      persistence = persistence
+    )
   }
 
   private def doUpgrades(upgrades: List[DatabaseUpgrade],

@@ -1,7 +1,8 @@
 package lightdb.query
 
+import cats.Eq
 import cats.effect.IO
-import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.index.{Index, IndexSupport}
 import lightdb.model.AbstractCollection
 import lightdb.spatial.GeoPoint
 import lightdb.util.DistanceCalculator
@@ -41,7 +42,7 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
 
   def sort(sort: Sort*): Query[D, V] = copy(sort = this.sort ::: sort.toList)
 
-  def distance(field: IndexedField[GeoPoint, D],
+  def distance(field: Index[GeoPoint, D],
                from: GeoPoint,
                sort: Boolean = true,
                radius: Option[Length] = None): Query[D, DistanceAndDoc[D]] = {
@@ -93,9 +94,17 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
     fs2.Stream.force(io)
   }
 
+  def docStream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.docStream)
+
   def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
 
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
+
+  def grouped[F](index: Index[F, D],
+                 direction: SortDirection = SortDirection.Ascending)
+                (implicit context: SearchContext[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = sort(Sort.ByField(index, direction))
+    .docStream
+    .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)
 
   object scored {
     def stream(implicit context: SearchContext[D]): fs2.Stream[IO, (V, Double)] = pageStream.flatMap(_.scoredStream)

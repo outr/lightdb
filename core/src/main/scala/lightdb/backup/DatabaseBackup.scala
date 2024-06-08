@@ -7,77 +7,78 @@ import fabric.rw.Asable
 import lightdb.{Document, KeyValue, LightDB}
 import lightdb.model.AbstractCollection
 
-import java.io.{File, PrintWriter}
+import java.io.{File, FileOutputStream, PrintWriter}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.io.Source
 
 object DatabaseBackup {
   /**
-   * Does a full backup of the supplied database to the directory specified
+   * Creates a ZIP file backup of the database. Use with DatabaseRestore.archive to restore the backup archive.
+   *
+   * @param db      the database to backup
+   * @param archive the ZIP file to create
+   * @return the number of records backed up
    */
-  def backup(db: LightDB, directory: File): IO[Int] = {
-    directory.mkdirs()
-    db
-      .collections
-      .map { collection =>
-        backupCollection(collection.asInstanceOf[AbstractCollection[KeyValue]], new File(directory, s"${collection.collectionName}.jsonl"))
+  def archive(db: LightDB,
+              archive: File = new File("backup.zip")): IO[Int] = {
+    val out = new ZipOutputStream(new FileOutputStream(archive))
+    collectionStreams(db)
+      .evalMap {
+        case (fileName, stream) =>
+          val entry = new ZipEntry(s"backup/$fileName")
+          out.putNextEntry(entry)
+          stream
+            .map { line =>
+              val bytes = s"$line\n".getBytes("UTF-8")
+              out.write(bytes)
+            }
+            .compile
+            .count
+            .map(_.toInt)
+            .flatTap { _ =>
+              IO(out.closeEntry())
+            }
       }
-      .sequence
-      .map(_.sum)
-  }
-
-  /**
-   * Does a full restore of the supplied database from the directory specified
-   */
-  def restore(db: LightDB,
-              directory: File,
-              truncate: Boolean = true): IO[Int] = db
-    .collections
-    .map { collection =>
-      val file = new File(directory, s"${collection.collectionName}.jsonl")
-      if (file.exists()) {
-        restoreCollection(collection.asInstanceOf[AbstractCollection[KeyValue]], file, truncate).flatTap { _ =>
-          collection.reIndex()
-        }
-      } else {
-        IO.pure(0)
-      }
-    }
-    .sequence
-    .map(_.sum)
-
-  /**
-   * Creates a backup of the supplied collection to the supplied file as JSON lines.
-   */
-  def backupCollection[D <: Document[D]](collection: AbstractCollection[D], file: File): IO[Int] = {
-    val writer = new PrintWriter(file)
-    collection
-      .jsonStream
-      .map(JsonFormatter.Compact(_))
-      .map(writer.println)
       .compile
-      .count
-      .map(_.toInt)
+      .toList
+      .map(_.sum)
       .guarantee(IO {
-        writer.flush()
-        writer.close()
+        out.flush()
+        out.close()
       })
   }
 
   /**
-   * Restores from a backup of JSON lines.
+   * Does a full backup of the supplied database to the directory specified
    */
-  def restoreCollection[D <: Document[D]](collection: AbstractCollection[D],
-                                file: File,
-                                truncate: Boolean = true): IO[Int] = collection.truncate().whenA(truncate).flatMap { _ =>
-    val source = Source.fromFile(file)
-    fs2.Stream
-      .fromBlockingIterator[IO](source.getLines(), 512)
-      .map(JsonParser(_))
-      .map(_.as[D](collection.rw))
-      .evalMap(collection.set(_))
+  def apply(db: LightDB, directory: File): IO[Int] = {
+    directory.mkdirs()
+    collectionStreams(db)
+      .evalMap {
+        case (fileName, stream) =>
+          val file = new File(directory, fileName)
+          val writer = new PrintWriter(file)
+          stream
+            .map(writer.println)
+            .compile
+            .count
+            .map(_.toInt)
+            .guarantee(IO {
+              writer.flush()
+              writer.close()
+            })
+      }
       .compile
-      .count
-      .map(_.toInt)
-      .guarantee(IO(source.close()))
+      .toList
+      .map(_.sum)
   }
+
+  private def collectionStreams(db: LightDB): fs2.Stream[IO, (String, fs2.Stream[IO, String])] = fs2.Stream(db.collections: _*)
+    .map { c =>
+      val collection = c.asInstanceOf[AbstractCollection[KeyValue]]
+      s"${c.collectionName}.jsonl" -> backupCollectionStream(collection)
+    }
+
+  private def backupCollectionStream[D <: Document[D]](collection: AbstractCollection[D]): fs2.Stream[IO, String] =
+    collection.jsonStream.map(JsonFormatter.Compact(_))
 }

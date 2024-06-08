@@ -4,8 +4,9 @@ import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
-import lightdb.backup.DatabaseBackup
+import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.halo.HaloDBSupport
+import lightdb.index.Index
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.{AbstractCollection, Collection, DocumentModel}
 import lightdb.query.Sort
@@ -111,8 +112,8 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         ids.toSet should be(Set(id1, id2, id3))
       }
     }
-    "do a database backup" in {
-      DatabaseBackup.backup(DB, new File("backup")).map { count =>
+    "do a database backup archive" in {
+      DatabaseBackup.archive(DB).map { count =>
         count should be(6)
       }
     }
@@ -151,7 +152,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.withSearchContext { implicit context =>
         Person
           .query
-          .filter(Person.age.between(19, 21))
+          .filter(Person.age BETWEEN 19 -> 21)
           .search()
           .flatMap { results =>
             results.docs.map { people =>
@@ -212,6 +213,14 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     "sort by age" in {
       Person.query.sort(Sort.ByField(Person.age)).toList.map { people =>
         people.map(_.name) should be(List("Jane Doe", "John Doe", "Bob Dole"))
+      }
+    }
+    "group by age" in {
+      Person.withSearchContext { implicit context =>
+        Person.query.grouped(Person.age).compile.toList.map { list =>
+          list.map(_._1) should be(List(19, 21, 123))
+          list.map(_._2.toList.map(_.name)) should be(List(List("Jane Doe"), List("John Doe"), List("Bob Dole")))
+        }
       }
     }
     "sort by distance from Oklahoma City" in {
@@ -290,7 +299,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "restore from the database backup" in {
-      DatabaseBackup.restore(DB, new File("backup")).map { count =>
+      DatabaseRestore.archive(DB).map { count =>
         count should be(6)
       }
     }
@@ -322,11 +331,11 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   object Person extends DocumentModel[Person] with LuceneSupport[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val name: LuceneIndex[String, Person] = index.one("name", _.name)
-    val age: LuceneIndex[Int, Person] = index.one("age", _.age)
-    val tag: LuceneIndex[String, Person] = index("tag", _.tags.toList)
-    val point: LuceneIndex[GeoPoint, Person] = index.one("point", _.point, sorted = true)
-    val search: LuceneIndex[String, Person] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
+    val name: I[String] = index.one("name", _.name)
+    val age: I[Int] = index.one("age", _.age)
+    val tag: I[String] = index("tag", _.tags.toList)
+    val point: I[GeoPoint] = index.one("point", _.point, sorted = true)
+    val search: I[String] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
