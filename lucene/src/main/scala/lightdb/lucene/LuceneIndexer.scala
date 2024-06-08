@@ -1,7 +1,7 @@
 package lightdb.lucene
 
 import cats.effect.IO
-import lightdb.index.{IndexSupport, Indexer}
+import lightdb.index.{Index, IndexSupport, Indexer}
 import lightdb.query.SearchContext
 import lightdb.{Document, Id}
 import org.apache.lucene.analysis.Analyzer
@@ -18,9 +18,10 @@ import fabric.rw._
 import lightdb.model.AbstractCollection
 
 case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
-                                           collection: AbstractCollection[D],
                                            persistent: Boolean = true,
                                            analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] {
+  private def collection: AbstractCollection[D] = indexSupport.collection
+
   private lazy val path: Option[Path] = if (persistent) {
     val p = collection.db.directory.resolve(collection.collectionName).resolve("index")
     Files.createDirectories(p)
@@ -45,7 +46,7 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
     val context = SearchContext(indexSupport)
     contextMapping.put(context, indexSearcher)
     f(context)
-      .guarantee(IO {
+      .guarantee(IO.blocking {
         contextMapping.remove(context)
         searcherManager.release(indexSearcher)
       })
@@ -57,8 +58,12 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
     indexWriter.updateDocument(new Term("_id", id.value), document)
   }
 
-  private[lightdb] def delete(id: Id[D]): IO[Unit] = IO {
+  private[lightdb] def delete(id: Id[D]): IO[Unit] = IO.blocking {
     indexWriter.deleteDocuments(parser.parse(s"_id:${id.value}"))
+  }
+
+  def truncate(): IO[Unit] = IO.blocking {
+    indexWriter.deleteAll()
   }
 
   private def commitBlocking(): Unit = {
@@ -72,7 +77,7 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
                store: Boolean = false,
                sorted: Boolean = false,
                tokenized: Boolean = false)
-              (implicit rw: RW[F]): LuceneIndex[F, D] = LuceneIndex(
+              (implicit rw: RW[F]): Index[F, D] = LuceneIndex(
     fieldName = name,
     indexSupport = indexSupport,
     get = get,
@@ -86,11 +91,11 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
              store: Boolean = false,
              sorted: Boolean = false,
              tokenized: Boolean = false)
-            (implicit rw: RW[F]): LuceneIndex[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
+            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
 
-  override def commit(): IO[Unit] = IO(commitBlocking())
+  override def commit(): IO[Unit] = IO.blocking(commitBlocking())
 
-  override def count(): IO[Int] = withSearchContext { context =>
-    IO(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
+  override def size: IO[Int] = withSearchContext { context =>
+    IO.blocking(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
   }
 }

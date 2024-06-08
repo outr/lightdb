@@ -1,21 +1,23 @@
 package lightdb.model
 
 import fabric.rw.RW
-import lightdb.{Document, LightDB}
+import lightdb.{CommitMode, Document, LightDB}
 
 abstract class Collection[D <: Document[D]](val collectionName: String,
-                                            protected[lightdb] val db: LightDB,
-                                            val autoCommit: Boolean = false,
+                                            val db: LightDB,
+                                            commitMode: CommitMode = CommitMode.Manual,
                                             val atomic: Boolean = true) extends AbstractCollection[D] with DocumentModel[D] {
   override def model: DocumentModel[D] = this
+
+  override def defaultCommitMode: CommitMode = commitMode
 }
 
 object Collection {
   def apply[D <: Document[D]](collectionName: String,
                               db: LightDB,
-                              autoCommit: Boolean = false,
+                              defaultCommitMode: CommitMode = CommitMode.Manual,
                               atomic: Boolean = true)(implicit docRW: RW[D]): Collection[D] =
-    new Collection[D](collectionName, db, autoCommit = autoCommit, atomic = atomic) {
+    new Collection[D](collectionName, db, defaultCommitMode, atomic) {
       override implicit val rw: RW[D] = docRW
     }
 }

@@ -1,15 +1,32 @@
 package lightdb
 
 import cats.effect.IO
-import lightdb.model.AbstractCollection
+import lightdb.model.{AbstractCollection, DocumentAction}
 
+/**
+ * Creates a key/value stored object with a list of links. This can be incredibly efficient for small lists, but much
+ * slower for larger sets of data and a standard index would be preferable.
+ *
+ * @param name the name of the index
+ * @param createV creates the value from the document
+ * @param createKey creates a unique identifier from the value
+ * @param collection the collection to associate this with
+ * @param maxLinks determines how to handle maximum number of links
+ */
 case class IndexedLinks[V, D <: Document[D]](name: String,
-                                             createKey: V => String,
                                              createV: D => V,
-                                             loadStore: () => Store,
+                                             createKey: V => String,
                                              collection: AbstractCollection[D],
-                                             maxLinks: MaxLinks) {
-  lazy val store: Store = loadStore()
+                                             maxLinks: MaxLinks = MaxLinks.OverflowWarn()) {
+  private lazy val store: Store = collection.db.createStoreInternal(s"${collection.collectionName}.indexedLinks.$name")
+
+  collection.postSet.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
+    add(doc).map(_ => Some(doc))
+  })
+  collection.postDelete.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
+    remove(doc).map(_ => Some(doc))
+  })
+  collection.truncateActions += clear()
 
   protected[lightdb] def add(doc: D): IO[Unit] = {
     val v = createV(doc)
@@ -83,4 +100,6 @@ case class IndexedLinks[V, D <: Document[D]](name: String,
   }
 
   def query(value: V): fs2.Stream[IO, D] = queryIds(value).evalMap(collection.apply)
+
+  def clear(): IO[Unit] = store.truncate()
 }

@@ -2,10 +2,13 @@ package lightdb
 
 import cats.effect.IO
 import fabric.Json
+import fabric.cryo.Cryo
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 
 trait Store {
+  def useCryo: Boolean = false
+
   def keyStream[D]: fs2.Stream[IO, Id[D]]
 
   def stream[D]: fs2.Stream[IO, (Id[D], Array[Byte])]
@@ -22,28 +25,48 @@ trait Store {
 
   def dispose(): IO[Unit]
 
-  def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = stream[D].map {
-    case (_, bytes) =>
-      val jsonString = bytes.string
-      val json = JsonParser(jsonString)
-      json.as[D]
-  }
+  def streamJson: fs2.Stream[IO, Json] = stream[Json]
+    .map {
+      case (id, bytes) => try {
+        bytes2Json(bytes)
+      } catch {
+        case t: Throwable =>
+          println(bytes.mkString(","))
+          throw new RuntimeException(s"Failed to read $id with ${bytes.length} bytes.", t)
+      }
+    }
+
+  def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = streamJson.map(_.as[D])
 
   def getJsonDoc[D: RW](id: Id[D]): IO[Option[D]] = get(id)
     .map(_.map { bytes =>
-      val jsonString = bytes.string
-      val json = JsonParser(jsonString)
-      json.as[D]
+      try {
+        val json = bytes2Json(bytes)
+        json.as[D]
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Failed to read $id with ${bytes.length} bytes.", t)
+      }
     })
 
   def putJsonDoc[D <: Document[D]](doc: D)
                                   (implicit rw: RW[D]): IO[D] = IO(doc.json)
     .flatMap(json => putJson(doc._id, json).map(_ => doc))
 
-  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] = IO(JsonFormatter.Compact(json))
-    .flatMap { jsonString =>
-      put(id, jsonString.getBytes).map(_ => ())
-    }
+  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] =
+    IO.blocking(json2Bytes(json)).flatMap(bytes => put(id, bytes)).map(_ => ())
+
+  private def json2Bytes(json: Json): Array[Byte] = if (useCryo) {
+    Cryo.freeze(json)
+  } else {
+    JsonFormatter.Compact(json).getBytes
+  }
+
+  private def bytes2Json(bytes: Array[Byte]): Json = if (useCryo) {
+    Cryo.thaw(bytes)
+  } else {
+    val jsonString = bytes.string
+    JsonParser(jsonString)
+  }
 
   def truncate(): IO[Unit] = keyStream[Any]
     .evalMap { id =>

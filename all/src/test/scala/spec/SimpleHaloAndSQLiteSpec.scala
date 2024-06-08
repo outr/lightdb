@@ -5,12 +5,13 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
 import lightdb.halo.HaloDBSupport
+import lightdb.index.Index
 import lightdb.model.Collection
-import lightdb.sqlite.{SQLIndexedField, SQLiteSupport}
+import lightdb.sql.{SQLIndex, SQLSupport}
+import lightdb.sqlite.SQLiteSupport
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import scribe.{Level, Logger}
 
 import java.nio.file.{Path, Paths}
 
@@ -23,7 +24,6 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
   "Simple database" should {
     "initialize the database" in {
-      Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
       DB.init(truncate = true)
     }
     "store John Doe" in {
@@ -55,7 +55,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify exactly two objects in index" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(2)
       }
     }
@@ -108,7 +108,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.withSearchContext { implicit context =>
         Person
           .query
-          .filter(Person.age.between(19, 21))
+          .filter(Person.age BETWEEN 19 -> 21)
           .search()
           .flatMap { results =>
             results.docs.map { people =>
@@ -152,7 +152,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "verify the number of records" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(2)
       }
     }
@@ -168,7 +168,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify the number of records has not changed after modify" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(2)
       }
     }
@@ -191,7 +191,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       Person.commit()
     }
     "verify exactly one object in index" in {
-      Person.index.count().map { size =>
+      Person.index.size.map { size =>
         size should be(1)
       }
     }
@@ -240,13 +240,10 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
 
   object DB extends LightDB with HaloDBSupport {
     override lazy val directory: Path = Paths.get("testdb")
-//    override protected def autoCommit: Boolean = true
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-//    val people: Collection[Person] = collection("people", Person)
-
-    override lazy val collections: List[Collection[_]] = List(
+    override lazy val userCollections: List[Collection[_]] = List(
       Person
     )
 
@@ -258,9 +255,9 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   object Person extends Collection[Person]("people", DB) with SQLiteSupport[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: SQLIndexedField[String, Person] = index("name", doc => Some(doc.name))
-    val age: SQLIndexedField[Int, Person] = index("age", doc => Some(doc.age))
-    val ageLinks: IndexedLinks[Int, Person] = indexedLinks[Int]("age", _.toString, _.age)
+    val name: I[String] = index.one("name", _.name)
+    val age: I[Int] = index.one("age", _.age)
+    val ageLinks: IndexedLinks[Int, Person] = IndexedLinks[Int, Person]("age", _.age, _.toString, this)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {

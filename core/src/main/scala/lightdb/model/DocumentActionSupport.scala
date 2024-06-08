@@ -32,15 +32,18 @@ trait DocumentActionSupport[D <: Document[D]] {
 
   protected def doDelete(id: Id[D],
                          collection: AbstractCollection[D],
-                         get: Id[D] => IO[D],
+                         get: Id[D] => IO[Option[D]],
                          delete: Id[D] => IO[Unit])
                         (implicit lock: DocLock[D]): IO[Id[D]] = preDeleteId.invoke(id, collection).flatMap {
-    case Some(id) => get(id).flatMap(doc => preDelete.invoke(doc, collection).flatMap {
-      case Some(doc) => delete(doc._id).flatMap { _ =>
-        postDelete.invoke(doc, collection).map(_ => doc._id)
+    case Some(id) => get(id).flatMap {
+      case Some(doc) => preDelete.invoke(doc, collection).flatMap {
+        case Some(doc) => delete(doc._id).flatMap { _ =>
+          postDelete.invoke(doc, collection).map(_ => doc._id)
+        }
+        case None => IO.pure(id)
       }
       case None => IO.pure(id)
-    })
+    }
     case None => IO.pure(id)
   }
 }
