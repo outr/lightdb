@@ -24,14 +24,15 @@ case class PagedResults[D <: Document[D], V](query: Query[D, V],
 
   def idAndScoreStream: fs2.Stream[IO, (Id[D], Double)] = fs2.Stream(idsAndScores: _*)
 
-  def stream: fs2.Stream[IO, V] = idStream
+  def docStream: fs2.Stream[IO, D] = idStream
     .evalMap { id =>
       getter match {
         case Some(g) => g(id)
         case None => query.collection(id)
       }
     }
-    .evalMap(query.convert)
+
+  def stream: fs2.Stream[IO, V] = docStream.evalMap(query.convert)
 
   def scoredStream: fs2.Stream[IO, (V, Double)] = idAndScoreStream
     .evalMap {

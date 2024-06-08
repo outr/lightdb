@@ -3,7 +3,7 @@ package lightdb.lucene
 import cats.effect.IO
 import fabric.define.DefType
 import lightdb._
-import lightdb.index.{IndexSupport, IndexedField}
+import lightdb.index.{IndexSupport, Index}
 import lightdb.model.AbstractCollection
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort, SortDirection}
 import lightdb.spatial.GeoPoint
@@ -15,7 +15,7 @@ import squants.space.Length
 trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
   override lazy val index: LuceneIndexer[D] = LuceneIndexer(this)
 
-  val _id: LuceneIndex[Id[D], D] = index("_id", doc => List(doc._id), store = true)
+  val _id: Index[Id[D], D] = index("_id", doc => List(doc._id), store = true)
 
   protected[lucene] def indexSearcher(context: SearchContext[D]): IndexSearcher = index.contextMapping.get(context)
 
@@ -69,7 +69,7 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
     )
   }
 
-  override protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit] = for {
+  override protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit] = for {
     fields <- IO.blocking(fields.flatMap { field =>
       field.asInstanceOf[LuceneIndex[_, D]].createFields(doc)
     })
@@ -81,6 +81,6 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
     collection.truncateActions.add(index.truncate())
   }
 
-  override def distanceFilter(field: IndexedField[GeoPoint, D], from: GeoPoint, distance: Length): Filter[D] =
+  override def distanceFilter(field: Index[GeoPoint, D], from: GeoPoint, distance: Length): Filter[D] =
     LuceneFilter(() => LatLonPoint.newDistanceQuery(field.fieldName, from.latitude, from.longitude, distance.toMeters))
 }

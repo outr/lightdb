@@ -29,7 +29,7 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
 
   def atomic: Boolean
 
-  protected[lightdb] def db: LightDB
+  def db: LightDB
 
   protected lazy val store: Store = db.createStoreInternal(collectionName)
 
@@ -40,6 +40,8 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   def stream: fs2.Stream[IO, D] = store.streamJsonDocs[D](rw)
 
   def jsonStream: fs2.Stream[IO, Json] = store.streamJson
+
+  def toList: IO[List[D]] = stream.compile.toList
 
   def withLock[Return](id: Id[D])(f: DocLock[D] => IO[Return])
                       (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Return] = {
@@ -89,7 +91,7 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
     doDelete(
       id = id,
       collection = this,
-      get = apply,
+      get = get,
       delete = id => store.delete(id)
     )(lock).flatMap { id =>
       mayCommit(commitMode).map(_ => id)
@@ -105,7 +107,6 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
 
   def truncate(commitMode: CommitMode = defaultCommitMode): IO[Unit] = for {
     _ <- store.truncate()
-    _ <- model.indexedLinks.map(_.store.truncate()).sequence
     _ <- truncateActions.invoke()
     _ <- mayCommit(commitMode)
   } yield ()
@@ -135,28 +136,6 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   def dispose(): IO[Unit] = store.dispose().flatMap { _ =>
     disposeActions.invoke()
   }
-
-  /**
-   * Creates a key/value stored object with a list of links. This can be incredibly efficient for small lists, but much
-   * slower for larger sets of data and a standard index would be preferable.
-   */
-  def indexedLinks[V](name: String,
-                      createKey: V => String,
-                      createV: D => V,
-                      maxLinks: MaxLinks = MaxLinks.OverflowWarn()): IndexedLinks[V, D] = {
-    val il = IndexedLinks[V, D](
-      name = name,
-      createKey = createKey,
-      createV = createV,
-      loadStore = () => db.createStoreInternal(s"$collectionName.indexed.$name"),
-      collection = this,
-      maxLinks = maxLinks
-    )
-    synchronized {
-      model._indexedLinks = il :: model._indexedLinks
-    }
-    il
-  }
 }
 
 object AbstractCollection {
@@ -173,7 +152,7 @@ object AbstractCollection {
       override def collectionName: String = name
       override def defaultCommitMode: CommitMode = cm
       override def atomic: Boolean = at
-      override protected[lightdb] def db: LightDB = lightDB
+      override def db: LightDB = lightDB
 
       override implicit val rw: RW[D] = docRW
       override def model: DocumentModel[D] = documentModel

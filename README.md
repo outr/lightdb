@@ -11,6 +11,7 @@ Computationally focused database using pluggable store + indexer
 ## Provided Indexers
 - Apache Lucene (https://lucene.apache.org) - Most featureful
 - SQLite (https://www.sqlite.org) - Fastest
+- DuckDB (https://duckdb.org) - Experimental
 
 ## 1.0 TODO
 - [ ] More performance improvements to SQLite integration
