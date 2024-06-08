@@ -1,15 +1,12 @@
 package lightdb.backup
 
 import cats.effect.IO
-import cats.implicits.{catsSyntaxApplicativeByName, toTraverseOps}
-import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw.Asable
+import fabric.io.JsonFormatter
 import lightdb.{Document, KeyValue, LightDB}
 import lightdb.model.AbstractCollection
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.zip.{ZipEntry, ZipOutputStream}
-import scala.io.Source
 
 object DatabaseBackup {
   /**
