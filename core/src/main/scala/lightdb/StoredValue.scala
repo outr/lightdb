@@ -33,11 +33,14 @@ case class StoredValue[T](key: String,
       value
     }
 
-  def modify(f: T => IO[T]): IO[T] = for {
-    current <- get()
-    modified <- f(current)
-    _ <- set(modified).whenA(current != modified)
-  } yield modified
+  // TODO: Figure out why withLock is causing it to get stuck
+  def modify(f: T => IO[T]): IO[T] = //collection.withLock(id) { implicit lock =>
+    for {
+      current <- get()
+      modified <- f(current)
+      _ <- set(modified).whenA(current != modified)
+    } yield modified
+  //}
 
   def clear(): IO[Unit] = collection.delete(id).map { _ =>
     if (cache) cached = None

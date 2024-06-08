@@ -5,7 +5,7 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw.RW
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.LuceneSupport
-import lightdb.{Document, Id, LightDB, StoredValue}
+import lightdb.{Document, FacetStore, Id, LightDB, StoredValue}
 import lightdb.model.Collection
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -21,6 +21,79 @@ class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "initialize the database" in {
       DB.init(truncate = true)
     }
+    "have two collections" in {
+      DB.collections.map(_.collectionName).toSet should be(Set("_backingStore", "airports", "flights"))
+    }
+    "query VIP airports" in {
+      Airport.vipKeys.values.map { keys =>
+        keys should be(Set("JFK", "ORD", "LAX", "ATL", "AMA", "SFO", "DFW"))
+      }
+    }
+    "query JFK airport" in {
+      val jfk = Airport.id("JFK")
+      Airport(jfk).map { airport =>
+        airport.name should be("John F Kennedy Intl")
+      }
+    }
+    "query the airports by id filter" in {
+      val keys = List("JFK", "LAX")
+      Airport.query
+        .filter(Airport._id IN keys.map(Airport.id))
+        .toList
+        .map { airports =>
+          airports.map(_.name).toSet should be(Set("John F Kennedy Intl", "Los Angeles International"))
+        }
+    }
+    "query by airport name" in {
+      Airport.query
+        .filter(Airport.name === "John F Kennedy Intl")
+        .one
+        .map { airport =>
+          airport._id should be(Airport.id("JFK"))
+        }
+    }
+    "count all the airports" in {
+      Airport.size.map { count =>
+        count should be(3375)
+      }
+    }
+    // TODO: Support traversals
+    /*"get all airport names reachable directly from LAX following edges" in {
+      val lax = Airport.id("LAX")
+      val query =
+        aql"""
+             FOR airport IN 1..1 OUTBOUND $lax ${database.flights}
+             RETURN DISTINCT airport.name
+           """
+      database.query[String](query).toList.map { response =>
+        response.length should be(82)
+      }
+    }
+    "traverse all airports reachable from LAX" in {
+      val lax = Airport.id("LAX")
+      val query =
+        aql"""
+             FOR airport IN OUTBOUND $lax ${database.flights}
+             OPTIONS { bfs: true, uniqueVertices: 'global' }
+             RETURN airport
+           """
+      database.airports.query(query).toList.map { response =>
+        response.length should be(82)
+      }
+    }
+    "find the shortest path between BIS and JFK" in {
+      val bis = Airport.id("BIS")
+      val jfk = Airport.id("JFK")
+      val query =
+        aql"""
+             FOR v IN OUTBOUND
+             SHORTEST_PATH $bis TO $jfk ${database.flights}
+             RETURN v.${Airport.name}
+           """
+      database.query[String](query).toList.map { response =>
+        response should be(List("Bismarck Municipal", "Minneapolis-St Paul Intl", "John F Kennedy Intl"))
+      }
+    }*/
     // TODO: Test ValueStore
     // TODO: the other stuff
     "dispose" in {
@@ -51,6 +124,8 @@ class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     override implicit val rw: RW[Airport] = RW.gen
 
     val name: I[String] = index.one[String]("name", _.name)
+    val vip: I[Boolean] = index.one[Boolean]("vip", _.vip)
+    val vipKeys: FacetStore[String, Airport] = FacetStore[String, Airport]("vipKeys", doc => if (doc.vip) Some(doc._id.value) else None, this, cached = true)
   }
 
   case class Flight(from: Id[Airport],
@@ -117,6 +192,7 @@ class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         flights.evalMap(Flight.set(_)).compile.count.map(_.toInt)
       }
       _ = insertedFlights should be(286463)
+      _ <- DB.commit()
     } yield {
       ()
     }

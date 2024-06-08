@@ -41,6 +41,8 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
 
   def jsonStream: fs2.Stream[IO, Json] = store.streamJson
 
+  def toList: IO[List[D]] = stream.compile.toList
+
   def withLock[Return](id: Id[D])(f: DocLock[D] => IO[Return])
                       (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Return] = {
     if (atomic && existingLock.isInstanceOf[DocLock.Empty[_]]) {
@@ -89,7 +91,7 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
     doDelete(
       id = id,
       collection = this,
-      get = apply,
+      get = get,
       delete = id => store.delete(id)
     )(lock).flatMap { id =>
       mayCommit(commitMode).map(_ => id)
