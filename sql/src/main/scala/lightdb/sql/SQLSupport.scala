@@ -4,7 +4,7 @@ import cats.effect.IO
 import fabric._
 import fabric.io.JsonFormatter
 import lightdb.{Document, Id}
-import lightdb.index.{Index, IndexSupport}
+import lightdb.index.{Index, IndexSupport, Materialized}
 import lightdb.model.AbstractCollection
 import lightdb.query.{PagedResults, Query, SearchContext, Sort, SortDirection}
 import lightdb.util.FlushingBacklog
@@ -13,6 +13,7 @@ import java.nio.file.{Files, Path}
 import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, Types}
 import scala.util.Try
 
+// TODO: Move all of IndexSupport custom code into SQLIndexed
 trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
   private var _connection: Option[Connection] = None
 
@@ -66,7 +67,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
 
   override lazy val index: SQLIndexer[D] = SQLIndexer(this)
 
-  val _id: Index[Id[D], D] = index.one("_id", _._id)
+  val _id: Index[Id[D], D] = index.one("_id", _._id, materialize = true)
 
   private[lightdb] lazy val backlog = new FlushingBacklog[Id[D], D](1_000, 10_000) {
     override protected def write(list: List[D]): IO[Unit] = IO.blocking {
@@ -139,9 +140,10 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
       case Nil => ""
       case list => list.mkString("ORDER BY ", ", ", "")
     }
+    val fields = index.fields.filter(_.materialize).map(_.fieldName).mkString(", ")
     val sql =
       s"""SELECT
-         |  *
+         |  $fields
          |FROM
          |  ${collection.collectionName}
          |$filters
@@ -154,14 +156,15 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     val ps = prepare(sql, params)
     val rs = ps.executeQuery()
     try {
-      val data = this.data(rs)
+      val materialized = this.materialized(rs)
       PagedResults(
         query = query,
         context = SQLPageContext(context),
         offset = offset,
         total = total,
-        idsAndScores = data.ids.map(id => id -> 0.0),
-        getter = data.lookup
+        idsAndScores = materialized.map(_.apply(_id)).map(id => id -> 0.0),
+        materialized = materialized,
+        getter = None
       )
     } finally {
       rs.close()
@@ -169,14 +172,18 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
-  protected def data(rs: ResultSet): SQLData[D] = {
-    val iterator = new Iterator[Id[D]] {
+  protected def materialized(rs: ResultSet): List[Materialized[D]] = {
+    val iterator = new Iterator[Materialized[D]] {
       override def hasNext: Boolean = rs.next()
 
-      override def next(): Id[D] = Id[D](rs.getString("_id"))
+      override def next(): Materialized[D] = {
+        val map = index.fields.filter(_.materialize).map { index =>
+          index -> getValue(rs, index)
+        }.toMap
+        new Materialized[D](map)
+      }
     }
-    val ids = iterator.toList
-    SQLData(ids, None)
+    iterator.toList
   }
 
   override protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit] =
@@ -204,6 +211,12 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
       case _ => throw new RuntimeException(s"SQLite does not support more than one element in an array ($value)")
     }
     case _ => ps.setString(index, JsonFormatter.Compact(value))
+  }
+
+  private def getValue[F](rs: ResultSet, index: Index[F, D]): Any = rs.getObject(index.fieldName) match {
+    case s: String => index.rw.write(str(s))
+    case i: java.lang.Integer => index.rw.write(num(i.intValue()))
+    case v => throw new UnsupportedOperationException(s"${index.fieldName} returned $v (${v.getClass.getName})")
   }
 
   private def commit(): IO[Unit] = IO.blocking {

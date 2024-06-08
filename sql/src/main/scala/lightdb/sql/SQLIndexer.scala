@@ -15,14 +15,16 @@ case class SQLIndexer[D <: Document[D]](indexSupport: SQLSupport[D]) extends Ind
     f(context)
   }
 
-  def apply[F](name: String, get: D => List[F])(implicit rw: RW[F]): Index[F, D] = SQLIndex(
+  def apply[F](name: String, get: D => List[F], materialize: Boolean = false)
+              (implicit rw: RW[F]): Index[F, D] = SQLIndex(
     fieldName = name,
     indexSupport = indexSupport,
+    materialize = materialize,
     get = doc => get(doc)
   )
 
-  def one[F](name: String, get: D => F)(implicit rw: RW[F]): Index[F, D] =
-    apply[F](name, doc => List(get(doc)))
+  def one[F](name: String, get: D => F, materialize: Boolean = false)
+            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => List(get(doc)), materialize = materialize)
 
   override def truncate(): IO[Unit] = indexSupport.truncate()
 

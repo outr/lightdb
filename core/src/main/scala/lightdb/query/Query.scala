@@ -2,7 +2,7 @@ package lightdb.query
 
 import cats.Eq
 import cats.effect.IO
-import lightdb.index.{Index, IndexSupport}
+import lightdb.index.{Index, IndexSupport, Materialized}
 import lightdb.model.AbstractCollection
 import lightdb.spatial.GeoPoint
 import lightdb.util.DistanceCalculator
@@ -97,6 +97,8 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
   def docStream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.docStream)
 
   def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
+
+  def materialized(implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = pageStream.flatMap(_.materializedStream)
 
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
 

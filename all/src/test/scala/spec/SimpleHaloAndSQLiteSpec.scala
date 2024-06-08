@@ -177,6 +177,13 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         person.name should be("Johnny Doe")
       }
     }
+    "query for materialized indexes" in {
+      Person.withSearchContext { implicit context =>
+        Person.query.materialized.compile.toList.map { list =>
+          list.map(m => m(Person.age)).toSet should be(Set(19, 21))
+        }
+      }
+    }
     "delete John" in {
       Person.delete(id1).map { deleted =>
         deleted should be(id1)
@@ -256,7 +263,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     override implicit val rw: RW[Person] = RW.gen
 
     val name: I[String] = index.one("name", _.name)
-    val age: I[Int] = index.one("age", _.age)
+    val age: I[Int] = index.one("age", _.age, materialize = true)
     val ageLinks: IndexedLinks[Int, Person] = IndexedLinks[Int, Person]("age", _.age, _.toString, this)
   }
 

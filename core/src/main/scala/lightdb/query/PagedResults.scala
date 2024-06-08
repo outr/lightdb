@@ -2,6 +2,7 @@ package lightdb.query
 
 import cats.effect.IO
 import cats.implicits.toTraverseOps
+import lightdb.index.Materialized
 import lightdb.{Document, Id}
 
 case class PagedResults[D <: Document[D], V](query: Query[D, V],
@@ -9,6 +10,7 @@ case class PagedResults[D <: Document[D], V](query: Query[D, V],
                                              offset: Int,
                                              total: Int,
                                              idsAndScores: List[(Id[D], Double)],
+                                             materialized: List[Materialized[D]],
                                              getter: Option[Id[D] => IO[D]] = None) {
   lazy val page: Int = offset / query.pageSize
   lazy val pages: Int = math.ceil(query.limit.getOrElse(total).toDouble / query.pageSize.toDouble).toInt
@@ -21,6 +23,8 @@ case class PagedResults[D <: Document[D], V](query: Query[D, V],
   def values: IO[List[V]] = docs.flatMap(_.map(query.convert).sequence)
 
   def idStream: fs2.Stream[IO, Id[D]] = fs2.Stream(ids: _*)
+
+  def materializedStream: fs2.Stream[IO, Materialized[D]] = fs2.Stream(materialized: _*)
 
   def idAndScoreStream: fs2.Stream[IO, (Id[D], Double)] = fs2.Stream(idsAndScores: _*)
 
