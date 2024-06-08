@@ -2,6 +2,7 @@
 .bsp/
 target/
 testdb/
+airports/
 benchmark/imdb/
 benchmark/data/
 backup/

@@ -5,7 +5,7 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw.RW
 import lightdb.halo.HaloDBSupport
 import lightdb.lucene.LuceneSupport
-import lightdb.{Document, FacetStore, Id, LightDB, StoredValue}
+import lightdb.{Document, ValueStore, Id, LightDB, Persistence, StoredValue, Unique}
 import lightdb.model.Collection
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -55,6 +55,12 @@ class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     "count all the airports" in {
       Airport.size.map { count =>
         count should be(3375)
+      }
+    }
+    "validate airport references" in {
+      Flight.airportReferences.facet(Airport.id("JFK")).map { facet =>
+        facet.count should be(4826)
+        facet.ids.size should be(4826)
       }
     }
     // TODO: Support traversals
@@ -125,7 +131,17 @@ class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
     val name: I[String] = index.one[String]("name", _.name)
     val vip: I[Boolean] = index.one[Boolean]("vip", _.vip)
-    val vipKeys: FacetStore[String, Airport] = FacetStore[String, Airport]("vipKeys", doc => if (doc.vip) Some(doc._id.value) else None, this, cached = true)
+    val vipKeys: ValueStore[String, Airport] = ValueStore[String, Airport]("vipKeys", doc => if (doc.vip) List(doc._id.value) else Nil, this, persistence = Persistence.Cached)
+
+    override def id(value: String = Unique()): Id[Airport] = {
+      val index = value.indexOf('/')
+      val v = if (index != -1) {
+        value.substring(index + 1)
+      } else {
+        value
+      }
+      Id(v)
+    }
   }
 
   case class Flight(from: Id[Airport],
@@ -146,6 +162,14 @@ class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
 
   object Flight extends Collection[Flight]("flights", DB) {
     override implicit val rw: RW[Flight] = RW.gen
+
+    val airportReferences: ValueStore[Id[Airport], Flight] = ValueStore[Id[Airport], Flight](
+      key = "airportReferences",
+      createV = f => List(f.from, f.to),
+      collection = this,
+      includeIds = true,
+      persistence = Persistence.Memory
+    )
   }
 
   object DataImportUpgrade extends DatabaseUpgrade {
