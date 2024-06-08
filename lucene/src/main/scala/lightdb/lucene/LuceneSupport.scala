@@ -3,7 +3,7 @@ package lightdb.lucene
 import cats.effect.IO
 import fabric.define.DefType
 import lightdb._
-import lightdb.index.{IndexSupport, Index}
+import lightdb.index.{Index, IndexSupport, Materialized}
 import lightdb.model.AbstractCollection
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort, SortDirection}
 import lightdb.spatial.GeoPoint
@@ -65,7 +65,8 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
       context = indexContext,
       offset = offset,
       total = total,
-      idsAndScores = idsAndScores
+      idsAndScores = idsAndScores,
+      materialized = Nil
     )
   }
 

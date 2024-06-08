@@ -7,6 +7,7 @@ import lightdb.query.Filter
 
 case class SQLIndex[F, D <: Document[D]](fieldName: String,
                                          indexSupport: IndexSupport[D],
+                                         materialize: Boolean,
                                          get: D => List[F])(implicit val rw: RW[F]) extends Index[F, D] {
   override def is(value: F): Filter[D] = SQLFilter[D](s"$fieldName = ?", List(value.json))
 
