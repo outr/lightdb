@@ -46,19 +46,31 @@ ThisBuild / outputStrategy := Some(StdoutOutput)
 ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
 
 val collectionCompatVersion: String = "2.12.0"
+
 val haloDBVersion: String = "0.5.6"
+
 val rocksDBVersion: String = "9.2.1"
+
 val catsEffectVersion: String = "3.5.4"
+
 val fabricVersion: String = "1.15.1"
+
 val fs2Version: String = "3.10.2"
-val scribeVersion: String = "3.14.0"
+
+val scribeVersion: String = "3.15.0"
+
 val luceneVersion: String = "9.11.0"
+
 val sqliteVersion: String = "3.46.0.0"
+
 val duckdbVersion: String = "1.0.0"
+
 val keysemaphoreVersion: String = "0.3.0-M1"
+
 val squantsVersion: String = "1.8.3"
 
 val scalaTestVersion: String = "3.2.18"
+
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
