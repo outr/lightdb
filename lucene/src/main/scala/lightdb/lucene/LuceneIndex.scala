@@ -38,6 +38,9 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
       s.split("\\s+").foreach(s => b.add(new TermQuery(new Term(fieldName, s)), BooleanClause.Occur.MUST))
       b.build()
     case Str(s, _) => new TermQuery(new Term(fieldName, s))
+    case Bool(b, _) => IntPoint.newExactQuery(fieldName, if (b) 1 else 0)
+    case NumInt(l, _) => LongPoint.newExactQuery(fieldName, l)
+    case NumDec(bd, _) => DoublePoint.newExactQuery(fieldName, bd.toDouble)
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${rw.definition})")
   })
 
@@ -102,7 +105,7 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
     val filterField = getJson(doc).flatMap {
       case Null => None
       case Str(s, _) => Some(new StringField(fieldName, s, fs))
-      case Bool(b, _) => Some(new StringField(fieldName, b.toString, fs))
+      case Bool(b, _) => Some(new IntField(fieldName, if (b) 1 else 0, fs))
       case NumInt(l, _) => Some(new LongField(fieldName, l, fs))
       case NumDec(bd, _) => Some(new DoubleField(fieldName, bd.toDouble, fs))
       case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
