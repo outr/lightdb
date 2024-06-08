@@ -10,7 +10,7 @@ import squants.space.Length
 trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
   private var _collection: Option[AbstractCollection[D]] = None
 
-  protected def collection: AbstractCollection[D] = this match {
+  protected[lightdb] def collection: AbstractCollection[D] = this match {
     case c: AbstractCollection[_] => c.asInstanceOf[AbstractCollection[D]]
     case _ => _collection.getOrElse(throw new RuntimeException("DocumentModel not initialized with Collection (yet)"))
   }
@@ -29,7 +29,16 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
     })
   }
 
-  def distanceFilter(field: IndexedField[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
+  override def reIndex(collection: AbstractCollection[D]): IO[Unit] = for {
+    _ <- super.reIndex(collection)
+    _ <- index.truncate()
+    _ <- collection.stream.evalMap { doc =>
+      indexDoc(doc, index.fields)
+    }.compile.drain
+    _ <- index.commit()
+  } yield ()
+
+  def distanceFilter(field: Index[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
     throw new UnsupportedOperationException("Distance filtering is not supported on this indexer")
 
   def index: Indexer[D]
@@ -42,5 +51,5 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
                   limit: Option[Int],
                   after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]]
 
-  protected def indexDoc(doc: D, fields: List[IndexedField[_, D]]): IO[Unit]
+  protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit]
 }

@@ -55,7 +55,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogAka = new FlushingBacklog[String, Document](1000, 10000) {
-    override protected def write(list: List[Document]): IO[Unit] = IO {
+    override protected def write(list: List[Document]): IO[Unit] = IO.blocking {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)
       titleAka.insertMany(javaList)
@@ -64,7 +64,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogBasics = new FlushingBacklog[String, Document](1000, 10000) {
-    override protected def write(list: List[Document]): IO[Unit] = IO {
+    override protected def write(list: List[Document]): IO[Unit] = IO.blocking {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)
       titleBasics.insertMany(javaList)
@@ -72,7 +72,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def init(): IO[Unit] = IO {
+  override def init(): IO[Unit] = IO.blocking {
     titleAka.createIndex(Indexes.ascending("titleId"))
   }
 
@@ -91,11 +91,11 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   import com.mongodb.client.model.Filters
 
-  override def get(id: String): IO[Document] = IO {
+  override def get(id: String): IO[Document] = IO.blocking {
     titleAka.find(Filters.eq("_id", id)).first()
   }
 
-  override def findByTitleId(titleId: String): IO[List[Document]] = IO {
+  override def findByTitleId(titleId: String): IO[List[Document]] = IO.blocking {
     titleAka.find(Filters.eq("titleId", titleId)).iterator().asScala.toList
   }
 
@@ -106,12 +106,12 @@ object MongoDBImplementation extends BenchmarkImplementation {
     ()
   }
 
-  override def verifyTitleAka(): IO[Unit] = IO {
+  override def verifyTitleAka(): IO[Unit] = IO.blocking {
     val docs = titleAka.countDocuments()
     scribe.info(s"TitleAka counts -- $docs")
   }
 
-  override def verifyTitleBasics(): IO[Unit] = IO {
+  override def verifyTitleBasics(): IO[Unit] = IO.blocking {
     val docs = titleBasics.countDocuments()
     scribe.info(s"TitleBasics counts -- $docs")
   }

@@ -1,6 +1,6 @@
 // Scala versions
 val scala213 = "2.13.14"
-val scala3 = "3.4.1"
+val scala3 = "3.4.2"
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.7.0-SNAPSHOT"
+ThisBuild / version := "0.11.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -46,22 +46,35 @@ ThisBuild / outputStrategy := Some(StdoutOutput)
 ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
 
 val collectionCompatVersion: String = "2.12.0"
+
 val haloDBVersion: String = "0.5.6"
-val rocksDBVersion: String = "9.1.1"
+
+val rocksDBVersion: String = "9.2.1"
+
 val catsEffectVersion: String = "3.5.4"
-val fabricVersion: String = "1.14.5"
+
+val fabricVersion: String = "1.15.1"
+
 val fs2Version: String = "3.10.2"
-val scribeVersion: String = "3.13.5"
-val luceneVersion: String = "9.10.0"
-val sqliteVersion: String = "3.45.3.0"
+
+val scribeVersion: String = "3.15.0"
+
+val luceneVersion: String = "9.11.0"
+
+val sqliteVersion: String = "3.46.0.0"
+
+val duckdbVersion: String = "1.0.0"
+
 val keysemaphoreVersion: String = "0.3.0-M1"
+
 val squantsVersion: String = "1.8.3"
 
 val scalaTestVersion: String = "3.2.18"
+
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core, halodb, rocksdb, mapdb, lucene, sqlite, all)
+	.aggregate(core, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -151,8 +164,19 @@ lazy val lucene = project.in(file("lucene"))
 		)
 	)
 
-lazy val sqlite = project.in(file("sqlite"))
+lazy val sql = project.in(file("sql"))
 	.dependsOn(core)
+	.settings(
+		name := s"$projectName-sql",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
+	)
+
+lazy val sqlite = project.in(file("sqlite"))
+	.dependsOn(sql)
 	.settings(
 		name := s"$projectName-sqlite",
 		fork := true,
@@ -163,8 +187,20 @@ lazy val sqlite = project.in(file("sqlite"))
 		)
 	)
 
+lazy val duckdb = project.in(file("duckdb"))
+	.dependsOn(sql)
+	.settings(
+		name := s"$projectName-duckdb",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.duckdb" % "duckdb_jdbc" % duckdbVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		)
+	)
+
 lazy val all = project.in(file("all"))
-	.dependsOn(core, halodb, rocksdb, mapdb, lucene, sqlite)
+	.dependsOn(core, halodb, rocksdb, mapdb, lucene, sqlite, duckdb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

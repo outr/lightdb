@@ -12,7 +12,7 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
   private val size = new AtomicInteger(0)
   private val flushing = new AtomicBoolean(false)
 
-  def enqueue(key: Key, value: Value): IO[Value] = IO {
+  def enqueue(key: Key, value: Value): IO[Value] = IO.blocking {
     val exists = map.put(key, value) != null
     var doFlush = false
     if (!exists) {

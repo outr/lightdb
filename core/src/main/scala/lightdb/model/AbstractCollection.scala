@@ -3,13 +3,21 @@ package lightdb.model
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import fabric.Json
 import fabric.rw.RW
 import io.chrisdavenport.keysemaphore.KeySemaphore
-import lightdb.{DocLock, Document, Id, IndexedLinks, LightDB, MaxLinks, Store}
+import lightdb.{CommitMode, DocLock, Document, Id, IndexedLinks, LightDB, MaxLinks, Store}
+
+import java.util.concurrent.atomic.AtomicBoolean
 
 trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   // Id-level locking
   private lazy val sem = KeySemaphore.of[IO, Id[D]](_ => 1L).unsafeRunSync()
+
+  private val _dirty = new AtomicBoolean(false)
+
+  def isDirty: Boolean = _dirty.get()
+  protected def flagDirty(): Unit = _dirty.set(true)
 
   implicit val rw: RW[D]
 
@@ -17,11 +25,11 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
 
   def collectionName: String
 
-  def autoCommit: Boolean
+  def defaultCommitMode: CommitMode = CommitMode.Manual
 
   def atomic: Boolean
 
-  protected[lightdb] def db: LightDB
+  def db: LightDB
 
   protected lazy val store: Store = db.createStoreInternal(collectionName)
 
@@ -30,6 +38,10 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
   def idStream: fs2.Stream[IO, Id[D]] = store.keyStream
 
   def stream: fs2.Stream[IO, D] = store.streamJsonDocs[D](rw)
+
+  def jsonStream: fs2.Stream[IO, Json] = store.streamJson
+
+  def toList: IO[List[D]] = stream.compile.toList
 
   def withLock[Return](id: Id[D])(f: DocLock[D] => IO[Return])
                       (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Return] = {
@@ -50,17 +62,18 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
     }
   }
 
-  def set(doc: D)(implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[D] = withLock(doc._id) { lock =>
+  def set(doc: D, commitMode: CommitMode = defaultCommitMode)
+         (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[D] = withLock(doc._id) { lock =>
     doSet(
       doc = doc,
       collection = this,
       set = (id, json) => store.putJson(id, json)
     )(lock).flatMap { doc =>
-      commit().whenA(autoCommit).map(_ => doc)
+      mayCommit(commitMode).map(_ => doc)
     }
   }
 
-  def set(docs: Seq[D]): IO[Int] = docs.map(set).sequence.map(_.size)
+  def setAll(docs: Seq[D], commitMode: CommitMode = defaultCommitMode): IO[Int] = docs.map(set(_, commitMode)).sequence.map(_.size)
 
   def modify(id: Id[D])
             (f: Option[D] => IO[Option[D]])
@@ -73,23 +86,29 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
     }
   }
 
-  def delete(id: Id[D])
+  def delete(id: Id[D], commitMode: CommitMode = defaultCommitMode)
             (implicit existingLock: DocLock[D] = new DocLock.Empty[D]): IO[Id[D]] = withLock(id) { implicit lock =>
     doDelete(
       id = id,
       collection = this,
-      get = apply,
+      get = get,
       delete = id => store.delete(id)
     )(lock).flatMap { id =>
-      commit().whenA(autoCommit).map(_ => id)
+      mayCommit(commitMode).map(_ => id)
     }
   }
 
-  def truncate(): IO[Unit] = for {
+  private def mayCommit(commitMode: CommitMode): IO[Unit] = {
+    if (commitMode == CommitMode.Async) {
+      flagDirty()
+    }
+    commit().whenA(commitMode == CommitMode.Auto)
+  }
+
+  def truncate(commitMode: CommitMode = defaultCommitMode): IO[Unit] = for {
     _ <- store.truncate()
-    _ <- model.indexedLinks.map(_.store.truncate()).sequence
     _ <- truncateActions.invoke()
-    _ <- commit().whenA(autoCommit)
+    _ <- mayCommit(commitMode)
   } yield ()
 
   def get(id: Id[D]): IO[Option[D]] = store.getJsonDoc(id)(rw)
@@ -99,34 +118,23 @@ trait AbstractCollection[D <: Document[D]] extends DocumentActionSupport[D] {
 
   def size: IO[Int] = store.size
 
-  def commit(): IO[Unit] = store.commit().flatMap { _ =>
-    commitActions.invoke()
+  def update(): IO[Unit] = if (isDirty) {
+    commit()
+  } else {
+    IO.unit
   }
+
+  def commit(): IO[Unit] = {
+    _dirty.set(false)
+    store.commit().flatMap { _ =>
+      commitActions.invoke()
+    }
+  }
+
+  def reIndex(): IO[Unit] = model.reIndex(this)
 
   def dispose(): IO[Unit] = store.dispose().flatMap { _ =>
     disposeActions.invoke()
-  }
-
-  /**
-   * Creates a key/value stored object with a list of links. This can be incredibly efficient for small lists, but much
-   * slower for larger sets of data and a standard index would be preferable.
-   */
-  def indexedLinks[V](name: String,
-                      createKey: V => String,
-                      createV: D => V,
-                      maxLinks: MaxLinks = MaxLinks.OverflowWarn()): IndexedLinks[V, D] = {
-    val il = IndexedLinks[V, D](
-      name = name,
-      createKey = createKey,
-      createV = createV,
-      loadStore = () => db.createStoreInternal(s"$collectionName.indexed.$name"),
-      collection = this,
-      maxLinks = maxLinks
-    )
-    synchronized {
-      model._indexedLinks = il :: model._indexedLinks
-    }
-    il
   }
 }
 
@@ -134,17 +142,17 @@ object AbstractCollection {
   def apply[D <: Document[D]](name: String,
                               db: LightDB,
                               model: DocumentModel[D],
-                              autoCommit: Boolean = false,
+                              defaultCommitMode: CommitMode = CommitMode.Manual,
                               atomic: Boolean = true)(implicit docRW: RW[D]): AbstractCollection[D] = {
-    val ac = autoCommit
+    val cm = defaultCommitMode
     val at = atomic
     val lightDB = db
     val documentModel = model
     new AbstractCollection[D] {
       override def collectionName: String = name
-      override def autoCommit: Boolean = ac
+      override def defaultCommitMode: CommitMode = cm
       override def atomic: Boolean = at
-      override protected[lightdb] def db: LightDB = lightDB
+      override def db: LightDB = lightDB
 
       override implicit val rw: RW[D] = docRW
       override def model: DocumentModel[D] = documentModel

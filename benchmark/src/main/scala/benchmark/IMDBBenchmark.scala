@@ -40,8 +40,6 @@ object IMDBBenchmark { // extends IOApp {
   case class Elapsed[Return](value: Return, elapsed: Double)
 
   def main(args: Array[String]): Unit = {
-    Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
-
     val start = System.currentTimeMillis()
     val baseDirectory = new File("data")
     val io = for {
@@ -60,7 +58,9 @@ object IMDBBenchmark { // extends IOApp {
       verifiedTitleAkaTime <- implementation.verifyTitleAka().elapsedValue
       verifiedTitleBasicsTime <- implementation.verifyTitleBasics().elapsedValue
       _ = scribe.info("--- Stage 7 ---")
-      cycleTime <- cycleThroughEntireCollection(10).elapsedValue
+      cycleTime <- cycleThroughEntireCollection(1).elapsedValue
+      count = ids.length
+      _ = assert(count == limit.value - 1, s"Expected ${limit.value - 1}, but received: $count")
       _ = scribe.info("--- Stage 8 ---")
       validationTime <- validateIds(ids).elapsedValue
       _ = scribe.info("--- Stage 9 ---")
@@ -79,7 +79,7 @@ object IMDBBenchmark { // extends IOApp {
     sys.exit(0)
   }
 
-  private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO {
+  private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO.blocking {
     val reader = new BufferedReader(new FileReader(file))
     val counter = new AtomicInteger(0)
     val concurrency = 32
@@ -100,7 +100,7 @@ object IMDBBenchmark { // extends IOApp {
       }
 
       val iterator = new IOIterator[T] {
-        override def next(): IO[Option[T]] = IO {
+        override def next(): IO[Option[T]] = IO.blocking {
           nextLine()
         }.map(_.map { line =>
           val values = line.split('\t').toList
@@ -177,6 +177,22 @@ object IMDBBenchmark { // extends IOApp {
     }
   }
 
+//  def validateTitleIds(idsList: List[Ids]): IO[Unit] = {
+//    fs2.Stream[IO, Ids](idsList: _*)
+//      .parEvalMap(8) { ids =>
+//        implementation.findByTitleId(ids.titleId).map { titleAkas =>
+//          val results = titleAkas.map(ta => implementation.titleIdFor(ta))
+//          if (titleAkas.isEmpty) {
+//            throw new RuntimeException("Empty!")
+//          } else if (!results.forall(id => id == ids.titleId)) {
+//            throw new RuntimeException(s"Not all titleIds match the query: $results")
+//          }
+//        }
+//      }
+//      .compile
+//      .drain
+//  }
+
 //  override def run(args: List[String]): IO[ExitCode] = {
 //    val baseDirectory = new File("data")
 //    val start = System.currentTimeMillis()
@@ -213,7 +229,7 @@ object IMDBBenchmark { // extends IOApp {
   private def downloadFile(file: File, limit: Limit): IO[File] = (if (file.exists()) {
     IO.pure(file)
   } else {
-    IO {
+    IO.blocking {
       scribe.info(s"File doesn't exist, downloading ${file.getName}...")
       file.getParentFile.mkdirs()
       val fileName = s"${file.getName}.gz"
@@ -251,7 +267,7 @@ object IMDBBenchmark { // extends IOApp {
   }).flatMap { file =>
     limit match {
       case Limit.Unlimited => IO.pure(file)
-      case _ => IO {
+      case _ => IO.blocking {
         val source = Source.fromFile(file)
         try {
           val (pre, post) = file.getName.splitAt(file.getName.lastIndexOf("."))
