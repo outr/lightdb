@@ -171,14 +171,24 @@ abstract class LightDB {
   object stored {
     def apply[T](key: String,
                  default: => T,
-                 cache: Boolean = true,
+                 persistence: Persistence = Persistence.Stored,
                  collection: Collection[KeyValue] = backingStore)
-                (implicit rw: RW[T]): StoredValue[T] = StoredValue[T](key, collection, () => default, cache = cache)
+                (implicit rw: RW[T]): StoredValue[T] = StoredValue[T](
+      key = key,
+      collection = collection,
+      default = () => default,
+      persistence = persistence
+    )
 
     def opt[T](key: String,
-               cache: Boolean = true,
+               persistence: Persistence = Persistence.Stored,
                collection: Collection[KeyValue] = backingStore)
-              (implicit rw: RW[T]): StoredValue[Option[T]] = StoredValue[Option[T]](key, collection, () => None, cache = cache)
+              (implicit rw: RW[T]): StoredValue[Option[T]] = StoredValue[Option[T]](
+      key = key,
+      collection = collection,
+      default = () => None,
+      persistence = persistence
+    )
   }
 
   private def doUpgrades(upgrades: List[DatabaseUpgrade],
