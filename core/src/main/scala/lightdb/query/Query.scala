@@ -18,6 +18,7 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
                                       offset: Int = 0,
                                       pageSize: Int = 1_000,
                                       limit: Option[Int] = None,
+                                      materializedIndexes: List[Index[_, D]] = Nil,
                                       countTotal: Boolean = true) {
   def evalConvert[T](converter: D => IO[T]): Query[D, T] = copy(convert = converter)
   def convert[T](converter: D => T): Query[D, T] = copy(convert = doc => IO.blocking(converter(doc)))
@@ -98,7 +99,10 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
 
   def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
 
-  def materialized(implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = pageStream.flatMap(_.materializedStream)
+  def materialized(indexes: Index[_, D]*)
+                  (implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = {
+    copy(materializedIndexes = indexes.toList).pageStream.flatMap(_.materializedStream)
+  }
 
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
 

@@ -25,8 +25,6 @@ case class LuceneIndex[F, D <: Document[D]](fieldName: String,
 
   private implicit def filter2Lucene(filter: Filter[D]): LuceneFilter[D] = filter.asInstanceOf[LuceneFilter[D]]
 
-  override def materialize: Boolean = false   // TODO: Support materialization
-
   lazy val fieldSortName: String = {
     val separate = rw.definition.className.collect {
       case "lightdb.spatial.GeoPoint" => true

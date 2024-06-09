@@ -140,10 +140,14 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
       case Nil => ""
       case list => list.mkString("ORDER BY ", ", ", "")
     }
-    val fields = index.fields.filter(_.materialize).map(_.fieldName).mkString(", ")
+    val indexes = query.materializedIndexes match {
+      case l if !l.contains(_id) => _id :: l
+      case l => l
+    }
+    val fieldNames = indexes.map(_.fieldName).mkString(", ")
     val sql =
       s"""SELECT
-         |  $fields
+         |  $fieldNames
          |FROM
          |  ${collection.collectionName}
          |$filters
@@ -156,7 +160,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     val ps = prepare(sql, params)
     val rs = ps.executeQuery()
     try {
-      val materialized = this.materialized(rs)
+      val materialized = this.materialized(rs, indexes)
       PagedResults(
         query = query,
         context = SQLPageContext(context),
@@ -172,12 +176,12 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
-  protected def materialized(rs: ResultSet): List[Materialized[D]] = {
+  protected def materialized(rs: ResultSet, indexes: List[Index[_, D]]): List[Materialized[D]] = {
     val iterator = new Iterator[Materialized[D]] {
       override def hasNext: Boolean = rs.next()
 
       override def next(): Materialized[D] = {
-        val map = index.fields.filter(_.materialize).map { index =>
+        val map = indexes.map { index =>
           index.fieldName -> getJson(rs, index.fieldName)
         }.toMap
         Materialized[D](Obj(map))
