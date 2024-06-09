@@ -106,7 +106,11 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
   }
 
   def aggregate(functions: AggregateFunction[_, D]*)
-               (implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = ???
+               (implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = indexSupport.aggregate(
+    query = this,
+    functions = functions.toList,
+    context = context
+  )
 
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
 

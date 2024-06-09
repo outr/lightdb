@@ -3,6 +3,7 @@ package lightdb.index
 import fabric.rw.{Convertible, RW}
 import fabric.{Json, Null, NumDec, NumInt}
 import lightdb.Document
+import lightdb.aggregate.{AggregateFunction, AggregateType}
 import lightdb.model.{AbstractCollection, Collection}
 import lightdb.query.Filter
 
@@ -63,4 +64,6 @@ trait Index[F, D <: Document[D]] {
             matchEndsWith: Boolean = false): Filter[D] = throw new UnsupportedOperationException("Words is not supported on this index")
 
     indexSupport.index.register(this)
+
+  def agg(`type`: AggregateType, name: String): AggregateFunction[F, D] = AggregateFunction(name, fieldName, `type`, rw)
 }

@@ -1,5 +1,6 @@
 package lightdb.aggregate
 
+import fabric.rw.RW
 import lightdb.Document
 
-trait AggregateFunction[F, D <: Document[D]]
+case class AggregateFunction[F, D <: Document[D]](name: String, fieldName: String, `type`: AggregateType, rw: RW[F])
