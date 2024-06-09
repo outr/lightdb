@@ -184,6 +184,22 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
         }
       }
     }
+    "query with aggregate functions" in {
+      Person.withSearchContext { implicit context =>
+        val minAge = Person.age.min("minAge")
+        val maxAge = Person.age.max("maxAge")
+        val avgAge = Person.age.avg("avgAge")
+        Person.query.aggregate(
+          minAge,
+          maxAge,
+          avgAge
+        ).compile.toList.map { list =>
+          list.map(m => m(minAge)).toSet should be(Set(-1))
+          list.map(m => m(maxAge)).toSet should be(Set(-1))
+          list.map(m => m(avgAge)).toSet should be(Set(-1))
+        }
+      }
+    }
     "delete John" in {
       Person.delete(id1).map { deleted =>
         deleted should be(id1)
