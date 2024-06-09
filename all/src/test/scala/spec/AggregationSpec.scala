@@ -80,7 +80,7 @@ class AggregationSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object DB extends LightDB with HaloDBSupport {
-    override lazy val directory: Path = Paths.get("testdb")
+    override lazy val directory: Path = Paths.get("db/aggregation")
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
