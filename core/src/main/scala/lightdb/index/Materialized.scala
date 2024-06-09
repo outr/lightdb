@@ -6,7 +6,11 @@ import lightdb.aggregate.AggregateFunction
 import lightdb.{Document, Id}
 
 case class Materialized[D <: Document[D]](json: Json) {
-  private def get[F](name: String, rw: RW[F]): Option[F] = json.get(name).map(_.as[F](rw))
+  private def get[F](name: String, rw: RW[F]): Option[F] = try {
+    json.get(name).map(_.as[F](rw))
+  } catch {
+    case t: Throwable => throw new RuntimeException(s"Failed to materialize $name, JSON: $json", t)
+  }
   def get[F](index: Index[F, D]): Option[F] = get(index.fieldName, index.rw)
   def get[F](function: AggregateFunction[F, D]): Option[F] = get(function.name, function.rw)
 

@@ -187,10 +187,10 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "query with aggregate functions" in {
       Person.withSearchContext { implicit context =>
-        val minAge = Person.age.agg(AggregateType.Min, "minAge")
-        val maxAge = Person.age.agg(AggregateType.Max, "maxAge")
-        val avgAge = Person.age.agg(AggregateType.Avg, "avgAge")
-        val sumAge = Person.age.agg(AggregateType.Sum, "sumAge")
+        val minAge = Person.age.min()
+        val maxAge = Person.age.max()
+        val avgAge = Person.age.avg()
+        val sumAge = Person.age.sum()
         Person.query.aggregate(
           minAge,
           maxAge,
@@ -283,7 +283,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     override implicit val rw: RW[Person] = RW.gen
 
     val name: I[String] = index.one("name", _.name)
-    val age: I[Int] = index.one("age", _.age, materialize = true)
+    val age: I[Int] = index.one("age", _.age)
     val ageLinks: IndexedLinks[Int, Person] = IndexedLinks[Int, Person]("age", _.age, _.toString, this)
   }
 

@@ -68,7 +68,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
 
   override lazy val index: SQLIndexer[D] = SQLIndexer(this)
 
-  val _id: Index[Id[D], D] = index.one("_id", _._id, materialize = true)
+  val _id: Index[Id[D], D] = index.one("_id", _._id)
 
   private[lightdb] lazy val backlog = new FlushingBacklog[Id[D], D](1_000, 10_000) {
     override protected def write(list: List[D]): IO[Unit] = IO.blocking {
@@ -232,6 +232,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
           case AggregateType.Min => "MIN"
           case AggregateType.Avg => "AVG"
           case AggregateType.Sum => "SUM"
+          case AggregateType.Count => "COUNT"
         }
         s"$af(${f.fieldName}) AS ${f.name}"
       }.mkString(", ")
