@@ -7,3 +7,4 @@ benchmark/imdb/
 benchmark/data/
 backup/
 backup.zip
+db/

@@ -228,14 +228,26 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
       }
       val fieldNames = functions.map { f =>
         val af = f.`type` match {
-          case AggregateType.Max => "MAX"
-          case AggregateType.Min => "MIN"
-          case AggregateType.Avg => "AVG"
-          case AggregateType.Sum => "SUM"
-          case AggregateType.Count => "COUNT"
+          case AggregateType.Max => Some("MAX")
+          case AggregateType.Min => Some("MIN")
+          case AggregateType.Avg => Some("AVG")
+          case AggregateType.Sum => Some("SUM")
+          case AggregateType.Count => Some("COUNT")
+          case AggregateType.Concat => Some("GROUP_CONCAT")
+          case AggregateType.Group => None
         }
-        s"$af(${f.fieldName}) AS ${f.name}"
+        val fieldName = af match {
+          case Some(s) => s"$s(${f.fieldName})"
+          case None => f.fieldName
+        }
+        s"$fieldName AS ${f.name}"
       }.mkString(", ")
+      val group = functions.filter(_.`type` == AggregateType.Group).map(_.fieldName).distinct match {
+        case Nil => ""
+        case list =>
+          s"""GROUP BY
+             |  ${list.mkString(", ")}""".stripMargin
+      }
       val sql =
         s"""SELECT
            |  $fieldNames
@@ -243,7 +255,9 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
            |  ${collection.collectionName}
            |$filters
            |$sort
+           |$group
            |""".stripMargin.trim
+      scribe.info(s"SQL: $sql")
       val ps = prepare(sql, params)
       val rs = ps.executeQuery()
       val iterator = materializedIterator(rs, functions.map(_.name))
