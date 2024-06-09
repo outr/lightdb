@@ -3,6 +3,7 @@ package lightdb.lucene
 import cats.effect.IO
 import fabric.define.DefType
 import lightdb._
+import lightdb.aggregate.AggregateFunction
 import lightdb.index.{Index, IndexSupport, Materialized}
 import lightdb.model.AbstractCollection
 import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort, SortDirection}
@@ -76,6 +77,11 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
     })
     _ = index.addDoc(doc._id, fields)
   } yield ()
+
+  override def aggregate[V](query: Query[D, V],
+                            functions: List[AggregateFunction[_, D]],
+                            context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] =
+    throw new UnsupportedOperationException("Aggregate functions not supported in Lucene currently")
 
   override protected[lightdb] def initModel(collection: AbstractCollection[D]): Unit = {
     super.initModel(collection)

@@ -3,6 +3,7 @@ package lightdb.sql
 import cats.effect.IO
 import fabric._
 import fabric.io.JsonFormatter
+import lightdb.aggregate.{AggregateFunction, AggregateType}
 import lightdb.{Document, Id}
 import lightdb.index.{Index, IndexSupport, Materialized}
 import lightdb.model.AbstractCollection
@@ -160,7 +161,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     val ps = prepare(sql, params)
     val rs = ps.executeQuery()
     try {
-      val materialized = this.materialized(rs, indexes)
+      val materialized = this.materializedIterator(rs, indexes.map(_.fieldName)).toList
       PagedResults(
         query = query,
         context = SQLPageContext(context),
@@ -176,22 +177,79 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     }
   }
 
-  protected def materialized(rs: ResultSet, indexes: List[Index[_, D]]): List[Materialized[D]] = {
-    val iterator = new Iterator[Materialized[D]] {
-      override def hasNext: Boolean = rs.next()
+  protected def materializedIterator(rs: ResultSet, fieldNames: List[String]): Iterator[Materialized[D]] = {
+    new Iterator[Materialized[D]] {
+      private var checkedNext = false
+      private var nextValue = false
+
+      override def hasNext: Boolean = {
+        if (!checkedNext) {
+          nextValue = rs.next()
+          checkedNext = true
+        }
+        nextValue
+      }
 
       override def next(): Materialized[D] = {
-        val map = indexes.map { index =>
-          index.fieldName -> getJson(rs, index.fieldName)
+        if (!checkedNext) {
+          rs.next()
+        }
+        checkedNext = false
+        val map = fieldNames.map { fieldName =>
+          fieldName -> getJson(rs, fieldName)
         }.toMap
         Materialized[D](Obj(map))
       }
     }
-    iterator.toList
   }
 
   override protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit] =
     backlog.enqueue(doc._id, doc).map(_ => ())
+
+  override def aggregate[V](query: Query[D, V],
+                            functions: List[AggregateFunction[_, D]],
+                            context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = {
+    val io = IO.blocking {
+      var params = List.empty[Json]
+      val filters = query.filter match {
+        case Some(f) =>
+          val filter = f.asInstanceOf[SQLPart]
+          params = params ::: filter.args
+          s"WHERE\n  ${filter.sql}"
+        case None => ""
+      }
+      val sort = query.sort.collect {
+        case Sort.ByField(field, direction) =>
+          val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+          s"${field.fieldName} $dir"
+      } match {
+        case Nil => ""
+        case list => list.mkString("ORDER BY ", ", ", "")
+      }
+      val fieldNames = functions.map { f =>
+        val af = f.`type` match {
+          case AggregateType.Max => "MAX"
+          case AggregateType.Min => "MIN"
+          case AggregateType.Avg => "AVG"
+          case AggregateType.Sum => "SUM"
+        }
+        s"$af(${f.fieldName}) AS ${f.name}"
+      }.mkString(", ")
+      val sql =
+        s"""SELECT
+           |  $fieldNames
+           |FROM
+           |  ${collection.collectionName}
+           |$filters
+           |$sort
+           |""".stripMargin.trim
+      val ps = prepare(sql, params)
+      val rs = ps.executeQuery()
+      val iterator = materializedIterator(rs, functions.map(_.name))
+      fs2.Stream.fromBlockingIterator[IO](iterator, 512)
+    }
+    fs2.Stream.force(io)
+  }
 
   private def prepare(sql: String, params: List[Json]): PreparedStatement = try {
     val ps = connection.prepareStatement(sql)
@@ -219,7 +277,12 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
 
   private def getJson(rs: ResultSet, fieldName: String): Json = rs.getObject(fieldName) match {
     case s: String => str(s)
+    case b: java.lang.Boolean => bool(b.booleanValue())
     case i: java.lang.Integer => num(i.intValue())
+    case l: java.lang.Long => num(l.longValue())
+    case f: java.lang.Float => num(f.doubleValue())
+    case d: java.lang.Double => num(d.doubleValue())
+    case null => Null
     case v => throw new UnsupportedOperationException(s"$fieldName returned $v (${v.getClass.getName})")
   }
 

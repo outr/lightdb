@@ -4,6 +4,7 @@ import cats.effect.IO
 import lightdb.model.{AbstractCollection, Collection, DocumentAction, DocumentListener, DocumentModel}
 import lightdb.query.{Filter, PagedResults, Query, SearchContext}
 import lightdb.Document
+import lightdb.aggregate.AggregateFunction
 import lightdb.spatial.GeoPoint
 import squants.space.Length
 
@@ -50,6 +51,10 @@ trait IndexSupport[D <: Document[D]] extends DocumentModel[D] {
                   offset: Int,
                   limit: Option[Int],
                   after: Option[PagedResults[D, V]]): IO[PagedResults[D, V]]
+
+  def aggregate[V](query: Query[D, V],
+                   functions: List[AggregateFunction[_, D]],
+                   context: SearchContext[D]): fs2.Stream[IO, Materialized[D]]
 
   protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit]
 }

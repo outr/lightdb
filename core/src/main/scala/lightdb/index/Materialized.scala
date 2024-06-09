@@ -2,10 +2,16 @@ package lightdb.index
 
 import fabric.Json
 import fabric.rw.{Asable, RW}
+import lightdb.aggregate.AggregateFunction
 import lightdb.{Document, Id}
 
 case class Materialized[D <: Document[D]](json: Json) {
-  def get[F](index: Index[F, D]): Option[F] = json.get(index.fieldName).map(_.as[F](index.rw))
+  private def get[F](name: String, rw: RW[F]): Option[F] = json.get(name).map(_.as[F](rw))
+  def get[F](index: Index[F, D]): Option[F] = get(index.fieldName, index.rw)
+  def get[F](function: AggregateFunction[F, D]): Option[F] = get(function.name, function.rw)
+
   def apply[F](index: Index[F, D]): F = get(index).getOrElse(throw new NullPointerException(s"${index.fieldName} not found in $json"))
+  def apply[F](function: AggregateFunction[F, D]): F = get(function).getOrElse(throw new NullPointerException(s"${function.name} not found in $json"))
+
   def as[T](implicit rw: RW[T]): T = json.as[T]
 }

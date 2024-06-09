@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
+import lightdb.aggregate.AggregateType
 import lightdb.halo.HaloDBSupport
 import lightdb.index.Index
 import lightdb.model.Collection
@@ -186,17 +187,20 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "query with aggregate functions" in {
       Person.withSearchContext { implicit context =>
-        val minAge = Person.age.min("minAge")
-        val maxAge = Person.age.max("maxAge")
-        val avgAge = Person.age.avg("avgAge")
+        val minAge = Person.age.agg(AggregateType.Min, "minAge")
+        val maxAge = Person.age.agg(AggregateType.Max, "maxAge")
+        val avgAge = Person.age.agg(AggregateType.Avg, "avgAge")
+        val sumAge = Person.age.agg(AggregateType.Sum, "sumAge")
         Person.query.aggregate(
           minAge,
           maxAge,
-          avgAge
+          avgAge,
+          sumAge
         ).compile.toList.map { list =>
-          list.map(m => m(minAge)).toSet should be(Set(-1))
-          list.map(m => m(maxAge)).toSet should be(Set(-1))
-          list.map(m => m(avgAge)).toSet should be(Set(-1))
+          list.map(m => m(minAge)).toSet should be(Set(19))
+          list.map(m => m(maxAge)).toSet should be(Set(21))
+          list.map(m => m(avgAge)).toSet should be(Set(20.0))
+          list.map(m => m(sumAge)).toSet should be(Set(40.0))
         }
       }
     }
