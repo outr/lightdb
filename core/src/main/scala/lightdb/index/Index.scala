@@ -1,7 +1,8 @@
 package lightdb.index
 
 import fabric.rw.{Convertible, RW}
-import fabric.{Json, Null, NumDec, NumInt}
+import fabric._
+import fabric.define.DefType
 import lightdb.{Document, Unique}
 import lightdb.aggregate.{AggregateFunction, AggregateType}
 import lightdb.model.{AbstractCollection, Collection}
@@ -72,4 +73,13 @@ trait Index[F, D <: Document[D]] {
   def avg(name: String = un): AggregateFunction[Double, D] = AggregateFunction(name, fieldName, AggregateType.Avg)
   def sum(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Sum)
   def count(name: String = un): AggregateFunction[Int, D] = AggregateFunction(name, fieldName, AggregateType.Count)
+  def group(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Group)
+  def concat(name: String = un): AggregateFunction[List[String], D] = AggregateFunction(name, fieldName, AggregateType.Concat)(Index.ConcatRW)
+}
+
+object Index {
+  private val ConcatRW: RW[List[String]] = RW.string[List[String]](
+    asString = _.mkString(","),
+    fromString = _.split(',').toList
+  )
 }
