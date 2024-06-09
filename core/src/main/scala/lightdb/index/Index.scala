@@ -13,7 +13,6 @@ trait Index[F, D <: Document[D]] {
 
   def fieldName: String
   def indexSupport: IndexSupport[D]
-  def materialize: Boolean
   def get: D => List[F]
   def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 

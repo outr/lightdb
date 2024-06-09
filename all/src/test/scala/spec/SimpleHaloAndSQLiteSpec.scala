@@ -179,7 +179,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
     }
     "query for materialized indexes" in {
       Person.withSearchContext { implicit context =>
-        Person.query.materialized.compile.toList.map { list =>
+        Person.query.materialized(Person.age).compile.toList.map { list =>
           list.map(m => m(Person.age)).toSet should be(Set(19, 21))
         }
       }

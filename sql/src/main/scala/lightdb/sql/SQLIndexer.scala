@@ -19,7 +19,6 @@ case class SQLIndexer[D <: Document[D]](indexSupport: SQLSupport[D]) extends Ind
               (implicit rw: RW[F]): Index[F, D] = SQLIndex(
     fieldName = name,
     indexSupport = indexSupport,
-    materialize = materialize,
     get = doc => get(doc)
   )
 
