@@ -178,9 +178,9 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
 
       override def next(): Materialized[D] = {
         val map = index.fields.filter(_.materialize).map { index =>
-          index -> getValue(rs, index)
+          index.fieldName -> getJson(rs, index.fieldName)
         }.toMap
-        new Materialized[D](map)
+        new Materialized[D](Obj(map))
       }
     }
     iterator.toList
@@ -213,10 +213,10 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
     case _ => ps.setString(index, JsonFormatter.Compact(value))
   }
 
-  private def getValue[F](rs: ResultSet, index: Index[F, D]): Any = rs.getObject(index.fieldName) match {
-    case s: String => index.rw.write(str(s))
-    case i: java.lang.Integer => index.rw.write(num(i.intValue()))
-    case v => throw new UnsupportedOperationException(s"${index.fieldName} returned $v (${v.getClass.getName})")
+  private def getJson(rs: ResultSet, fieldName: String): Json = rs.getObject(fieldName) match {
+    case s: String => str(s)
+    case i: java.lang.Integer => num(i.intValue())
+    case v => throw new UnsupportedOperationException(s"$fieldName returned $v (${v.getClass.getName})")
   }
 
   private def commit(): IO[Unit] = IO.blocking {
