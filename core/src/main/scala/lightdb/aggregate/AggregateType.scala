@@ -7,4 +7,5 @@ object AggregateType {
   case object Min extends AggregateType
   case object Avg extends AggregateType
   case object Sum extends AggregateType
+  case object Count extends AggregateType
 }

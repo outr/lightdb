@@ -2,7 +2,7 @@ package lightdb.index
 
 import fabric.rw.{Convertible, RW}
 import fabric.{Json, Null, NumDec, NumInt}
-import lightdb.Document
+import lightdb.{Document, Unique}
 import lightdb.aggregate.{AggregateFunction, AggregateType}
 import lightdb.model.{AbstractCollection, Collection}
 import lightdb.query.Filter
@@ -65,5 +65,11 @@ trait Index[F, D <: Document[D]] {
 
     indexSupport.index.register(this)
 
-  def agg(`type`: AggregateType, name: String): AggregateFunction[F, D] = AggregateFunction(name, fieldName, `type`, rw)
+  private def un: String = Unique(length = 8, characters = Unique.LettersLower)
+
+  def max(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Max)
+  def min(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Min)
+  def avg(name: String = un): AggregateFunction[Double, D] = AggregateFunction(name, fieldName, AggregateType.Avg)
+  def sum(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Sum)
+  def count(name: String = un): AggregateFunction[Int, D] = AggregateFunction(name, fieldName, AggregateType.Count)
 }
