@@ -180,7 +180,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
         val map = index.fields.filter(_.materialize).map { index =>
           index.fieldName -> getJson(rs, index.fieldName)
         }.toMap
-        new Materialized[D](Obj(map))
+        Materialized[D](Obj(map))
       }
     }
     iterator.toList
