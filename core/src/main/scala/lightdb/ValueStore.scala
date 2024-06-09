@@ -7,25 +7,39 @@ import fabric.{arr, obj}
 import fabric.rw._
 import lightdb.model.{AbstractCollection, DocumentAction}
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 case class ValueStore[V, D <: Document[D]](key: String,
                                            createV: D => List[V],
                                            collection: AbstractCollection[D],
                                            includeIds: Boolean = false,
                                            persistence: Persistence = Persistence.Stored)
                                           (implicit rw: RW[V]) {
+  private val _initialized = new AtomicBoolean(false)
+
   private lazy val stored = collection.db.stored[Map[V, Facet[D]]](
     key = s"${collection.collectionName}.valueStore.$key",
     default = Map.empty,
     persistence = persistence
   )
 
-  def facets: IO[Map[V, Facet[D]]] = stored.get()
+  private def init(): IO[Unit] = if (_initialized.compareAndSet(false, true)) {
+    if (persistence == Persistence.Memory) {
+      collection.stream.foreach(set).compile.drain
+    } else {
+      IO.unit
+    }
+  } else {
+    IO.unit
+  }
+
+  def facets: IO[Map[V, Facet[D]]] = init().flatMap(_ => stored.get())
 
   def facet(v: V): IO[Facet[D]] = facets.map(_.getOrElse(v, Facet()))
 
   def values: IO[Set[V]] = facets.map(_.keySet)
 
-  collection.postSet.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
+  private def set(doc: D): IO[Unit] = {
     createV(doc).map { v =>
       stored.modify { map =>
         IO {
@@ -40,7 +54,13 @@ case class ValueStore[V, D <: Document[D]](key: String,
           map + (v -> facet)
         }
       }
-    }.sequence.map(_ => Some(doc))
+    }.sequence.map(_ => ())
+  }
+
+  collection.postSet.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
+    init().flatMap { _ =>
+      set(doc).map(_ => Some(doc))
+    }
   })
   collection.postDelete.add((_: DocumentAction, doc: D, _: AbstractCollection[D]) => {
     createV(doc).map { v =>

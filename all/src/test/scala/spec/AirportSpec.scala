@@ -19,7 +19,7 @@ import scala.io.Source
 class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
-      DB.init(truncate = true)
+      DB.init()
     }
     "have two collections" in {
       DB.collections.map(_.collectionName).toSet should be(Set("_backingStore", "airports", "flights"))
@@ -108,7 +108,7 @@ class AirportSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object DB extends LightDB with HaloDBSupport {
-    override lazy val directory: Path = Paths.get("airports")
+    override lazy val directory: Path = Paths.get("db/airports")
 
     override lazy val userCollections: List[Collection[_]] = List(
       Airport, Flight

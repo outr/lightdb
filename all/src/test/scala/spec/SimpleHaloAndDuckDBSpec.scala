@@ -238,7 +238,7 @@ class SimpleHaloAndDuckDBSpec extends AsyncWordSpec with AsyncIOSpec with Matche
   }
 
   object DB extends LightDB with HaloDBSupport {
-    override lazy val directory: Path = Paths.get("testdb")
+    override lazy val directory: Path = Paths.get("db/duckdb")
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
