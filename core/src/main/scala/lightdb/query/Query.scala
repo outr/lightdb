@@ -105,7 +105,7 @@ case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
     copy(materializedIndexes = indexes.toList).pageStream.flatMap(_.materializedStream)
   }
 
-  def aggregate(functions: AggregateFunction[_, D]*): AggregateQuery[D] = AggregateQuery[D](this, functions.toList)
+  def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D] = AggregateQuery[D](this, functions.toList)
 
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
 
