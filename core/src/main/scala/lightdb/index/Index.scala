@@ -1,6 +1,6 @@
 package lightdb.index
 
-import fabric.rw.{Convertible, RW}
+import fabric.rw._
 import fabric._
 import lightdb.{Document, Unique}
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateType}
