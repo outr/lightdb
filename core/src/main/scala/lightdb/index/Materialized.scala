@@ -11,7 +11,7 @@ case class Materialized[D <: Document[D]](json: Json) {
   } catch {
     case t: Throwable => throw new RuntimeException(s"Failed to materialize $name, JSON: $json", t)
   }
-  def get[F](index: Index[F, D]): Option[F] = get(index.fieldName, index.rw)
+  def get[F](index: Index[F, D]): Option[F] = get(index.fieldName, index.fRW)
   def get[T, F](function: AggregateFunction[T, F, D]): Option[T] = get(function.name, function.rw)
 
   def apply[F](index: Index[F, D]): F = get(index).getOrElse(throw new NullPointerException(s"${index.fieldName} not found in $json"))

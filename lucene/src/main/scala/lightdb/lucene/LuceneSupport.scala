@@ -25,7 +25,7 @@ trait LuceneSupport[D <: Document[D]] extends IndexSupport[D] {
     case Sort.IndexOrder => SortField.FIELD_DOC
     case Sort.ByField(field, dir) =>
       val f = field.asInstanceOf[LuceneIndex[_, D]]
-      f.rw.definition match {
+      f.fRW.definition match {
         case DefType.Int => new SortedNumericSortField(field.fieldName, f.sortType, dir == SortDirection.Descending)
         case DefType.Str => new SortField(field.fieldName, f.sortType, dir == SortDirection.Descending)
         case d => throw new RuntimeException(s"Unsupported sort definition: $d")

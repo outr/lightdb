@@ -1,23 +1,22 @@
 package lightdb.sql
 
+import fabric.Json
 import fabric.rw._
-import lightdb.index.{Index, IndexSupport}
+import lightdb.index.{FilterSupport, Index, IndexSupport}
 import lightdb.Document
+import lightdb.aggregate.AggregateFilter
 import lightdb.query.Filter
 
 case class SQLIndex[F, D <: Document[D]](fieldName: String,
                                          indexSupport: IndexSupport[D],
-                                         get: D => List[F])(implicit val rw: RW[F]) extends Index[F, D] {
-  override def is(value: F): Filter[D] = SQLFilter[D](s"$fieldName = ?", List(value.json))
+                                         get: D => List[F])(implicit val fRW: RW[F]) extends Index[F, D] with SQLFilterSupport[F, D, Filter[D]] { index =>
+  override protected def createFilter(sql: String, args: List[Json]): Filter[D] = SQLFilter[D](sql, args)
 
-  override def >(value: F)(implicit num: Numeric[F]): Filter[D] = SQLFilter[D](s"$fieldName > ?", List(value.json))
-  override def >=(value: F)(implicit num: Numeric[F]): Filter[D] = SQLFilter[D](s"$fieldName >= ?", List(value.json))
-  override def <(value: F)(implicit num: Numeric[F]): Filter[D] = SQLFilter[D](s"$fieldName < ?", List(value.json))
-  override def <=(value: F)(implicit num: Numeric[F]): Filter[D] = SQLFilter[D](s"$fieldName <= ?", List(value.json))
+  def aggregateFilterSupport(name: String): FilterSupport[F, D, AggregateFilter[D]] = new SQLAggregateFilterSupport(name)
 
-  override protected def rangeLong(from: Long, to: Long): Filter[D] = SQLFilter[D](s"$fieldName BETWEEN ? AND ?", List(from.json, to.json))
-
-  override protected def rangeDouble(from: Double, to: Double): Filter[D] = SQLFilter[D](s"$fieldName BETWEEN ? AND ?", List(from.json, to.json))
-
-  override def IN(values: Seq[F]): Filter[D] = SQLFilter[D](s"$fieldName IN (${values.map(_ => "?").mkString(", ")})", values.toList.map(_.json))
+  class SQLAggregateFilterSupport(name: String) extends SQLFilterSupport[F, D, AggregateFilter[D]] {
+    override protected def createFilter(sql: String, args: List[Json]): AggregateFilter[D] = SQLAggregateFilter[D](sql, args)
+    override def fieldName: String = name
+    override implicit def fRW: RW[F] = index.fRW
+  }
 }
