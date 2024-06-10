@@ -96,17 +96,17 @@ class AggregationSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       val names = Person.name.concat()
       val age = Person.age.group()
       val count = Person.age.count()
-      // TODO: HAVING ageCount > 1
       // TODO: ORDER BY ageCount DESC
       Person.withSearchContext { implicit context =>
         Person.query
           .aggregate(ids, names, age, count)
+          .filter(count > 1)
           .toList
           .map { list =>
-//          list.map(_(ids)) should be(Nil)
-//          list.map(_(names)) should be(Nil)
-//          list.map(_(age)) should be(Nil)
-          list.map(_(count)) should be(Nil)
+          list.map(_(names)).map(_.toSet) should be(List(Set("Oscar", "Adam")))
+          list.map(_(ids)).map(_.toSet) should be(List(Set(oscar._id, adam._id).map(_.value)))
+          list.map(_(age)) should be(List(21))
+          list.map(_(count)) should be(List(2))
         }
       }
     }

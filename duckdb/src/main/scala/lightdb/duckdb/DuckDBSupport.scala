@@ -22,7 +22,7 @@ trait DuckDBSupport[D <: Document[D]] extends SQLSupport[D] {
       if (i.fieldName == "_id") {
         "_id VARCHAR PRIMARY KEY"
       } else {
-        val t = i.rw.definition match {
+        val t = i.fRW.definition match {
           case DefType.Str => "VARCHAR"
           case DefType.Int => "INTEGER"
           case d => throw new UnsupportedOperationException(s"${i.fieldName} has an unsupported type: $d")

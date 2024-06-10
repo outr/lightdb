@@ -216,6 +216,13 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
           s"WHERE\n  ${filter.sql}"
         case None => ""
       }
+      val havingFilters = query.filter match {
+        case Some(f) =>
+          val filter = f.asInstanceOf[SQLPart]
+          params = params ::: filter.args
+          s"HAVING\n  ${filter.sql}"
+        case None => ""
+      }
       val sort = query.query.sort.collect {
         case Sort.ByField(field, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
@@ -254,8 +261,9 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
            |$filters
            |$sort
            |$group
+           |$havingFilters
            |""".stripMargin.trim
-      scribe.info(s"SQL: $sql")
+      scribe.info(s"SQL: $sql, Params: $params")
       val ps = prepare(sql, params)
       val rs = ps.executeQuery()
       val iterator = materializedIterator(rs, query.functions.map(_.name))
