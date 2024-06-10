@@ -3,11 +3,12 @@ package lightdb.aggregate
 import cats.effect.IO
 import lightdb.Document
 import lightdb.index.Materialized
-import lightdb.query.{Query, SearchContext}
+import lightdb.query.{Query, SearchContext, SortDirection}
 
 case class AggregateQuery[D <: Document[D]](query: Query[D, _],
                                             functions: List[AggregateFunction[_, _, D]],
-                                            filter: Option[AggregateFilter[D]] = None) {
+                                            filter: Option[AggregateFilter[D]] = None,
+                                            sort: List[(AggregateFunction[_, _, D], SortDirection)] = Nil) {
   def filter(filter: AggregateFilter[D], and: Boolean = false): AggregateQuery[D] = {
     if (and && this.filter.nonEmpty) {
       copy(filter = Some(this.filter.get && filter))
@@ -25,6 +26,11 @@ case class AggregateQuery[D <: Document[D]](query: Query[D, _],
   } else {
     this
   }
+
+  def sort(function: AggregateFunction[_, _, D],
+           direction: SortDirection = SortDirection.Ascending): AggregateQuery[D] = copy(
+    sort = sort ::: List((function, direction))
+  )
 
   def stream(implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = query.indexSupport.aggregate(this)
 

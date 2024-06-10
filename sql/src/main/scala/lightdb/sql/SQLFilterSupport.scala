@@ -1,7 +1,7 @@
 package lightdb.sql
 
 import fabric.Json
-import fabric.rw.Convertible
+import fabric.rw._
 import lightdb.Document
 import lightdb.index.FilterSupport
 

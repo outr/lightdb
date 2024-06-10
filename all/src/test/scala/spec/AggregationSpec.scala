@@ -6,6 +6,7 @@ import lightdb.aggregate.AggregateType
 import lightdb.{Document, Id, IndexedLinks, LightDB, StoredValue}
 import lightdb.halo.HaloDBSupport
 import lightdb.model.Collection
+import lightdb.query.SortDirection
 import lightdb.sqlite.SQLiteSupport
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -75,31 +76,15 @@ class AggregationSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
           }
       }
     }
-    /*
-    SELECT
-        GROUP_CONCAT(_id),
-        GROUP_CONCAT(name),
-        age,
-        COUNT(age) AS ageCount
-    FROM
-        people
-    WHERE
-        age > 0
-    GROUP BY
-        age
-    HAVING
-        ageCount > 1
-    ORDER BY ageCount DESC
-     */
     "aggregate with grouping and filtering" in {
       val ids = Person._id.concat()
       val names = Person.name.concat()
       val age = Person.age.group()
       val count = Person.age.count()
-      // TODO: ORDER BY ageCount DESC
       Person.withSearchContext { implicit context =>
         Person.query
           .aggregate(ids, names, age, count)
+          .sort(count, SortDirection.Descending)
           .filter(count > 1)
           .toList
           .map { list =>
