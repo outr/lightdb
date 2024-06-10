@@ -235,12 +235,12 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
           case AggregateType.Group => None
         }
         val fieldName = af match {
-          case Some(s) => s"$s(${f.fieldName})"
-          case None => f.fieldName
+          case Some(s) => s"$s(${f.index.fieldName})"
+          case None => f.index.fieldName
         }
         s"$fieldName AS ${f.name}"
       }.mkString(", ")
-      val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.fieldName).distinct match {
+      val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.index.fieldName).distinct match {
         case Nil => ""
         case list =>
           s"""GROUP BY

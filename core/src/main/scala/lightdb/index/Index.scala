@@ -68,13 +68,13 @@ trait Index[F, D <: Document[D]] {
 
   private def un: String = Unique(length = 8, characters = Unique.LettersLower)
 
-  def max(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Max)
-  def min(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Min)
-  def avg(name: String = un): AggregateFunction[Double, D] = AggregateFunction(name, fieldName, AggregateType.Avg)
-  def sum(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Sum)
-  def count(name: String = un): AggregateFunction[Int, D] = AggregateFunction(name, fieldName, AggregateType.Count)
-  def group(name: String = un): AggregateFunction[F, D] = AggregateFunction(name, fieldName, AggregateType.Group)
-  def concat(name: String = un): AggregateFunction[List[String], D] = AggregateFunction(name, fieldName, AggregateType.Concat)(Index.ConcatRW)
+  def max(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Max)
+  def min(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Min)
+  def avg(name: String = un): AggregateFunction[Double, F, D] = AggregateFunction(name, this, AggregateType.Avg)
+  def sum(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Sum)
+  def count(name: String = un): AggregateFunction[Int, F, D] = AggregateFunction(name, this, AggregateType.Count)
+  def group(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Group)
+  def concat(name: String = un): AggregateFunction[List[String], F, D] = AggregateFunction(name, this, AggregateType.Concat)(Index.ConcatRW)
 }
 
 object Index {
