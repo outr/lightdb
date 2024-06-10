@@ -196,7 +196,7 @@ class SimpleHaloAndSQLiteSpec extends AsyncWordSpec with AsyncIOSpec with Matche
           maxAge,
           avgAge,
           sumAge
-        ).compile.toList.map { list =>
+        ).stream.compile.toList.map { list =>
           list.map(m => m(minAge)).toSet should be(Set(19))
           list.map(m => m(maxAge)).toSet should be(Set(21))
           list.map(m => m(avgAge)).toSet should be(Set(20.0))
