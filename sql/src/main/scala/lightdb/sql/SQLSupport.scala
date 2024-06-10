@@ -3,7 +3,7 @@ package lightdb.sql
 import cats.effect.IO
 import fabric._
 import fabric.io.JsonFormatter
-import lightdb.aggregate.{AggregateFunction, AggregateType}
+import lightdb.aggregate.{AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.{Document, Id}
 import lightdb.index.{Index, IndexSupport, Materialized}
 import lightdb.model.AbstractCollection
@@ -206,19 +206,17 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
   override protected def indexDoc(doc: D, fields: List[Index[_, D]]): IO[Unit] =
     backlog.enqueue(doc._id, doc).map(_ => ())
 
-  override def aggregate[V](query: Query[D, V],
-                            functions: List[AggregateFunction[_, D]],
-                            context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = {
+  override def aggregate(query: AggregateQuery[D])(implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = {
     val io = IO.blocking {
       var params = List.empty[Json]
-      val filters = query.filter match {
+      val filters = query.query.filter match {
         case Some(f) =>
           val filter = f.asInstanceOf[SQLPart]
           params = params ::: filter.args
           s"WHERE\n  ${filter.sql}"
         case None => ""
       }
-      val sort = query.sort.collect {
+      val sort = query.query.sort.collect {
         case Sort.ByField(field, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
           s"${field.fieldName} $dir"
@@ -226,7 +224,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
         case Nil => ""
         case list => list.mkString("ORDER BY ", ", ", "")
       }
-      val fieldNames = functions.map { f =>
+      val fieldNames = query.functions.map { f =>
         val af = f.`type` match {
           case AggregateType.Max => Some("MAX")
           case AggregateType.Min => Some("MIN")
@@ -242,7 +240,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
         }
         s"$fieldName AS ${f.name}"
       }.mkString(", ")
-      val group = functions.filter(_.`type` == AggregateType.Group).map(_.fieldName).distinct match {
+      val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.fieldName).distinct match {
         case Nil => ""
         case list =>
           s"""GROUP BY
@@ -260,7 +258,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
       scribe.info(s"SQL: $sql")
       val ps = prepare(sql, params)
       val rs = ps.executeQuery()
-      val iterator = materializedIterator(rs, functions.map(_.name))
+      val iterator = materializedIterator(rs, query.functions.map(_.name))
       fs2.Stream.fromBlockingIterator[IO](iterator, 512)
     }
     fs2.Stream.force(io)

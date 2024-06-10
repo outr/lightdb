@@ -63,6 +63,7 @@ class AggregationSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         Person.query
           .filter(Person.age <=> (5, 16))
           .aggregate(max, min, avg, sum, count)
+          .stream
           .compile
           .toList
           .map { list =>
@@ -98,7 +99,10 @@ class AggregationSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       // TODO: HAVING ageCount > 1
       // TODO: ORDER BY ageCount DESC
       Person.withSearchContext { implicit context =>
-        Person.query.aggregate(ids, names, age, count).compile.toList.map { list =>
+        Person.query
+          .aggregate(ids, names, age, count)
+          .toList
+          .map { list =>
 //          list.map(_(ids)) should be(Nil)
 //          list.map(_(names)) should be(Nil)
 //          list.map(_(age)) should be(Nil)
