@@ -244,13 +244,13 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
           case AggregateType.Avg => Some("AVG")
           case AggregateType.Sum => Some("SUM")
           case AggregateType.Count | AggregateType.CountDistinct => Some("COUNT")
-          case AggregateType.Concat => Some("GROUP_CONCAT")
+          case AggregateType.Concat | AggregateType.ConcatDistinct => Some("GROUP_CONCAT")
           case AggregateType.Group => None
         }
         val fieldName = af match {
           case Some(s) =>
             val pre = f.`type` match {
-              case AggregateType.CountDistinct => "DISTINCT "
+              case AggregateType.CountDistinct | AggregateType.ConcatDistinct => "DISTINCT "
               case _ => ""
             }
             val post = f.`type` match {
