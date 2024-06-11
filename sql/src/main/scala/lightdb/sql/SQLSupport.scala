@@ -249,11 +249,15 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
         }
         val fieldName = af match {
           case Some(s) =>
-            val extra = f.`type` match {
+            val pre = f.`type` match {
               case AggregateType.CountDistinct => "DISTINCT "
               case _ => ""
             }
-            s"$s($extra${f.index.fieldName})"
+            val post = f.`type` match {
+              case AggregateType.Concat => ", ';;'"
+              case _ => ""
+            }
+            s"$s($pre${f.index.fieldName}$post)"
           case None => f.index.fieldName
         }
         s"$fieldName AS ${f.name}"

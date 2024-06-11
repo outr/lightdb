@@ -32,7 +32,7 @@ trait Index[F, D <: Document[D]] extends FilterSupport[F, D, Filter[D]] {
 object Index {
   private def ConcatRW[F](implicit fRW: RW[F]): RW[List[F]] = RW.from[List[F]](
     r = list => arr(list.map(fRW.read)),
-    w = _.asString.split(',').toList.map { s =>
+    w = _.asString.split(";;").toList.map { s =>
       val json = fRW.definition match {
         case DefType.Str => str(s)
         case DefType.Int => num(s.toLong)
