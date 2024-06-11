@@ -243,12 +243,17 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
           case AggregateType.Min => Some("MIN")
           case AggregateType.Avg => Some("AVG")
           case AggregateType.Sum => Some("SUM")
-          case AggregateType.Count => Some("COUNT")
+          case AggregateType.Count | AggregateType.CountDistinct => Some("COUNT")
           case AggregateType.Concat => Some("GROUP_CONCAT")
           case AggregateType.Group => None
         }
         val fieldName = af match {
-          case Some(s) => s"$s(${f.index.fieldName})"
+          case Some(s) =>
+            val extra = f.`type` match {
+              case AggregateType.CountDistinct => "DISTINCT "
+              case _ => ""
+            }
+            s"$s($extra${f.index.fieldName})"
           case None => f.index.fieldName
         }
         s"$fieldName AS ${f.name}"
