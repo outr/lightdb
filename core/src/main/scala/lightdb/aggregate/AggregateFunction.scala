@@ -6,6 +6,8 @@ import lightdb.index.{FilterSupport, Index}
 
 case class AggregateFunction[T, F, D <: Document[D]](name: String, index: Index[F, D], `type`: AggregateType)
                                                     (implicit val rw: RW[T]) extends FilterSupport[F, D, AggregateFilter[D]] {
+  def rename(name: String): AggregateFunction[T, F, D] = copy(name = name)
+
   override implicit def fRW: RW[F] = index.fRW
 
   override def is(value: F): AggregateFilter[D] = index.aggregateFilterSupport(name).is(value)

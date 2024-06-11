@@ -15,16 +15,14 @@ trait Index[F, D <: Document[D]] extends FilterSupport[F, D, Filter[D]] {
   def get: D => List[F]
   def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 
-  private def un: String = Unique(length = 8, characters = Unique.LettersLower)
-
-  def max(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Max)
-  def min(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Min)
-  def avg(name: String = un): AggregateFunction[Double, F, D] = AggregateFunction(name, this, AggregateType.Avg)
-  def sum(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Sum)
-  def count(name: String = un): AggregateFunction[Int, F, D] = AggregateFunction(name, this, AggregateType.Count)
-  def countDistinct(name: String = un): AggregateFunction[Int, F, D] = AggregateFunction(name, this, AggregateType.CountDistinct)
-  def group(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Group)
-  def concat(name: String = un): AggregateFunction[List[F], F, D] = AggregateFunction(name, this, AggregateType.Concat)(Index.ConcatRW)
+  lazy val max: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Max", this, AggregateType.Max)
+  lazy val min: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Min", this, AggregateType.Min)
+  lazy val avg: AggregateFunction[Double, F, D] = AggregateFunction(s"${fieldName}Avg", this, AggregateType.Avg)
+  lazy val sum: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Sum", this, AggregateType.Sum)
+  lazy val count: AggregateFunction[Int, F, D] = AggregateFunction(s"${fieldName}Count", this, AggregateType.Count)
+  lazy val countDistinct: AggregateFunction[Int, F, D] = AggregateFunction(s"${fieldName}CountDistinct", this, AggregateType.CountDistinct)
+  lazy val group: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Group", this, AggregateType.Group)
+  lazy val concat: AggregateFunction[List[F], F, D] = AggregateFunction(s"${fieldName}Concat", this, AggregateType.Concat)(Index.ConcatRW)
 
   def aggregateFilterSupport(name: String): FilterSupport[F, D, AggregateFilter[D]]
 }

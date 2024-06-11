@@ -54,52 +54,41 @@ class AggregationSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       Person.commit()
     }
     "get a basic aggregation" in {
-      val max = Person.age.max()
-      val min = Person.age.min()
-      val avg = Person.age.avg()
-      val sum = Person.age.sum()
-      val count = Person.age.count()
-
       Person.withSearchContext { implicit context =>
         Person.query
           .filter(Person.age <=> (5, 16))
-          .aggregate(max, min, avg, sum, count)
+          .aggregate(Person.age.max, Person.age.min, Person.age.avg, Person.age.sum, Person.age.count)
           .stream
           .compile
           .toList
           .map { list =>
-            list.map(m => m(max)) should be(List(15))
-            list.map(m => m(min)) should be(List(11))
-            list.map(m => m(avg)) should be(List(12.666666666666666))
-            list.map(m => m(sum)) should be(List(38))
-            list.map(m => m(count)) should be(List(3))
+            list.map(m => m(Person.age.max)) should be(List(15))
+            list.map(m => m(Person.age.min)) should be(List(11))
+            list.map(m => m(Person.age.avg)) should be(List(12.666666666666666))
+            list.map(m => m(Person.age.sum)) should be(List(38))
+            list.map(m => m(Person.age.count)) should be(List(3))
           }
       }
     }
     "aggregate with grouping and filtering" in {
-      val ids = Person._id.concat()
-      val names = Person.name.concat()
-      val age = Person.age.group()
-      val count = Person.age.count()
       Person.query
-        .aggregate(ids, names, age, count)
-        .sort(count, SortDirection.Descending)
-        .filter(count > 1)
+        .aggregate(Person._id.concat, Person.name.concat, Person.age.group, Person.age.count)
+        .sort(Person.age.count, SortDirection.Descending)
+        .filter(Person.age.count > 1)
         .toList
         .map { list =>
-        list.map(_(names)).map(_.toSet) should be(List(Set("Oscar", "Adam")))
-        list.map(_(ids)).map(_.toSet) should be(List(Set(oscar._id, adam._id)))
-        list.map(_(age)) should be(List(21))
-        list.map(_(count)) should be(List(2))
+        list.map(_(Person.name.concat)).map(_.toSet) should be(List(Set("Oscar", "Adam")))
+        list.map(_(Person._id.concat)).map(_.toSet) should be(List(Set(oscar._id, adam._id)))
+        list.map(_(Person.age.group)) should be(List(21))
+        list.map(_(Person.age.count)) should be(List(2))
       }
     }
     "aggregate with age concatenation" in {
-      val ages = Person.age.concat()
       Person.query
-        .aggregate(ages)
+        .aggregate(Person.age.concat)
         .toList
         .map { list =>
-          list.map(_(ages).toSet) should be(List(
+          list.map(_(Person.age.concat).toSet) should be(List(
             Set(2, 4, 11, 12, 15, 21, 21, 22, 23, 30, 33, 35, 42, 53, 62, 72, 81, 89, 99, 102)
           ))
         }
