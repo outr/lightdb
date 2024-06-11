@@ -23,6 +23,7 @@ trait Index[F, D <: Document[D]] extends FilterSupport[F, D, Filter[D]] {
   lazy val countDistinct: AggregateFunction[Int, F, D] = AggregateFunction(s"${fieldName}CountDistinct", this, AggregateType.CountDistinct)
   lazy val group: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Group", this, AggregateType.Group)
   lazy val concat: AggregateFunction[List[F], F, D] = AggregateFunction(s"${fieldName}Concat", this, AggregateType.Concat)(Index.ConcatRW)
+  lazy val concatDistinct: AggregateFunction[List[F], F, D] = AggregateFunction(s"${fieldName}ConcatDistinct", this, AggregateType.ConcatDistinct)(Index.ConcatRW)
 
   def aggregateFilterSupport(name: String): FilterSupport[F, D, AggregateFilter[D]]
 }
