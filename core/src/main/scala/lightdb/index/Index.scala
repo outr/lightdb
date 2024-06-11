@@ -2,6 +2,7 @@ package lightdb.index
 
 import fabric.rw._
 import fabric._
+import fabric.define.DefType
 import lightdb.{Document, Unique}
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateType}
 import lightdb.query.Filter
@@ -21,15 +22,26 @@ trait Index[F, D <: Document[D]] extends FilterSupport[F, D, Filter[D]] {
   def avg(name: String = un): AggregateFunction[Double, F, D] = AggregateFunction(name, this, AggregateType.Avg)
   def sum(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Sum)
   def count(name: String = un): AggregateFunction[Int, F, D] = AggregateFunction(name, this, AggregateType.Count)
+  def countDistinct(name: String = un): AggregateFunction[Int, F, D] = AggregateFunction(name, this, AggregateType.CountDistinct)
   def group(name: String = un): AggregateFunction[F, F, D] = AggregateFunction(name, this, AggregateType.Group)
-  def concat(name: String = un): AggregateFunction[List[String], F, D] = AggregateFunction(name, this, AggregateType.Concat)(Index.ConcatRW)
+  def concat(name: String = un): AggregateFunction[List[F], F, D] = AggregateFunction(name, this, AggregateType.Concat)(Index.ConcatRW)
 
   def aggregateFilterSupport(name: String): FilterSupport[F, D, AggregateFilter[D]]
 }
 
 object Index {
-  private val ConcatRW: RW[List[String]] = RW.string[List[String]](
-    asString = _.mkString(","),
-    fromString = _.split(',').toList
+  private def ConcatRW[F](implicit fRW: RW[F]): RW[List[F]] = RW.from[List[F]](
+    r = list => arr(list.map(fRW.read)),
+    w = _.asString.split(',').toList.map { s =>
+      val json = fRW.definition match {
+        case DefType.Str => str(s)
+        case DefType.Int => num(s.toLong)
+        case DefType.Dec => num(BigDecimal(s))
+        case DefType.Bool => bool(s.toBoolean)
+        case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
+      }
+      json.as[F]
+    },
+    d = DefType.Json
   )
 }

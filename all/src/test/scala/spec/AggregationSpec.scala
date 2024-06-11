@@ -81,19 +81,28 @@ class AggregationSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       val names = Person.name.concat()
       val age = Person.age.group()
       val count = Person.age.count()
-      Person.withSearchContext { implicit context =>
-        Person.query
-          .aggregate(ids, names, age, count)
-          .sort(count, SortDirection.Descending)
-          .filter(count > 1)
-          .toList
-          .map { list =>
-          list.map(_(names)).map(_.toSet) should be(List(Set("Oscar", "Adam")))
-          list.map(_(ids)).map(_.toSet) should be(List(Set(oscar._id, adam._id).map(_.value)))
-          list.map(_(age)) should be(List(21))
-          list.map(_(count)) should be(List(2))
-        }
+      Person.query
+        .aggregate(ids, names, age, count)
+        .sort(count, SortDirection.Descending)
+        .filter(count > 1)
+        .toList
+        .map { list =>
+        list.map(_(names)).map(_.toSet) should be(List(Set("Oscar", "Adam")))
+        list.map(_(ids)).map(_.toSet) should be(List(Set(oscar._id, adam._id)))
+        list.map(_(age)) should be(List(21))
+        list.map(_(count)) should be(List(2))
       }
+    }
+    "aggregate with age concatenation" in {
+      val ages = Person.age.concat()
+      Person.query
+        .aggregate(ages)
+        .toList
+        .map { list =>
+          list.map(_(ages).toSet) should be(List(
+            Set(2, 4, 11, 12, 15, 21, 21, 22, 23, 30, 33, 35, 42, 53, 62, 72, 81, 89, 99, 102)
+          ))
+        }
     }
     "dispose" in {
       DB.dispose()
