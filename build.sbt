@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.11.0"
+ThisBuild / version := "0.12.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -42,6 +42,11 @@ ThisBuild / resolvers += Resolver.mavenLocal
 ThisBuild / resolvers += "jitpack" at "https://jitpack.io"
 
 ThisBuild / outputStrategy := Some(StdoutOutput)
+
+ThisBuild / javaOptions ++= Seq(
+	"--enable-native-access=ALL-UNNAMED",
+	"--add-modules", "jdk.incubator.vector"
+)
 
 ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
 
@@ -109,6 +114,40 @@ lazy val core = project.in(file("core"))
 			),
 		Compile / unmanagedSourceDirectories ++= {
 			val major = if (scalaVersion.value.startsWith("3.")) "-3" else "-2"
+			List(CrossType.Pure, CrossType.Full).flatMap(
+				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
+			)
+		}
+	)
+
+lazy val next = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-effect supports native, NativePlatform)
+	.crossType(CrossType.Pure)
+	.settings(
+		name := s"$projectName-next",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"com.outr" %%% "scribe" % scribeVersion,
+			"com.outr" %%% "scribe-cats" % scribeVersion,
+			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
+			"org.typelevel" %%% "fabric-io" % fabricVersion,
+			"co.fs2" %%% "fs2-core" % fs2Version,
+			"org.typelevel" %%% "squants" % squantsVersion,
+			"com.outr" %% "scribe-slf4j" % scribeVersion,
+			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+		),
+		libraryDependencies ++= (
+			if (scalaVersion.value.startsWith("2.")) {
+				Seq(
+					"org.scala-lang.modules" %% "scala-collection-compat" % collectionCompatVersion,
+					"org.scala-lang" % "scala-reflect" % scalaVersion.value
+				)
+			} else {
+				Nil
+			}
+		),
+		Compile / unmanagedSourceDirectories ++= {
+			val major = if (scalaVersion.value.startsWith("2.")) "-2" else "-3"
 			List(CrossType.Pure, CrossType.Full).flatMap(
 				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
 			)

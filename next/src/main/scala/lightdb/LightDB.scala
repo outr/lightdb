@@ -1,0 +1,5 @@
+package lightdb
+
+trait LightDB {
+
+}
