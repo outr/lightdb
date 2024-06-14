@@ -16,3 +16,12 @@ Computationally focused database using pluggable store + indexer
 ## 1.0 TODO
 - [ ] More performance improvements to SQLite integration
 - [ ] Automated generation of performance bar charts
+- [ ] Rewrite
+  - [ ] Cross-Platform
+  - [ ] Transactions
+  - [ ] Single listener to capture all events on a Collection
+  - [ ] No AbstractCollection
+  - [ ] DB.collection and / Model separation
+  - [ ] No IndexSupport, simply instantiated `index` and pass ref to collection
+  - [ ] Update benchmark to provide better async processing and JMH
+  - [ ] Generic unit tests with multiple implementations
