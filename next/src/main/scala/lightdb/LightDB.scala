@@ -20,4 +20,6 @@ trait LightDB extends Initializable {
   }
 
   override protected def initialize(): IO[Unit] = ???
+
+  def dispose(): IO[Unit] = IO.unit
 }
