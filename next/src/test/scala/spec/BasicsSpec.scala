@@ -2,6 +2,7 @@ package spec
 
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw.RW
+import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.store.{AtomicMapStore, StoreManager}
 import lightdb.{Id, LightDB}
@@ -9,23 +10,27 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
 class BasicsSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+  private val amy = Person("Amy", 21)
+
   "Basics" should {
     "initialize the database" in {
-      fail()
+      DB.init
     }
     "insert the first record" in {
-      fail()
+      DB.people.set(amy)
     }
     "retrieve the first record by id" in {
-      fail()
+      DB.people(amy._id).map { p =>
+        p should be(amy)
+      }
     }
     "dispose the database" in {
-      fail()
+      DB.dispose()
     }
   }
 
   object DB extends LightDB {
-    val people = collection(Person)
+    val people: Collection[Person] = collection(Person)
 
     override def storeManager: StoreManager = AtomicMapStore
   }
