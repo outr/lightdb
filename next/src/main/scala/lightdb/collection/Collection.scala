@@ -1,8 +1,6 @@
 package lightdb.collection
 
 import lightdb.LightDB
-import lightdb.document.Document
+import lightdb.document.{Document, DocumentModel}
 
-trait Collection[D <: Document[D]] {
-  def db: LightDB
-}
+case class Collection[D <: Document[D]](model: DocumentModel[D], db: LightDB)
