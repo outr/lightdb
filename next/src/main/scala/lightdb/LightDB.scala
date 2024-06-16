@@ -21,7 +21,7 @@ trait LightDB extends Initializable {
   }
 
   override protected def initialize(): IO[Unit] = for {
-    _ <- collections.map(_.init).parSequence
+    _ <- collections.map(_.init()).parSequence
     _ <- IO.unit    // TODO: Database upgrades and initialization
   } yield ()
 

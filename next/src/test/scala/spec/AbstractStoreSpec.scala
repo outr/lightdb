@@ -5,7 +5,7 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw.RW
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
-import lightdb.store.{AtomicMapStore, StoreManager}
+import lightdb.store.StoreManager
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -47,7 +47,7 @@ abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Mat
 
   specName should {
     "initialize the database" in {
-      DB.init
+      DB.init().map(b => b should be(true))
     }
     "insert the records" in {
       DB.people.transaction { implicit transaction =>

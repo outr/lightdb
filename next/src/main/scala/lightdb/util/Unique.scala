@@ -1,6 +1,5 @@
 package lightdb.util
 
-import java.security.SecureRandom
 import java.util.concurrent.ThreadLocalRandom
 
 /**
@@ -15,8 +14,6 @@ object Unique {
   lazy val LettersAndNumbers = s"$LettersLower$Numbers"
   lazy val AllLetters = s"$LettersLower$LettersUpper"
   lazy val AllLettersAndNumbers = s"$LettersLower$LettersUpper$Numbers"
-
-  private lazy val secure = new SecureRandom
 
   /**
    * Random number generator used to generate unique values. Defaults to `threadLocalRandom`.
@@ -34,11 +31,6 @@ object Unique {
   var defaultCharacters: String = AllLettersAndNumbers
 
   /**
-   * True if randomization should be secure. Defaults to false.
-   */
-  var defaultSecure: Boolean = false
-
-  /**
    * Uses java.util.concurrent.ThreadLocalRandom to generate random numbers.
    *
    * @param max the maximum value to include
@@ -46,22 +38,17 @@ object Unique {
    */
   final def threadLocalRandom(max: Int): Int = ThreadLocalRandom.current().nextInt(max)
 
-  final def secureRandom(max: Int): Int = synchronized {
-    secure.nextInt(max)
-  }
-
   /**
    * Generates a unique String using the characters supplied at the length defined.
    *
    * @param length     the length of the resulting String. Defaults to Unique.defaultLength.
    * @param characters the characters for use in the String. Defaults to Unique.defaultCharacters.
-   * @param secure     true if the randomization should be secure. Defaults to Unique.defaultSecure.
    * @return a unique String
    */
-  def apply(length: Int = defaultLength, characters: String = defaultCharacters, secure: Boolean = defaultSecure): String = {
+  def apply(length: Int = defaultLength, characters: String = defaultCharacters): String = {
     val charMax = characters.length
-    val r = if (secure) secureRandom _ else random
-    (0 until length).map(i => characters.charAt(r(charMax))).mkString
+    val r = random
+    (0 until length).map(_ => characters.charAt(r(charMax))).mkString
   }
 
   /**
@@ -69,13 +56,13 @@ object Unique {
    *
    * 32 characters of unique hexadecimal values with dashes representing 36 total characters
    */
-  def uuid(secure: Boolean = false): String = {
-    val a = apply(8, Hexadecimal, secure)
-    val b = apply(4, Hexadecimal, secure)
-    val c = apply(3, Hexadecimal, secure)
-    val d = apply(1, "89ab", secure)
-    val e = apply(3, Hexadecimal, secure)
-    val f = apply(12, Hexadecimal, secure)
+  def uuid: String = {
+    val a = apply(8, Hexadecimal)
+    val b = apply(4, Hexadecimal)
+    val c = apply(3, Hexadecimal)
+    val d = apply(1, "89ab")
+    val e = apply(3, Hexadecimal)
+    val f = apply(12, Hexadecimal)
     s"$a-$b-4$c-$d$e-$f"
   }
 
