@@ -17,7 +17,11 @@ Computationally focused database using pluggable store + indexer
 - [ ] More performance improvements to SQLite integration
   - [ ] HikariCP for connection pooling
   - [ ] Property transactions without autocommit
-- [ ] Automated generation of performance bar charts
+- [ ] New benchmarks
+  - [ ] JMH
+  - [ ] Better parallel processing
+  - [ ] Automated generation of performance bar charts
+  - [ ] Shell script to run all benchmarks
 - [ ] Rewrite
   - [X] Cross-Platform
   - [X] Transactions
@@ -27,7 +31,6 @@ Computationally focused database using pluggable store + indexer
   - [ ] No IndexSupport, simply instantiated `index` and pass ref to collection
     - [ ] Support for multiple indexes on the same collection
     - [ ] Indexes have no implementation logic
-  - [ ] Update benchmark to provide better async processing and JMH
   - [X] Generic unit tests with multiple implementations
   - [ ] Add btree supported indexes in Store
   - [ ] Add Redis support

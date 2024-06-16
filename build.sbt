@@ -124,7 +124,6 @@ lazy val next = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-eff
 	.crossType(CrossType.Pure)
 	.settings(
 		name := s"$projectName-next",
-		fork := true,
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
 			"com.outr" %%% "scribe-cats" % scribeVersion,
@@ -152,6 +151,9 @@ lazy val next = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-eff
 				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
 			)
 		}
+	)
+	.jvmSettings(
+		fork := true
 	)
 
 lazy val halodb = project.in(file("halodb"))
