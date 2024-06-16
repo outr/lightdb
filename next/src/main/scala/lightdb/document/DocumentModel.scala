@@ -1,6 +1,5 @@
 package lightdb.document
 
-import cats.effect.IO
 import lightdb.util.Unique
 import lightdb.Id
 import lightdb.collection.Collection
