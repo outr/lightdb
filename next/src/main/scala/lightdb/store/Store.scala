@@ -41,7 +41,7 @@ trait Store[D <: Document[D]] extends Initializable {
   def count(implicit transaction: Transaction[D]): IO[Int]
   def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]]
   def delete(id: Id[D])(implicit transaction: Transaction[D]): IO[Boolean]
-  def truncate()(implicit transaction: Transaction[D]): IO[Unit]
+  def truncate()(implicit transaction: Transaction[D]): IO[Int]
 
   def dispose(): IO[Unit]
 }

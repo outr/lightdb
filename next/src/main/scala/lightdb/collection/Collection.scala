@@ -65,6 +65,14 @@ case class Collection[D <: Document[D]](name: String,
     }
   }
 
+  def set(stream: fs2.Stream[IO, D])(implicit transaction: Transaction[D]): IO[Int] = stream
+    .evalMap(set)
+    .compile
+    .count
+    .map(_.toInt)
+
+  def set(docs: Seq[D])(implicit transaction: Transaction[D]): IO[Int] = set(fs2.Stream(docs: _*))
+
   def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, D] = model.store.stream
 
   def count(implicit transaction: Transaction[D]): IO[Int] = model.store.count
@@ -81,17 +89,39 @@ case class Collection[D <: Document[D]](name: String,
 
   final def delete(doc: D)(implicit transaction: Transaction[D]): IO[Option[D]] = {
     recurseOption(doc, (l, d) => l.preDelete(d, transaction)).flatMap {
-      case Some(d) => for {
-        _ <- model.store.delete(d._id)
-        _ <- model.listener().map(l => l.postDelete(d, transaction)).ioSeq
-      } yield Some(d)
+      case Some(d) => model.store.delete(d._id).flatMap {
+        case true => model
+          .listener()
+          .map(l => l.postDelete(d, transaction))
+          .ioSeq
+          .map(_ => Some(d))
+        case false => IO.pure(None)
+      }
       case None => IO.pure(None)
     }
   }
 
-  def truncate()(implicit transaction: Transaction[D]): IO[Unit] = model.listener()
-    .map(l => l.truncate(transaction))
-    .ioSeq
+  def delete(stream: fs2.Stream[IO, D])(implicit transaction: Transaction[D]): IO[Int] = stream
+    .evalMap(delete)
+    .unNone
+    .compile
+    .count
+    .map(_.toInt)
+
+  def delete(docs: Seq[D])(implicit transaction: Transaction[D]): IO[Int] = delete(fs2.Stream(docs: _*))
+
+  def delete(id: Id[D])(implicit transaction: Transaction[D]): IO[Option[D]] = get(id)
+    .flatMap {
+      case Some(doc) => delete(doc)
+      case None => IO.pure(None)
+    }
+
+  def truncate()(implicit transaction: Transaction[D]): IO[Int] = for {
+    removed <- model.store.truncate()
+    _ <- model.listener()
+      .map(l => l.truncate(transaction))
+      .ioSeq
+  } yield removed
 
   def dispose(): IO[Unit] = model.listener()
     .map(l => l.dispose())
