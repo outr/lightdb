@@ -1,6 +1,7 @@
 package lightdb
 
 import cats.effect.IO
+import cats.implicits.catsSyntaxParallelSequence1
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.store.StoreManager
@@ -19,7 +20,10 @@ trait LightDB extends Initializable {
     c
   }
 
-  override protected def initialize(): IO[Unit] = ???
+  override protected def initialize(): IO[Unit] = for {
+    _ <- collections.map(_.init).parSequence
+    _ <- IO.unit    // TODO: Database upgrades and initialization
+  } yield ()
 
   def dispose(): IO[Unit] = IO.unit
 }

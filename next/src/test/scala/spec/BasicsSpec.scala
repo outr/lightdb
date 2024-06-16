@@ -17,11 +17,15 @@ class BasicsSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
       DB.init
     }
     "insert the first record" in {
-      DB.people.set(amy)
+      DB.people.transaction { implicit transaction =>
+        DB.people.set(amy).map(o => o should not be None)
+      }
     }
     "retrieve the first record by id" in {
-      DB.people(amy._id).map { p =>
-        p should be(amy)
+      DB.people.transaction { implicit transaction =>
+        DB.people(amy._id).map { p =>
+          p should be(amy)
+        }
       }
     }
     "dispose the database" in {
@@ -30,7 +34,7 @@ class BasicsSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
   }
 
   object DB extends LightDB {
-    val people: Collection[Person] = collection(Person)
+    val people: Collection[Person] = collection("people", Person)
 
     override def storeManager: StoreManager = AtomicMapStore
   }
