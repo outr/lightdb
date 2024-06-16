@@ -1,8 +1,6 @@
 package lightdb.document
 
 import cats.effect.IO
-import fabric.Json
-import lightdb.{Id, LightDB}
 import lightdb.collection.Collection
 import lightdb.transaction.Transaction
 import moduload.Priority
@@ -11,6 +9,10 @@ trait DocumentListener[D <: Document[D]] {
   def priority: Priority = Priority.Normal
 
   def init(collection: Collection[D]): IO[Unit] = IO.unit
+
+  def transactionStart(transaction: Transaction[D]): IO[Unit] = IO.unit
+
+  def transactionEnd(transaction: Transaction[D]): IO[Unit] = IO.unit
 
   def preSet(doc: D, transaction: Transaction[D]): IO[Option[D]] = IO.pure(Some(doc))
 
