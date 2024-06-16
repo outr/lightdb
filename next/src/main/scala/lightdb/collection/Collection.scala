@@ -73,6 +73,17 @@ case class Collection[D <: Document[D]](name: String,
 
   def set(docs: Seq[D])(implicit transaction: Transaction[D]): IO[Int] = set(fs2.Stream(docs: _*))
 
+  def modify(id: Id[D], lock: Boolean = true)
+            (f: Option[D] => IO[Option[D]])
+            (implicit transaction: Transaction[D]): IO[Option[D]] = transaction.mayLock(id, lock) {
+    get(id).flatMap { option =>
+      f(option).flatMap {
+        case Some(doc) => set(doc)
+        case None => IO.pure(None)
+      }
+    }
+  }
+
   def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, D] = model.store.stream
 
   def count(implicit transaction: Transaction[D]): IO[Int] = model.store.count
