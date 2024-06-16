@@ -28,7 +28,8 @@ Computationally focused database using pluggable store + indexer
     - [ ] Support for multiple indexes on the same collection
     - [ ] Indexes have no implementation logic
   - [ ] Update benchmark to provide better async processing and JMH
-  - [ ] Generic unit tests with multiple implementations
+  - [X] Generic unit tests with multiple implementations
+  - [ ] Add btree supported indexes in Store
   - [ ] Add Redis support
   - [ ] Support SQL as a Store as well as Indexer
   - [ ] Support H2 as another SQL database

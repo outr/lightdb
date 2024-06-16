@@ -1,5 +1,6 @@
 package spec
 
+import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw.RW
 import lightdb.collection.Collection
@@ -9,7 +10,7 @@ import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
-class BasicsSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
+abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
   private val adam = Person("Adam", 21)
   private val brenda = Person("Brenda", 11)
   private val charlie = Person("Charlie", 35)
@@ -42,7 +43,9 @@ class BasicsSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     quintin, ruth, sam, tori, uba, veronica, wyatt, xena, yuri, zoey
   )
 
-  "Basics" should {
+  private lazy val specName: String = getClass.getSimpleName
+
+  specName should {
     "initialize the database" in {
       DB.init
     }
@@ -93,6 +96,24 @@ class BasicsSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
         }
       }
     }
+    "modify a record" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.modify(adam._id) {
+          case Some(p) => IO.pure(Some(p.copy(name = "Allan")))
+          case None => fail("Adam was not found!")
+        }
+      }.map {
+        case Some(p) => p.name should be("Allan")
+        case None => fail("Allan was not returned!")
+      }
+    }
+    "verify the record has been renamed" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people(adam._id).map { p =>
+          p.name should be("Allan")
+        }
+      }
+    }
     "truncate the collection" in {
       DB.people.transaction { implicit transaction =>
         DB.people.truncate().map { removed =>
@@ -112,10 +133,12 @@ class BasicsSpec extends AsyncWordSpec with AsyncIOSpec with Matchers {
     }
   }
 
+  protected def storeManager: StoreManager
+
   object DB extends LightDB {
     val people: Collection[Person] = collection("people", Person)
 
-    override def storeManager: StoreManager = AtomicMapStore
+    override def storeManager: StoreManager = spec.storeManager
   }
 
   case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]
