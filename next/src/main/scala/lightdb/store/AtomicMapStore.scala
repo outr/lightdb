@@ -43,7 +43,13 @@ class AtomicMapStore[D <: Document[D]] extends Store[D] {
     map.remove(id) != null
   }
 
-  override def truncate()(implicit transaction: Transaction[D]): IO[Unit] = IO.blocking(map.clear())
+  override def truncate()(implicit transaction: Transaction[D]): IO[Int] = IO.blocking {
+    try {
+      map.size()
+    } finally {
+      map.clear()
+    }
+  }
 
   override def dispose(): IO[Unit] = IO.blocking(map.clear())
 }
