@@ -18,6 +18,10 @@ trait DocumentListener[D <: Document[D]] {
 
   def postSet(doc: D, transaction: Transaction[D]): IO[Unit] = IO.unit
 
+  def commit(transaction: Transaction[D]): IO[Unit] = IO.unit
+
+  def rollback(transaction: Transaction[D]): IO[Unit] = IO.unit
+
   def preDelete(doc: D, transaction: Transaction[D]): IO[Option[D]] = IO.pure(Some(doc))
 
   def postDelete(doc: D, transaction: Transaction[D]): IO[Unit] = IO.unit

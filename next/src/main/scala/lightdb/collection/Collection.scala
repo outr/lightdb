@@ -45,8 +45,10 @@ case class Collection[D <: Document[D]](name: String,
       _ <- model.listener().map(l => l.transactionStart(transaction)).ioSeq
     } yield transaction
 
-    private def release(transaction: Transaction[D]): IO[Unit] =
-      model.listener().map(l => l.transactionEnd(transaction)).ioSeq
+    private def release(transaction: Transaction[D]): IO[Unit] = for {
+      _ <- transaction.commit()
+      _ <- model.listener().map(l => l.transactionEnd(transaction)).ioSeq
+    } yield ()
   }
 
   def apply(id: Id[D])(implicit transaction: Transaction[D]): IO[D] = model.store(id)
@@ -69,6 +71,14 @@ case class Collection[D <: Document[D]](name: String,
 
   def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = model.store.idStream
 
+  private[lightdb] def commit(transaction: Transaction[D]): IO[Unit] = model.listener()
+    .map(l => l.commit(transaction))
+    .ioSeq
+
+  private[lightdb] def rollback(transaction: Transaction[D]): IO[Unit] = model.listener()
+    .map(l => l.rollback(transaction))
+    .ioSeq
+
   final def delete(doc: D)(implicit transaction: Transaction[D]): IO[Option[D]] = {
     recurseOption(doc, (l, d) => l.preDelete(d, transaction)).flatMap {
       case Some(d) => for {
@@ -82,10 +92,8 @@ case class Collection[D <: Document[D]](name: String,
   def truncate()(implicit transaction: Transaction[D]): IO[Unit] = model.listener()
     .map(l => l.truncate(transaction))
     .ioSeq
-    .map(_ => ())
 
   def dispose(): IO[Unit] = model.listener()
     .map(l => l.dispose())
     .ioSeq
-    .map(_ => ())
 }
