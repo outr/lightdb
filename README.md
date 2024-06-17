@@ -28,6 +28,7 @@ Computationally focused database using pluggable store + indexer
   - [X] Single listener to capture all events on a Collection
   - [X] No AbstractCollection
   - [X] DB.collection and / Model separation
+  - [ ] Remove Pagination for better streaming "SearchResults"
   - [ ] No IndexSupport, simply instantiated `index` and pass ref to collection
     - [ ] Support for multiple indexes on the same collection
     - [ ] Indexes have no implementation logic

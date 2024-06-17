@@ -6,7 +6,7 @@ import lightdb.index.Materialized
 import lightdb.query.{Query, SortDirection}
 import lightdb.transaction.Transaction
 
-case class AggregateQuery[D <: Document[D]](query: Query[D, _],
+case class AggregateQuery[D <: Document[D]](query: Query[D],
                                             functions: List[AggregateFunction[_, _, D]],
                                             filter: Option[AggregateFilter[D]] = None,
                                             sort: List[(AggregateFunction[_, _, D], SortDirection)] = Nil) {
