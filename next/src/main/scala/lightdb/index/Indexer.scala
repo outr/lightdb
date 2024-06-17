@@ -1,6 +1,7 @@
 package lightdb.index
 
 import cats.effect.IO
+import fabric.rw.RW
 import lightdb.aggregate.AggregateQuery
 import lightdb.document.Document
 import lightdb.filter.Filter
@@ -10,6 +11,27 @@ import lightdb.transaction.Transaction
 import squants.space.Length
 
 trait Indexer[D <: Document[D]] {
+  def apply[F](name: String,
+               get: D => List[F],
+               store: Boolean = false,
+               sorted: Boolean = false,
+               tokenized: Boolean = false)
+              (implicit rw: RW[F]): Index[F, D]
+
+  def opt[F](name: String,
+             get: D => Option[F],
+             store: Boolean = false,
+             sorted: Boolean = false,
+             tokenized: Boolean = false)
+            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => get(doc).toList, store, sorted, tokenized)
+
+  def one[F](name: String,
+             get: D => F,
+             store: Boolean = false,
+             sorted: Boolean = false,
+             tokenized: Boolean = false)
+            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
+
   def doSearch[V](query: Query[D, V],
                   transaction: Transaction[D],
                   offset: Int,

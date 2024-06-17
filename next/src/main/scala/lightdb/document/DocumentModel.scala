@@ -3,11 +3,14 @@ package lightdb.document
 import lightdb.util.Unique
 import lightdb.Id
 import lightdb.collection.Collection
+import lightdb.index.Index
 import lightdb.store.Store
 
 import java.util.concurrent.atomic.AtomicBoolean
 
 trait DocumentModel[D <: Document[D]] {
+  type I[F] = Index[F, D]
+
   private[lightdb] val _initialized = new AtomicBoolean(false)
   private[lightdb] var collection: Collection[D] = _
   private[lightdb] var store: Store[D] = _
