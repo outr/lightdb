@@ -7,10 +7,8 @@ import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.document.Document
 import lightdb.filter.Filter
-import lightdb.index.{Index, Indexer, Materialized, SearchConversion}
-import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
+import lightdb.index.{Index, Indexer, Materialized}
 import lightdb.transaction.Transaction
-import squants.space.Length
 
 case class Query[D <: Document[D]](indexer: Indexer[D],
                                       collection: Collection[D],
@@ -75,7 +73,7 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
   def countTotal(b: Boolean): Query[D] = copy(countTotal = b)
 
   object search {
-    def apply[V](conversion: SearchConversion[D, V])
+    def apply[V](conversion: indexer.Conversion[V])
                  (implicit transaction: Transaction[D]): IO[SearchResults[D, V]] = indexer.doSearch(
       query = query,
       transaction = transaction,
@@ -84,45 +82,23 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
       limit = limit
     )
 
-    def apply[V](f: (D, Double) => IO[V])(implicit transaction: Transaction[D]): fs2.Stream[IO, V] =
-      fs2.Stream.force(search(SearchConversion.Doc(f)).map(_.stream))
-
-    def docs(implicit transaction: Transaction[D]): IO[SearchResults[D, D]] =
-      apply[D](SearchConversion.Doc((doc, _) => IO.pure(doc)))
-    def scoredDocs(implicit transaction: Transaction[D]): IO[SearchResults[D, (D, Double)]] =
-      apply[(D, Double)](SearchConversion.Doc((doc, score) => IO.pure(doc -> score)))
-    def ids(implicit transaction: Transaction[D]): IO[SearchResults[D, Id[D]]] =
-      apply[Id[D]](SearchConversion.Id((id, _) => IO.pure(id)))
-    def scoredIds(implicit transaction: Transaction[D]): IO[SearchResults[D, (Id[D], Double)]] =
-      apply[(Id[D], Double)](SearchConversion.Id((id, score) => IO.pure(id -> score)))
+    def docs(implicit transaction: Transaction[D]): IO[SearchResults[D, D]] = apply[D](indexer.Conversion.Doc)
+    def ids(implicit transaction: Transaction[D]): IO[SearchResults[D, Id[D]]] = apply(indexer.Conversion.Id)
     def materialized(indexes: Index[_, D]*)
                     (implicit transaction: Transaction[D]): IO[SearchResults[D, Materialized[D]]] = apply(
-      SearchConversion.Materialized(indexes.toList, (m, _) => IO.pure(m))
-    )
-    def scoredMaterialized(indexes: Index[_, D]*)
-                    (implicit transaction: Transaction[D]): IO[SearchResults[D, (Materialized[D], Double)]] = apply(
-      SearchConversion.Materialized(indexes.toList, (m, s) => IO.pure(m -> s))
+      indexer.Conversion.Materialized(indexes: _*)
     )
   }
 
   object stream {
     def docs(implicit transaction: Transaction[D]): fs2.Stream[IO, D] = fs2.Stream.force(search.docs.map(_.stream))
-    def scoredDocs(implicit transaction: Transaction[D]): fs2.Stream[IO, (D, Double)] = fs2.Stream.force(search.scoredDocs.map(_.stream))
+    def scoredDocs(implicit transaction: Transaction[D]): fs2.Stream[IO, (D, Double)] = fs2.Stream.force(search.docs.map(_.scoredStream))
     def ids(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = fs2.Stream.force(search.ids.map(_.stream))
-    def scoredIds(implicit transaction: Transaction[D]): fs2.Stream[IO, (Id[D], Double)] = fs2.Stream.force(search.scoredIds.map(_.stream))
+    def scoredIds(implicit transaction: Transaction[D]): fs2.Stream[IO, (Id[D], Double)] = fs2.Stream.force(search.ids.map(_.scoredStream))
     def materialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] = {
       fs2.Stream.force(search.materialized(indexes: _*).map(_.stream))
     }
-    def scoredMaterialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, (Materialized[D], Double)] = fs2.Stream.force(search.scoredMaterialized(indexes: _*).map(_.stream))
-  }
-
-  object list {
-    def docs(implicit transaction: Transaction[D]): IO[List[D]] = stream.docs.compile.toList
-    def scoredDocs(implicit transaction: Transaction[D]): IO[List[(D, Double)]] = stream.scoredDocs.compile.toList
-    def ids(implicit transaction: Transaction[D]): IO[List[Id[D]]] = stream.ids.compile.toList
-    def scoredIds(implicit transaction: Transaction[D]): IO[List[(Id[D], Double)]] = stream.scoredIds.compile.toList
-    def materialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): IO[List[Materialized[D]]] = stream.materialized(indexes: _*).compile.toList
-    def scoredMaterialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): IO[List[(Materialized[D], Double)]] = stream.scoredMaterialized(indexes: _*).compile.toList
+    def scoredMaterialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, (Materialized[D], Double)] = fs2.Stream.force(search.materialized(indexes: _*).map(_.scoredStream))
   }
 
   def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D] = AggregateQuery[D](this, functions.toList)
@@ -134,9 +110,9 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
     .docs
     .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)
 
-  def first(implicit transaction: Transaction[D]): IO[Option[V]] = stream.take(1).compile.last
+  def first(implicit transaction: Transaction[D]): IO[Option[D]] = stream.docs.take(1).compile.last
 
-  def one(implicit transaction: Transaction[D]): IO[V] = first.map(_.getOrElse(throw new RuntimeException(s"No results for query: $this")))
+  def one(implicit transaction: Transaction[D]): IO[D] = first.map(_.getOrElse(throw new RuntimeException(s"No results for query: $this")))
 
   def count(implicit transaction: Transaction[D]): IO[Int] = stream.ids.compile.count.map(_.toInt)
 }

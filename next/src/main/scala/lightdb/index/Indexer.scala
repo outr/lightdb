@@ -34,7 +34,7 @@ trait Indexer[D <: Document[D]] {
 
   def doSearch[V](query: Query[D],
                   transaction: Transaction[D],
-                  conversion: SearchConversion[D, V],
+                  conversion: Conversion[V],
                   offset: Int,
                   limit: Option[Int]): IO[SearchResults[D, V]]
 
@@ -42,12 +42,12 @@ trait Indexer[D <: Document[D]] {
 
   def distanceFilter(field: Index[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
     throw new UnsupportedOperationException("Distance filtering is not supported on this indexer")
-}
 
-sealed trait SearchConversion[D <: Document[D], V]
+  sealed trait Conversion[V]
 
-object SearchConversion {
-  case class Id[D <: Document[D], V](f: (lightdb.Id[D], Double) => IO[V]) extends SearchConversion[D, V]
-  case class Doc[D <: Document[D], V](f: (D, Double) => IO[V]) extends SearchConversion[D, V]
-  case class Materialized[D <: Document[D], V](indexes: List[Index[_, D]], f: (lightdb.index.Materialized[D], Double) => IO[V]) extends SearchConversion[D, V]
+  object Conversion {
+    case object Id extends Conversion[lightdb.Id[D]]
+    case object Doc extends Conversion[D]
+    case class Materialized(indexes: Index[_, D]*) extends Conversion[lightdb.index.Materialized[D]]
+  }
 }
