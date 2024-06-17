@@ -7,8 +7,9 @@ import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.document.Document
 import lightdb.filter.Filter
-import lightdb.index.{Index, Indexer}
-import lightdb.spatial.GeoPoint
+import lightdb.index.{Index, Indexer, Materialized}
+import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
+import lightdb.transaction.Transaction
 import squants.space.Length
 
 case class Query[D <: Document[D], V](indexer: Indexer[D],
@@ -59,7 +60,7 @@ case class Query[D <: Document[D], V](indexer: Indexer[D],
       q = q.sort(Sort.ByDistance(field, from))
     }
     radius.foreach { r =>
-      q = q.filter(indexSupport.distanceFilter(
+      q = q.filter(indexer.distanceFilter(
         field = field,
         from = from,
         radius = r
@@ -80,15 +81,15 @@ case class Query[D <: Document[D], V](indexer: Indexer[D],
 
   def countTotal(b: Boolean): Query[D, V] = copy(countTotal = b)
 
-  def search()(implicit context: SearchContext[D]): IO[PagedResults[D, V]] = indexSupport.doSearch(
+  def search()(implicit transaction: Transaction[D]): IO[PagedResults[D, V]] = indexer.doSearch(
     query = this,
-    context = context,
+    transaction = transaction,
     offset = offset,
     limit = limit,
     after = None
   )
 
-  def pageStream(implicit context: SearchContext[D]): fs2.Stream[IO, PagedResults[D, V]] = {
+  def pageStream(implicit transaction: Transaction[D]): fs2.Stream[IO, PagedResults[D, V]] = {
     val io = search().map { page1 =>
       fs2.Stream.emit(page1) ++ fs2.Stream.unfoldEval(page1) { page =>
         page.next().map(_.map(p => p -> p))
@@ -97,48 +98,38 @@ case class Query[D <: Document[D], V](indexer: Indexer[D],
     fs2.Stream.force(io)
   }
 
-  def docStream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.docStream)
+  def docStream(implicit transaction: Transaction[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.docStream)
 
-  def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
+  def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
 
   def materialized(indexes: Index[_, D]*)
-                  (implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = {
+                  (implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] = {
     copy(materializedIndexes = indexes.toList).pageStream.flatMap(_.materializedStream)
   }
 
   def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D] = AggregateQuery[D](this, functions.toList)
 
-  def stream(implicit context: SearchContext[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
+  def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
 
   def grouped[F](index: Index[F, D],
                  direction: SortDirection = SortDirection.Ascending)
-                (implicit context: SearchContext[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = sort(Sort.ByField(index, direction))
+                (implicit transaction: Transaction[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = sort(Sort.ByField(index, direction))
     .docStream
     .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)
 
   object scored {
-    def stream(implicit context: SearchContext[D]): fs2.Stream[IO, (V, Double)] = pageStream.flatMap(_.scoredStream)
+    def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, (V, Double)] = pageStream.flatMap(_.scoredStream)
 
-    def toList: IO[List[(V, Double)]] = indexSupport.withSearchContext { implicit context =>
-      stream.compile.toList
-    }
+    def toList(implicit transaction: Transaction[D]): IO[List[(V, Double)]] = stream.compile.toList
   }
 
-  def toIdList: IO[List[Id[D]]] = indexSupport.withSearchContext { implicit context =>
-    idStream.compile.toList
-  }
+  def toIdList(implicit transaction: Transaction[D]): IO[List[Id[D]]] = idStream.compile.toList
 
-  def toList: IO[List[V]] = indexSupport.withSearchContext { implicit context =>
-    stream.compile.toList
-  }
+  def toList(implicit transaction: Transaction[D]): IO[List[V]] = stream.compile.toList
 
-  def first: IO[Option[V]] = indexSupport.withSearchContext { implicit context =>
-    stream.take(1).compile.last
-  }
+  def first(implicit transaction: Transaction[D]): IO[Option[V]] = stream.take(1).compile.last
 
-  def one: IO[V] = first.map(_.getOrElse(throw new RuntimeException(s"No results for query: $this")))
+  def one(implicit transaction: Transaction[D]): IO[V] = first.map(_.getOrElse(throw new RuntimeException(s"No results for query: $this")))
 
-  def count: IO[Int] = indexSupport.withSearchContext { implicit context =>
-    idStream.compile.count.map(_.toInt)
-  }
+  def count(implicit transaction: Transaction[D]): IO[Int] = idStream.compile.count.map(_.toInt)
 }
