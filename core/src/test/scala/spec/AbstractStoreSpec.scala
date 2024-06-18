@@ -11,6 +11,8 @@ import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
+import java.nio.file.Path
+
 abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
   private val adam = Person("Adam", 21)
   private val brenda = Person("Brenda", 11)
@@ -137,6 +139,8 @@ abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   protected def storeManager: StoreManager
 
   object DB extends LightDB {
+    override lazy val directory: Path = Path.of(s"db/$specName")
+
     val people: Collection[Person] = collection("people", Person)
 
     override def storeManager: StoreManager = spec.storeManager
