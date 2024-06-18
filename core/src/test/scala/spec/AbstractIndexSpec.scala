@@ -12,6 +12,8 @@ import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
+import java.nio.file.Path
+
 abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
 
@@ -28,6 +30,8 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   protected def indexer: Indexer[Person]
 
   object DB extends LightDB {
+    override lazy val directory: Path = Path.of(s"db/$specName")
+
     val people: Collection[Person] = collection("people", Person)
 
     override def storeManager: StoreManager = spec.storeManager

@@ -159,7 +159,7 @@ lazy val mapdb = project.in(file("mapdb"))
 	)
 
 lazy val lucene = project.in(file("lucene"))
-	.dependsOn(core.jvm)
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-lucene",
 		fork := true,
