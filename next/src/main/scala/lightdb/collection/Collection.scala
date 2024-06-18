@@ -134,6 +134,8 @@ case class Collection[D <: Document[D]](name: String,
       .ioSeq
   } yield removed
 
+  def update(): IO[Unit] = IO.unit
+
   def dispose(): IO[Unit] = model.listener()
     .map(l => l.dispose())
     .ioSeq
