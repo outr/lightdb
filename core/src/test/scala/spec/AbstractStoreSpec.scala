@@ -6,6 +6,7 @@ import fabric.rw.RW
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.store.StoreManager
+import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -139,6 +140,8 @@ abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     val people: Collection[Person] = collection("people", Person)
 
     override def storeManager: StoreManager = spec.storeManager
+
+    override def upgrades: List[DatabaseUpgrade] = Nil
   }
 
   case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]

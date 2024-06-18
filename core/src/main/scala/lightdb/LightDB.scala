@@ -32,6 +32,9 @@ trait LightDB extends Initializable {
    */
   protected def disableExtraneousLogging: Boolean = true
 
+  private val _disposed = new AtomicBoolean(false)
+  private var _collections = List.empty[Collection[_]]
+
   val backingStore: Collection[KeyValue] = collection[KeyValue]("_backingStore", KeyValue)
 
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
@@ -91,9 +94,6 @@ trait LightDB extends Initializable {
     }
     Logger.system.installJUL()
   }
-
-  private val _disposed = new AtomicBoolean(false)
-  private var _collections = List.empty[Collection[_]]
 
   def storeManager: StoreManager
 

@@ -8,6 +8,7 @@ import lightdb.document.{Document, DocumentModel}
 import lightdb.index.Indexer
 import lightdb.spatial.GeoPoint
 import lightdb.store.StoreManager
+import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
@@ -30,6 +31,8 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     val people: Collection[Person] = collection("people", Person)
 
     override def storeManager: StoreManager = spec.storeManager
+
+    override def upgrades: List[DatabaseUpgrade] = Nil
   }
 
   case class Person(name: String,
