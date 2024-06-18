@@ -79,51 +79,17 @@ val scalaTestVersion: String = "3.2.18"
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, all)
+	.aggregate(core.jvm, core.js, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, all)
 	.settings(
 		name := projectName,
 		publish := {},
 		publishLocal := {}
 	)
 
-lazy val core = project.in(file("core"))
-	.settings(
-		name := s"$projectName-core",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"com.outr" %% "scribe" % scribeVersion,
-			"com.outr" %% "scribe-cats" % scribeVersion,
-			"org.typelevel" %% "cats-effect" % catsEffectVersion,
-			"org.typelevel" %% "fabric-io" % fabricVersion,
-			"co.fs2" %% "fs2-core" % fs2Version,
-			"com.outr" %% "scribe-slf4j" % scribeVersion,
-			"io.chrisdavenport" %% "keysemaphore" % keysemaphoreVersion,
-			"org.typelevel" %% "squants" % squantsVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
-		),
-		libraryDependencies ++= (
-			if (scalaVersion.value.startsWith("3.")) {
-				Nil
-			} else {
-				Seq(
-					"org.scala-lang.modules" %% "scala-collection-compat" % collectionCompatVersion,
-					"org.scala-lang" % "scala-reflect" % scalaVersion.value
-				)
-			}
-			),
-		Compile / unmanagedSourceDirectories ++= {
-			val major = if (scalaVersion.value.startsWith("3.")) "-3" else "-2"
-			List(CrossType.Pure, CrossType.Full).flatMap(
-				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
-			)
-		}
-	)
-
-lazy val next = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-effect supports native, NativePlatform)
+lazy val core = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-effect supports native, NativePlatform)
 	.crossType(CrossType.Pure)
 	.settings(
-		name := s"$projectName-next",
+		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
 			"com.outr" %%% "scribe-cats" % scribeVersion,
@@ -157,7 +123,7 @@ lazy val next = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-eff
 	)
 
 lazy val halodb = project.in(file("halodb"))
-	.dependsOn(core)
+	.dependsOn(core.jvm)
 	.settings(
 		name := s"$projectName-halo",
 		fork := true,
@@ -169,7 +135,7 @@ lazy val halodb = project.in(file("halodb"))
 	)
 
 lazy val rocksdb = project.in(file("rocksdb"))
-	.dependsOn(core)
+	.dependsOn(core.jvm)
 	.settings(
 		name := s"$projectName-rocks",
 		fork := true,
@@ -181,7 +147,7 @@ lazy val rocksdb = project.in(file("rocksdb"))
 	)
 
 lazy val mapdb = project.in(file("mapdb"))
-	.dependsOn(core)
+	.dependsOn(core.jvm)
 	.settings(
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
@@ -193,7 +159,7 @@ lazy val mapdb = project.in(file("mapdb"))
 	)
 
 lazy val lucene = project.in(file("lucene"))
-	.dependsOn(core)
+	.dependsOn(core.jvm)
 	.settings(
 		name := s"$projectName-lucene",
 		fork := true,
@@ -206,7 +172,7 @@ lazy val lucene = project.in(file("lucene"))
 	)
 
 lazy val sql = project.in(file("sql"))
-	.dependsOn(core)
+	.dependsOn(core.jvm)
 	.settings(
 		name := s"$projectName-sql",
 		fork := true,
@@ -241,7 +207,7 @@ lazy val duckdb = project.in(file("duckdb"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core, halodb, rocksdb, mapdb, lucene, sqlite, duckdb)
+	.dependsOn(core.jvm, halodb, rocksdb, mapdb, lucene, sqlite, duckdb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

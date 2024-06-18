@@ -1,7 +1,6 @@
 package lightdb
 
 import fabric.rw._
-import lightdb.util.Unique
 
 class Id[T](val value: String) extends AnyVal {
   def bytes: Array[Byte] = {
