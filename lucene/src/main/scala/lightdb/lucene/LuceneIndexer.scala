@@ -1,29 +1,47 @@
 package lightdb.lucene
 
 import cats.effect.IO
-import lightdb.index.{Index, IndexSupport, Indexer}
-import lightdb.query.SearchContext
-import lightdb.{Document, Id}
+import fabric.define.DefType
+import lightdb.index.{Index, Indexer, Materialized}
+import lightdb.Id
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
-import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, Term}
+import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, SearcherFactory, SearcherManager}
+import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
-import org.apache.lucene.document.{Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.document.{LatLonDocValuesField, Document => LuceneDocument, Field => LuceneField}
 
 import java.nio.file.{Files, Path}
 import java.util.concurrent.ConcurrentHashMap
 import fabric.rw._
-import lightdb.model.AbstractCollection
+import lightdb.aggregate.AggregateQuery
+import lightdb.collection.Collection
+import lightdb.document.{Document, DocumentListener, DocumentModel}
+import lightdb.query.{Query, SearchResults, Sort, SortDirection}
+import lightdb.transaction.{Transaction, TransactionKey}
 
-case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
+case class LuceneIndexer[D <: Document[D]](model: DocumentModel[D],
+                                           batchSize: Int = 512,
                                            persistent: Boolean = true,
-                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] {
-  private def collection: AbstractCollection[D] = indexSupport.collection
+                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] with DocumentListener[D] {
+  private var collection: Collection[D] = _
+  model.listener += this
+
+  private lazy val indexSearcherKey: TransactionKey[IndexSearcher] = TransactionKey("indexSearcher")
+
+  override def init(collection: Collection[D]): IO[Unit] = super.init(collection).map { _ =>
+    this.collection = collection
+  }
+
+  override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
+    transaction.get(indexSearcherKey).foreach { indexSearcher =>
+      searcherManager.release(indexSearcher)
+    }
+  }
 
   private lazy val path: Option[Path] = if (persistent) {
-    val p = collection.db.directory.resolve(collection.collectionName).resolve("index")
+    val p = collection.db.directory.resolve(collection.name).resolve("index")
     Files.createDirectories(p)
     Some(p)
   } else {
@@ -38,19 +56,6 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
   private lazy val searcherManager = new SearcherManager(indexWriter, new SearcherFactory)
 
   private lazy val parser = new QueryParser("_id", analyzer)
-
-  private[lucene] val contextMapping = new ConcurrentHashMap[SearchContext[D], IndexSearcher]
-
-  override def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return] = {
-    val indexSearcher = searcherManager.acquire()
-    val context = SearchContext(indexSupport)
-    contextMapping.put(context, indexSearcher)
-    f(context)
-      .guarantee(IO.blocking {
-        contextMapping.remove(context)
-        searcherManager.release(indexSearcher)
-      })
-  }
 
   private[lightdb] def addDoc(id: Id[D], fields: List[LuceneField]): Unit = if (fields.length > 1) {
     val document = new LuceneDocument
@@ -72,30 +77,78 @@ case class LuceneIndexer[D <: Document[D]](indexSupport: IndexSupport[D],
     searcherManager.maybeRefreshBlocking()
   }
 
-  def apply[F](name: String,
+  override def apply[F](name: String,
                get: D => List[F],
                store: Boolean = false,
                sorted: Boolean = false,
                tokenized: Boolean = false)
               (implicit rw: RW[F]): Index[F, D] = LuceneIndex(
-    fieldName = name,
-    indexSupport = indexSupport,
+    name = name,
+    indexer = this,
     get = get,
     store = store,
     sorted = sorted,
     tokenized = tokenized
   )
 
-  def one[F](name: String,
-             get: D => F,
-             store: Boolean = false,
-             sorted: Boolean = false,
-             tokenized: Boolean = false)
-            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
+  override def doSearch[V](query: Query[D],
+                           transaction: Transaction[D],
+                           conversion: Conversion[V]): IO[SearchResults[D, V]] = IO.blocking {
+    val q: LuceneQuery = query.filter.map(_.asInstanceOf[LuceneFilter[D]].asQuery()).getOrElse(new MatchAllDocsQuery)
+    val sortFields = query.sort match {
+      case Nil => List(SortField.FIELD_SCORE)
+      case _ => query.sort.map(sort2SortField)
+    }
+    val s = new LuceneSort(sortFields: _*)
+    val indexSearcher = transaction.getOrCreate(indexSearcherKey, searcherManager.acquire())
+    val topFieldDocs: TopFieldDocs = indexSearcher.search(q, batchSize, s, query.scoreDocs)
+    val scoreDocs: List[ScoreDoc] = topFieldDocs
+      .scoreDocs
+      .toList
+      .slice(query.offset, query.offset + query.limit.getOrElse(Int.MaxValue - query.offset))
+    val total: Int = topFieldDocs.totalHits.value.toInt
+    val storedFields: StoredFields = indexSearcher.storedFields()
+    val idsAndScores = scoreDocs.map(doc => Id[D](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
+    // TODO: Support streaming through entire resultset
+//    val last = scoreDocs.lastOption
+    val idStream = fs2.Stream(idsAndScores: _*)
+    val stream: fs2.Stream[IO, (V, Double)] = conversion match {
+      case Conversion.Id => idStream
+      case Conversion.Doc => idStream.evalMap {
+        case (id, score) => collection(id)(transaction).map(doc => doc -> score)
+      }
+      case Conversion.Materialized(indexes) => ???   // TODO: Re-evaluate
+    }
 
-  override def commit(): IO[Unit] = IO.blocking(commitBlocking())
+    SearchResults(
+      offset = query.offset,
+      limit = query.limit,
+      total = Some(total),    // TODO: Is it faster if I turn this off?
+      scoredStream = stream,
+      transaction = transaction
+    )
+  }
 
-  override def size: IO[Int] = withSearchContext { context =>
-    IO.blocking(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
+  override def aggregate(query: AggregateQuery[D])
+                        (implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] =
+    throw new UnsupportedOperationException("Aggregate functions not supported in Lucene currently")
+
+  //  override def size: IO[Int] = withSearchContext { context =>
+//    IO.blocking(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
+//  }
+
+  private def sort2SortField(sort: Sort): SortField = sort match {
+    case Sort.BestMatch => SortField.FIELD_SCORE
+    case Sort.IndexOrder => SortField.FIELD_DOC
+    case Sort.ByField(field, dir) =>
+      val f = field.asInstanceOf[LuceneIndex[_, D]]
+      f.rw.definition match {
+        case DefType.Int => new SortedNumericSortField(field.name, f.sortType, dir == SortDirection.Descending)
+        case DefType.Str => new SortField(field.name, f.sortType, dir == SortDirection.Descending)
+        case d => throw new RuntimeException(s"Unsupported sort definition: $d")
+      }
+    case Sort.ByDistance(field, from) =>
+      val f = field.asInstanceOf[LuceneIndex[_, D]]
+      LatLonDocValuesField.newDistanceSort(f.fieldSortName, from.latitude, from.longitude)
   }
 }

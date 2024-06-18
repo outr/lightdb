@@ -44,6 +44,16 @@ case class Transaction[D <: Document[D]](collection: Collection[D]) { transactio
   def get[T](key: TransactionKey[T]): Option[T] = map.get(key)
     .map(_.asInstanceOf[T])
 
+  def getOrCreate[T](key: TransactionKey[T], create: => T): T = synchronized {
+    get[T](key) match {
+      case Some(t) => t
+      case None =>
+        val t: T = create
+        put(key, t)
+        t
+    }
+  }
+
   def apply[T](key: TransactionKey[T]): T = get[T](key)
     .getOrElse(throw new RuntimeException(s"Key not found: $key. Keys: ${map.keys.mkString(", ")}"))
 

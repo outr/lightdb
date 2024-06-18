@@ -1,7 +1,7 @@
 package lightdb.lucene
 
-import lightdb.Document
-import lightdb.query.Filter
+import lightdb.document.Document
+import lightdb.filter.Filter
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, Query => LuceneQuery}
 
 case class LuceneFilter[D <: Document[D]](asQuery: () => LuceneQuery) extends Filter[D] {

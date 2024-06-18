@@ -77,9 +77,7 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
                  (implicit transaction: Transaction[D]): IO[SearchResults[D, V]] = indexer.doSearch(
       query = query,
       transaction = transaction,
-      conversion = conversion,
-      offset = offset,
-      limit = limit
+      conversion = conversion
     )
 
     def docs(implicit transaction: Transaction[D]): IO[SearchResults[D, D]] = apply[D](indexer.Conversion.Doc)
