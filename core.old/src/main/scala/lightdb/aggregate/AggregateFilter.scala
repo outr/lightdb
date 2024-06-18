@@ -1,6 +1,6 @@
 package lightdb.aggregate
 
-import lightdb.document.Document
+import lightdb.Document
 
 trait AggregateFilter[D <: Document[D]] {
   def &&(that: AggregateFilter[D]): AggregateFilter[D]

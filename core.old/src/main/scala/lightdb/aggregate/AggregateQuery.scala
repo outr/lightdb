@@ -1,12 +1,11 @@
 package lightdb.aggregate
 
 import cats.effect.IO
-import lightdb.document.Document
+import lightdb.Document
 import lightdb.index.Materialized
-import lightdb.query.{Query, SortDirection}
-import lightdb.transaction.Transaction
+import lightdb.query.{Query, SearchContext, SortDirection}
 
-case class AggregateQuery[D <: Document[D]](query: Query[D],
+case class AggregateQuery[D <: Document[D]](query: Query[D, _],
                                             functions: List[AggregateFunction[_, _, D]],
                                             filter: Option[AggregateFilter[D]] = None,
                                             sort: List[(AggregateFunction[_, _, D], SortDirection)] = Nil) {
@@ -33,7 +32,9 @@ case class AggregateQuery[D <: Document[D]](query: Query[D],
     sort = sort ::: List((function, direction))
   )
 
-  def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] = query.indexer.aggregate(this)
+  def stream(implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = query.indexSupport.aggregate(this)
 
-  def toList(implicit transaction: Transaction[D]): IO[List[Materialized[D]]] = stream.compile.toList
+  def toList: IO[List[Materialized[D]]] = query.indexSupport.withSearchContext { implicit context =>
+    stream.compile.toList
+  }
 }

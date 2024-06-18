@@ -2,32 +2,52 @@ package lightdb.index
 
 import cats.effect.IO
 import fabric.rw.RW
-import lightdb.model.Collection
-import lightdb.query.SearchContext
-import lightdb.{Document, Id, query}
+import lightdb.aggregate.AggregateQuery
+import lightdb.document.Document
+import lightdb.filter.Filter
+import lightdb.query.{Query, SearchResults}
+import lightdb.spatial.GeoPoint
+import lightdb.transaction.Transaction
+import squants.space.Length
 
 trait Indexer[D <: Document[D]] {
-  protected var _fields = List.empty[Index[_, D]]
+  def apply[F](name: String,
+               get: D => List[F],
+               store: Boolean = false,
+               sorted: Boolean = false,
+               tokenized: Boolean = false)
+              (implicit rw: RW[F]): Index[F, D]
 
-  def fields: List[Index[_, D]] = _fields
+  def opt[F](name: String,
+             get: D => Option[F],
+             store: Boolean = false,
+             sorted: Boolean = false,
+             tokenized: Boolean = false)
+            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => get(doc).toList, store, sorted, tokenized)
 
-  def indexSupport: IndexSupport[D]
+  def one[F](name: String,
+             get: D => F,
+             store: Boolean = false,
+             sorted: Boolean = false,
+             tokenized: Boolean = false)
+            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
 
-  def truncate(): IO[Unit]
+  def doSearch[V](query: Query[D],
+                  transaction: Transaction[D],
+                  conversion: Conversion[V],
+                  offset: Int,
+                  limit: Option[Int]): IO[SearchResults[D, V]]
 
-  def commit(): IO[Unit]
+  def aggregate(query: AggregateQuery[D])(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]]
 
-  def size: IO[Int]
+  def distanceFilter(field: Index[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
+    throw new UnsupportedOperationException("Distance filtering is not supported on this indexer")
 
-  def withSearchContext[Return](f: SearchContext[D] => IO[Return]): IO[Return]
+  sealed trait Conversion[V]
 
-  protected[lightdb] def register[F](field: Index[F, D]): Unit = synchronized {
-    fields.find(_.fieldName == field.fieldName) match {
-      case Some(existing) if existing != field => throw new RuntimeException(s"Index already exists: ${field.fieldName}")
-      case Some(_) => // Don't add again
-      case None => _fields = field :: _fields
-    }
+  object Conversion {
+    case object Id extends Conversion[lightdb.Id[D]]
+    case object Doc extends Conversion[D]
+    case class Materialized(indexes: Index[_, D]*) extends Conversion[lightdb.index.Materialized[D]]
   }
-
-  private[lightdb] def delete(id: Id[D]): IO[Unit]
 }

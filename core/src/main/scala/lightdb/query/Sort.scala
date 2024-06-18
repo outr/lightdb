@@ -1,6 +1,6 @@
 package lightdb.query
 
-import lightdb.Document
+import lightdb.document.Document
 import lightdb.index.Index
 import lightdb.spatial.GeoPoint
 

@@ -1,21 +1,24 @@
 package lightdb
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1, toTraverseOps}
-import fabric.rw.RW
-import lightdb.collection.Collection
-import lightdb.document.{Document, DocumentModel}
-import lightdb.store.StoreManager
-import lightdb.util.Initializable
+import fabric.rw._
+import lightdb.index.IndexSupport
+import lightdb.model.{AbstractCollection, Collection, DocumentModel}
 import lightdb.upgrade.DatabaseUpgrade
 import scribe.{Level, Logger}
+
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicBoolean
 import scribe.cats.{io => logger}
 
-import java.util.concurrent.atomic.AtomicBoolean
-import scala.concurrent.duration._
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.Try
 
-trait LightDB extends Initializable {
+abstract class LightDB {
+  def directory: Path
+
   /**
    * How frequently to run background updates. Defaults to every 30 seconds.
    */
@@ -32,23 +35,34 @@ trait LightDB extends Initializable {
    */
   protected def disableExtraneousLogging: Boolean = true
 
-  val backingStore: Collection[KeyValue] = collection[KeyValue]("_backingStore", KeyValue)
+  private val _initialized = new AtomicBoolean(false)
+  private val _disposed = new AtomicBoolean(false)
+
+  private var stores = List.empty[Store]
+
+  lazy val backingStore: Collection[KeyValue] = Collection[KeyValue]("_backingStore", this)
 
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
+  def initialized: Boolean = _initialized.get()
+  def disposed: Boolean = _disposed.get()
+
+  def userCollections: List[AbstractCollection[_]]
+
+  final lazy val collections: List[AbstractCollection[_]] = backingStore :: userCollections
   def upgrades: List[DatabaseUpgrade]
 
-  protected[lightdb] def verifyInitialized(): Unit = if (!isInitialized) throw new RuntimeException(s"Database not initialized!")
+  def commit(): IO[Unit] = collections.map(_.commit()).sequence.map(_ => ())
 
-  override protected def initialize(): IO[Unit] = {
+  protected[lightdb] def verifyInitialized(): Unit = if (!initialized) throw new RuntimeException(s"Database not initialized ($directory)!")
+
+  def init(truncate: Boolean = false): IO[Unit] = if (_initialized.compareAndSet(false, true)) {
     for {
-      _ <- logger.info(s"LightDB initializing...")
+      _ <- logger.info(s"LightDB initializing ${directory.getFileName.toString} collection...")
       _ = initLogging()
-      _ <- collections.map(_.init()).parSequence
       // Truncate the database before we do anything if specified
-      // TODO: Can't pass truncate in as an arg here anymore
-      //      _ <- this.truncate().whenA(truncate)
+      _ <- this.truncate().whenA(truncate)
       // Determine if this is an uninitialized database
       dbInitialized <- databaseInitialized.get()
       // Get applied database upgrades
@@ -63,8 +77,7 @@ trait LightDB extends Initializable {
         _ <- doUpgrades(upgrades, stillBlocking = true)
       } yield ()).whenA(upgrades.nonEmpty)
       // Verify integrity
-      // TODO: Revisit
-      /*_ <- collections.map { collection =>
+      _ <- collections.map { collection =>
         collection.model match {
           case indexSupport: IndexSupport[_] => for {
             storeCount <- collection.size
@@ -74,14 +87,16 @@ trait LightDB extends Initializable {
           } yield ()
           case _ => IO.unit
         }
-      }.sequence.whenA(verifyIndexIntegrityOnStartup)*/
+      }.sequence.whenA(verifyIndexIntegrityOnStartup)
       // Set initialized
       _ <- databaseInitialized.set(true)
       _ = addShutdownHook()
     } yield {
       // Start updater
-      recursiveUpdates().unsafeRunAndForget()(cats.effect.unsafe.implicits.global)
+      recursiveUpdates().unsafeRunAndForget()
     }
+  } else {
+    IO.unit
   }
 
   private def initLogging(): Unit = {
@@ -92,25 +107,10 @@ trait LightDB extends Initializable {
     Logger.system.installJUL()
   }
 
-  private val _disposed = new AtomicBoolean(false)
-  private var _collections = List.empty[Collection[_]]
-
-  def storeManager: StoreManager
-
-  def collections: List[Collection[_]] = _collections
-
-  def collection[D <: Document[D]](name: String, model: DocumentModel[D]): Collection[D] = synchronized {
-    val c = Collection[D](name, model, this)
-    _collections = c :: _collections
-    c
-  }
-
-  def disposed: Boolean = _disposed.get()
-
   private lazy val disposeThread = new Thread {
     override def run(): Unit = Try {
       try {
-        dispose().unsafeRunSync()(cats.effect.unsafe.implicits.global)
+        dispose().unsafeRunSync()
       } catch {
         case t: Throwable => scribe.error(s"Failure disposing during shutdown hook", t)
       }
@@ -119,7 +119,7 @@ trait LightDB extends Initializable {
 
   // TODO: Figure out why shutdown hook causes system to get stuck
   private def addShutdownHook(): Unit = {
-    //    Runtime.getRuntime.addShutdownHook(disposeThread)
+//    Runtime.getRuntime.addShutdownHook(disposeThread)
   }
 
   private def removeShutdownHook(): Unit = {} //Try(Runtime.getRuntime.removeShutdownHook(disposeThread))
@@ -132,20 +132,36 @@ trait LightDB extends Initializable {
     _ <- recursiveUpdates().whenA(!disposed)
   } yield ()
 
-  def truncate(): IO[Unit] = collections.map { c =>
-    val collection = c.asInstanceOf[Collection[KeyValue]]
-    collection.transaction { implicit transaction =>
-      collection.truncate()
-    }
-  }.parSequence.map(_ => ())
+  protected[lightdb] def createStoreInternal(name: String): Store = synchronized {
+    verifyInitialized()
+    val store = createStore(name)
+    stores = store :: stores
+    store
+  }
+
+  protected def collection[D <: Document[D]](name: String,
+                                             model: DocumentModel[D],
+                                             defaultCommitMode: CommitMode = CommitMode.Manual,
+                                             atomic: Boolean = true)
+                                            (implicit rw: RW[D]): AbstractCollection[D] = AbstractCollection[D](
+    name = name,
+    db = this,
+    model = model,
+    defaultCommitMode = defaultCommitMode,
+    atomic = atomic
+  )
+
+  protected def createStore(name: String): Store
+
+  def truncate(): IO[Unit] = collections.map(_.truncate()).parSequence.map(_ => ())
 
   def update(): IO[Unit] = collections.map(_.update()).sequence.map(_ => ())
 
   def dispose(): IO[Unit] = if (_disposed.compareAndSet(false, true)) {
     for {
-      _ <- IO.unit // TODO: wait for active transactions to close
+      _ <- commit()
       _ <- collections.map(_.dispose()).parSequence
-      _ <- IO.unit // TODO: //stores.map(_.dispose()).parSequence
+      _ <- stores.map(_.dispose()).parSequence
       _ = removeShutdownHook()
     } yield ()
   } else {
