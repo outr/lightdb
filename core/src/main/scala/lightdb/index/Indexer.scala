@@ -34,9 +34,7 @@ trait Indexer[D <: Document[D]] {
 
   def doSearch[V](query: Query[D],
                   transaction: Transaction[D],
-                  conversion: Conversion[V],
-                  offset: Int,
-                  limit: Option[Int]): IO[SearchResults[D, V]]
+                  conversion: Conversion[V]): IO[SearchResults[D, V]]
 
   def aggregate(query: AggregateQuery[D])(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]]
 

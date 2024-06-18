@@ -4,9 +4,8 @@ import cats.effect.IO
 import fabric.define.DefType
 import lightdb._
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
-import lightdb.index.{Index, IndexSupport, Materialized}
-import lightdb.model.AbstractCollection
-import lightdb.query.{Filter, PageContext, PagedResults, Query, SearchContext, Sort, SortDirection}
+import lightdb.index.{Index, Materialized}
+import lightdb.query.{Query, Sort, SortDirection}
 import lightdb.spatial.GeoPoint
 import org.apache.lucene.document.{LatLonDocValuesField, LatLonPoint}
 import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}

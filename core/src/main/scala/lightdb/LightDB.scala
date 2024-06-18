@@ -11,11 +11,14 @@ import lightdb.upgrade.DatabaseUpgrade
 import scribe.{Level, Logger}
 import scribe.cats.{io => logger}
 
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration._
 import scala.util.Try
 
 trait LightDB extends Initializable {
+  def directory: Path
+
   /**
    * How frequently to run background updates. Defaults to every 30 seconds.
    */
