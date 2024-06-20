@@ -210,7 +210,7 @@ class SimpleHaloAndLuceneSpec extends AsyncWordSpec with AsyncIOSpec with Matche
       }
     }
     "sort by age" in {
-      Person.query.sort(Sort.ByField(Person.age)).toList.map { people =>
+      Person.query.sort(Sort.ByIndex(Person.age)).toList.map { people =>
         people.map(_.name) should be(List("Jane Doe", "John Doe", "Bob Dole"))
       }
     }

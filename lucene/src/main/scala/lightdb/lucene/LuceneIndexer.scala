@@ -1,23 +1,25 @@
 package lightdb.lucene
 
 import cats.effect.IO
+import fabric._
 import fabric.define.DefType
-import lightdb.index.{Index, Indexer, Materialized}
+import lightdb.index.{Index, Indexed, Indexer, Materialized}
 import lightdb.Id
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
-import org.apache.lucene.document.{LatLonDocValuesField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.document.{DoubleField, DoublePoint, Field, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 
 import java.nio.file.{Files, Path}
-import fabric.rw._
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.document.{Document, DocumentListener, DocumentModel}
+import lightdb.document.{Document, DocumentModel}
+import lightdb.filter.{CombinedFilter, EqualsFilter, Filter, InFilter, RangeDoubleFilter, RangeLongFilter}
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
+import lightdb.spatial.GeoPoint
 import lightdb.transaction.{Transaction, TransactionKey}
 
 case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
@@ -37,6 +39,58 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     transaction.get(indexSearcherKey).foreach { indexSearcher =>
       searcherManager.release(indexSearcher)
     }
+  }
+
+  override def postSet(doc: D, transaction: Transaction[D]): IO[Unit] = super.postSet(doc, transaction).flatMap { _ =>
+    indexDoc(doc, model.asInstanceOf[Indexed[D]].indexes)
+  }
+
+  private def indexDoc(doc: D, indexes: List[Index[_, D]]): IO[Unit] = for {
+    fields <- IO.blocking(indexes.flatMap { index =>
+      createFields(index, doc)
+    })
+    _ = addDoc(doc._id, fields)
+  } yield ()
+
+  protected[lightdb] def createFields(index: Index[_, D], doc: D): List[LuceneField] = if (index.tokenized) {
+    index.getJson(doc).flatMap {
+      case Null => Nil
+      case Str(s, _) => List(s)
+      case f => throw new RuntimeException(s"Unsupported tokenized value: $f (${index.rw.definition})")
+    }.map { value =>
+      new LuceneField(index.name, value, if (index.store) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED)
+    }
+  } else {
+    def fs: LuceneField.Store = if (index.store) Field.Store.YES else Field.Store.NO
+
+    val filterField = index.getJson(doc).flatMap {
+      case Null => None
+      case Str(s, _) => Some(new StringField(index.name, s, fs))
+      case Bool(b, _) => Some(new IntField(index.name, if (b) 1 else 0, fs))
+      case NumInt(l, _) => Some(new LongField(index.name, l, fs))
+      case NumDec(bd, _) => Some(new DoubleField(index.name, bd.toDouble, fs))
+      case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
+        case GeoPoint(latitude, longitude) => Some(new LatLonPoint(index.name, latitude, longitude))
+        case ref => throw new RuntimeException(s"Unsupported object reference: $ref for JSON: $obj")
+      }
+      case json => throw new RuntimeException(s"Unsupported JSON: $json (${index.rw.definition})")
+    }
+    val sortField = if (index.sorted) {
+      val separate = index.rw.definition.className.collect {
+        case "lightdb.spatial.GeoPoint" => true
+      }.getOrElse(false)
+      val fieldSortName = if (separate) s"${index.name}Sort" else index.name
+      index.getJson(doc).flatMap {
+        case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
+          case GeoPoint(latitude, longitude) => Some(new LatLonDocValuesField(fieldSortName, latitude, longitude))
+          case _ => None
+        }
+        case _ => None
+      }
+    } else {
+      Nil
+    }
+    filterField ::: sortField
   }
 
   private lazy val path: Option[Path] = if (persistent) {
@@ -76,24 +130,47 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     searcherManager.maybeRefreshBlocking()
   }
 
-  override def apply[F](name: String,
-               get: D => List[F],
-               store: Boolean = false,
-               sorted: Boolean = false,
-               tokenized: Boolean = false)
-              (implicit rw: RW[F]): Index[F, D] = LuceneIndex(
-    name = name,
-    indexer = this,
-    get = get,
-    store = store,
-    sorted = sorted,
-    tokenized = tokenized
-  )
+  private def filter2Lucene(filter: Option[Filter[D]]): LuceneQuery = filter match {
+    case Some(f) => f match {
+      case f: EqualsFilter[_, D] => exactQuery(f.index, f.getJson)
+      case f: InFilter[_, D] =>
+        val queries = f.getJson.map(json => exactQuery(f.index, json))
+        val b = new BooleanQuery.Builder
+        b.setMinimumNumberShouldMatch(1)
+        queries.foreach { q =>
+          b.add(q, BooleanClause.Occur.SHOULD)
+        }
+        b.build()
+      case CombinedFilter(filters) =>
+        val queries = filters.map(f => filter2Lucene(Some(f)))
+        val b = new BooleanQuery.Builder
+        b.setMinimumNumberShouldMatch(1)
+        queries.foreach { q =>
+          b.add(q, BooleanClause.Occur.SHOULD)
+        }
+        b.build()
+      case RangeLongFilter(index, from, to) => LongField.newRangeQuery(index.name, from, to)
+      case RangeDoubleFilter(index, from, to) => DoubleField.newRangeQuery(index.name, from, to)
+    }
+    case None => new MatchAllDocsQuery
+  }
+
+  private def exactQuery(index: Index[_, D], json: Json): LuceneQuery = json match {
+    case Str(s, _) if index.tokenized =>
+      val b = new BooleanQuery.Builder
+      s.split("\\s+").foreach(s => b.add(new TermQuery(new Term(index.name, s)), BooleanClause.Occur.MUST))
+      b.build()
+    case Str(s, _) => new TermQuery(new Term(index.name, s))
+    case Bool(b, _) => IntPoint.newExactQuery(index.name, if (b) 1 else 0)
+    case NumInt(l, _) => LongPoint.newExactQuery(index.name, l)
+    case NumDec(bd, _) => DoublePoint.newExactQuery(index.name, bd.toDouble)
+    case json => throw new RuntimeException(s"Unsupported equality check: $json (${index.rw.definition})")
+  }
 
   override def doSearch[V](query: Query[D, M],
                            transaction: Transaction[D],
                            conversion: Conversion[V]): IO[SearchResults[D, V]] = IO.blocking {
-    val q: LuceneQuery = query.filter.map(_.asInstanceOf[LuceneFilter[D]].asQuery()).getOrElse(new MatchAllDocsQuery)
+    val q: LuceneQuery = filter2Lucene(query.filter)
     val sortFields = query.sort match {
       case Nil => List(SortField.FIELD_SCORE)
       case _ => query.sort.map(sort2SortField)
@@ -140,15 +217,23 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
   private def sort2SortField(sort: Sort): SortField = sort match {
     case Sort.BestMatch => SortField.FIELD_SCORE
     case Sort.IndexOrder => SortField.FIELD_DOC
-    case Sort.ByField(field, dir) =>
-      val f = field.asInstanceOf[LuceneIndex[_, D]]
-      f.rw.definition match {
-        case DefType.Int => new SortedNumericSortField(field.name, f.sortType, dir == SortDirection.Descending)
-        case DefType.Str => new SortField(field.name, f.sortType, dir == SortDirection.Descending)
+    case Sort.ByIndex(field, dir) =>
+      val sortType = field.rw.definition match {
+        case DefType.Str => SortField.Type.STRING
+        case DefType.Dec => SortField.Type.DOUBLE
+        case DefType.Int => SortField.Type.LONG
+        case _ => throw new RuntimeException(s"Unsupported sort type for ${field.rw.definition}")
+      }
+      field.rw.definition match {
+        case DefType.Int => new SortedNumericSortField(field.name, sortType, dir == SortDirection.Descending)
+        case DefType.Str => new SortField(field.name, sortType, dir == SortDirection.Descending)
         case d => throw new RuntimeException(s"Unsupported sort definition: $d")
       }
-    case Sort.ByDistance(field, from) =>
-      val f = field.asInstanceOf[LuceneIndex[_, D]]
-      LatLonDocValuesField.newDistanceSort(f.fieldSortName, from.latitude, from.longitude)
+    case Sort.ByDistance(index, from) =>
+      val separate = index.rw.definition.className.collect {
+        case "lightdb.spatial.GeoPoint" => true
+      }.getOrElse(false)
+      val fieldSortName = if (separate) s"${index.name}Sort" else index.name
+      LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
   }
 }

@@ -11,27 +11,6 @@ import lightdb.transaction.Transaction
 import squants.space.Length
 
 trait Indexer[D <: Document[D], M <: DocumentModel[D]] extends DocumentListener[D] {
-  def apply[F](name: String,
-               get: D => List[F],
-               store: Boolean = false,
-               sorted: Boolean = false,
-               tokenized: Boolean = false)
-              (implicit rw: RW[F]): Index[F, D]
-
-  def opt[F](name: String,
-             get: D => Option[F],
-             store: Boolean = false,
-             sorted: Boolean = false,
-             tokenized: Boolean = false)
-            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => get(doc).toList, store, sorted, tokenized)
-
-  def one[F](name: String,
-             get: D => F,
-             store: Boolean = false,
-             sorted: Boolean = false,
-             tokenized: Boolean = false)
-            (implicit rw: RW[F]): Index[F, D] = apply[F](name, doc => List(get(doc)), store, sorted, tokenized)
-
   def doSearch[V](query: Query[D, M],
                   transaction: Transaction[D],
                   conversion: Conversion[V]): IO[SearchResults[D, V]]

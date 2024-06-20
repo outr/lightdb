@@ -134,7 +134,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
       -1
     }
     val sort = query.sort.collect {
-      case Sort.ByField(field, direction) =>
+      case Sort.ByIndex(field, direction) =>
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
         s"${field.fieldName} $dir"
     } match {
@@ -224,7 +224,7 @@ trait SQLSupport[D <: Document[D]] extends IndexSupport[D] {
         case None => ""
       }
       val querySort = query.query.sort.collect {
-        case Sort.ByField(field, direction) =>
+        case Sort.ByIndex(field, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
           s"${field.fieldName} $dir"
       }

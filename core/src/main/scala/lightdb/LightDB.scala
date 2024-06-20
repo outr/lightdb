@@ -5,6 +5,7 @@ import cats.implicits.{catsSyntaxApplicativeByName, catsSyntaxParallelSequence1,
 import fabric.rw.RW
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
+import lightdb.index.{IndexedCollection, Indexer}
 import lightdb.store.StoreManager
 import lightdb.util.Initializable
 import lightdb.upgrade.DatabaseUpgrade
@@ -104,7 +105,16 @@ trait LightDB extends Initializable {
 
   def collection[D <: Document[D], M <: DocumentModel[D]](name: String, model: M)
                                                          (implicit rw: RW[D]): Collection[D, M] = synchronized {
-    val c = Collection[D, M](name, model, this)
+    val c = new Collection[D, M](name, model, this)
+    _collections = c :: _collections
+    c
+  }
+
+  def collection[D <: Document[D], M <: DocumentModel[D]](name: String,
+                                                          model: M,
+                                                          indexer: Indexer[D, M])
+                                                         (implicit rw: RW[D]): IndexedCollection[D, M] = synchronized {
+    val c = new IndexedCollection[D, M](name, model, indexer, this)
     _collections = c :: _collections
     c
   }

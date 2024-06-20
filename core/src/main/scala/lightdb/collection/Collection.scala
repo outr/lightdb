@@ -8,10 +8,10 @@ import lightdb.util.Initializable
 import cats.implicits._
 import fabric.rw.RW
 
-case class Collection[D <: Document[D], M <: DocumentModel[D]](name: String,
-                                                               model: M,
-                                                               db: LightDB)
-                                                              (implicit rw: RW[D]) extends Initializable { collection =>
+class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
+                                                          val model: M,
+                                                          val db: LightDB)
+                                                         (implicit rw: RW[D]) extends Initializable { collection =>
   private implicit class ListIO[R](list: List[IO[R]]) {
     def ioSeq: IO[Unit] = if (model.parallel) {
       list.parSequence.map(_ => ())
