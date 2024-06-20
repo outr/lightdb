@@ -19,22 +19,14 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
                                       limit: Option[Int] = None,
                                       materializedIndexes: List[Index[_, D]] = Nil,
                                       countTotal: Boolean = true) { query =>
-  def filter(filter: Filter[D], and: Boolean = false): Query[D, M] = {
-    if (and && this.filter.nonEmpty) {
-      copy(filter = Some(this.filter.get && filter))
-    } else {
-      copy(filter = Some(filter))
+  def clearFilters: Query[D, M] = copy(filter = None)
+  def filter(f: M => Filter[D]): Query[D, M] = {
+    val filter = f(collection.model)
+    val combined = this.filter match {
+      case Some(current) => current && filter
+      case None => filter
     }
-  }
-
-  def filters(filters: Filter[D]*): Query[D, M] = if (filters.nonEmpty) {
-    var filter = filters.head
-    filters.tail.foreach { f =>
-      filter = filter && f
-    }
-    this.filter(filter)
-  } else {
-    this
+    copy(filter = Some(combined))
   }
 
   def sort(sort: Sort*): Query[D, M] = copy(sort = this.sort ::: sort.toList)
@@ -103,7 +95,7 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
 
   def grouped[F](index: Index[F, D],
                  direction: SortDirection = SortDirection.Ascending)
-                (implicit transaction: Transaction[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = sort(Sort.ByField(index, direction))
+                (implicit transaction: Transaction[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = sort(Sort.ByIndex(index, direction))
     .stream
     .docs
     .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)

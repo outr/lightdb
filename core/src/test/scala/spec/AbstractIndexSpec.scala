@@ -5,7 +5,7 @@ import fabric.rw.RW
 import lightdb.{Id, LightDB}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
-import lightdb.index.Indexer
+import lightdb.index.{Indexed, IndexedCollection, Indexer}
 import lightdb.spatial.GeoPoint
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
@@ -62,7 +62,9 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     }
     "query for John Doe" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.indexer.search()
+        DB.people.query.filter(_.name === "John Doe").stream.docs.compile.toList.map { people =>
+          people.map(_._id) should be(List(id1))
+        }
       }
     }
     "truncate the database" in {
@@ -79,7 +81,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   object DB extends LightDB {
     override lazy val directory: Path = Path.of(s"db/$specName")
 
-    val people: Collection[Person, Person.type] = collection("people", Person)
+    val people: IndexedCollection[Person, Person.type] = collection("people", Person, indexer(Person))
 
     override def storeManager: StoreManager = spec.storeManager
 
@@ -92,10 +94,8 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
                     point: GeoPoint,
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
-  object Person extends DocumentModel[Person] {
+  object Person extends DocumentModel[Person] with Indexed[Person] {
     implicit val rw: RW[Person] = RW.gen
-
-    val index: Indexer[Person, Person.type] = spec.indexer(this)
 
     val name: I[String] = index.one("name", _.name)
     val age: I[Int] = index.one("age", _.age)
