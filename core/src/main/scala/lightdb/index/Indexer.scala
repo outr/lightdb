@@ -3,14 +3,14 @@ package lightdb.index
 import cats.effect.IO
 import fabric.rw.RW
 import lightdb.aggregate.AggregateQuery
-import lightdb.document.Document
+import lightdb.document.{Document, DocumentListener}
 import lightdb.filter.Filter
 import lightdb.query.{Query, SearchResults}
 import lightdb.spatial.GeoPoint
 import lightdb.transaction.Transaction
 import squants.space.Length
 
-trait Indexer[D <: Document[D]] {
+trait Indexer[D <: Document[D]] extends DocumentListener[D] {
   def apply[F](name: String,
                get: D => List[F],
                store: Boolean = false,

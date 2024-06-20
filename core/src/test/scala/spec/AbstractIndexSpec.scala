@@ -27,7 +27,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   }
 
   protected def storeManager: StoreManager
-  protected def indexer: Indexer[Person]
+  protected def indexer(model: Person.type): Indexer[Person]
 
   object DB extends LightDB {
     override lazy val directory: Path = Path.of(s"db/$specName")
@@ -48,7 +48,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   object Person extends DocumentModel[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val index: Indexer[Person] = spec.indexer
+    val index: Indexer[Person] = spec.indexer(this)
 
     val name: I[String] = index.one("name", _.name)
     val age: I[Int] = index.one("age", _.age)

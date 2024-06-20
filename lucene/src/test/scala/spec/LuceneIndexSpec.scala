@@ -6,5 +6,5 @@ import lightdb.store.{AtomicMapStore, StoreManager}
 class LuceneIndexSpec extends AbstractIndexSpec {
   override protected def storeManager: StoreManager = AtomicMapStore
 
-  override protected lazy val indexer: Indexer[Person] = LuceneIndexer(Person)
+  override protected def indexer(model: Person.type): Indexer[Person] = LuceneIndexer(model)
 }

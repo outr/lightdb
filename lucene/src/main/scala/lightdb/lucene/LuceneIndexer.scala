@@ -13,7 +13,6 @@ import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
 import org.apache.lucene.document.{LatLonDocValuesField, Document => LuceneDocument, Field => LuceneField}
 
 import java.nio.file.{Files, Path}
-import java.util.concurrent.ConcurrentHashMap
 import fabric.rw._
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
@@ -24,7 +23,7 @@ import lightdb.transaction.{Transaction, TransactionKey}
 case class LuceneIndexer[D <: Document[D]](model: DocumentModel[D],
                                            batchSize: Int = 512,
                                            persistent: Boolean = true,
-                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] with DocumentListener[D] {
+                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] {
   private var collection: Collection[D] = _
   model.listener += this
 
@@ -118,6 +117,7 @@ case class LuceneIndexer[D <: Document[D]](model: DocumentModel[D],
         case (id, score) => collection(id)(transaction).map(doc => doc -> score)
       }
       case Conversion.Materialized(indexes) => ???   // TODO: Re-evaluate
+      case _ => throw new UnsupportedOperationException(s"Invalid Conversion: $conversion")
     }
 
     SearchResults(
