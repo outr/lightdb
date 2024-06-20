@@ -1,6 +1,7 @@
 package lightdb.store
 
 import cats.effect.IO
+import fabric.rw.RW
 import lightdb.Id
 import lightdb.document.Document
 import lightdb.transaction.Transaction
@@ -55,5 +56,6 @@ class AtomicMapStore[D <: Document[D]] extends Store[D] {
 }
 
 object AtomicMapStore extends StoreManager {
-  override protected def create[D <: Document[D]](name: String): IO[Store[D]] = IO(new AtomicMapStore[D])
+  override protected def create[D <: Document[D]](name: String)
+                                                 (implicit rw: RW[D]): IO[Store[D]] = IO(new AtomicMapStore[D])
 }
