@@ -17,9 +17,56 @@ import java.nio.file.Path
 abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
 
+  private val id1 = Id[Person]("john")
+  private val id2 = Id[Person]("jane")
+  private val id3 = Id[Person]("bob")
+
+  private val newYorkCity = GeoPoint(40.7142, -74.0119)
+  private val chicago = GeoPoint(41.8119, -87.6873)
+  private val noble = GeoPoint(35.1417, -97.3409)
+  private val oklahomaCity = GeoPoint(35.5514, -97.4075)
+  private val yonkers = GeoPoint(40.9461, -73.8669)
+
+  private val p1 = Person(
+    name = "John Doe",
+    age = 21,
+    tags = Set("dog", "cat"),
+    point = newYorkCity,
+    _id = id1
+  )
+  private val p2 = Person(
+    name = "Jane Doe",
+    age = 19,
+    tags = Set("cat"),
+    point = noble,
+    _id = id2
+  )
+  private val p3 = Person(
+    name = "Bob Dole",
+    age = 123,
+    tags = Set("dog", "monkey"),
+    point = yonkers,
+    _id = id3
+  )
+
   specName should {
     "initialize the database" in {
       DB.init().map(b => b should be(true))
+    }
+    "store John Doe" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.set(List(p1, p2, p3)).map { count =>
+          count should be(3)
+        }
+      }
+    }
+    "query for John Doe" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.indexer.search()
+      }
+    }
+    "truncate the database" in {
+      DB.truncate()
     }
     "dispose the database" in {
       DB.dispose()

@@ -16,7 +16,7 @@ import org.apache.lucene.queryparser.classic.QueryParser
 import scala.language.implicitConversions
 
 case class LuceneIndex[F, D <: Document[D]](name: String,
-                                            indexer: LuceneIndexer[D],
+                                            indexer: LuceneIndexer[D, _],
                                             get: D => List[F],
                                             store: Boolean,
                                             sorted: Boolean,

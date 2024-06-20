@@ -20,16 +20,16 @@ import lightdb.document.{Document, DocumentListener, DocumentModel}
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
 import lightdb.transaction.{Transaction, TransactionKey}
 
-case class LuceneIndexer[D <: Document[D]](model: DocumentModel[D],
+case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
                                            batchSize: Int = 512,
                                            persistent: Boolean = true,
-                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D] {
-  private var collection: Collection[D] = _
+                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D, M] {
+  private var collection: Collection[D, _] = _
   model.listener += this
 
   private lazy val indexSearcherKey: TransactionKey[IndexSearcher] = TransactionKey("indexSearcher")
 
-  override def init(collection: Collection[D]): IO[Unit] = super.init(collection).map { _ =>
+  override def init(collection: Collection[D, _]): IO[Unit] = super.init(collection).map { _ =>
     this.collection = collection
   }
 
@@ -90,7 +90,7 @@ case class LuceneIndexer[D <: Document[D]](model: DocumentModel[D],
     tokenized = tokenized
   )
 
-  override def doSearch[V](query: Query[D],
+  override def doSearch[V](query: Query[D, M],
                            transaction: Transaction[D],
                            conversion: Conversion[V]): IO[SearchResults[D, V]] = IO.blocking {
     val q: LuceneQuery = query.filter.map(_.asInstanceOf[LuceneFilter[D]].asQuery()).getOrElse(new MatchAllDocsQuery)
@@ -129,7 +129,7 @@ case class LuceneIndexer[D <: Document[D]](model: DocumentModel[D],
     )
   }
 
-  override def aggregate(query: AggregateQuery[D])
+  override def aggregate(query: AggregateQuery[D, M])
                         (implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] =
     throw new UnsupportedOperationException("Aggregate functions not supported in Lucene currently")
 

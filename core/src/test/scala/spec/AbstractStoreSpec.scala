@@ -52,6 +52,13 @@ abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     "initialize the database" in {
       DB.init().map(b => b should be(true))
     }
+    "verify the database is empty" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.count.map { count =>
+          count should be(0)
+        }
+      }
+    }
     "insert the records" in {
       DB.people.transaction { implicit transaction =>
         DB.people.set(names).map(o => o should not be None)
