@@ -6,7 +6,7 @@ import fabric.rw._
 import lightdb.collection.Collection
 
 case class StoredValue[T](key: String,
-                          collection: Collection[KeyValue],
+                          collection: Collection[KeyValue, KeyValue.type],
                           default: () => T,
                           persistence: Persistence)(implicit rw: RW[T]) {
   private lazy val id = Id[KeyValue](key)

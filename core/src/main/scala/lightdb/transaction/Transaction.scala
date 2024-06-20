@@ -9,7 +9,7 @@ import lightdb.document.Document
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-case class Transaction[D <: Document[D]](collection: Collection[D]) { transaction =>
+case class Transaction[D <: Document[D]](collection: Collection[D, _]) { transaction =>
   private var map = Map.empty[TransactionKey[_], Any]
   private var locks = Set.empty[Id[D]]
 

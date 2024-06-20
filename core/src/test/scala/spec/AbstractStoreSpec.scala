@@ -141,7 +141,7 @@ abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   object DB extends LightDB {
     override lazy val directory: Path = Path.of(s"db/$specName")
 
-    val people: Collection[Person] = collection("people", Person)
+    val people: Collection[Person, Person.type] = collection("people", Person)
 
     override def storeManager: StoreManager = spec.storeManager
 
