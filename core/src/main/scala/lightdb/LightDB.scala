@@ -103,7 +103,7 @@ trait LightDB extends Initializable {
   def collections: List[Collection[_, _]] = _collections
 
   def collection[D <: Document[D], M <: DocumentModel[D]](name: String, model: M)
-                                  (implicit rw: RW[D]): Collection[D, M] = synchronized {
+                                                         (implicit rw: RW[D]): Collection[D, M] = synchronized {
     val c = Collection[D, M](name, model, this)
     _collections = c :: _collections
     c
