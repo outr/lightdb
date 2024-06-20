@@ -2,7 +2,6 @@ package benchmark
 
 import cats.effect.IO
 import fabric.rw.RW
-import lightdb.halo.HaloDBSupport
 import lightdb.lucene.LuceneSupport
 import lightdb.model.Collection
 import lightdb.sqlite.SQLiteSupport

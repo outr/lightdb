@@ -5,7 +5,6 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
-import lightdb.halo.HaloDBSupport
 import lightdb.index.Index
 import lightdb.lucene.{LuceneIndex, LuceneSupport}
 import lightdb.model.{AbstractCollection, Collection, DocumentModel}

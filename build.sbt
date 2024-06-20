@@ -123,7 +123,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-eff
 	)
 
 lazy val halodb = project.in(file("halodb"))
-	.dependsOn(core.jvm)
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-halo",
 		fork := true,

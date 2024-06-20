@@ -5,7 +5,6 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
 import lightdb.duckdb.DuckDBSupport
-import lightdb.halo.HaloDBSupport
 import lightdb.model.Collection
 import lightdb.sqlite.SQLiteSupport
 import lightdb.upgrade.DatabaseUpgrade

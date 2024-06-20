@@ -5,7 +5,6 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb._
 import lightdb.aggregate.AggregateType
-import lightdb.halo.HaloDBSupport
 import lightdb.index.Index
 import lightdb.model.Collection
 import lightdb.sql.{SQLIndex, SQLSupport}

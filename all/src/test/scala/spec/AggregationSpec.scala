@@ -4,7 +4,6 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb.aggregate.AggregateType
 import lightdb.{Document, Id, IndexedLinks, LightDB, StoredValue}
-import lightdb.halo.HaloDBSupport
 import lightdb.model.Collection
 import lightdb.query.SortDirection
 import lightdb.sqlite.SQLiteSupport

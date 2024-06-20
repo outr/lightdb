@@ -3,7 +3,6 @@ package spec
 import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
-import lightdb.halo.HaloDBSupport
 import lightdb.lucene.LuceneSupport
 import lightdb.{Document, ValueStore, Id, LightDB, Persistence, StoredValue, Unique}
 import lightdb.model.Collection
