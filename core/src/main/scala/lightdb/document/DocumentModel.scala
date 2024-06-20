@@ -8,11 +8,11 @@ import lightdb.store.Store
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-trait DocumentModel[D <: Document[D]] {
+trait DocumentModel[D <: Document[D]] { model =>
   type I[F] = Index[F, D]
 
   private[lightdb] val _initialized = new AtomicBoolean(false)
-  private[lightdb] var collection: Collection[D] = _
+  private[lightdb] var collection: Collection[D, _] = _
   private[lightdb] var store: Store[D] = _
 
   final def initialized: Boolean = _initialized.get()

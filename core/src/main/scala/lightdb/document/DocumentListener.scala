@@ -8,7 +8,7 @@ import moduload.Priority
 trait DocumentListener[D <: Document[D]] {
   def priority: Priority = Priority.Normal
 
-  def init(collection: Collection[D]): IO[Unit] = IO.unit
+  def init(collection: Collection[D, _]): IO[Unit] = IO.unit
 
   def transactionStart(transaction: Transaction[D]): IO[Unit] = IO.unit
 

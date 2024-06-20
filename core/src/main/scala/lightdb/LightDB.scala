@@ -36,9 +36,9 @@ trait LightDB extends Initializable {
   protected def disableExtraneousLogging: Boolean = true
 
   private val _disposed = new AtomicBoolean(false)
-  private var _collections = List.empty[Collection[_]]
+  private var _collections = List.empty[Collection[_, _]]
 
-  val backingStore: Collection[KeyValue] = collection[KeyValue]("_backingStore", KeyValue)
+  val backingStore: Collection[KeyValue, KeyValue.type] = collection("_backingStore", KeyValue)
 
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
@@ -100,11 +100,11 @@ trait LightDB extends Initializable {
 
   def storeManager: StoreManager
 
-  def collections: List[Collection[_]] = _collections
+  def collections: List[Collection[_, _]] = _collections
 
-  def collection[D <: Document[D]](name: String, model: DocumentModel[D])
-                                  (implicit rw: RW[D]): Collection[D] = synchronized {
-    val c = Collection[D](name, model, this)
+  def collection[D <: Document[D], M <: DocumentModel[D]](name: String, model: M)
+                                  (implicit rw: RW[D]): Collection[D, M] = synchronized {
+    val c = Collection[D, M](name, model, this)
     _collections = c :: _collections
     c
   }
@@ -137,7 +137,7 @@ trait LightDB extends Initializable {
   } yield ()
 
   def truncate(): IO[Unit] = collections.map { c =>
-    val collection = c.asInstanceOf[Collection[KeyValue]]
+    val collection = c.asInstanceOf[Collection[KeyValue, KeyValue.type]]
     collection.transaction { implicit transaction =>
       collection.truncate()
     }
@@ -160,7 +160,7 @@ trait LightDB extends Initializable {
     def apply[T](key: String,
                  default: => T,
                  persistence: Persistence = Persistence.Stored,
-                 collection: Collection[KeyValue] = backingStore)
+                 collection: Collection[KeyValue, KeyValue.type] = backingStore)
                 (implicit rw: RW[T]): StoredValue[T] = StoredValue[T](
       key = key,
       collection = collection,
@@ -170,7 +170,7 @@ trait LightDB extends Initializable {
 
     def opt[T](key: String,
                persistence: Persistence = Persistence.Stored,
-               collection: Collection[KeyValue] = backingStore)
+               collection: Collection[KeyValue, KeyValue.type] = backingStore)
               (implicit rw: RW[T]): StoredValue[Option[T]] = StoredValue[Option[T]](
       key = key,
       collection = collection,

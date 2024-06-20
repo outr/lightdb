@@ -5,13 +5,13 @@ import cats.effect.IO
 import lightdb.Id
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
-import lightdb.document.Document
+import lightdb.document.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.index.{Index, Indexer, Materialized}
 import lightdb.transaction.Transaction
 
-case class Query[D <: Document[D]](indexer: Indexer[D],
-                                      collection: Collection[D],
+case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M],
+                                      collection: Collection[D, M],
                                       filter: Option[Filter[D]] = None,
                                       sort: List[Sort] = Nil,
                                       scoreDocs: Boolean = false,
@@ -19,7 +19,7 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
                                       limit: Option[Int] = None,
                                       materializedIndexes: List[Index[_, D]] = Nil,
                                       countTotal: Boolean = true) { query =>
-  def filter(filter: Filter[D], and: Boolean = false): Query[D] = {
+  def filter(filter: Filter[D], and: Boolean = false): Query[D, M] = {
     if (and && this.filter.nonEmpty) {
       copy(filter = Some(this.filter.get && filter))
     } else {
@@ -27,7 +27,7 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
     }
   }
 
-  def filters(filters: Filter[D]*): Query[D] = if (filters.nonEmpty) {
+  def filters(filters: Filter[D]*): Query[D, M] = if (filters.nonEmpty) {
     var filter = filters.head
     filters.tail.foreach { f =>
       filter = filter && f
@@ -37,7 +37,7 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
     this
   }
 
-  def sort(sort: Sort*): Query[D] = copy(sort = this.sort ::: sort.toList)
+  def sort(sort: Sort*): Query[D, M] = copy(sort = this.sort ::: sort.toList)
 
   /*def distance(field: Index[GeoPoint, D],
                from: GeoPoint,
@@ -62,15 +62,15 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
     q
   }*/
 
-  def clearSort: Query[D] = copy(sort = Nil)
+  def clearSort: Query[D, M] = copy(sort = Nil)
 
-  def scoreDocs(b: Boolean): Query[D] = copy(scoreDocs = b)
+  def scoreDocs(b: Boolean): Query[D, M] = copy(scoreDocs = b)
 
-  def offset(offset: Int): Query[D] = copy(offset = offset)
+  def offset(offset: Int): Query[D, M] = copy(offset = offset)
 
-  def limit(limit: Int): Query[D] = copy(limit = Some(limit))
+  def limit(limit: Int): Query[D, M] = copy(limit = Some(limit))
 
-  def countTotal(b: Boolean): Query[D] = copy(countTotal = b)
+  def countTotal(b: Boolean): Query[D, M] = copy(countTotal = b)
 
   object search {
     def apply[V](conversion: indexer.Conversion[V])
@@ -99,7 +99,7 @@ case class Query[D <: Document[D]](indexer: Indexer[D],
     def scoredMaterialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, (Materialized[D], Double)] = fs2.Stream.force(search.materialized(indexes: _*).map(_.scoredStream))
   }
 
-  def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D] = AggregateQuery[D](this, functions.toList)
+  def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D, M] = AggregateQuery(this, functions.toList)
 
   def grouped[F](index: Index[F, D],
                  direction: SortDirection = SortDirection.Ascending)
