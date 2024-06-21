@@ -5,7 +5,7 @@ import fabric.define.DefType
 import fabric.rw.{Convertible, RW}
 import lightdb.aggregate.AggregateFilter
 import lightdb.document.Document
-import lightdb.filter.{EqualsFilter, Filter, FilterSupport, InFilter, RangeDoubleFilter, RangeLongFilter}
+import lightdb.filter.{Filter, FilterSupport}
 
 case class Index[F, D <: Document[D]](name: String,
                                       get: D => List[F],
@@ -16,13 +16,33 @@ case class Index[F, D <: Document[D]](name: String,
                                      (implicit val rw: RW[F]) extends FilterSupport[F, D, Filter[D]] {
   def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 
-  override def is(value: F): Filter[D] = EqualsFilter(this, value)
+  override def is(value: F): Filter[D] = Filter.Equals(this, value)
 
-  override def rangeLong(from: Long, to: Long): Filter[D] = RangeLongFilter(this.asInstanceOf[Index[Long, D]], from, to)
+  override protected def rangeLong(from: Option[Long], to: Option[Long]): Filter[D] =
+    Filter.RangeLong(this.asInstanceOf[Index[Long, D]], from, to)
 
-  override def rangeDouble(from: Double, to: Double): Filter[D] = RangeDoubleFilter(this.asInstanceOf[Index[Double, D]], from, to)
+  override protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter[D] =
+    Filter.RangeDouble(this.asInstanceOf[Index[Double, D]], from, to)
 
-  override def IN(values: Seq[F]): Filter[D] = InFilter(this, values)
+  override def IN(values: Seq[F]): Filter[D] = Filter.In(this, values)
+
+  override def parsed(query: String, allowLeadingWildcard: Boolean): Filter[D] =
+    Filter.Parsed(this, query, allowLeadingWildcard)
+
+  override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): Filter[D] = {
+    val words = s.split("\\s+").map { w =>
+      if (matchStartsWith && matchEndsWith) {
+        s"%$w%"
+      } else if (matchStartsWith) {
+        s"%$w"
+      } else if (matchEndsWith) {
+        s"$w%"
+      } else {
+        w
+      }
+    }.mkString(" ")
+    parsed(words, allowLeadingWildcard = matchEndsWith)
+  }
 }
 
 object Index {

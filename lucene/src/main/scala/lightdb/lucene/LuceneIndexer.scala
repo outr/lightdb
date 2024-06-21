@@ -15,9 +15,8 @@ import org.apache.lucene.document.{DoubleField, DoublePoint, Field, IntField, In
 
 import java.nio.file.{Files, Path}
 import lightdb.aggregate.AggregateQuery
-import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
-import lightdb.filter.{CombinedFilter, EqualsFilter, Filter, InFilter, RangeDoubleFilter, RangeLongFilter}
+import lightdb.filter.Filter
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
 import lightdb.spatial.GeoPoint
 import lightdb.transaction.{Transaction, TransactionKey}
@@ -125,8 +124,8 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
 
   private def filter2Lucene(filter: Option[Filter[D]]): LuceneQuery = filter match {
     case Some(f) => f match {
-      case f: EqualsFilter[_, D] => exactQuery(f.index, f.getJson)
-      case f: InFilter[_, D] =>
+      case f: Filter.Equals[_, D] => exactQuery(f.index, f.getJson)
+      case f: Filter.In[_, D] =>
         val queries = f.getJson.map(json => exactQuery(f.index, json))
         val b = new BooleanQuery.Builder
         b.setMinimumNumberShouldMatch(1)
@@ -134,7 +133,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
           b.add(q, BooleanClause.Occur.SHOULD)
         }
         b.build()
-      case CombinedFilter(filters) =>
+      case Filter.Combined(filters) =>
         val queries = filters.map(f => filter2Lucene(Some(f)))
         val b = new BooleanQuery.Builder
         b.setMinimumNumberShouldMatch(1)
@@ -142,8 +141,13 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
           b.add(q, BooleanClause.Occur.SHOULD)
         }
         b.build()
-      case RangeLongFilter(index, from, to) => LongField.newRangeQuery(index.name, from, to)
-      case RangeDoubleFilter(index, from, to) => DoubleField.newRangeQuery(index.name, from, to)
+      case Filter.RangeLong(index, from, to) => LongField.newRangeQuery(index.name, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
+      case Filter.RangeDouble(index, from, to) => DoubleField.newRangeQuery(index.name, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
+      case Filter.Parsed(index, query, allowLeadingWildcard) =>
+        val parser = new QueryParser(index.name, analyzer)
+        parser.setAllowLeadingWildcard(allowLeadingWildcard)
+        parser.setSplitOnWhitespace(true)
+        parser.parse(query)
     }
     case None => new MatchAllDocsQuery
   }

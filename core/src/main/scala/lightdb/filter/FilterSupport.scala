@@ -32,26 +32,36 @@ trait FilterSupport[F, D <: Document[D], Filter] {
       .getOrElse(throw new NullPointerException("Range must have at least one specified (from and/or to)"))
       .json match {
       case NumInt(_, _) => rangeLong(
-        from.map(l => l.toLong + (if (includeFrom) 0 else 1)).getOrElse(Long.MinValue),
-        to.map(l => l.toLong - (if (includeTo) 0 else 1)).getOrElse(Long.MaxValue)
+        from.map(l => l.toLong + (if (includeFrom) 0 else 1)),
+        to.map(l => l.toLong - (if (includeTo) 0 else 1))
       )
       case NumDec(_, _) => rangeDouble(
-        from.map(d => d.toDouble + (if (includeFrom) 0.0 else doublePrecision)).getOrElse(Double.MinValue),
-        to.map(d => d.toDouble - (if (includeTo) 0.0 else doublePrecision)).getOrElse(Double.MaxValue)
+        from.map(d => d.toDouble + (if (includeFrom) 0.0 else doublePrecision)),
+        to.map(d => d.toDouble - (if (includeTo) 0.0 else doublePrecision))
       )
       case json => throw new UnsupportedOperationException(s"Unsupported value for range query: $json")
     }
   }
 
-  def rangeLong(from: Long, to: Long): Filter
+  protected def rangeLong(from: Option[Long], to: Option[Long]): Filter
 
-  def rangeDouble(from: Double, to: Double): Filter
+  protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter
 
   def IN(values: Seq[F]): Filter
 
-  def parsed(query: String, allowLeadingWildcard: Boolean = false): Filter = throw new UnsupportedOperationException("Parsed is not supported on this index")
+  def parsed(query: String, allowLeadingWildcard: Boolean = false): Filter
 
   def words(s: String,
             matchStartsWith: Boolean = true,
-            matchEndsWith: Boolean = false): Filter = throw new UnsupportedOperationException("Words is not supported on this index")
+            matchEndsWith: Boolean = false): Filter
+}
+
+object FilterSupport {
+  def rangeLong[F, D <: Document[D], Filter](filter: FilterSupport[F, D, Filter],
+                                             from: Option[Long],
+                                             to: Option[Long]): Filter = filter.rangeLong(from, to)
+
+  def rangeDouble[F, D <: Document[D], Filter](filter: FilterSupport[F, D, Filter],
+                                             from: Option[Double],
+                                             to: Option[Double]): Filter = filter.rangeDouble(from, to)
 }
