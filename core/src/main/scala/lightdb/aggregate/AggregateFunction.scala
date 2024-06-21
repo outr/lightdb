@@ -31,9 +31,11 @@ case class AggregateFunction[T, F, D <: Document[D]](name: String, index: Index[
                      includeTo: Boolean = true)
                     (implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).range(from, to, includeFrom, includeTo)
 
-  override def rangeLong(from: Long, to: Long): AggregateFilter[D] = index.aggregate(name).rangeLong(from, to)
+  override protected def rangeLong(from: Option[Long], to: Option[Long]): AggregateFilter[D] =
+    FilterSupport.rangeLong(index.aggregate(name), from, to)
 
-  override def rangeDouble(from: Double, to: Double): AggregateFilter[D] = index.aggregate(name).rangeDouble(from, to)
+  override protected def rangeDouble(from: Option[Double], to: Option[Double]): AggregateFilter[D] =
+    FilterSupport.rangeDouble(index.aggregate(name), from, to)
 
   override def IN(values: Seq[F]): AggregateFilter[D] = index.aggregate(name).IN(values)
 

@@ -11,14 +11,14 @@ import lightdb.index.{Index, Indexer, Materialized}
 import lightdb.transaction.Transaction
 
 case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M],
-                                      collection: Collection[D, M],
-                                      filter: Option[Filter[D]] = None,
-                                      sort: List[Sort] = Nil,
-                                      scoreDocs: Boolean = false,
-                                      offset: Int = 0,
-                                      limit: Option[Int] = None,
-                                      materializedIndexes: List[Index[_, D]] = Nil,
-                                      countTotal: Boolean = true) { query =>
+                                                          collection: Collection[D, M],
+                                                          filter: Option[Filter[D]] = None,
+                                                          sort: List[Sort] = Nil,
+                                                          scoreDocs: Boolean = false,
+                                                          offset: Int = 0,
+                                                          limit: Option[Int] = None,
+                                                          materializedIndexes: List[Index[_, D]] = Nil,
+                                                          countTotal: Boolean = true) { query =>
   def clearFilters: Query[D, M] = copy(filter = None)
   def filter(f: M => Filter[D]): Query[D, M] = {
     val filter = f(collection.model)
@@ -101,12 +101,15 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
 
   def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D, M] = AggregateQuery(this, functions.toList)
 
-  def grouped[F](index: Index[F, D],
+  def grouped[F](f: M => Index[F, D],
                  direction: SortDirection = SortDirection.Ascending)
-                (implicit transaction: Transaction[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = sort(Sort.ByIndex(index, direction))
-    .stream
-    .docs
-    .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)
+                (implicit transaction: Transaction[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = {
+    val index = f(collection.model)
+    sort(Sort.ByIndex(index, direction))
+      .stream
+      .docs
+      .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)
+  }
 
   def first(implicit transaction: Transaction[D]): IO[Option[D]] = stream.docs.take(1).compile.last
 

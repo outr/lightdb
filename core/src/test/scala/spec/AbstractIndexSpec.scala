@@ -8,6 +8,7 @@ import lightdb.{Id, LightDB}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.index.{Indexed, IndexedCollection, Indexer}
+import lightdb.query.Sort
 import lightdb.spatial.GeoPoint
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
@@ -15,6 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
 import java.nio.file.Path
+import scala.collection.immutable.List
 
 abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
@@ -108,6 +110,21 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
       DB.people.transaction { implicit transaction =>
         DB.people.query.filter(_.age BETWEEN 19 -> 21).stream.ids.compile.toList.map { ids =>
           ids.toSet should be(Set(id1, id2))
+        }
+      }
+    }
+    "sort by age" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.sort(Sort.ByIndex(Person.age).descending).stream.docs.compile.toList.map { people =>
+          people.map(_.name) should be(List("Bob Dole", "John Doe", "Jane Doe"))
+        }
+      }
+    }
+    "group by age" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.grouped(_.age).compile.toList.map { list =>
+          list.map(_._1) should be(List(19, 21, 123))
+          list.map(_._2.toList.map(_.name)) should be(List(List("Jane Doe"), List("John Doe"), List("Bob Dole")))
         }
       }
     }
