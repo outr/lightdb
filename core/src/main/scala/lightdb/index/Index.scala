@@ -1,6 +1,7 @@
 package lightdb.index
 
-import fabric.Json
+import fabric._
+import fabric.define.DefType
 import fabric.rw.{Convertible, RW}
 import lightdb.aggregate.AggregateFilter
 import lightdb.document.Document
@@ -22,4 +23,14 @@ case class Index[F, D <: Document[D]](name: String,
   override def rangeDouble(from: Double, to: Double): Filter[D] = RangeDoubleFilter(this.asInstanceOf[Index[Double, D]], from, to)
 
   override def IN(values: Seq[F]): Filter[D] = InFilter(this, values)
+}
+
+object Index {
+  def string2Json[F](s: String)(rw: RW[F]): Json = rw.definition match {
+    case DefType.Str => str(s)
+    case DefType.Int => num(s.toLong)
+    case DefType.Dec => num(BigDecimal(s))
+    case DefType.Bool => bool(s.toBoolean)
+    case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
+  }
 }

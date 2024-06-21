@@ -193,7 +193,14 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
       case Conversion.Doc => idStream.evalMap {
         case (id, score) => collection(id)(transaction).map(doc => doc -> score)
       }
-      case Conversion.Materialized(indexes) => ???   // TODO: Re-evaluate
+      case m: Conversion.Materialized => fs2.Stream.fromBlockingIterator[IO](scoreDocs.iterator.map { scoreDoc =>
+        val json = obj(m.indexes.toList.map { index =>
+          val s = storedFields.document(scoreDoc.doc).get(index.name)
+          index.name -> Index.string2Json(s)(index.rw)
+        }: _*)
+        val score = scoreDoc.score.toDouble
+        Materialized[D](json) -> score
+      }, 512)
       case _ => throw new UnsupportedOperationException(s"Invalid Conversion: $conversion")
     }
 

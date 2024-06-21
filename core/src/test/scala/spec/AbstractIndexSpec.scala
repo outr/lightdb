@@ -1,6 +1,7 @@
 package spec
 
 import cats.effect.testing.scalatest.AsyncIOSpec
+import fabric.obj
 import fabric.rw.RW
 import lightdb.{Id, LightDB}
 import lightdb.collection.Collection
@@ -60,10 +61,27 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
         }
       }
     }
-    "query for John Doe" in {
+    "query for John Doe doc" in {
       DB.people.transaction { implicit transaction =>
         DB.people.query.filter(_.name === "John Doe").stream.docs.compile.toList.map { people =>
           people.map(_._id) should be(List(id1))
+        }
+      }
+    }
+    "query for Jane Doe id" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.filter(_.age === 19).stream.ids.compile.toList.map { ids =>
+          ids should be(List(id2))
+        }
+      }
+    }
+    "query for Bob Dole materialized" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.filter(_.tag === "monkey").stream.materialized(Person.name, Person.age).compile.toList.map { list =>
+          list.map(_.json) should be(List(obj(
+            "name" -> "Bob Dole",
+            "age" -> 123
+          )))
         }
       }
     }
@@ -97,8 +115,8 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   object Person extends DocumentModel[Person] with Indexed[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val name: I[String] = index.one("name", _.name)
-    val age: I[Int] = index.one("age", _.age)
+    val name: I[String] = index.one("name", _.name, store = true)
+    val age: I[Int] = index.one("age", _.age, store = true)
     val tag: I[String] = index("tag", _.tags.toList)
     val point: I[GeoPoint] = index.one("point", _.point, sorted = true)
     val search: I[String] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
