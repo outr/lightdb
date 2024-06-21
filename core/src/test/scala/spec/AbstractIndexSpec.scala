@@ -33,6 +33,8 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   private val oklahomaCity = GeoPoint(35.5514, -97.4075)
   private val yonkers = GeoPoint(40.9461, -73.8669)
 
+  protected def supportsAggregateFunctions: Boolean = true
+
   private val p1 = Person(
     name = "John Doe",
     age = 21,
@@ -105,21 +107,25 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
       }
     }
     "query with aggregate functions" in {
-      DB.people.transaction { implicit transaction =>
-        DB.people.query
-          .aggregate(p => List(
-            p.age.min,
-            p.age.max,
-            p.age.avg,
-            p.age.sum
-          ))
-          .toList
-          .map { list =>
-            list.map(m => m(Person.age.min)).toSet should be(Set(19))
-            list.map(m => m(Person.age.max)).toSet should be(Set(21))
-            list.map(m => m(Person.age.avg)).toSet should be(Set(20.0))
-            list.map(m => m(Person.age.sum)).toSet should be(Set(40.0))
-          }
+      if (supportsAggregateFunctions) {
+        DB.people.transaction { implicit transaction =>
+          DB.people.query
+            .aggregate(p => List(
+              p.age.min,
+              p.age.max,
+              p.age.avg,
+              p.age.sum
+            ))
+            .toList
+            .map { list =>
+              list.map(m => m(Person.age.min)).toSet should be(Set(19))
+              list.map(m => m(Person.age.max)).toSet should be(Set(21))
+              list.map(m => m(Person.age.avg)).toSet should be(Set(20.0))
+              list.map(m => m(Person.age.sum)).toSet should be(Set(40.0))
+            }
+        }
+      } else {
+        succeed
       }
     }
     "do a database backup archive" in {
