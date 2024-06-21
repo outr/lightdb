@@ -3,6 +3,8 @@ package lightdb.filter
 import fabric.Json
 import lightdb.document.Document
 import lightdb.index.Index
+import lightdb.spatial.GeoPoint
+import squants.space.Length
 
 sealed trait Filter[D <: Document[D]] {
   def &&(that: Filter[D]): Filter[D] = (this, that) match {
@@ -32,4 +34,6 @@ object Filter {
   case class RangeDouble[D <: Document[D]](index: Index[Double, D], from: Option[Double], to: Option[Double]) extends Filter[D]
 
   case class Parsed[F, D <: Document[D]](index: Index[F, D], query: String, allowLeadingWildcard: Boolean) extends Filter[D]
+
+  case class Distance[D <: Document[D]](index: Index[GeoPoint, D], from: GeoPoint, radius: Length) extends Filter[D]
 }

@@ -3,6 +3,8 @@ package lightdb.filter
 import fabric.rw.{Convertible, RW}
 import fabric.{NumDec, NumInt}
 import lightdb.document.Document
+import lightdb.spatial.GeoPoint
+import squants.space.Length
 
 trait FilterSupport[F, D <: Document[D], Filter] {
   implicit def rw: RW[F]
@@ -54,6 +56,8 @@ trait FilterSupport[F, D <: Document[D], Filter] {
   def words(s: String,
             matchStartsWith: Boolean = true,
             matchEndsWith: Boolean = false): Filter
+
+  def distance(from: GeoPoint, radius: Length)(implicit evidence: F =:= GeoPoint): Filter
 }
 
 object FilterSupport {
