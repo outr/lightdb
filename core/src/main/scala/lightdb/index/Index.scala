@@ -5,7 +5,7 @@ import fabric.define.DefType
 import fabric.rw.{Convertible, RW}
 import lightdb.aggregate.AggregateFilter
 import lightdb.document.Document
-import lightdb.filter.{Filter, FilterSupport}
+import lightdb.filter.{AggregateSupport, Filter, FilterSupport}
 import lightdb.spatial.GeoPoint
 import squants.space.Length
 
@@ -15,7 +15,7 @@ case class Index[F, D <: Document[D]](name: String,
                                       sorted: Boolean,
                                       tokenized: Boolean,
                                       aggregate: String => FilterSupport[F, D, AggregateFilter[D]])
-                                     (implicit val rw: RW[F]) extends FilterSupport[F, D, Filter[D]] {
+                                     (implicit val rw: RW[F]) extends FilterSupport[F, D, Filter[D]] with AggregateSupport[F, D] {
   def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 
   override def is(value: F): Filter[D] = Filter.Equals(this, value)
