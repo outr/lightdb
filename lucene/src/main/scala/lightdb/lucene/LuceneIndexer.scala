@@ -26,14 +26,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
                                            batchSize: Int = 512,
                                            persistent: Boolean = true,
                                            analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D, M] {
-  private var collection: Collection[D, _] = _
-  model.listener += this
-
   private lazy val indexSearcherKey: TransactionKey[IndexSearcher] = TransactionKey("indexSearcher")
-
-  override def init(collection: Collection[D, _]): IO[Unit] = super.init(collection).map { _ =>
-    this.collection = collection
-  }
 
   override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
     transaction.get(indexSearcherKey).foreach { indexSearcher =>
@@ -176,7 +169,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
       case _ => query.sort.map(sort2SortField)
     }
     val s = new LuceneSort(sortFields: _*)
-    val indexSearcher = transaction.getOrCreate(indexSearcherKey, searcherManager.acquire())
+    val indexSearcher = getIndexSearcher(transaction)
     val topFieldDocs: TopFieldDocs = indexSearcher.search(q, batchSize, s, query.scoreDocs)
     val scoreDocs: List[ScoreDoc] = topFieldDocs
       .scoreDocs
@@ -213,13 +206,17 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     )
   }
 
+  private def getIndexSearcher(implicit transaction: Transaction[D]): IndexSearcher =
+    transaction.getOrCreate(indexSearcherKey, searcherManager.acquire())
+
   override def aggregate(query: AggregateQuery[D, M])
                         (implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] =
     throw new UnsupportedOperationException("Aggregate functions not supported in Lucene currently")
 
-  //  override def size: IO[Int] = withSearchContext { context =>
-//    IO.blocking(context.indexSupport.asInstanceOf[LuceneSupport[D]].indexSearcher(context).count(new MatchAllDocsQuery))
-//  }
+  override def count(implicit transaction: Transaction[D]): IO[Int] = IO.blocking {
+    val indexSearcher = getIndexSearcher
+    indexSearcher.count(new MatchAllDocsQuery)
+  }
 
   private def sort2SortField(sort: Sort): SortField = sort match {
     case Sort.BestMatch => SortField.FIELD_SCORE

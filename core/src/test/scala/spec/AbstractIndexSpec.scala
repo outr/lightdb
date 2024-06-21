@@ -3,6 +3,7 @@ package spec
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.obj
 import fabric.rw.RW
+import lightdb.backup.DatabaseBackup
 import lightdb.{Id, LightDB}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
@@ -54,9 +55,16 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     "initialize the database" in {
       DB.init().map(b => b should be(true))
     }
-    "store John Doe" in {
+    "store three people" in {
       DB.people.transaction { implicit transaction =>
         DB.people.set(List(p1, p2, p3)).map { count =>
+          count should be(3)
+        }
+      }
+    }
+    "verify exactly three people exist in the index" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.indexer.count.map { count =>
           count should be(3)
         }
       }
@@ -89,6 +97,18 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
               "age" -> 123
             )))
           }
+      }
+    }
+    "do a database backup archive" in {
+      DatabaseBackup.archive(DB).map { count =>
+        count should be(4)
+      }
+    }
+    "search by age range" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.filter(_.age BETWEEN 19 -> 21).stream.ids.compile.toList.map { ids =>
+          ids.toSet should be(Set(id1, id2))
+        }
       }
     }
     "truncate the database" in {
