@@ -18,7 +18,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.document.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
 import lightdb.transaction.{Transaction, TransactionKey}
 
 case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
@@ -29,12 +29,17 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
 
   override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
     transaction.get(indexSearcherKey).foreach { indexSearcher =>
+      commitBlocking()
       searcherManager.release(indexSearcher)
     }
   }
 
   override def postSet(doc: D, transaction: Transaction[D]): IO[Unit] = super.postSet(doc, transaction).flatMap { _ =>
     indexDoc(doc, model.asInstanceOf[Indexed[D]].indexes)
+  }
+
+  override def postDelete(doc: D, transaction: Transaction[D]): IO[Unit] = super.postDelete(doc, transaction).flatMap { _ =>
+    delete(doc._id)
   }
 
   private def indexDoc(doc: D, indexes: List[Index[_, D]]): IO[Unit] = for {
@@ -119,7 +124,6 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
   private def commitBlocking(): Unit = {
     indexWriter.flush()
     indexWriter.commit()
-    searcherManager.maybeRefreshBlocking()
   }
 
   private def filter2Lucene(filter: Option[Filter[D]]): LuceneQuery = filter match {
@@ -148,6 +152,8 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
         parser.setAllowLeadingWildcard(allowLeadingWildcard)
         parser.setSplitOnWhitespace(true)
         parser.parse(query)
+      case Filter.Distance(index, from, radius) =>
+        LatLonPoint.newDistanceQuery(index.name, from.latitude, from.longitude, radius.toMeters)
     }
     case None => new MatchAllDocsQuery
   }
@@ -191,14 +197,19 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
         case (id, score) => collection(id)(transaction).map(doc => doc -> score)
       }
       case m: Conversion.Materialized => fs2.Stream.fromBlockingIterator[IO](scoreDocs.iterator.map { scoreDoc =>
-        val json = obj(m.indexes.toList.map { index =>
+        val json = obj(m.indexes.map { index =>
           val s = storedFields.document(scoreDoc.doc).get(index.name)
           index.name -> Index.string2Json(s)(index.rw)
         }: _*)
         val score = scoreDoc.score.toDouble
         Materialized[D](json) -> score
       }, 512)
-      case _ => throw new UnsupportedOperationException(s"Invalid Conversion: $conversion")
+      case m: Conversion.Distance => idStream.evalMap {
+        case (id, score) => collection(id)(transaction).map { doc =>
+          val distance = DistanceCalculator(m.from, m.index.get(doc).head)
+          DistanceAndDoc(doc, distance) -> score
+        }
+      }
     }
 
     SearchResults(
@@ -210,8 +221,12 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     )
   }
 
-  private def getIndexSearcher(implicit transaction: Transaction[D]): IndexSearcher =
-    transaction.getOrCreate(indexSearcherKey, searcherManager.acquire())
+  private def getIndexSearcher(implicit transaction: Transaction[D]): IndexSearcher = {
+    transaction.getOrCreate(indexSearcherKey, {
+      searcherManager.maybeRefreshBlocking()
+      searcherManager.acquire()
+    })
+  }
 
   override def aggregate(query: AggregateQuery[D, M])
                         (implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] =

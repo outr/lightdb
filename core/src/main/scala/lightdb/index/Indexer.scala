@@ -6,7 +6,7 @@ import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentListener, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.query.{Query, SearchResults}
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 import lightdb.transaction.Transaction
 import squants.space.Length
 
@@ -33,14 +33,12 @@ trait Indexer[D <: Document[D], M <: DocumentModel[D]] extends DocumentListener[
 
   def aggregate(query: AggregateQuery[D, M])(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]]
 
-  def distanceFilter(field: Index[GeoPoint, D], from: GeoPoint, radius: Length): Filter[D] =
-    throw new UnsupportedOperationException("Distance filtering is not supported on this indexer")
-
   sealed trait Conversion[V]
 
   object Conversion {
     case object Id extends Conversion[lightdb.Id[D]]
     case object Doc extends Conversion[D]
     case class Materialized(indexes: List[Index[_, D]]) extends Conversion[lightdb.index.Materialized[D]]
+    case class Distance(index: Index[GeoPoint, D], from: GeoPoint, sort: Boolean, radius: Option[Length]) extends Conversion[DistanceAndDoc[D]]
   }
 }

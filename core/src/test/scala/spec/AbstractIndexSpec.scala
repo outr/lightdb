@@ -14,6 +14,7 @@ import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import squants.space.LengthConversions.LengthConversions
 
 import java.nio.file.Path
 import scala.collection.immutable.List
@@ -125,6 +126,49 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
         DB.people.query.grouped(_.age).compile.toList.map { list =>
           list.map(_._1) should be(List(19, 21, 123))
           list.map(_._2.toList.map(_.name)) should be(List(List("Jane Doe"), List("John Doe"), List("Bob Dole")))
+        }
+      }
+    }
+    "sort by distance from Oklahoma City" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.stream.distance(
+          _.point,
+          from = oklahomaCity,
+          radius = Some(1320.miles)
+        ).compile.toList.map { list =>
+          val people = list.map(_.doc)
+          val distances = list.map(_.distance)
+          people.map(_.name) should be(List("Jane Doe", "John Doe"))
+          distances should be(List(28.555228128634383.miles, 1316.1223938032729.miles))
+        }
+      }
+    }
+    "search using tokenized data and a parsed query" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.filter(_.search.words("joh 21")).stream.docs.compile.toList.map { list =>
+          list.map(_.name) should be(List("John Doe"))
+        }
+      }
+    }
+    "find Jane by parsed query" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.filter(_._id.parsed(id2.value)).stream.docs.compile.toList.map { list =>
+          list.map(_.name) should be(List("Jane Doe"))
+        }
+      }
+    }
+    "delete Jane" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.delete(p2).map {
+          case Some(p) => p.name should be("Jane Doe")
+          case None => fail()
+        }
+      }
+    }
+    "verify John and Bob still exist" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.stream.docs.compile.toList.map { people =>
+          people.map(_.name).toSet should be(Set("John Doe", "Bob Dole"))
         }
       }
     }

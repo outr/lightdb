@@ -6,6 +6,8 @@ import fabric.rw.{Convertible, RW}
 import lightdb.aggregate.AggregateFilter
 import lightdb.document.Document
 import lightdb.filter.{Filter, FilterSupport}
+import lightdb.spatial.GeoPoint
+import squants.space.Length
 
 case class Index[F, D <: Document[D]](name: String,
                                       get: D => List[F],
@@ -43,6 +45,10 @@ case class Index[F, D <: Document[D]](name: String,
     }.mkString(" ")
     parsed(words, allowLeadingWildcard = matchEndsWith)
   }
+
+  override def distance(from: GeoPoint, radius: Length)
+                       (implicit evidence: F =:= GeoPoint): Filter[D] =
+    Filter.Distance(this.asInstanceOf[Index[GeoPoint, D]], from, radius)
 }
 
 object Index {
