@@ -110,7 +110,7 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
       fs2.Stream.force(search.distance(f, from, sort, radius).map(_.scoredStream))
   }
 
-  def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D, M] = AggregateQuery(this, functions.toList)
+  def aggregate(f: M => List[AggregateFunction[_, _, D]]): AggregateQuery[D, M] = AggregateQuery(this, f(collection.model))
 
   def grouped[F](f: M => Index[F, D],
                  direction: SortDirection = SortDirection.Ascending)
