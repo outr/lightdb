@@ -32,15 +32,17 @@ object Index {
   private def ConcatRW[F](implicit fRW: RW[F]): RW[List[F]] = RW.from[List[F]](
     r = list => arr(list.map(fRW.read)),
     w = _.asString.split(";;").toList.map { s =>
-      val json = fRW.definition match {
-        case DefType.Str => str(s)
-        case DefType.Int => num(s.toLong)
-        case DefType.Dec => num(BigDecimal(s))
-        case DefType.Bool => bool(s.toBoolean)
-        case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
-      }
+      val json = string2Json[F](s)(fRW)
       json.as[F]
     },
     d = DefType.Json
   )
+
+  def string2Json[F](s: String)(rw: RW[F]): Json = rw.definition match {
+    case DefType.Str => str(s)
+    case DefType.Int => num(s.toLong)
+    case DefType.Dec => num(BigDecimal(s))
+    case DefType.Bool => bool(s.toBoolean)
+    case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
+  }
 }

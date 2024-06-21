@@ -9,7 +9,7 @@ trait Indexed[D <: Document[D]] {
 
   def indexes: List[Index[_, D]] = _indexes
 
-  val _id: Index[Id[D], D] = index.one("_id", _._id)
+  val _id: Index[Id[D], D] = index.one("_id", _._id, store = true)
 
   object index {
     def apply[F](name: String,

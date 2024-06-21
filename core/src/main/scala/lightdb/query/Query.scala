@@ -86,6 +86,10 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
     def ids(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = fs2.Stream.force(search.ids.map(_.stream))
     def scoredIds(implicit transaction: Transaction[D]): fs2.Stream[IO, (Id[D], Double)] = fs2.Stream.force(search.ids.map(_.scoredStream))
     def materialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] = {
+      val notStored = indexes.filter(!_.store).map(_.name).toList
+      if (notStored.nonEmpty) {
+        throw new RuntimeException(s"Cannot use non-stored indexes in Materialized: ${notStored.mkString(", ")}")
+      }
       fs2.Stream.force(search.materialized(indexes: _*).map(_.stream))
     }
     def scoredMaterialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, (Materialized[D], Double)] = fs2.Stream.force(search.materialized(indexes: _*).map(_.scoredStream))
