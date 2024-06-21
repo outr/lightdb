@@ -74,10 +74,11 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
 
     def docs(implicit transaction: Transaction[D]): IO[SearchResults[D, D]] = apply[D](indexer.Conversion.Doc)
     def ids(implicit transaction: Transaction[D]): IO[SearchResults[D, Id[D]]] = apply(indexer.Conversion.Id)
-    def materialized(indexes: Index[_, D]*)
-                    (implicit transaction: Transaction[D]): IO[SearchResults[D, Materialized[D]]] = apply(
-      indexer.Conversion.Materialized(indexes: _*)
-    )
+    def materialized(f: M => List[Index[_, D]])
+                    (implicit transaction: Transaction[D]): IO[SearchResults[D, Materialized[D]]] = {
+      val indexes = f(collection.model)
+      apply(indexer.Conversion.Materialized(indexes))
+    }
   }
 
   object stream {
@@ -85,14 +86,17 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
     def scoredDocs(implicit transaction: Transaction[D]): fs2.Stream[IO, (D, Double)] = fs2.Stream.force(search.docs.map(_.scoredStream))
     def ids(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = fs2.Stream.force(search.ids.map(_.stream))
     def scoredIds(implicit transaction: Transaction[D]): fs2.Stream[IO, (Id[D], Double)] = fs2.Stream.force(search.ids.map(_.scoredStream))
-    def materialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] = {
-      val notStored = indexes.filter(!_.store).map(_.name).toList
+    def materialized(f: M => List[Index[_, D]])(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] = {
+      val indexes = f(collection.model)
+      val notStored = indexes.filter(!_.store).map(_.name)
       if (notStored.nonEmpty) {
         throw new RuntimeException(s"Cannot use non-stored indexes in Materialized: ${notStored.mkString(", ")}")
       }
-      fs2.Stream.force(search.materialized(indexes: _*).map(_.stream))
+      fs2.Stream.force(search.materialized(_ => indexes).map(_.stream))
     }
-    def scoredMaterialized(indexes: Index[_, D]*)(implicit transaction: Transaction[D]): fs2.Stream[IO, (Materialized[D], Double)] = fs2.Stream.force(search.materialized(indexes: _*).map(_.scoredStream))
+    def scoredMaterialized(f: M => List[Index[_, D]])
+                          (implicit transaction: Transaction[D]): fs2.Stream[IO, (Materialized[D], Double)] =
+      fs2.Stream.force(search.materialized(f).map(_.scoredStream))
   }
 
   def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D, M] = AggregateQuery(this, functions.toList)

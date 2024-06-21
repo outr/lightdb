@@ -77,12 +77,18 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     }
     "query for Bob Dole materialized" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_.tag === "monkey").stream.materialized(Person.name, Person.age).compile.toList.map { list =>
-          list.map(_.json) should be(List(obj(
-            "name" -> "Bob Dole",
-            "age" -> 123
-          )))
-        }
+        DB.people.query
+          .filter(_.tag === "monkey")
+          .stream
+          .materialized(p => List(p.name, p.age))
+          .compile
+          .toList
+          .map { list =>
+            list.map(_.json) should be(List(obj(
+              "name" -> "Bob Dole",
+              "age" -> 123
+            )))
+          }
       }
     }
     "truncate the database" in {

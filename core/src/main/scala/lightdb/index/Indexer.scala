@@ -25,6 +25,6 @@ trait Indexer[D <: Document[D], M <: DocumentModel[D]] extends DocumentListener[
   object Conversion {
     case object Id extends Conversion[lightdb.Id[D]]
     case object Doc extends Conversion[D]
-    case class Materialized(indexes: Index[_, D]*) extends Conversion[lightdb.index.Materialized[D]]
+    case class Materialized(indexes: List[Index[_, D]]) extends Conversion[lightdb.index.Materialized[D]]
   }
 }
