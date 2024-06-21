@@ -115,6 +115,7 @@ trait LightDB extends Initializable {
                                                           indexer: Indexer[D, M])
                                                          (implicit rw: RW[D]): IndexedCollection[D, M] = synchronized {
     val c = new IndexedCollection[D, M](name, model, indexer, this)
+    model.listener += indexer
     _collections = c :: _collections
     c
   }

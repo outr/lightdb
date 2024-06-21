@@ -1,5 +1,6 @@
 package lightdb.document
 
+import fabric.rw.RW
 import lightdb.util.Unique
 import lightdb.Id
 import lightdb.collection.Collection
@@ -10,6 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 trait DocumentModel[D <: Document[D]] { model =>
   type I[F] = Index[F, D]
+
+  implicit val rw: RW[D]
 
   private[lightdb] val _initialized = new AtomicBoolean(false)
   private[lightdb] var collection: Collection[D, _] = _

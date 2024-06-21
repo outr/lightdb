@@ -6,7 +6,8 @@ import lightdb.document.{Document, DocumentListener, DocumentModel}
 import lightdb.transaction.Transaction
 import lightdb.util.Initializable
 import cats.implicits._
-import fabric.rw.RW
+import fabric.Json
+import fabric.rw.{Convertible, RW}
 
 class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
                                                           val model: M,
@@ -91,6 +92,8 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
   def count(implicit transaction: Transaction[D]): IO[Int] = model.store.count
 
   def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = model.store.idStream
+
+  def jsonStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Json] = stream.map(_.json)
 
   private[lightdb] def commit(transaction: Transaction[D]): IO[Unit] = model.listener()
     .map(l => l.commit(transaction))

@@ -5,6 +5,6 @@ testdb/
 airports/
 benchmark/imdb/
 benchmark/data/
-backup/
+/backup/
 backup.zip
 db/
