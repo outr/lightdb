@@ -1,10 +1,11 @@
 package spec
 
+import cats.effect.IO
 import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.obj
 import fabric.rw.RW
-import lightdb.backup.DatabaseBackup
-import lightdb.{Id, LightDB}
+import lightdb.backup.{DatabaseBackup, DatabaseRestore}
+import lightdb.{Id, LightDB, StoredValue}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.index.{Indexed, IndexedCollection, Indexer}
@@ -99,12 +100,31 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
               "name" -> "Bob Dole",
               "age" -> 123
             )))
+            list.map(_.apply(Person.age)) should be(List(123))
+          }
+      }
+    }
+    "query with aggregate functions" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query
+          .aggregate(p => List(
+            p.age.min,
+            p.age.max,
+            p.age.avg,
+            p.age.sum
+          ))
+          .toList
+          .map { list =>
+            list.map(m => m(Person.age.min)).toSet should be(Set(19))
+            list.map(m => m(Person.age.max)).toSet should be(Set(21))
+            list.map(m => m(Person.age.avg)).toSet should be(Set(20.0))
+            list.map(m => m(Person.age.sum)).toSet should be(Set(40.0))
           }
       }
     }
     "do a database backup archive" in {
       DatabaseBackup.archive(DB).map { count =>
-        count should be(4)
+        count should be(6)
       }
     }
     "search by age range" in {
@@ -143,6 +163,16 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
         }
       }
     }
+    "replace Jane Doe" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.set(Person("Jan Doe", 20, Set("cat", "bear"), chicago, id2)).map {
+          case Some(p) =>
+            p._id should be(id2)
+            p.name should be("Jan Doe")
+          case None => fail()
+        }
+      }
+    }
     "search using tokenized data and a parsed query" in {
       DB.people.transaction { implicit transaction =>
         DB.people.query.filter(_.search.words("joh 21")).stream.docs.compile.toList.map { list =>
@@ -150,17 +180,17 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
         }
       }
     }
-    "find Jane by parsed query" in {
+    "find Jan by parsed query" in {
       DB.people.transaction { implicit transaction =>
         DB.people.query.filter(_._id.parsed(id2.value)).stream.docs.compile.toList.map { list =>
-          list.map(_.name) should be(List("Jane Doe"))
+          list.map(_.name) should be(List("Jan Doe"))
         }
       }
     }
     "delete Jane" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.delete(p2).map {
-          case Some(p) => p.name should be("Jane Doe")
+        DB.people.delete(id2).map {
+          case Some(p) => p.name should be("Jan Doe")
           case None => fail()
         }
       }
@@ -169,6 +199,23 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
       DB.people.transaction { implicit transaction =>
         DB.people.query.stream.docs.compile.toList.map { people =>
           people.map(_.name).toSet should be(Set("John Doe", "Bob Dole"))
+        }
+      }
+    }
+    "verify start time has been set" in {
+      DB.startTime.get().map { startTime =>
+        startTime should be > 0L
+      }
+    }
+    "restore from the database backup" in {
+      DatabaseRestore.archive(DB).map { count =>
+        count should be(6)
+      }
+    }
+    "verify Jane has been restored" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.stream.docs.compile.toList.map { people =>
+          people.map(_.name).toSet should be(Set("John Doe", "Bob Dole", "Jane Doe"))
         }
       }
     }
@@ -186,11 +233,13 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   object DB extends LightDB {
     override lazy val directory: Path = Path.of(s"db/$specName")
 
+    val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
+
     val people: IndexedCollection[Person, Person.type] = collection("people", Person, indexer(Person))
 
     override def storeManager: StoreManager = spec.storeManager
 
-    override def upgrades: List[DatabaseUpgrade] = Nil
+    override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
   }
 
   case class Person(name: String,
@@ -207,5 +256,15 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     val tag: I[String] = index("tag", _.tags.toList)
     val point: I[GeoPoint] = index.one("point", _.point, sorted = true)
     val search: I[String] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
+  }
+
+  object InitialSetupUpgrade extends DatabaseUpgrade {
+    override def applyToNew: Boolean = true
+
+    override def blockStartup: Boolean = true
+
+    override def alwaysRun: Boolean = false
+
+    override def upgrade(ldb: LightDB): IO[Unit] = DB.startTime.set(System.currentTimeMillis()).map(_ => ())
   }
 }
