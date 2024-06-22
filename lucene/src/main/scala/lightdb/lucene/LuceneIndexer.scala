@@ -9,7 +9,7 @@ import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.store.{ByteBuffersDirectory, FSDirectory}
 import org.apache.lucene.document.{DoubleField, DoublePoint, Field, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 
@@ -22,7 +22,6 @@ import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
 import lightdb.transaction.{Transaction, TransactionKey}
 
 case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
-                                           batchSize: Int = 512,
                                            persistent: Boolean = true,
                                            analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D, M] {
   private lazy val indexSearcherKey: TransactionKey[IndexSearcher] = TransactionKey("indexSearcher")
@@ -170,9 +169,9 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${index.rw.definition})")
   }
 
-  override def doSearch[V](query: Query[D, M],
-                           transaction: Transaction[D],
-                           conversion: Conversion[V]): IO[SearchResults[D, V]] = IO.blocking {
+  private def createStream[V](query: Query[D, M],
+                              transaction: Transaction[D],
+                              conversion: Conversion[V]): IO[(fs2.Stream[IO, (V, Double)], Int)] = IO.blocking {
     val q: LuceneQuery = filter2Lucene(query.filter)
     val sortFields = query.sort match {
       case Nil => List(SortField.FIELD_SCORE)
@@ -180,16 +179,16 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     }
     val s = new LuceneSort(sortFields: _*)
     val indexSearcher = getIndexSearcher(transaction)
-    val topFieldDocs: TopFieldDocs = indexSearcher.search(q, batchSize, s, query.scoreDocs)
+    val limit = query.limit.map(l => math.min(l - query.offset, query.batchSize)).getOrElse(query.batchSize)
+    val collectorManager = new TopFieldCollectorManager(s, query.offset + limit, Int.MaxValue)
+    val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
     val scoreDocs: List[ScoreDoc] = topFieldDocs
       .scoreDocs
       .toList
-      .slice(query.offset, query.offset + query.limit.getOrElse(Int.MaxValue - query.offset))
+      .slice(query.offset, query.offset + limit)
     val total: Int = topFieldDocs.totalHits.value.toInt
     val storedFields: StoredFields = indexSearcher.storedFields()
     val idsAndScores = scoreDocs.map(doc => Id[D](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
-    // TODO: Support streaming through entire resultset
-//    val last = scoreDocs.lastOption
     val idStream = fs2.Stream(idsAndScores: _*)
     val stream: fs2.Stream[IO, (V, Double)] = conversion match {
       case Conversion.Id => idStream
@@ -211,15 +210,29 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
         }
       }
     }
-
-    SearchResults(
-      offset = query.offset,
-      limit = query.limit,
-      total = Some(total),    // TODO: Is it faster if I turn this off?
-      scoredStream = stream,
-      transaction = transaction
-    )
+    (stream, total)
   }
+
+  override def doSearch[V](query: Query[D, M],
+                           transaction: Transaction[D],
+                           conversion: Conversion[V]): IO[SearchResults[D, V]] =
+    createStream(query, transaction, conversion).map {
+      case (page1, total) =>
+        val limit = query.limit.map(l => math.min(l, total)).getOrElse(total) - query.offset
+        val pages = math.ceil(limit.toDouble / query.batchSize.toDouble).toInt
+        val streams = (1 until pages).toList.map { page =>
+          fs2.Stream.force(createStream(query.copy(offset = page * query.batchSize), transaction, conversion)
+            .map(_._1))
+        }
+        val stream = streams.foldLeft(page1)((combined, stream) => combined ++ stream)
+        SearchResults(
+          offset = query.offset,
+          limit = query.limit,
+          total = Some(total),
+          scoredStream = stream,
+          transaction = transaction
+        )
+    }
 
   private def getIndexSearcher(implicit transaction: Transaction[D]): IndexSearcher = {
     transaction.getOrCreate(indexSearcherKey, {
