@@ -20,6 +20,8 @@ import scala.util.Try
 trait LightDB extends Initializable {
   def directory: Path
 
+  def storeManager: StoreManager
+
   /**
    * How frequently to run background updates. Defaults to every 30 seconds.
    */
@@ -35,6 +37,12 @@ trait LightDB extends Initializable {
    * Disables extraneous logging from underlying implementations. Defaults to true.
    */
   protected def disableExtraneousLogging: Boolean = true
+
+  /**
+   * Automatically truncates all collections in the database during initialization if this is set to true.
+   * Defaults to false.
+   */
+  protected def truncateOnInit: Boolean = false
 
   private val _disposed = new AtomicBoolean(false)
   private var _collections = List.empty[Collection[_, _]]
@@ -54,8 +62,7 @@ trait LightDB extends Initializable {
       _ = initLogging()
       _ <- collections.map(_.init()).parSequence
       // Truncate the database before we do anything if specified
-      // TODO: Can't pass truncate in as an arg here anymore
-      //      _ <- this.truncate().whenA(truncate)
+      _ <- truncate().whenA(truncateOnInit)
       // Determine if this is an uninitialized database
       dbInitialized <- databaseInitialized.get()
       // Get applied database upgrades
@@ -70,18 +77,10 @@ trait LightDB extends Initializable {
         _ <- doUpgrades(upgrades, stillBlocking = true)
       } yield ()).whenA(upgrades.nonEmpty)
       // Verify integrity
-      // TODO: Revisit
-      /*_ <- collections.map { collection =>
-        collection.model match {
-          case indexSupport: IndexSupport[_] => for {
-            storeCount <- collection.size
-            indexCount <- indexSupport.index.size
-            _ <- logger.warn(s"Index and Store out of sync for ${collection.collectionName} (Store: $storeCount, Index: $indexCount). Rebuilding index...").whenA(storeCount != indexCount)
-            _ <- collection.reIndex().whenA(storeCount != indexCount)
-          } yield ()
-          case _ => IO.unit
-        }
-      }.sequence.whenA(verifyIndexIntegrityOnStartup)*/
+      _ <- collections.map {
+        case c: IndexedCollection[_, _] => c.indexer.maybeRebuild()
+        case _ => IO.unit
+      }.sequence.whenA(verifyIndexIntegrityOnStartup)
       // Set initialized
       _ <- databaseInitialized.set(true)
     } yield {
@@ -97,8 +96,6 @@ trait LightDB extends Initializable {
     }
     Logger.system.installJUL()
   }
-
-  def storeManager: StoreManager
 
   def collections: List[Collection[_, _]] = _collections
 
@@ -139,11 +136,7 @@ trait LightDB extends Initializable {
   def update(): IO[Unit] = collections.map(_.update()).sequence.map(_ => ())
 
   def dispose(): IO[Unit] = if (_disposed.compareAndSet(false, true)) {
-    for {
-      _ <- IO.unit // TODO: wait for active transactions to close
-      _ <- collections.map(_.dispose()).parSequence
-      _ <- IO.unit // TODO: //stores.map(_.dispose()).parSequence
-    } yield ()
+    collections.map(_.dispose()).parSequence.void
   } else {
     IO.unit
   }

@@ -41,6 +41,10 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     delete(doc._id)
   }
 
+  override def truncate(transaction: Transaction[D]): IO[Unit] = super.truncate(transaction).flatMap { _ =>
+    truncate().map(_ => commitBlocking())
+  }
+
   private def indexDoc(doc: D, indexes: List[Index[_, D]]): IO[Unit] = for {
     fields <- IO.blocking(indexes.flatMap { index =>
       createFields(index, doc)

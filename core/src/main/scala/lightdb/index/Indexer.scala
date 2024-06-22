@@ -1,6 +1,7 @@
 package lightdb.index
 
 import cats.effect.IO
+import cats.implicits.catsSyntaxApplicativeByName
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentListener, DocumentModel}
@@ -9,6 +10,7 @@ import lightdb.query.{Query, SearchResults}
 import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 import lightdb.transaction.Transaction
 import squants.space.Length
+import scribe.cats.{io => logger}
 
 trait Indexer[D <: Document[D], M <: DocumentModel[D]] extends DocumentListener[D] {
   private var _collection: Collection[D, M] = _
@@ -30,6 +32,16 @@ trait Indexer[D <: Document[D], M <: DocumentModel[D]] extends DocumentListener[
       postSet(doc, transaction)
     }.compile.drain
   } yield ()
+
+  def maybeRebuild(): IO[Boolean] = collection.transaction { implicit transaction =>
+    for {
+      storeCount <- collection.count
+      indexCount <- count
+      shouldRebuild = storeCount != indexCount
+      _ <- logger.warn(s"Index and Store out of sync for ${collection.name} (Store: $storeCount, Index: $indexCount). Rebuilding index...").whenA(shouldRebuild)
+      _ <- rebuild().whenA(shouldRebuild)
+    } yield shouldRebuild
+  }
 
   def aggregate(query: AggregateQuery[D, M])(implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]]
 

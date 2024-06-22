@@ -9,6 +9,8 @@ import cats.implicits._
 import fabric.Json
 import fabric.rw.{Convertible, RW}
 
+import scala.concurrent.duration.DurationInt
+
 class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
                                                           val model: M,
                                                           val db: LightDB)
@@ -38,6 +40,12 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
   } yield ()
 
   object transaction {
+    private var _active = Set.empty[Transaction[D]]
+    def active: Set[Transaction[D]] = _active
+
+    private def add(transaction: Transaction[D]): Unit = synchronized(_active += transaction)
+    private def remove(transaction: Transaction[D]): Unit = synchronized(_active -= transaction)
+
     def apply[Return](f: Transaction[D] => IO[Return]): IO[Return] = create()
       .flatMap { transaction =>
         f(transaction).guarantee(release(transaction))
@@ -46,11 +54,13 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
     private def create(): IO[Transaction[D]] = for {
       transaction <- IO(Transaction[D](collection))
       _ <- model.listener().map(l => l.transactionStart(transaction)).ioSeq
+      _ = add(transaction)
     } yield transaction
 
     private def release(transaction: Transaction[D]): IO[Unit] = for {
       _ <- transaction.commit()
       _ <- model.listener().map(l => l.transactionEnd(transaction)).ioSeq
+      _ = remove(transaction)
     } yield ()
   }
 
@@ -141,7 +151,12 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
 
   def update(): IO[Unit] = IO.unit
 
-  def dispose(): IO[Unit] = model.listener()
-    .map(l => l.dispose())
-    .ioSeq
+  def dispose(): IO[Unit] = if (transaction.active.nonEmpty) {
+    scribe.warn(s"Waiting to dispose $name. ${transaction.active.size} transactions are still active...")
+    IO.sleep(1.second).flatMap(_ => dispose())
+  } else {
+    model.listener()
+      .map(l => l.dispose())
+      .ioSeq
+  }
 }
