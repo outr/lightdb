@@ -19,6 +19,7 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
                                                           scoreDocs: Boolean = false,
                                                           offset: Int = 0,
                                                           limit: Option[Int] = None,
+                                                          batchSize: Int = 512,
                                                           materializedIndexes: List[Index[_, D]] = Nil,
                                                           countTotal: Boolean = true) { query =>
   def clearFilters: Query[D, M] = copy(filter = None)
