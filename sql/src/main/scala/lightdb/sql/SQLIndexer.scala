@@ -7,7 +7,7 @@ import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw.Convertible
 import lightdb.Id
-import lightdb.aggregate.AggregateQuery
+import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.filter.Filter
@@ -169,6 +169,84 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     inserts.insert(doc)
   }
 
+  override def aggregate(query: AggregateQuery[D, M])
+                        (implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]] = fs2.Stream.force(IO.blocking {
+    val connection = getConnection(transaction)
+    val fields = query.functions.map { f =>
+      val af = f.`type` match {
+        case AggregateType.Max => Some("MAX")
+        case AggregateType.Min => Some("MIN")
+        case AggregateType.Avg => Some("AVG")
+        case AggregateType.Sum => Some("SUM")
+        case AggregateType.Count | AggregateType.CountDistinct => Some("COUNT")
+        case AggregateType.Concat | AggregateType.ConcatDistinct => Some("GROUP_CONCAT")
+        case AggregateType.Group => None
+      }
+      val fieldName = af match {
+        case Some(s) =>
+          val pre = f.`type` match {
+            case AggregateType.CountDistinct | AggregateType.ConcatDistinct => "DISTINCT "
+            case _ => ""
+          }
+          val post = f.`type` match {
+            case AggregateType.Concat => ", ';;'"
+            case _ => ""
+          }
+          s"$s($pre${f.index.name}$post)"
+        case None => f.index.name
+      }
+      SQLPart(s"$fieldName AS ${f.name}", Nil)
+    }
+    val filters = query.query.filter.map(filter2Part).toList
+    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.index.name).distinct.map(s => SQLPart(s, Nil))
+    val having = query.filter.map(af2Part).toList
+    val sort = (query.sort ::: query.query.sort).collect {
+      case Sort.ByIndex(index, direction) =>
+        val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+        SQLPart(s"${index.name} $dir", Nil)
+    }
+    val b = SQLQueryBuilder(
+      collection = collection,
+      fields = fields,
+      filters = filters,
+      group = group,
+      having = having,
+      sort = sort,
+      limit = query.query.limit,
+      offset = query.query.offset
+    )
+    val rs = b.execute(connection)
+    def createStream[R](f: ResultSet => R): fs2.Stream[IO, R] = {
+      val iterator = new Iterator[R] {
+        private var checkedNext = false
+        private var nextValue = false
+
+        override def hasNext: Boolean = {
+          if (!checkedNext) {
+            nextValue = rs.next()
+            checkedNext = true
+          }
+          nextValue
+        }
+
+        override def next(): R = {
+          if (!checkedNext) {
+            rs.next()
+          }
+          checkedNext = false
+          f(rs)
+        }
+      }
+      fs2.Stream.fromBlockingIterator[IO](iterator, query.query.batchSize)
+    }
+    createStream[MaterializedAggregate[D, M]] { rs =>
+      val json = obj(indexes.map { index =>
+        index.name -> getJson(rs, index.name)
+      }: _*)
+      MaterializedAggregate[D, M](json, collection.model)
+    }
+  })
+
   override def doSearch[V](query: Query[D, M],
                            transaction: Transaction[D],
                            conversion: Conversion[V]): IO[SearchResults[D, V]] = IO.blocking {
@@ -278,19 +356,42 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     case f: Filter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
   }
 
-  override def aggregate(query: AggregateQuery[D, M])
-                        (implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]] = ???
+  private def af2Part(f: AggregateFilter[_]): SQLPart = f match {
+    case f: AggregateFilter.Equals[_, _] => SQLPart(s"${f.index.name} = ?", List(f.getJson))
+    case f: AggregateFilter.In[_, _] => SQLPart(s"${f.index.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
+    case f: AggregateFilter.Combined[_] =>
+      val parts = f.filters.map(f => af2Part(f))
+      SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
+    case f: AggregateFilter.RangeLong[_] => (f.from, f.to) match {
+      case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
+      case (None, Some(to)) => SQLPart(s"${f.index.name} < ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.index.name} > ?", List(from.json))
+      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+    }
+    case f: AggregateFilter.RangeDouble[_] => (f.from, f.to) match {
+      case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
+      case (None, Some(to)) => SQLPart(s"${f.index.name} < ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.index.name} > ?", List(from.json))
+      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+    }
+    case f: AggregateFilter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
+    case f: AggregateFilter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
+  }
 }
 
 case class SQLQueryBuilder[D <: Document[D]](collection: Collection[D, _],
                                              fields: List[SQLPart] = Nil,
                                              filters: List[SQLPart] = Nil,
+                                             group: List[SQLPart] = Nil,
+                                             having: List[SQLPart] = Nil,
                                              sort: List[SQLPart] = Nil,
                                              limit: Option[Int] = None,
                                              offset: Int) {
   def queryTotal(connection: Connection): Int = {
     val b = copy(
       fields = List(SQLPart("COUNT(*) AS count", Nil)),
+      group = Nil,
+      having = Nil,
       sort = Nil,
       limit = None,
       offset = 0
@@ -316,6 +417,20 @@ case class SQLQueryBuilder[D <: Document[D]](collection: Collection[D, _],
       case (f, index) =>
         if (index == 0) {
           b.append("WHERE\n")
+        } else {
+          b.append("AND\n")
+        }
+        b.append(s"\t${f.sql}\n")
+    }
+    if (group.nonEmpty) {
+      b.append("GROUP BY\n\t")
+      b.append(group.map(_.sql).mkString(", "))
+      b.append('\n')
+    }
+    having.zipWithIndex.foreach {
+      case (f, index) =>
+        if (index == 0) {
+          b.append("HAVING\n")
         } else {
           b.append("AND\n")
         }

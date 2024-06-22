@@ -174,7 +174,7 @@ lazy val lucene = project.in(file("lucene"))
 	)
 
 lazy val sql = project.in(file("sql"))
-	.dependsOn(core.jvm)
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-sql",
 		fork := true,
@@ -186,7 +186,7 @@ lazy val sql = project.in(file("sql"))
 	)
 
 lazy val sqlite = project.in(file("sqlite"))
-	.dependsOn(sql)
+	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-sqlite",
 		fork := true,
@@ -198,7 +198,7 @@ lazy val sqlite = project.in(file("sqlite"))
 	)
 
 lazy val duckdb = project.in(file("duckdb"))
-	.dependsOn(sql)
+	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-duckdb",
 		fork := true,
@@ -210,7 +210,7 @@ lazy val duckdb = project.in(file("duckdb"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, halodb, rocksdb, mapdb, lucene, sqlite, duckdb)
+	.dependsOn(core.jvm, core.jvm % "test->test", halodb, rocksdb, mapdb, lucene, sqlite, duckdb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

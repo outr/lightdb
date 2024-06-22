@@ -3,7 +3,6 @@ package lightdb.index
 import fabric._
 import fabric.define.DefType
 import fabric.rw.{Convertible, RW}
-import lightdb.aggregate.AggregateFilter
 import lightdb.document.Document
 import lightdb.filter.{AggregateSupport, Filter, FilterSupport}
 import lightdb.spatial.GeoPoint
@@ -13,8 +12,7 @@ case class Index[F, D <: Document[D]](name: String,
                                       get: D => List[F],
                                       store: Boolean,
                                       sorted: Boolean,
-                                      tokenized: Boolean,
-                                      aggregate: String => FilterSupport[F, D, AggregateFilter[D]])
+                                      tokenized: Boolean)
                                      (implicit val rw: RW[F]) extends FilterSupport[F, D, Filter[D]] with AggregateSupport[F, D] with Materializable[D, F] {
   def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 
