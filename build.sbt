@@ -135,7 +135,7 @@ lazy val halodb = project.in(file("halodb"))
 	)
 
 lazy val rocksdb = project.in(file("rocksdb"))
-	.dependsOn(core.jvm)
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-rocks",
 		fork := true,

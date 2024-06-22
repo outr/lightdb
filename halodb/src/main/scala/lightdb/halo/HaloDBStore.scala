@@ -81,6 +81,7 @@ class HaloDBStore[D <: Document[D]](directory: Path,
 
 object HaloDBStore extends StoreManager {
   override protected def create[D <: Document[D]](name: String)(implicit rw: RW[D]): IO[Store[D]] = IO {
+    // TODO: Fix path resolution
     new HaloDBStore[D](Path.of("db", name), 32, 1024 * 1024)
   }
 }
