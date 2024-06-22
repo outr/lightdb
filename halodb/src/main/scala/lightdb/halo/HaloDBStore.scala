@@ -5,7 +5,7 @@ import com.oath.halodb.{HaloDB, HaloDBOptions}
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.RW
-import lightdb.Id
+import lightdb.{Id, LightDB}
 import lightdb.document.Document
 import lightdb.store.{JsonStore, Store, StoreManager}
 import lightdb.transaction.Transaction
@@ -80,8 +80,7 @@ class HaloDBStore[D <: Document[D]](directory: Path,
 }
 
 object HaloDBStore extends StoreManager {
-  override protected def create[D <: Document[D]](name: String)(implicit rw: RW[D]): IO[Store[D]] = IO {
-    // TODO: Fix path resolution
-    new HaloDBStore[D](Path.of("db", name), 32, 1024 * 1024)
+  override protected def create[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): IO[Store[D]] = IO {
+    new HaloDBStore[D](db.directory.resolve(name), 32, 1024 * 1024)
   }
 }

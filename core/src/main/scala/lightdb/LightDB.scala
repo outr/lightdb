@@ -18,6 +18,7 @@ import scala.concurrent.duration._
 import scala.util.Try
 
 trait LightDB extends Initializable {
+  // TODO: Support in-memory
   def directory: Path
 
   def storeManager: StoreManager

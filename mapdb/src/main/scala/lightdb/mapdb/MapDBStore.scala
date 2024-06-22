@@ -4,7 +4,7 @@ import cats.effect.IO
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.RW
-import lightdb.Id
+import lightdb.{Id, LightDB}
 import lightdb.document.Document
 import lightdb.store.{JsonStore, Store, StoreManager}
 import lightdb.transaction.Transaction
@@ -70,8 +70,7 @@ case class MapDBStore[D <: Document[D]](directory: Option[Path],
 }
 
 object MapDBStore extends StoreManager {
-  override protected def create[D <: Document[D]](name: String)(implicit rw: RW[D]): IO[Store[D]] = IO {
-    // TODO: Fix path resolution
-    new MapDBStore[D](Some(Path.of("db", name)))
+  override protected def create[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): IO[Store[D]] = IO {
+    new MapDBStore[D](Some(db.directory.resolve(name)))
   }
 }

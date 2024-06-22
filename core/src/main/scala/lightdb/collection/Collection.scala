@@ -35,7 +35,7 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
 
   override protected def initialize(): IO[Unit] = for {
     _ <- IO(model.collection = this)
-    _ <- db.storeManager[D](name).map(store => model.store = store)
+    _ <- db.storeManager[D](db, name).map(store => model.store = store)
     _ <- model.listener().map(_.init(this)).ioSeq.map(_ => model._initialized.set(true))
   } yield ()
 

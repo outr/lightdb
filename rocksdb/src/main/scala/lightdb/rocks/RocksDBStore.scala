@@ -4,7 +4,7 @@ import cats.effect.IO
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.RW
-import lightdb.Id
+import lightdb.{Id, LightDB}
 import org.rocksdb.{RocksDB, RocksIterator}
 
 import java.nio.file.{Files, Path}
@@ -91,9 +91,8 @@ case class RocksDBStore[D <: Document[D]](directory: Path)
 }
 
 object RocksDBStore extends StoreManager {
-  override protected def create[D <: Document[D]](name: String)
+  override protected def create[D <: Document[D]](db: LightDB, name: String)
                                                  (implicit rw: RW[D]): IO[Store[D]] = IO {
-    // TODO: Fix path resolution
-    new RocksDBStore[D](Path.of("db", name))
+    new RocksDBStore[D](db.directory.resolve(name))
   }
 }
