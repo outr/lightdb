@@ -52,22 +52,22 @@ case class StoredValue[T](key: String,
     }
   }
 
-  // TODO: Figure out why withLock is causing it to get stuck
-  def modify(f: T => IO[T]): IO[T] = collection.transaction { implicit transaction => //collection.withLock(id) { implicit lock =>
-    if (persistence == Persistence.Memory) {
-      get().flatMap(f).map { value =>
-        cached = Some(value)
-        value
+  def modify(f: T => IO[T]): IO[T] = collection.transaction { implicit transaction =>
+    transaction.withLock(id) {
+      if (persistence == Persistence.Memory) {
+        get().flatMap(f).map { value =>
+          cached = Some(value)
+          value
+        }
+      } else {
+        for {
+          current <- get()
+          modified <- f(current)
+          _ <- set(modified).whenA(current != modified)
+        } yield modified
       }
-    } else {
-      for {
-        current <- get()
-        modified <- f(current)
-        _ <- set(modified).whenA(current != modified)
-      } yield modified
     }
   }
-  //}
 
   def clear(): IO[Unit] = collection.transaction { implicit transaction =>
     collection.delete(id).map { _ =>
