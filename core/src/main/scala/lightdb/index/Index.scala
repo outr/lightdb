@@ -15,7 +15,7 @@ case class Index[F, D <: Document[D]](name: String,
                                       sorted: Boolean,
                                       tokenized: Boolean,
                                       aggregate: String => FilterSupport[F, D, AggregateFilter[D]])
-                                     (implicit val rw: RW[F]) extends FilterSupport[F, D, Filter[D]] with AggregateSupport[F, D] {
+                                     (implicit val rw: RW[F]) extends FilterSupport[F, D, Filter[D]] with AggregateSupport[F, D] with Materializable[D, F] {
   def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 
   override def is(value: F): Filter[D] = Filter.Equals(this, value)

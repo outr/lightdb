@@ -3,12 +3,12 @@ package lightdb.aggregate
 import fabric.rw.RW
 import lightdb.document.Document
 import lightdb.filter.FilterSupport
-import lightdb.index.Index
+import lightdb.index.{Index, Materializable}
 import lightdb.spatial.GeoPoint
 import squants.space.Length
 
 case class AggregateFunction[T, F, D <: Document[D]](name: String, index: Index[F, D], `type`: AggregateType)
-                                                    (implicit val tRW: RW[T]) extends FilterSupport[F, D, AggregateFilter[D]] {
+                                                    (implicit val tRW: RW[T]) extends FilterSupport[F, D, AggregateFilter[D]] with Materializable[D, F] {
   def rename(name: String): AggregateFunction[T, F, D] = copy(name = name)
 
   override implicit def rw: RW[F] = index.rw

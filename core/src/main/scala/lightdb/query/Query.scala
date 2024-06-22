@@ -7,7 +7,7 @@ import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.filter.Filter
-import lightdb.index.{Index, Indexer, Materialized}
+import lightdb.index.{Index, Indexer, Materialized, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 import lightdb.transaction.Transaction
 import squants.space.Length
@@ -54,7 +54,7 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
     def docs(implicit transaction: Transaction[D]): IO[SearchResults[D, D]] = apply[D](indexer.Conversion.Doc)
     def ids(implicit transaction: Transaction[D]): IO[SearchResults[D, Id[D]]] = apply(indexer.Conversion.Id)
     def materialized(f: M => List[Index[_, D]])
-                    (implicit transaction: Transaction[D]): IO[SearchResults[D, Materialized[D]]] = {
+                    (implicit transaction: Transaction[D]): IO[SearchResults[D, MaterializedIndex[D, M]]] = {
       val indexes = f(collection.model)
       val notStored = indexes.filter(!_.store).map(_.name)
       if (notStored.nonEmpty) {
@@ -91,10 +91,10 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
     def scoredDocs(implicit transaction: Transaction[D]): fs2.Stream[IO, (D, Double)] = fs2.Stream.force(search.docs.map(_.scoredStream))
     def ids(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = fs2.Stream.force(search.ids.map(_.stream))
     def scoredIds(implicit transaction: Transaction[D]): fs2.Stream[IO, (Id[D], Double)] = fs2.Stream.force(search.ids.map(_.scoredStream))
-    def materialized(f: M => List[Index[_, D]])(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] =
+    def materialized(f: M => List[Index[_, D]])(implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedIndex[D, M]] =
       fs2.Stream.force(search.materialized(f).map(_.stream))
     def scoredMaterialized(f: M => List[Index[_, D]])
-                          (implicit transaction: Transaction[D]): fs2.Stream[IO, (Materialized[D], Double)] =
+                          (implicit transaction: Transaction[D]): fs2.Stream[IO, (MaterializedIndex[D, M], Double)] =
       fs2.Stream.force(search.materialized(f).map(_.scoredStream))
     def distance(f: M => Index[GeoPoint, D],
                  from: GeoPoint,

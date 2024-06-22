@@ -3,7 +3,7 @@ package lightdb.lucene
 import cats.effect.IO
 import fabric._
 import fabric.define.DefType
-import lightdb.index.{Index, Indexed, Indexer, Materialized}
+import lightdb.index.{Index, Indexed, Indexer, Materialized, MaterializedAggregate, MaterializedIndex}
 import lightdb.Id
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -202,7 +202,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
           index.name -> Index.string2Json(s)(index.rw)
         }: _*)
         val score = scoreDoc.score.toDouble
-        Materialized[D](json) -> score
+        MaterializedIndex[D, M](json, model) -> score
       }, 512)
       case m: Conversion.Distance => idStream.evalMap {
         case (id, score) => collection(id)(transaction).map { doc =>
@@ -229,7 +229,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
   }
 
   override def aggregate(query: AggregateQuery[D, M])
-                        (implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] =
+                        (implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]] =
     throw new UnsupportedOperationException("Aggregate functions not supported in Lucene currently")
 
   override def count(implicit transaction: Transaction[D]): IO[Int] = IO.blocking {
