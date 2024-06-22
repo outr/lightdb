@@ -23,8 +23,7 @@ trait Indexed[D <: Document[D]] {
         get = get,
         store = store,
         sorted = sorted,
-        tokenized = tokenized,
-        aggregate = _ => throw new UnsupportedOperationException("Support aggregation")
+        tokenized = tokenized
       )
       synchronized {
         _indexes = _indexes ::: List(index)

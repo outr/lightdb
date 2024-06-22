@@ -13,39 +13,34 @@ case class AggregateFunction[T, F, D <: Document[D]](name: String, index: Index[
 
   override implicit def rw: RW[F] = index.rw
 
-  override def is(value: F): AggregateFilter[D] = index.aggregate(name).is(value)
-
-  override def >(value: F)(implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).>(value)
-
-  override def >=(value: F)(implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).>=(value)
-
-  override def <(value: F)(implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).<(value)
-
-  override def <=(value: F)(implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).<=(value)
-
-  override def BETWEEN(tuple: (F, F))(implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).BETWEEN(tuple)
-
-  override def <=>(tuple: (F, F))(implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).<=>(tuple)
-
-  override def range(from: Option[F],
-                     to: Option[F],
-                     includeFrom: Boolean = true,
-                     includeTo: Boolean = true)
-                    (implicit num: Numeric[F]): AggregateFilter[D] = index.aggregate(name).range(from, to, includeFrom, includeTo)
+  override def is(value: F): AggregateFilter[D] = AggregateFilter.Equals(index, value)
 
   override protected def rangeLong(from: Option[Long], to: Option[Long]): AggregateFilter[D] =
-    FilterSupport.rangeLong(index.aggregate(name), from, to)
+    AggregateFilter.RangeLong(this.asInstanceOf[Index[Long, D]], from, to)
 
   override protected def rangeDouble(from: Option[Double], to: Option[Double]): AggregateFilter[D] =
-    FilterSupport.rangeDouble(index.aggregate(name), from, to)
+    AggregateFilter.RangeDouble(this.asInstanceOf[Index[Double, D]], from, to)
 
-  override def IN(values: Seq[F]): AggregateFilter[D] = index.aggregate(name).IN(values)
+  override def IN(values: Seq[F]): AggregateFilter[D] = AggregateFilter.In(index, values)
 
-  override def parsed(query: String, allowLeadingWildcard: Boolean = false): AggregateFilter[D] = index.aggregate(name).parsed(query, allowLeadingWildcard)
+  override def parsed(query: String, allowLeadingWildcard: Boolean): AggregateFilter[D] =
+    AggregateFilter.Parsed(index, query, allowLeadingWildcard)
 
-  override def words(s: String,
-                     matchStartsWith: Boolean = true,
-                     matchEndsWith: Boolean = false): AggregateFilter[D] = index.aggregate(name).words(s, matchStartsWith, matchEndsWith)
+  override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): AggregateFilter[D] = {
+    val words = s.split("\\s+").map { w =>
+      if (matchStartsWith && matchEndsWith) {
+        s"%$w%"
+      } else if (matchStartsWith) {
+        s"%$w"
+      } else if (matchEndsWith) {
+        s"$w%"
+      } else {
+        w
+      }
+    }.mkString(" ")
+    parsed(words, allowLeadingWildcard = matchEndsWith)
+  }
 
-  override def distance(from: GeoPoint, radius: Length)(implicit evidence: F =:= GeoPoint): AggregateFilter[D] = ???
+  override def distance(from: GeoPoint, radius: Length)(implicit evidence: F =:= GeoPoint): AggregateFilter[D] =
+    AggregateFilter.Distance(this.asInstanceOf[Index[GeoPoint, D]], from, radius)
 }
