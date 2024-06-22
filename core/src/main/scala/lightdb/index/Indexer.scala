@@ -15,6 +15,7 @@ import scribe.cats.{io => logger}
 trait Indexer[D <: Document[D], M <: DocumentModel[D]] extends DocumentListener[D] {
   private var _collection: Collection[D, M] = _
   protected def collection: Collection[D, M] = _collection
+  protected lazy val indexes: List[Index[_, D]] = collection.model.asInstanceOf[Indexed[D]].indexes
 
   override def init(collection: Collection[D, _]): IO[Unit] = super.init(collection).map { _ =>
     this._collection = collection.asInstanceOf[Collection[D, M]]

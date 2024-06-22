@@ -66,6 +66,8 @@ val scribeVersion: String = "3.15.0"
 
 val luceneVersion: String = "9.11.0"
 
+val hikariCPVersion: String = "5.1.0"
+
 val sqliteVersion: String = "3.46.0.0"
 
 val duckdbVersion: String = "1.0.0"
@@ -177,6 +179,7 @@ lazy val sql = project.in(file("sql"))
 		name := s"$projectName-sql",
 		fork := true,
 		libraryDependencies ++= Seq(
+			"com.zaxxer" % "HikariCP" % hikariCPVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		)

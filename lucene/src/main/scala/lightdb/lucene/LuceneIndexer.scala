@@ -3,7 +3,7 @@ package lightdb.lucene
 import cats.effect.IO
 import fabric._
 import fabric.define.DefType
-import lightdb.index.{Index, Indexed, Indexer, Materialized, MaterializedAggregate, MaterializedIndex}
+import lightdb.index.{Index, Indexed, Indexer, MaterializedAggregate, MaterializedIndex}
 import lightdb.Id
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -22,13 +22,12 @@ import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
 import lightdb.transaction.{Transaction, TransactionKey}
 
 case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
-                                           persistent: Boolean = true,
-                                           analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D, M] {
+                                                                  persistent: Boolean = true,
+                                                                  analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D, M] {
   private lazy val indexSearcherKey: TransactionKey[IndexSearcher] = TransactionKey("indexSearcher")
 
   override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
     transaction.get(indexSearcherKey).foreach { indexSearcher =>
-      commitBlocking()
       searcherManager.release(indexSearcher)
     }
   }
@@ -41,8 +40,14 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     delete(doc._id)
   }
 
+  override def commit(transaction: Transaction[D]): IO[Unit] = super.commit(transaction).map { _ =>
+    transaction.get(indexSearcherKey).foreach { _ =>
+      commitBlocking()
+    }
+  }
+
   override def truncate(transaction: Transaction[D]): IO[Unit] = super.truncate(transaction).flatMap { _ =>
-    truncate().map(_ => commitBlocking())
+    truncate()
   }
 
   private def indexDoc(doc: D, indexes: List[Index[_, D]]): IO[Unit] = for {
