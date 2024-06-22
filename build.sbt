@@ -147,7 +147,7 @@ lazy val rocksdb = project.in(file("rocksdb"))
 	)
 
 lazy val mapdb = project.in(file("mapdb"))
-	.dependsOn(core.jvm)
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
