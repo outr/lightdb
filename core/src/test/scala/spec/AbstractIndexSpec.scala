@@ -102,7 +102,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
               "name" -> "Bob Dole",
               "age" -> 123
             )))
-            list.map(_.apply(Person.age)) should be(List(123))
+            list.map(_(_.age)) should be(List(123))
           }
       }
     }
@@ -118,10 +118,10 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
             ))
             .toList
             .map { list =>
-              list.map(m => m(Person.age.min)).toSet should be(Set(19))
-              list.map(m => m(Person.age.max)).toSet should be(Set(21))
-              list.map(m => m(Person.age.avg)).toSet should be(Set(20.0))
-              list.map(m => m(Person.age.sum)).toSet should be(Set(40.0))
+              list.map(m => m(_.age.min)).toSet should be(Set(19))
+              list.map(m => m(_.age.max)).toSet should be(Set(21))
+              list.map(m => m(_.age.avg)).toSet should be(Set(20.0))
+              list.map(m => m(_.age.sum)).toSet should be(Set(40.0))
             }
         }
       } else {

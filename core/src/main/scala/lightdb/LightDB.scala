@@ -84,7 +84,6 @@ trait LightDB extends Initializable {
       }.sequence.whenA(verifyIndexIntegrityOnStartup)*/
       // Set initialized
       _ <- databaseInitialized.set(true)
-      _ = addShutdownHook()
     } yield {
       // Start updater
       recursiveUpdates().unsafeRunAndForget()(cats.effect.unsafe.implicits.global)
@@ -122,23 +121,6 @@ trait LightDB extends Initializable {
 
   def disposed: Boolean = _disposed.get()
 
-  private lazy val disposeThread = new Thread {
-    override def run(): Unit = Try {
-      try {
-        dispose().unsafeRunSync()(cats.effect.unsafe.implicits.global)
-      } catch {
-        case t: Throwable => scribe.error(s"Failure disposing during shutdown hook", t)
-      }
-    }
-  }
-
-  // TODO: Figure out why shutdown hook causes system to get stuck
-  private def addShutdownHook(): Unit = {
-    //    Runtime.getRuntime.addShutdownHook(disposeThread)
-  }
-
-  private def removeShutdownHook(): Unit = {} //Try(Runtime.getRuntime.removeShutdownHook(disposeThread))
-
   private def recursiveUpdates(): IO[Unit] = for {
     _ <- IO.sleep(updateFrequency)
     _ <- update().recoverWith {
@@ -161,7 +143,6 @@ trait LightDB extends Initializable {
       _ <- IO.unit // TODO: wait for active transactions to close
       _ <- collections.map(_.dispose()).parSequence
       _ <- IO.unit // TODO: //stores.map(_.dispose()).parSequence
-      _ = removeShutdownHook()
     } yield ()
   } else {
     IO.unit

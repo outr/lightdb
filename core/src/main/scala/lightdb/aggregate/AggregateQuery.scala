@@ -2,7 +2,7 @@ package lightdb.aggregate
 
 import cats.effect.IO
 import lightdb.document.{Document, DocumentModel}
-import lightdb.index.Materialized
+import lightdb.index.{Index, Materialized, MaterializedAggregate}
 import lightdb.query.{Query, SortDirection}
 import lightdb.transaction.Transaction
 
@@ -33,7 +33,7 @@ case class AggregateQuery[D <: Document[D], M <: DocumentModel[D]](query: Query[
     sort = sort ::: List((function, direction))
   )
 
-  def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]] = query.indexer.aggregate(this)
+  def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]] = query.indexer.aggregate(this)
 
-  def toList(implicit transaction: Transaction[D]): IO[List[Materialized[D]]] = stream.compile.toList
+  def toList(implicit transaction: Transaction[D]): IO[List[MaterializedAggregate[D, M]]] = stream.compile.toList
 }

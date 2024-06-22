@@ -31,14 +31,14 @@ trait Indexer[D <: Document[D], M <: DocumentModel[D]] extends DocumentListener[
     }.compile.drain
   } yield ()
 
-  def aggregate(query: AggregateQuery[D, M])(implicit transaction: Transaction[D]): fs2.Stream[IO, Materialized[D]]
+  def aggregate(query: AggregateQuery[D, M])(implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]]
 
   sealed trait Conversion[V]
 
   object Conversion {
     case object Id extends Conversion[lightdb.Id[D]]
     case object Doc extends Conversion[D]
-    case class Materialized(indexes: List[Index[_, D]]) extends Conversion[lightdb.index.Materialized[D]]
+    case class Materialized(indexes: List[Index[_, D]]) extends Conversion[lightdb.index.MaterializedIndex[D, M]]
     case class Distance(index: Index[GeoPoint, D], from: GeoPoint, sort: Boolean, radius: Option[Length]) extends Conversion[DistanceAndDoc[D]]
   }
 }
