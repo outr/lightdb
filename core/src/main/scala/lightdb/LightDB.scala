@@ -95,7 +95,6 @@ trait LightDB extends Initializable {
       Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
       Logger("org.apache.lucene.store").withMinimumLevel(Level.Warn).replace()
     }
-    Logger.system.installJUL()
   }
 
   def collections: List[Collection[_, _]] = _collections
