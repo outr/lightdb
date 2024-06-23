@@ -79,7 +79,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
-  private def getConnection(implicit transaction: Transaction[D]): Connection = connectionManager.getConnection
+  protected def getConnection(implicit transaction: Transaction[D]): Connection = connectionManager.getConnection
 
   override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
     transaction.get(insertsKey).foreach { inserts =>
@@ -93,7 +93,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       inserts.execute()
     }
     connectionManager.currentConnection(transaction).foreach { connection =>
-      connection.commit()
+      if (!config.autoCommit) connection.commit()
     }
   }
 
@@ -142,7 +142,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
-  private def indexDoc(doc: D)(implicit transaction: Transaction[D]): IO[Unit] = IO.blocking {
+  protected def indexDoc(doc: D)(implicit transaction: Transaction[D]): IO[Unit] = IO.blocking {
     val connection = getConnection
     val inserts = transaction.getOrCreate(insertsKey, {
       val sql = s"INSERT OR REPLACE INTO ${collection.name}(${indexes.map(_.name).mkString(", ")}) VALUES (${indexes.map(_ => "?").mkString(", ")})"
@@ -315,6 +315,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     case l: java.lang.Long => num(l.longValue())
     case f: java.lang.Float => num(f.doubleValue())
     case d: java.lang.Double => num(d.doubleValue())
+    case bi: java.math.BigInteger => num(BigDecimal(bi))
     case null => Null
     case v => throw new UnsupportedOperationException(s"$fieldName returned $v (${v.getClass.getName})")
   }

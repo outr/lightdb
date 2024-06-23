@@ -51,28 +51,35 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
         f(transaction).guarantee(release(transaction))
       }
 
-    private def create(): IO[Transaction[D]] = for {
+    def create(): IO[Transaction[D]] = for {
       transaction <- IO(Transaction[D](collection))
       _ <- model.listener().map(l => l.transactionStart(transaction)).ioSeq
       _ = add(transaction)
     } yield transaction
 
-    private def release(transaction: Transaction[D]): IO[Unit] = for {
+    def release(transaction: Transaction[D]): IO[Unit] = for {
       _ <- transaction.commit()
       _ <- model.listener().map(l => l.transactionEnd(transaction)).ioSeq
       _ = remove(transaction)
     } yield ()
   }
 
-  def apply(id: Id[D])(implicit transaction: Transaction[D]): IO[D] = model.store(id)
+  def apply(id: Id[D])(implicit transaction: Transaction[D]): IO[D] = model.store(id).map { d =>
+    Id.setPersisted(d._id, persisted = true)
+    d
+  }
 
-  def get(id: Id[D])(implicit transaction: Transaction[D]): IO[Option[D]] = model.store.get(id)
+  def get(id: Id[D])(implicit transaction: Transaction[D]): IO[Option[D]] = model.store.get(id).map { o =>
+    o.foreach(d => Id.setPersisted(d._id, persisted = true))
+    o
+  }
 
   final def set(doc: D)(implicit transaction: Transaction[D]): IO[Option[D]] = {
     recurseOption(doc, (l, d) => l.preSet(d, transaction)).flatMap {
       case Some(d) => for {
         _ <- model.store.set(d)
         _ <- model.listener().map(l => l.postSet(d, transaction)).ioSeq
+        _ = Id.setPersisted(d._id, persisted = true)
       } yield Some(d)
       case None => IO.pure(None)
     }
@@ -120,7 +127,10 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
           .listener()
           .map(l => l.postDelete(d, transaction))
           .ioSeq
-          .map(_ => Some(d))
+          .map { _ =>
+            Id.setPersisted(d._id, persisted = false)
+            Some(d)
+          }
         case false => IO.pure(None)
       }
       case None => IO.pure(None)

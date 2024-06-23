@@ -8,7 +8,7 @@ import java.sql.{Connection, DriverManager}
 case class SingleConnectionManager[D <: Document[D]](config: SQLConfig) extends ConnectionManager[D] {
   private lazy val connection = {
     val c = DriverManager.getConnection(config.jdbcUrl, config.username.orNull, config.password.orNull)
-    c.setAutoCommit(false)
+    c.setAutoCommit(config.autoCommit)
     c
   }
 

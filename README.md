@@ -14,9 +14,9 @@ Computationally focused database using pluggable store + indexer
 - DuckDB (https://duckdb.org) - Experimental
 
 ## 1.0 TODO
-- [ ] More performance improvements to SQLite integration
-  - [ ] HikariCP for connection pooling
-  - [ ] Property transactions without autocommit
+- [X] More performance improvements to SQLite integration
+  - [X] HikariCP for connection pooling
+  - [X] Property transactions without autocommit
 - [ ] New benchmarks
   - [ ] JMH
   - [ ] Better parallel processing
@@ -32,6 +32,9 @@ Computationally focused database using pluggable store + indexer
   - [X] No IndexSupport, simply instantiated `index` and pass ref to collection
     - [X] Support for multiple indexes on the same collection
   - [X] Generic unit tests with multiple implementations
+  - [ ] Document classes
+  - [ ] MDoc support
+- [ ] New Integrations
   - [ ] Add btree supported indexes in Store
   - [ ] Add Redis support
   - [ ] Support SQL as a Store as well as Indexer

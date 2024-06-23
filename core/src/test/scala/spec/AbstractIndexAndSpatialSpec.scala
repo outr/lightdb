@@ -255,7 +255,7 @@ abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpe
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with Indexed[Person] {
-    implicit val rw: RW[Person] = RW.gen
+    override implicit val rw: RW[Person] = RW.gen
 
     val name: I[String] = index.one("name", _.name, store = true)
     val age: I[Int] = index.one("age", _.age, store = true)
