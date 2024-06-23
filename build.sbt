@@ -69,7 +69,7 @@ val keysemaphoreVersion: String = "0.3.0-M1"
 
 val squantsVersion: String = "1.8.3"
 
-val scalaTestVersion: String = "3.2.18"
+val scalaTestVersion: String = "3.2.19"
 
 val catsEffectTestingVersion: String = "1.5.0"
 
