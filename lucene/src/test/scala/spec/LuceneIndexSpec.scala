@@ -3,7 +3,7 @@ import lightdb.index.Indexer
 import lightdb.lucene.LuceneIndexer
 import lightdb.store.{AtomicMapStore, StoreManager}
 
-class LuceneIndexSpec extends AbstractIndexSpec {
+class LuceneIndexSpec extends AbstractIndexAndSpatialSpec {
   override protected def supportsAggregateFunctions: Boolean = false
 
   override protected def storeManager: StoreManager = AtomicMapStore

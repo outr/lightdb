@@ -5,25 +5,33 @@ import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.obj
 import fabric.rw.RW
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
+import lightdb.{Id, LightDB, StoredValue}
+import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.index.{Indexed, IndexedCollection, Indexer}
 import lightdb.query.Sort
 import lightdb.spatial.GeoPoint
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB, StoredValue}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import squants.space.LengthConversions.LengthConversions
 
 import java.nio.file.Path
+import scala.collection.immutable.List
 
-abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
+abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
 
   private val id1 = Id[Person]("john")
   private val id2 = Id[Person]("jane")
   private val id3 = Id[Person]("bob")
+
+  private val newYorkCity = GeoPoint(40.7142, -74.0119)
+  private val chicago = GeoPoint(41.8119, -87.6873)
+  private val noble = GeoPoint(35.1417, -97.3409)
+  private val oklahomaCity = GeoPoint(35.5514, -97.4075)
+  private val yonkers = GeoPoint(40.9461, -73.8669)
 
   protected def supportsAggregateFunctions: Boolean = true
 
@@ -31,18 +39,21 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     name = "John Doe",
     age = 21,
     tags = Set("dog", "cat"),
+    point = newYorkCity,
     _id = id1
   )
   private val p2 = Person(
     name = "Jane Doe",
     age = 19,
     tags = Set("cat"),
+    point = noble,
     _id = id2
   )
   private val p3 = Person(
     name = "Bob Dole",
     age = 123,
     tags = Set("dog", "monkey"),
+    point = yonkers,
     _id = id3
   )
 
@@ -144,9 +155,23 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
         }
       }
     }
+    "sort by distance from Oklahoma City" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people.query.stream.distance(
+          _.point,
+          from = oklahomaCity,
+          radius = Some(1320.miles)
+        ).compile.toList.map { list =>
+          val people = list.map(_.doc)
+          val distances = list.map(_.distance)
+          people.map(_.name) should be(List("Jane Doe", "John Doe"))
+          distances should be(List(28.555228128634383.miles, 1316.1223938032729.miles))
+        }
+      }
+    }
     "replace Jane Doe" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.set(Person("Jan Doe", 20, Set("cat", "bear"), id2)).map {
+        DB.people.set(Person("Jan Doe", 20, Set("cat", "bear"), chicago, id2)).map {
           case Some(p) =>
             p._id should be(id2)
             p.name should be("Jan Doe")
@@ -226,6 +251,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   case class Person(name: String,
                     age: Int,
                     tags: Set[String],
+                    point: GeoPoint,
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with Indexed[Person] {
@@ -234,6 +260,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     val name: I[String] = index.one("name", _.name, store = true)
     val age: I[Int] = index.one("age", _.age, store = true)
     val tag: I[String] = index("tag", _.tags.toList)
+    val point: I[GeoPoint] = index.one("point", _.point, sorted = true)
     val search: I[String] = index("search", doc => List(doc.name, doc.age.toString) ::: doc.tags.toList, tokenized = true)
   }
 
