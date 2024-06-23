@@ -13,6 +13,7 @@ import lightdb.document.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.index.{Index, Indexed, Indexer, MaterializedAggregate, MaterializedIndex}
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
+import lightdb.spatial.GeoPoint
 import lightdb.transaction.{Transaction, TransactionKey}
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Types}
@@ -43,6 +44,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
         val t = index.rw.definition match {
           case DefType.Str => "VARCHAR"
           case DefType.Int => "INTEGER"
+          case DefType.Obj(_, Some("lightdb.spatial.GeoPoint")) => "VARCHAR"    // TODO: Support
           case d => throw new UnsupportedOperationException(s"${index.name} has an unsupported type: $d")
         }
         s"${index.name} $t"
@@ -467,7 +469,7 @@ class SQLInserts[D <: Document[D]](ps: PreparedStatement,
 
   def insert(doc: D): Unit = {
     indexes.map(_.getJson(doc)).zipWithIndex.foreach {
-      case (value, index) => SQLIndexer.setValue(ps, index, value)
+      case (value, index) => SQLIndexer.setValue(ps, index + 1, value)
     }
     synchronized {
       batchSize += 1
