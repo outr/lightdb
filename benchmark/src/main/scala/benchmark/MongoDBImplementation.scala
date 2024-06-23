@@ -4,12 +4,10 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.mongodb.client.MongoClients
 import com.mongodb.client.model.Indexes
-import lightdb.Unique
-import lightdb.util.FlushingBacklog
+import lightdb.util.{FlushingBacklog, Unique}
 import org.bson.Document
 
 import java.{lang, util}
-import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 object MongoDBImplementation extends BenchmarkImplementation {

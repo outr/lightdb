@@ -15,16 +15,25 @@ case class HikariConnectionManager[D <: Document[D]](config: SQLConfig) extends 
     config.username.foreach(hc.setUsername)
     config.password.foreach(hc.setPassword)
     config.maximumPoolSize.foreach(hc.setMaximumPoolSize)
-    hc.setAutoCommit(false)
+    hc.setAutoCommit(config.autoCommit)
     new HikariDataSource(hc)
   }
 
+  private def openConnection(): Connection = {
+    val c = dataSource.getConnection
+    c
+  }
+
+  private def closeConnection(connection: Connection): Unit = {
+    connection.close()
+  }
+
   override def getConnection(implicit transaction: Transaction[D]): Connection = transaction
-    .getOrCreate(connectionKey, dataSource.getConnection)
+    .getOrCreate(connectionKey, openConnection())
 
   override def currentConnection(implicit transaction: Transaction[D]): Option[Connection] =
     transaction.get(connectionKey)
 
   override def releaseConnection(implicit transaction: Transaction[D]): Unit =
-    currentConnection.foreach(_.close())
+    currentConnection.foreach(closeConnection)
 }
