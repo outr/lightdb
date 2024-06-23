@@ -183,7 +183,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       SQLPart(s"$fieldName AS ${f.name}", Nil)
     }
     val filters = query.query.filter.map(filter2Part).toList
-    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.index.name).distinct.map(s => SQLPart(s, Nil))
+    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct.map(s => SQLPart(s, Nil))
     val having = query.filter.map(af2Part).toList
     val sort = (query.sort ::: query.query.sort).collect {
       case Sort.ByIndex(index, direction) =>
@@ -225,8 +225,8 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       fs2.Stream.fromBlockingIterator[IO](iterator, query.query.batchSize)
     }
     createStream[MaterializedAggregate[D, M]] { rs =>
-      val json = obj(indexes.map { index =>
-        index.name -> getJson(rs, index.name)
+      val json = obj(query.functions.map { f =>
+        f.name -> getJson(rs, f.name)
       }: _*)
       MaterializedAggregate[D, M](json, collection.model)
     }
@@ -327,14 +327,14 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
     case f: Filter.RangeLong[_] => (f.from, f.to) match {
       case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
-      case (None, Some(to)) => SQLPart(s"${f.index.name} < ?", List(to.json))
-      case (Some(from), None) => SQLPart(s"${f.index.name} > ?", List(from.json))
+      case (None, Some(to)) => SQLPart(s"${f.index.name} <= ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.index.name} >= ?", List(from.json))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: Filter.RangeDouble[_] => (f.from, f.to) match {
       case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
-      case (None, Some(to)) => SQLPart(s"${f.index.name} < ?", List(to.json))
-      case (Some(from), None) => SQLPart(s"${f.index.name} > ?", List(from.json))
+      case (None, Some(to)) => SQLPart(s"${f.index.name} <= ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.index.name} >= ?", List(from.json))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: Filter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
@@ -342,21 +342,21 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
   }
 
   private def af2Part(f: AggregateFilter[_]): SQLPart = f match {
-    case f: AggregateFilter.Equals[_, _] => SQLPart(s"${f.index.name} = ?", List(f.getJson))
-    case f: AggregateFilter.In[_, _] => SQLPart(s"${f.index.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
+    case f: AggregateFilter.Equals[_, _] => SQLPart(s"${f.name} = ?", List(f.getJson))
+    case f: AggregateFilter.In[_, _] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
     case f: AggregateFilter.Combined[_] =>
       val parts = f.filters.map(f => af2Part(f))
       SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
     case f: AggregateFilter.RangeLong[_] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
-      case (None, Some(to)) => SQLPart(s"${f.index.name} < ?", List(to.json))
-      case (Some(from), None) => SQLPart(s"${f.index.name} > ?", List(from.json))
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(from.json, to.json))
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(from.json))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: AggregateFilter.RangeDouble[_] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
-      case (None, Some(to)) => SQLPart(s"${f.index.name} < ?", List(to.json))
-      case (Some(from), None) => SQLPart(s"${f.index.name} > ?", List(from.json))
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(from.json, to.json))
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(from.json))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: AggregateFilter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")

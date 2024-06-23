@@ -73,8 +73,9 @@ case class SQLQueryBuilder[D <: Document[D]](collection: Collection[D, _],
       b.append("OFFSET\n")
       b.append(s"\t$offset\n")
     }
+    val args = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
+//    scribe.info(s"${b.toString()} (${args.mkString(", ")})")
     val ps = connection.prepareStatement(b.toString())
-    val args = (fields ::: filters ::: sort).flatMap(_.args)
     args.zipWithIndex.foreach {
       case (value, index) => SQLIndexer.setValue(ps, index + 1, value)
     }

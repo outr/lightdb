@@ -13,18 +13,18 @@ case class AggregateFunction[T, F, D <: Document[D]](name: String, index: Index[
 
   override implicit def rw: RW[F] = index.rw
 
-  override def is(value: F): AggregateFilter[D] = AggregateFilter.Equals(index, value)
+  override def is(value: F): AggregateFilter[D] = AggregateFilter.Equals(name, index, value)
 
   override protected def rangeLong(from: Option[Long], to: Option[Long]): AggregateFilter[D] =
-    AggregateFilter.RangeLong(this.asInstanceOf[Index[Long, D]], from, to)
+    AggregateFilter.RangeLong(name, index.asInstanceOf[Index[Long, D]], from, to)
 
   override protected def rangeDouble(from: Option[Double], to: Option[Double]): AggregateFilter[D] =
-    AggregateFilter.RangeDouble(this.asInstanceOf[Index[Double, D]], from, to)
+    AggregateFilter.RangeDouble(name, index.asInstanceOf[Index[Double, D]], from, to)
 
-  override def IN(values: Seq[F]): AggregateFilter[D] = AggregateFilter.In(index, values)
+  override def IN(values: Seq[F]): AggregateFilter[D] = AggregateFilter.In(name, index, values)
 
   override def parsed(query: String, allowLeadingWildcard: Boolean): AggregateFilter[D] =
-    AggregateFilter.Parsed(index, query, allowLeadingWildcard)
+    AggregateFilter.Parsed(name, index, query, allowLeadingWildcard)
 
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): AggregateFilter[D] = {
     val words = s.split("\\s+").map { w =>
@@ -42,5 +42,5 @@ case class AggregateFunction[T, F, D <: Document[D]](name: String, index: Index[
   }
 
   override def distance(from: GeoPoint, radius: Length)(implicit evidence: F =:= GeoPoint): AggregateFilter[D] =
-    AggregateFilter.Distance(this.asInstanceOf[Index[GeoPoint, D]], from, radius)
+    AggregateFilter.Distance(name, this.asInstanceOf[Index[GeoPoint, D]], from, radius)
 }
