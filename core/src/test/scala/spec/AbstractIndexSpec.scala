@@ -26,6 +26,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   private val id3 = Id[Person]("bob")
 
   protected def supportsAggregateFunctions: Boolean = true
+  protected def supportsParsed: Boolean = true
 
   private val p1 = Person(
     name = "John Doe",
@@ -81,7 +82,7 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     "query for Bob Dole materialized" in {
       DB.people.transaction { implicit transaction =>
         DB.people.query
-          .filter(_.tag === "monkey")
+          .filter(_.name === "Bob Dole")
           .stream
           .materialized(p => List(p.name, p.age))
           .compile
@@ -155,17 +156,25 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
       }
     }
     "search using tokenized data and a parsed query" in {
-      DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_.search.words("joh 21")).stream.docs.compile.toList.map { list =>
-          list.map(_.name) should be(List("John Doe"))
+      if (supportsParsed) {
+        DB.people.transaction { implicit transaction =>
+          DB.people.query.filter(_.search.words("joh 21")).stream.docs.compile.toList.map { list =>
+            list.map(_.name) should be(List("John Doe"))
+          }
         }
+      } else {
+        succeed
       }
     }
     "find Jan by parsed query" in {
-      DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_._id.parsed(id2.value)).stream.docs.compile.toList.map { list =>
-          list.map(_.name) should be(List("Jan Doe"))
+      if (supportsParsed) {
+        DB.people.transaction { implicit transaction =>
+          DB.people.query.filter(_._id.parsed(id2.value)).stream.docs.compile.toList.map { list =>
+            list.map(_.name) should be(List("Jan Doe"))
+          }
         }
+      } else {
+        succeed
       }
     }
     "delete Jane" in {

@@ -6,6 +6,7 @@ import fabric.io.JsonParser
 import fabric.rw.Asable
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
+import lightdb.transaction.Transaction
 import lightdb.{KeyValue, LightDB}
 
 import java.io.File
@@ -62,7 +63,8 @@ object DatabaseRestore {
 
   private def restoreStream[D <: Document[D], M <: DocumentModel[D]](collection: Collection[D, M],
                                                                   stream: fs2.Stream[IO, String],
-                                                                  truncate: Boolean = true): IO[Int] = collection.transaction { implicit transaction =>
+                                                                  truncate: Boolean = true)
+                                                                    (implicit transaction: Transaction[D]): IO[Int] = {
     collection.truncate().whenA(truncate).flatMap { _ =>
       stream
         .map(JsonParser(_))
