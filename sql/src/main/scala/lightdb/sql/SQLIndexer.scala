@@ -500,7 +500,7 @@ object SQLIndexer {
     case Arr(v, _) => v.toList match {
       case Nil => ps.setNull(index, Types.NULL)
       case value :: Nil => setValue(ps, index, value)
-      case _ => throw new RuntimeException(s"SQLite does not support more than one element in an array ($value)")
+      case _ => ps.setString(index, JsonFormatter.Compact(value))
     }
     case _ => ps.setString(index, JsonFormatter.Compact(value))
   }
