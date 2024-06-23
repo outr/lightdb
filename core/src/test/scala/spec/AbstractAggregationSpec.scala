@@ -107,6 +107,7 @@ abstract class AbstractAggregationSpec extends AsyncWordSpec with AsyncIOSpec wi
 
   object DB extends LightDB {
     override lazy val directory: Path = Path.of(s"db/$specName")
+    override protected def truncateOnInit: Boolean = true
 
     val people: IndexedCollection[Person, Person.type] = collection("people", Person, indexer(Person))
 
