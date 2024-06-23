@@ -1,9 +1,5 @@
-//package lightdb.sql
-//
-//import fabric.Json
-//
-//trait SQLPart {
-//  def sql: String
-//
-//  def args: List[Json]
-//}
+package lightdb.sql
+
+import fabric.Json
+
+case class SQLPart(sql: String, args: List[Json])

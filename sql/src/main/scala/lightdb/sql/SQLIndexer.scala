@@ -1,8 +1,7 @@
 package lightdb.sql
 
 import cats.effect.IO
-import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
-import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str, bool, num, obj, str}
+import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str, bool, num, obj, str}
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw.Convertible
@@ -18,22 +17,10 @@ import lightdb.transaction.{Transaction, TransactionKey}
 import java.sql.{Connection, PreparedStatement, ResultSet, Types}
 
 trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] {
-  private lazy val connectionKey: TransactionKey[Connection] = TransactionKey("sqlConnection")
   private lazy val insertsKey: TransactionKey[SQLInserts[D]] = TransactionKey("inserts")
 
-  private lazy val dataSource: HikariDataSource = {
-    val config = new HikariConfig
-    config.setJdbcUrl(jdbcUrl)
-    config.setMaximumPoolSize(1)
-    username.foreach(config.setUsername)
-    password.foreach(config.setPassword)
-    config.setAutoCommit(false)
-    new HikariDataSource(config)
-  }
-
-  protected def jdbcUrl: String
-  protected def username: Option[String] = None
-  protected def password: Option[String] = None
+  protected def config: SQLConfig
+  protected def connectionManager: ConnectionManager[D]
 
   protected def createTable(): String = {
     val entries = indexes.map { index =>
@@ -92,31 +79,20 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
-  private def getConnection(implicit transaction: Transaction[D]): Connection = transaction
-    .getOrCreate(connectionKey, {
-      scribe.info(s"Opening connection (${transaction.id})...")
-      try {
-        dataSource.getConnection
-      } finally {
-        scribe.info("Returning!")
-      }
-    })
+  private def getConnection(implicit transaction: Transaction[D]): Connection = connectionManager.getConnection
 
   override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
     transaction.get(insertsKey).foreach { inserts =>
       inserts.close()
     }
-    transaction.get(connectionKey).foreach { connection =>
-      scribe.info(s"Closing connection...")
-      connection.close()
-    }
+    connectionManager.releaseConnection(transaction)
   }
 
   override def commit(transaction: Transaction[D]): IO[Unit] = super.commit(transaction).map { _ =>
     transaction.get(insertsKey).foreach { inserts =>
       inserts.execute()
     }
-    transaction.get(connectionKey).foreach { connection =>
+    connectionManager.currentConnection(transaction).foreach { connection =>
       connection.commit()
     }
   }
@@ -386,115 +362,6 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     case f: AggregateFilter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
     case f: AggregateFilter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
   }
-}
-
-case class SQLQueryBuilder[D <: Document[D]](collection: Collection[D, _],
-                                             fields: List[SQLPart] = Nil,
-                                             filters: List[SQLPart] = Nil,
-                                             group: List[SQLPart] = Nil,
-                                             having: List[SQLPart] = Nil,
-                                             sort: List[SQLPart] = Nil,
-                                             limit: Option[Int] = None,
-                                             offset: Int) {
-  def queryTotal(connection: Connection): Int = {
-    val b = copy(
-      fields = List(SQLPart("COUNT(*) AS count", Nil)),
-      group = Nil,
-      having = Nil,
-      sort = Nil,
-      limit = None,
-      offset = 0
-    )
-    val rs = b.execute(connection)
-    try {
-      rs.next()
-      rs.getInt(1)
-    } finally {
-      rs.close()
-    }
-  }
-
-  def execute(connection: Connection): ResultSet = {
-    val b = new StringBuilder
-    b.append("SELECT\n")
-    b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
-    b.append("FROM\n")
-    b.append(s"\t${collection.name}\n")
-    filters.zipWithIndex.foreach {
-      case (f, index) =>
-        if (index == 0) {
-          b.append("WHERE\n")
-        } else {
-          b.append("AND\n")
-        }
-        b.append(s"\t${f.sql}\n")
-    }
-    if (group.nonEmpty) {
-      b.append("GROUP BY\n\t")
-      b.append(group.map(_.sql).mkString(", "))
-      b.append('\n')
-    }
-    having.zipWithIndex.foreach {
-      case (f, index) =>
-        if (index == 0) {
-          b.append("HAVING\n")
-        } else {
-          b.append("AND\n")
-        }
-        b.append(s"\t${f.sql}\n")
-    }
-    if (sort.nonEmpty) {
-      b.append("ORDER BY\n\t")
-      b.append(sort.map(_.sql).mkString(", "))
-      b.append('\n')
-    }
-    limit.foreach { l =>
-      b.append("LIMIT\n")
-      b.append(s"\t$l\n")
-    }
-    if (offset > 0) {
-      b.append("OFFSET\n")
-      b.append(s"\t$offset\n")
-    }
-    scribe.info(b.toString())
-    val ps = connection.prepareStatement(b.toString())
-    val args = (fields ::: filters ::: sort).flatMap(_.args)
-    args.zipWithIndex.foreach {
-      case (value, index) => SQLIndexer.setValue(ps, index + 1, value)
-    }
-    ps.executeQuery()
-  }
-}
-
-case class SQLPart(sql: String, args: List[Json])
-
-class SQLInserts[D <: Document[D]](ps: PreparedStatement,
-                                   indexes: List[Index[_, D]],
-                                   maxBatch: Int) {
-  private var batchSize = 0
-
-  def insert(doc: D): Unit = {
-    indexes.map(_.getJson(doc)).zipWithIndex.foreach {
-      case (value, index) => SQLIndexer.setValue(ps, index + 1, value)
-    }
-    ps.addBatch()
-    synchronized {
-      batchSize += 1
-      if (batchSize >= maxBatch) {
-        ps.executeBatch()
-        batchSize = 0
-      }
-    }
-  }
-
-  def execute(): Unit = synchronized {
-    if (batchSize > 0) {
-      ps.executeBatch()
-      batchSize = 0
-    }
-  }
-
-  def close(): Unit = ps.close()
 }
 
 object SQLIndexer {

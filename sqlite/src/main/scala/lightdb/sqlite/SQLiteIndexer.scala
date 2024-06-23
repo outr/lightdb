@@ -1,7 +1,7 @@
 package lightdb.sqlite
 
 import lightdb.document.{Document, DocumentModel}
-import lightdb.sql.SQLIndexer
+import lightdb.sql.{ConnectionManager, HikariConnectionManager, SQLConfig, SQLIndexer, SingleConnectionManager}
 
 import java.nio.file.{Files, Path}
 
@@ -11,6 +11,8 @@ case class SQLiteIndexer[D <: Document[D], M <: DocumentModel[D]]() extends SQLI
     Files.createDirectories(p.getParent)
     p
   }
-
-  override protected lazy val jdbcUrl: String = s"jdbc:sqlite:${path.toFile.getCanonicalPath}"
+  override protected lazy val config: SQLConfig = SQLConfig(
+    jdbcUrl = s"jdbc:sqlite:${path.toFile.getCanonicalPath}"
+  )
+  override protected lazy val connectionManager: ConnectionManager[D] = SingleConnectionManager(config)
 }
