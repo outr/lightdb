@@ -5,11 +5,14 @@ import cats.implicits.toTraverseOps
 import lightdb.Id
 import lightdb.collection.Collection
 import lightdb.document.Document
+import lightdb.util.Unique
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 case class Transaction[D <: Document[D]](collection: Collection[D, _]) { transaction =>
+  val id: String = Unique()
+
   private var map = Map.empty[TransactionKey[_], Any]
   private var locks = Set.empty[Id[D]]
 

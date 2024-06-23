@@ -11,13 +11,11 @@ import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.filter.Filter
-import lightdb.index.{Index, Indexed, Indexer, MaterializedAggregate, MaterializedIndex}
+import lightdb.index.{Index, Indexer, MaterializedAggregate, MaterializedIndex}
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
-import lightdb.spatial.GeoPoint
 import lightdb.transaction.{Transaction, TransactionKey}
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Types}
-import java.util.concurrent.atomic.AtomicInteger
 
 trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] {
   private lazy val connectionKey: TransactionKey[Connection] = TransactionKey("sqlConnection")
@@ -26,6 +24,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
   private lazy val dataSource: HikariDataSource = {
     val config = new HikariConfig
     config.setJdbcUrl(jdbcUrl)
+    config.setMaximumPoolSize(1)
     username.foreach(config.setUsername)
     password.foreach(config.setPassword)
     config.setAutoCommit(false)
@@ -94,13 +93,21 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
   }
 
   private def getConnection(implicit transaction: Transaction[D]): Connection = transaction
-    .getOrCreate(connectionKey, dataSource.getConnection)
+    .getOrCreate(connectionKey, {
+      scribe.info(s"Opening connection (${transaction.id})...")
+      try {
+        dataSource.getConnection
+      } finally {
+        scribe.info("Returning!")
+      }
+    })
 
   override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
     transaction.get(insertsKey).foreach { inserts =>
       inserts.close()
     }
     transaction.get(connectionKey).foreach { connection =>
+      scribe.info(s"Closing connection...")
       connection.close()
     }
   }
@@ -121,7 +128,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
   override def postDelete(doc: D, transaction: Transaction[D]): IO[Unit] = super.postDelete(doc, transaction).flatMap { _ =>
     IO.blocking {
       val connection = getConnection(transaction)
-      val ps = connection.prepareStatement("DELETE FROM ${collection.name} WHERE _id = ?")
+      val ps = connection.prepareStatement(s"DELETE FROM ${collection.name} WHERE _id = ?")
       try {
         ps.setString(1, doc._id.value)
         ps.executeUpdate()
@@ -410,9 +417,7 @@ case class SQLQueryBuilder[D <: Document[D]](collection: Collection[D, _],
   def execute(connection: Connection): ResultSet = {
     val b = new StringBuilder
     b.append("SELECT\n")
-    fields.foreach { f =>
-      b.append(s"\t${f.sql}\n")
-    }
+    b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
     b.append("FROM\n")
     b.append(s"\t${collection.name}\n")
     filters.zipWithIndex.foreach {
@@ -451,6 +456,7 @@ case class SQLQueryBuilder[D <: Document[D]](collection: Collection[D, _],
       b.append("OFFSET\n")
       b.append(s"\t$offset\n")
     }
+    scribe.info(b.toString())
     val ps = connection.prepareStatement(b.toString())
     val args = (fields ::: filters ::: sort).flatMap(_.args)
     args.zipWithIndex.foreach {
@@ -471,6 +477,7 @@ class SQLInserts[D <: Document[D]](ps: PreparedStatement,
     indexes.map(_.getJson(doc)).zipWithIndex.foreach {
       case (value, index) => SQLIndexer.setValue(ps, index + 1, value)
     }
+    ps.addBatch()
     synchronized {
       batchSize += 1
       if (batchSize >= maxBatch) {

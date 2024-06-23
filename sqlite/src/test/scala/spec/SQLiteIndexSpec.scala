@@ -6,6 +6,7 @@ import lightdb.store.{AtomicMapStore, StoreManager}
 
 class SQLiteIndexSpec extends AbstractIndexSpec {
   override protected def supportsAggregateFunctions: Boolean = false
+  override protected def supportsParsed: Boolean = false
 
   override protected def storeManager: StoreManager = AtomicMapStore
 
