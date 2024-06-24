@@ -60,6 +60,10 @@ object TightLoops extends IOApp {
         }
       }
       _ <- logger.info(s"Counted in $countTime / $countIndexesTime")
+      streamTime <- elapsed {
+        streamRecords()(transaction)
+      }
+      _ <- logger.info(s"Streamed in $streamTime")
       searchTime <- elapsed {
         searchRecords()(transaction)
       }
@@ -93,11 +97,21 @@ object TightLoops extends IOApp {
     .compile
     .lastOrError
 
+  def streamRecords()(implicit transaction: Transaction[Person]): IO[Unit] = fs2.Stream(0 until SearchIterations: _*)
+    .evalMap { _ =>
+      DB.people.stream.compile.count.flatMap { count =>
+        logger.info(s"Streamed: $count")
+      }
+    }
+    .compile
+    .drain
+
   def searchRecords()(implicit transaction: Transaction[Person]): IO[Unit] = fs2.Stream((0 until SearchIterations): _*)
     .evalMap { _ =>
       fs2.Stream((0 until RecordCount): _*)
         .evalMap { age =>
-          DB.people.query.filter(_.age === age).stream.docs.compile.toList.map { list =>
+          // Person.get is the problem!!!!
+          DB.people.query.filter(_.age === age).stream.ids.evalMap(id => DB.people(id)).compile.toList.map { list =>
             if (list.size != 1) {
               scribe.warn(s"Unable to find age = $age")
             }
