@@ -101,6 +101,9 @@ object TightLoops extends IOApp {
             if (list.size != 1) {
               scribe.warn(s"Unable to find age = $age")
             }
+            if (list.head.age != age) {
+              scribe.warn(s"${list.head.age} was not $age")
+            }
           }
         }
         .compile
