@@ -81,6 +81,6 @@ class HaloDBStore[D <: Document[D]](directory: Path,
 
 object HaloDBStore extends StoreManager {
   override protected def create[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): IO[Store[D]] = IO {
-    new HaloDBStore[D](db.directory.resolve(name), 32, 1024 * 1024)
+    new HaloDBStore[D](db.directory.resolve(name), 32, 1024 * 1024 * 1024)
   }
 }

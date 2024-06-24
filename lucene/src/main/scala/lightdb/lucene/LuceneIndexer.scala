@@ -3,7 +3,7 @@ package lightdb.lucene
 import cats.effect.IO
 import fabric._
 import fabric.define.DefType
-import lightdb.index.{Index, Indexed, Indexer, MaterializedAggregate, MaterializedIndex}
+import lightdb.index.{Index, Indexer, MaterializedAggregate, MaterializedIndex}
 import lightdb.Id
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -21,10 +21,31 @@ import lightdb.query.{Query, SearchResults, Sort, SortDirection}
 import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
 import lightdb.transaction.{Transaction, TransactionKey}
 
-case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
-                                                                  persistent: Boolean = true,
+case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Boolean = true,
                                                                   analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D, M] {
   private lazy val indexSearcherKey: TransactionKey[IndexSearcher] = TransactionKey("indexSearcher")
+
+  private lazy val path: Option[Path] = if (persistent) {
+    val p = collection.db.directory.resolve(collection.name).resolve("index")
+    Files.createDirectories(p)
+    Some(p)
+  } else {
+    None
+  }
+  private lazy val directory = path
+    .map(p => FSDirectory.open(p))
+    .getOrElse(new ByteBuffersDirectory())
+  private lazy val config = {
+    val c = new IndexWriterConfig(analyzer)
+    c.setCommitOnClose(true)
+    c.setRAMBufferSizeMB(1_000)     // TODO: Make configurable
+    c
+  }
+  private lazy val indexWriter = new IndexWriter(directory, config)
+
+  private lazy val searcherManager = new SearcherManager(indexWriter, new SearcherFactory)
+
+  private lazy val parser = new QueryParser("_id", analyzer)
 
   override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
     transaction.get(indexSearcherKey).foreach { indexSearcher =>
@@ -33,7 +54,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
   }
 
   override def postSet(doc: D, transaction: Transaction[D]): IO[Unit] = super.postSet(doc, transaction).flatMap { _ =>
-    indexDoc(doc, model.asInstanceOf[Indexed[D]].indexes)
+    indexDoc(doc, indexes)
   }
 
   override def postDelete(doc: D, transaction: Transaction[D]): IO[Unit] = super.postDelete(doc, transaction).flatMap { _ =>
@@ -98,24 +119,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
     filterField ::: sortField
   }
 
-  private lazy val path: Option[Path] = if (persistent) {
-    val p = collection.db.directory.resolve(collection.name).resolve("index")
-    Files.createDirectories(p)
-    Some(p)
-  } else {
-    None
-  }
-  private lazy val directory = path
-    .map(p => FSDirectory.open(p))
-    .getOrElse(new ByteBuffersDirectory())
-  private lazy val config = new IndexWriterConfig(analyzer)
-  private lazy val indexWriter = new IndexWriter(directory, config)
-
-  private lazy val searcherManager = new SearcherManager(indexWriter, new SearcherFactory)
-
-  private lazy val parser = new QueryParser("_id", analyzer)
-
-  private[lightdb] def addDoc(id: Id[D], fields: List[LuceneField]): Unit = if (fields.length > 1) {
+  private[lightdb] def addDoc(id: Id[D], fields: List[LuceneField]): Unit = if (fields.tail.nonEmpty) {
     val document = new LuceneDocument
     fields.foreach(document.add)
     indexWriter.updateDocument(new Term("_id", id.value), document)
@@ -210,7 +214,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](model: M,
           index.name -> Index.string2Json(s)(index.rw)
         }: _*)
         val score = scoreDoc.score.toDouble
-        MaterializedIndex[D, M](json, model) -> score
+        MaterializedIndex[D, M](json, collection.model) -> score
       }, 512)
       case m: Conversion.Distance => idStream.evalMap {
         case (id, score) => collection(id)(transaction).map { doc =>

@@ -222,6 +222,7 @@ lazy val all = project.in(file("all"))
 
 lazy val benchmark = project.in(file("benchmark"))
 	.dependsOn(all)
+	.enablePlugins(JmhPlugin)
 	.settings(
 		name := s"$projectName-benchmark",
 		fork := true,
@@ -231,6 +232,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.postgresql" % "postgresql" % "42.7.3",
 			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
+			"commons-io" % "commons-io" % "2.16.1",
 			"com.outr" %% "scarango-driver" % "3.20.0"
 		)
 	)

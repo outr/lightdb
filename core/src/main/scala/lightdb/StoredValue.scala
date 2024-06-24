@@ -52,23 +52,6 @@ case class StoredValue[T](key: String,
     }
   }
 
-  def modify(f: T => IO[T]): IO[T] = collection.transaction { implicit transaction =>
-    transaction.withLock(id) {
-      if (persistence == Persistence.Memory) {
-        get().flatMap(f).map { value =>
-          cached = Some(value)
-          value
-        }
-      } else {
-        for {
-          current <- get()
-          modified <- f(current)
-          _ <- set(modified).whenA(current != modified)
-        } yield modified
-      }
-    }
-  }
-
   def clear(): IO[Unit] = collection.transaction { implicit transaction =>
     collection.delete(id).map { _ =>
       cached = None
