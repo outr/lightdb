@@ -193,7 +193,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
     val s = new LuceneSort(sortFields: _*)
     val indexSearcher = getIndexSearcher(transaction)
     val limit = query.limit.map(l => math.min(l - query.offset, query.batchSize)).getOrElse(query.batchSize)
-    val collectorManager = new TopFieldCollectorManager(s, query.offset + limit, Int.MaxValue)
+    val collectorManager = new TopFieldCollectorManager(s, query.offset + limit, null, Int.MaxValue, false)
     val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
     val scoreDocs: List[ScoreDoc] = topFieldDocs
       .scoreDocs

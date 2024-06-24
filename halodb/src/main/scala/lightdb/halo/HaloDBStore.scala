@@ -14,8 +14,8 @@ import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
 
 class HaloDBStore[D <: Document[D]](directory: Path,
-                                    indexThreads: Int,
-                                    maxFileSize: Int)
+                                    indexThreads: Int = Runtime.getRuntime.availableProcessors(),
+                                    maxFileSize: Int = 1024 * 1024)
                                    (implicit val rw: RW[D]) extends JsonStore[D] {
   override type Serialized = Array[Byte]
 
@@ -81,6 +81,6 @@ class HaloDBStore[D <: Document[D]](directory: Path,
 
 object HaloDBStore extends StoreManager {
   override protected def create[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): IO[Store[D]] = IO {
-    new HaloDBStore[D](db.directory.resolve(name), 32, 1024 * 1024 * 1024)
+    new HaloDBStore[D](db.directory.resolve(name))
   }
 }
