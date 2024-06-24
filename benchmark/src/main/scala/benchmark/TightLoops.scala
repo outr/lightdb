@@ -23,6 +23,7 @@ import scala.util.Random
 object TightLoops extends IOApp {
   private val RecordCount = 1_000_000
   private val CountIterations = 100_000
+  private val SearchIterations = 1
 
   private val AnimalNames = Vector(
     "Aardvark", "Aardwolf", "African buffalo", "African elephant", "African leopard", "African Tree Pangolin", "Albatross", "Alligator", "Alpaca", "American robin", "Anaconda", "Angel Fish", "Angelfish", "Anglerfish", "Ant", "Anteater", "Antelope", "Antlion", "Ape", "Aphid", "Arab horse", "Arabian leopard", "Archer Fish", "Arctic Fox", "Arctic Wolf", "Armadillo", "Arrow crab", "Asian Elephant", "Asp", "Atlantic Puffin", "Aye-Aye", "Baboon", "Badger", "Bald eagle", "Bandicoot", "Bangle Tiger", "Barnacle", "Barracuda", "Basilisk", "Bass", "Basset Hound", "Bat", "Beaked whale", "Bear", "Bearded Dragon", "Beaver", "Bedbug", "Bee", "Beetle", "Beluga Whale", "Big-horned sheep", "Billy goat", "Bird", "Bird of paradise", "Bison", "Black Bear", "Black Fly", "Black Footed Rhino", "Black panther", "Black Rhino", "Black widow spider", "Blackbird", "Blowfish", "Blue bird", "Blue jay", "Blue whale", "Boa", "Boar", "Bob-Cat", "Bobcat", "Bobolink", "Bonobo", "Booby", "Border Collie", "Bornean Orang-utan", "Bottle-Nose dolphin", "Bovid", "Box jellyfish", "Boxer dog", "Brown Bear", "Buck", "Budgie", "Buffalo", "Bug", "Bull", "Bull frog", "Bull Mastiff", "Butterfly", "Buzzard", "Caiman lizard", "Camel", "Canary", "Cape buffalo", "Capybara", "Cardinal", "Caribou", "Carp", "Cat", "Caterpillar", "Catfish", "Catshark", "Cattle", "Centipede", "Cephalopod", "Chameleon", "Cheetah", "Chickadee", "Chicken", "Chihuahua", "Chimpanzee", "Chinchilla", "Chipmunk", "Chupacabra", "Cicada", "Clam", "Clown Fish", "Clownfish", "Cobra", "Cockatiel", "Cockatoo", "Cocker Spaniel", "Cockroach", "Cod", "Coho", "Common Dolphin", "Common seal", "Condor", "Constrictor", "Coral", "Corn Snake", "Cougar", "Cow", "Coyote", "Crab", "Crane", "Crane fly", "Crawdad", "Crawfish", "Cray fish", "Crayfish", "Cricket", "Crocodile", "Crow", "Cuckoo", "Cuckoo bird", "Cuttle fish", "Dacshund", "Dalmation", "Damsel fly", "Damselfly", "Dart Frog", "Deer", "Devi Fish (Giant Sting ray)", "Diamond back rattler", "Dik-dik", "Dingo", "Dinosaur", "Doberman Pinscher", "Dodo bird", "Dog", "Dolly Varden", "Dolphin", "Donkey", "Door mouse", "Dormouse", "Dove", "Draft horse", "Dragon", "Dragonfly", "Drake", "Du-gong", "Duck", "Duckbill Platypus", "Dung beetle", "Eagle", "Earthworm", "Earwig", "Echidna", "Eclectus", "Eel", "Egret", "Elephant", "Elephant seal", "Elk", "Emu", "English pointer", "Ermine", "Erne", "Eurasian Lynx", "Falcon", "Ferret", "Finch", "Firefly", "Fish", "Flamingo", "Flatworm", "Flea", "Fly", "Flyingfish", "Fowl", "Fox", "Fresh Water Crocodile", "Frog", "Fruit bat", "Galapagos Land Iguana", "Galapagos Tortoise", "Galliform", "Gamefowl", "Gazelle", "Gecko", "Gerbil", "Giant Anteater", "Giant panda", "Giant squid", "Gibbon", "Gila monster", "Giraffe", "Gnat", "Goat", "Goldfish", "Goose", "Gopher", "Gorilla", "Grasshopper", "Great blue heron", "Great white shark", "Green fly", "Green poison dart frog", "Green Sea Turtle", "Grey Whale", "Grizzly bear", "Ground shark", "Ground sloth", "Groundhog", "Grouse", "Guan", "Guanaco", "Guinea pig", "Guineafowl", "Gull", "Guppy", "Haddock", "Halibut", "Hammerhead shark", "Hamster", "Hare", "Harrier", "Hawk", "Hedgehog", "Hermit crab", "Heron", "Herring", "Hippopotamus", "Hookworm", "Hornet", "Horse", "Hoverfly", "Hummingbird", "Humpback whale", "Hyena", "Hyrax", "Iguana", "Iguanodon", "Impala", "Inchworm", "Insect", "Irrawaddy Dolphin", "Irukandji jellyfish", "Jackal", "Jackrabbit", "Jaguar", "Jay", "Jellyfish", "June bug", "Junglefowl", "Kangaroo", "Kangaroo mouse", "Kangaroo rat", "Killer Whale", "King Cobra", "Kingfisher", "Kite", "Kiwi", "Koala", "Koi", "Komodo dragon", "Kookaburra", "Krill", "Ladybug", "Lama", "Lamb", "Lamprey", "Lancelet", "Land snail", "Lark", "Leatherback sea turtle", "Leech", "Lemming", "Lemur", "Leopard", "Leopon", "Lice", "Limpet", "Lion", "Lionfish", "Lizard", "Llama", "Lobster", "Locust", "Loon", "Louse", "Lungfish", "Lynx", "Macaw", "Mackerel", "Magpie", "Man-Of-War", "Manatee", "Mandrill", "Manta ray", "Mantis", "Marlin", "Marmoset", "Marmot", "Marsupials", "Mastodon", "Meadowlark", "Meerkat", "Mink", "Minnow", "Mite", "Mockingbird", "Mole", "Mollusk", "Mollusks", "Monarch Butterfly", "Mongoose", "Monitor lizard", "Monkey", "Moose", "Mosquito", "Moth", "Mountain goat", "Mountain Lion", "Mouse", "Mule", "Muskox", "Muskrat", "Naked Mole Rat", "Narwhal", "Nautilus", "Newt", "Nightingale", "Ocelot", "Octopus", "Opossum", "Orangutan", "Orca", "Osprey", "Ostrich", "Otter", "Owl", "Ox", "Panda", "Panther", "Panthera hybrid", "Parakeet", "Parrot", "Parrotfish", "Partridge", "Peacock", "Peafowl", "Pelican", "Penguin", "Perch", "Peregrine falcon", "Pheasant", "Pig", "Pigeon", "Pike", "Pilot whale", "Pinniped", "Piranha", "Planarian", "Platypus", "Polar bear", "Pony", "Porcupine", "Porpoise", "Possum", "Prairie dog", "Prawn", "Praying mantis", "Ptarmigan", "Puffin", "Puma", "Python", "Quail", "Quelea", "Quetzal", "Quokka", "Rabbit", "Raccoon", "Rainbow trout", "Rat", "Rattlesnake", "Raven", "Ray", "Red panda", "Reindeer", "Reptile", "Rhino", "Rhinoceros", "Right whale", "Ringworm", "Roadrunner", "Robin", "Rodent", "Rook", "Rooster", "Roundworm", "Saber-toothed cat", "Sailfish", "Salamander", "Salmon", "Salt water alligator", "Sandpiper", "Sawfish", "Scallop", "Scorpion", "Sea anemone", "Sea lion", "Sea slug", "Sea snail", "Sea urchin", "Seahorse", "Seal", "Shark", "Sheep", "Shrew", "Shrimp", "Siberian Husky", "Siberian Tiger", "Skink", "Skunk", "Skunks", "Slender Loris", "Sloth", "Sloth bear", "Slug", "Slugs", "Smelt", "Snail", "Snails", "Snake", "Snipe", "Snow Fox", "Snow Hare", "Snow leopard", "Sockeye salmon", "Sole", "Somali Wild Ass", "Sparrow", "Spectacled Bear", "Sperm whale", "Spider", "Spider monkey", "Sponge", "Spoonbill", "Squid", "Squirrel", "Star-nosed mole", "Starfish", "Steelhead trout", "Stingray", "Stoat", "Stork", "Sturgeon", "Sugar glider", "Swallow", "Swan", "Swift", "Swordfish", "Swordtail", "Tadpole", "Tahr", "Takin", "Tamarin", "Tapeworm", "Tapir", "Tarantula", "Tarpan", "Tarsier", "Tasmanian devil", "Tazmanian devil", "Tazmanian tiger", "Termite", "Tern", "Terrapin", "Thrush", "Tick", "Tiger", "Tiger shark", "Tiglon", "Toad", "Tortoise", "Toucan", "Trapdoor spider", "Tree frog", "Trout", "Tuna", "Turkey", "Turtle", "Tyrannosaurus", "Uakari", "Umbrella bird", "Urchin", "Urial", "Urutu", "Vampire bat", "Vampire squid", "Velociraptor", "Velvet worm", "Vervet", "Vicuna", "Viper", "Viper Fish", "Vole", "Vulture", "Wallaby", "Walrus", "Warbler", "Warthog", "Wasp", "Water buffalo", "Water Dragons", "Weasel", "Weevil", "Whale", "Whale Shark", "Whippet", "White Rhino", "White tailed dear", "Whitefish", "Whooper", "Whooping crane", "Widow Spider", "Wildcat", "Wildebeest", "Wolf", "Wolf Spider", "Wolverine", "Wombat", "Woodchuck", "Woodpecker", "Wren", "X-ray fish", "Xerinae", "Yak", "Yellow Bellied Marmot", "Yellow belly sapsucker", "Yellow finned tuna", "Yellow perch", "Yeti", "Yorkshire terrier", "Zander", "Zebra", "Zebra Dove", "Zebra finch", "Zebu", "Zorilla"
@@ -37,30 +38,38 @@ object TightLoops extends IOApp {
     elapsed = Duration.between(start, end).toMillis
   } yield (elapsed / 1000.0).f(f = 3)
 
-  override def run(args: List[String]): IO[ExitCode] = for {
-    _ <- IO.blocking {
-      val dbDir = new File("db")
-      FileUtils.deleteDirectory(dbDir)
-      dbDir.mkdirs()
-    }
-    _ <- DB.init()
-    transaction <- DB.people.transaction.create()
-    insertTime <- elapsed(insertRecords()(transaction))
-    _ <- logger.info(s"Inserted in $insertTime")
-    countTime <- elapsed {
-      countRecords()(transaction).flatMap { count =>
-        logger.info(s"Inserted $count records")
+  override def run(args: List[String]): IO[ExitCode] = elapsed {
+    for {
+      _ <- IO.blocking {
+        val dbDir = new File("db")
+        FileUtils.deleteDirectory(dbDir)
+        dbDir.mkdirs()
       }
-    }
-    countIndexesTime <- elapsed {
-      countIndexes()(transaction).flatMap { count =>
-        logger.info(s"Indexed $count records")
+      _ <- DB.init()
+      transaction <- DB.people.transaction.create()
+      insertTime <- elapsed(insertRecords()(transaction))
+      _ <- logger.info(s"Inserted in $insertTime")
+      countTime <- elapsed {
+        countRecords()(transaction).flatMap { count =>
+          logger.info(s"Inserted $count records")
+        }
       }
-    }
-    _ <- logger.info(s"Counted in $countTime / $countIndexesTime")
-    _ <- DB.people.transaction.release(transaction)
-    _ <- DB.dispose()
-  } yield ExitCode.Success
+      countIndexesTime <- elapsed {
+        countIndexes()(transaction).flatMap { count =>
+          logger.info(s"Indexed $count records")
+        }
+      }
+      _ <- logger.info(s"Counted in $countTime / $countIndexesTime")
+      searchTime <- elapsed {
+        searchRecords()(transaction)
+      }
+      _ <- logger.info(s"Searched in $searchTime")
+      _ <- DB.people.transaction.release(transaction)
+      _ <- DB.dispose()
+    } yield ()
+  }.flatMap { totalTime =>
+    logger.info(s"Completed in $totalTime")
+  }.map(_ => ExitCode.Success)
 
   def insertRecords()(implicit transaction: Transaction[Person]): IO[Unit] = fs2.Stream((0 until RecordCount): _*)
     .evalMap(index => DB.people.set(Person(
@@ -83,6 +92,22 @@ object TightLoops extends IOApp {
     .evalMap(_ => DB.people.indexer.count)
     .compile
     .lastOrError
+
+  def searchRecords()(implicit transaction: Transaction[Person]): IO[Unit] = fs2.Stream((0 until SearchIterations): _*)
+    .evalMap { _ =>
+      fs2.Stream((0 until RecordCount): _*)
+        .evalMap { age =>
+          DB.people.query.filter(_.age === age).stream.docs.compile.toList.map { list =>
+            if (list.size != 1) {
+              scribe.warn(s"Unable to find age = $age")
+            }
+          }
+        }
+        .compile
+        .drain
+    }
+    .compile
+    .drain
 
   object DB extends LightDB {
     override lazy val directory: Path = Path.of(s"db/tightLoops")
