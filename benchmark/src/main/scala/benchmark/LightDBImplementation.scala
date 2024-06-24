@@ -7,7 +7,8 @@ import lightdb.document.{Document, DocumentModel}
 import lightdb.halo.HaloDBStore
 import lightdb.index.{Indexed, IndexedCollection}
 import lightdb.lucene.LuceneIndexer
-import lightdb.store.StoreManager
+import lightdb.sqlite.SQLiteIndexer
+import lightdb.store.{AtomicMapStore, StoreManager}
 import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
@@ -71,7 +72,6 @@ object LightDBImplementation extends BenchmarkImplementation {
   override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] =
     DB.titleAka
       .query
-      .limit(100)
       .filter(_.titleId === titleId)
       .stream
       .docs
@@ -104,9 +104,9 @@ object LightDBImplementation extends BenchmarkImplementation {
 
     override def directory: Path = Paths.get("imdb")
 
-    override def storeManager: StoreManager = HaloDBStore
+    override def storeManager: StoreManager = AtomicMapStore
 
-    val titleAka: IndexedCollection[TitleAkaLDB, TitleAkaLDB.type] = collection("titleAka", TitleAkaLDB, LuceneIndexer(TitleAkaLDB))
+    val titleAka: IndexedCollection[TitleAkaLDB, TitleAkaLDB.type] = collection("titleAka", TitleAkaLDB, LuceneIndexer())
     val titleBasics: Collection[TitleBasicsLDB, TitleBasicsLDB.type] = collection("titleBasics", TitleBasicsLDB)
 
     //    val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
