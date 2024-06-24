@@ -233,11 +233,15 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
       case (page1, total) =>
         val limit = query.limit.map(l => math.min(l, total)).getOrElse(total) - query.offset
         val pages = math.ceil(limit.toDouble / query.batchSize.toDouble).toInt
-        val streams = (1 until pages).toList.map { page =>
-          fs2.Stream.force(createStream(query.copy(offset = page * query.batchSize), transaction, conversion)
-            .map(_._1))
+        val stream = if (pages > 1) {
+          val streams = (1 until pages).toList.map { page =>
+            fs2.Stream.force(createStream(query.copy(offset = page * query.batchSize), transaction, conversion)
+              .map(_._1))
+          }
+          streams.foldLeft(page1)((combined, stream) => combined ++ stream)
+        } else {
+          page1
         }
-        val stream = streams.foldLeft(page1)((combined, stream) => combined ++ stream)
         SearchResults(
           offset = query.offset,
           limit = query.limit,
