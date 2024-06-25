@@ -1,8 +1,5 @@
 package lightdb.duckdb
 
-import cats.effect.IO
-import fabric._
-import fabric.io.JsonFormatter
 import lightdb.document.{Document, DocumentModel}
 import lightdb.sql.{ConnectionManager, SQLConfig, SQLIndexer, SingleConnectionManager}
 import lightdb.transaction.{Transaction, TransactionKey}

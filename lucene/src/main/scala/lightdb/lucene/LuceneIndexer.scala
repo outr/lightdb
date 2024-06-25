@@ -1,6 +1,5 @@
 package lightdb.lucene
 
-import cats.effect.IO
 import fabric._
 import fabric.define.DefType
 import lightdb.index.{Index, Indexer, MaterializedAggregate, MaterializedIndex}
@@ -47,36 +46,41 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
 
   private lazy val parser = new QueryParser("_id", analyzer)
 
-  override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
+  override def transactionEnd(transaction: Transaction[D]): Unit = {
+    super.transactionEnd(transaction)
     transaction.get(indexSearcherKey).foreach { indexSearcher =>
       searcherManager.release(indexSearcher)
     }
   }
 
-  override def postSet(doc: D, transaction: Transaction[D]): IO[Unit] = super.postSet(doc, transaction).flatMap { _ =>
+  override def postSet(doc: D, transaction: Transaction[D]): Unit = {
+    super.postSet(doc, transaction)
     indexDoc(doc, indexes)
   }
 
-  override def postDelete(doc: D, transaction: Transaction[D]): IO[Unit] = super.postDelete(doc, transaction).flatMap { _ =>
+  override def postDelete(doc: D, transaction: Transaction[D]): Unit = {
+    super.postDelete(doc, transaction)
     delete(doc._id)
   }
 
-  override def commit(transaction: Transaction[D]): IO[Unit] = super.commit(transaction).map { _ =>
+  override def commit(transaction: Transaction[D]): Unit = {
+    super.commit(transaction)
     transaction.get(indexSearcherKey).foreach { _ =>
       commitBlocking()
     }
   }
 
-  override def truncate(transaction: Transaction[D]): IO[Unit] = super.truncate(transaction).flatMap { _ =>
+  override def truncate(transaction: Transaction[D]): Unit = {
+    super.truncate(transaction)
     truncate()
   }
 
-  private def indexDoc(doc: D, indexes: List[Index[_, D]]): IO[Unit] = for {
-    fields <- IO.blocking(indexes.flatMap { index =>
+  private def indexDoc(doc: D, indexes: List[Index[_, D]]): Unit = {
+    val fields = indexes.flatMap { index =>
       createFields(index, doc)
-    })
-    _ = addDoc(doc._id, fields)
-  } yield ()
+    }
+    addDoc(doc._id, fields)
+  }
 
   protected[lightdb] def createFields(index: Index[_, D], doc: D): List[LuceneField] = if (index.tokenized) {
     index.getJson(doc).flatMap {
@@ -125,13 +129,9 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
     indexWriter.updateDocument(new Term("_id", id.value), document)
   }
 
-  private[lightdb] def delete(id: Id[D]): IO[Unit] = IO.blocking {
-    indexWriter.deleteDocuments(parser.parse(s"_id:${id.value}"))
-  }
+  private[lightdb] def delete(id: Id[D]): Unit = indexWriter.deleteDocuments(parser.parse(s"_id:${id.value}"))
 
-  def truncate(): IO[Unit] = IO.blocking {
-    indexWriter.deleteAll()
-  }
+  def truncate(): Unit = indexWriter.deleteAll()
 
   private def commitBlocking(): Unit = {
     indexWriter.flush()
@@ -182,9 +182,9 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${index.rw.definition})")
   }
 
-  private def createStream[V](query: Query[D, M],
+  private def createIterator[V](query: Query[D, M],
                               transaction: Transaction[D],
-                              conversion: Conversion[V]): IO[(fs2.Stream[IO, (V, Double)], Int)] = IO.blocking {
+                              conversion: Conversion[V]): (Iterator[(V, Double)], Int) = {
     val q: LuceneQuery = filter2Lucene(query.filter)
     val sortFields = query.sort match {
       case Nil => List(SortField.FIELD_SCORE)
@@ -202,43 +202,44 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
     val total: Int = topFieldDocs.totalHits.value.toInt
     val storedFields: StoredFields = indexSearcher.storedFields()
     val idsAndScores = scoreDocs.map(doc => Id[D](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
-    val idStream = fs2.Stream(idsAndScores: _*)
-    val stream: fs2.Stream[IO, (V, Double)] = conversion match {
-      case Conversion.Id => idStream
-      case Conversion.Doc => idStream.evalMap {
-        case (id, score) => collection.get(id)(transaction).map(_.map(doc => doc -> score))
-      }.unNone
-      case m: Conversion.Materialized => fs2.Stream.fromBlockingIterator[IO](scoreDocs.iterator.map { scoreDoc =>
+    val iterator: Iterator[(V, Double)] = conversion match {
+      case Conversion.Id => idsAndScores.iterator
+      case Conversion.Doc => idsAndScores.iterator.flatMap {
+        case (id, score) => collection.get(id)(transaction).map(doc => doc -> score)
+      }
+      case m: Conversion.Materialized => scoreDocs.iterator.map { scoreDoc =>
         val json = obj(m.indexes.map { index =>
           val s = storedFields.document(scoreDoc.doc).get(index.name)
           index.name -> Index.string2Json(s)(index.rw)
         }: _*)
         val score = scoreDoc.score.toDouble
         MaterializedIndex[D, M](json, collection.model) -> score
-      }, 512)
-      case m: Conversion.Distance => idStream.evalMap {
-        case (id, score) => collection(id)(transaction).map { doc =>
+      }
+      case m: Conversion.Distance => idsAndScores.iterator.map {
+        case (id, score) =>
+          val doc = collection(id)(transaction)
           val distance = DistanceCalculator(m.from, m.index.get(doc).head)
           DistanceAndDoc(doc, distance) -> score
-        }
       }
     }
-    (stream, total)
+    (iterator, total)
   }
 
   override def doSearch[V](query: Query[D, M],
                            transaction: Transaction[D],
-                           conversion: Conversion[V]): IO[SearchResults[D, V]] =
-    createStream(query, transaction, conversion).map {
+                           conversion: Conversion[V]): SearchResults[D, V] =
+    createIterator(query, transaction, conversion) match {
       case (page1, total) =>
         val limit = query.limit.map(l => math.min(l, total)).getOrElse(total) - query.offset
         val pages = math.ceil(limit.toDouble / query.batchSize.toDouble).toInt
-        val stream = if (pages > 1) {
-          val streams = (1 until pages).toList.map { page =>
-            fs2.Stream.force(createStream(query.copy(offset = page * query.batchSize), transaction, conversion)
-              .map(_._1))
-          }
-          streams.foldLeft(page1)((combined, stream) => combined ++ stream)
+        val iterator = if (pages > 1) {
+//          val streams = (1 until pages).toList.map { page =>
+//            fs2.Stream.force(createIterator(query.copy(offset = page * query.batchSize), transaction, conversion)
+//              .map(_._1))
+//          }
+//          streams.foldLeft(page1)((combined, stream) => combined ++ stream)
+          // TODO: Implement
+          ???
         } else {
           page1
         }
@@ -246,7 +247,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
           offset = query.offset,
           limit = query.limit,
           total = Some(total),
-          scoredStream = stream,
+          scoredIterator = iterator,
           transaction = transaction
         )
     }
@@ -259,10 +260,10 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
   }
 
   override def aggregate(query: AggregateQuery[D, M])
-                        (implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]] =
+                        (implicit transaction: Transaction[D]): Iterator[MaterializedAggregate[D, M]] =
     throw new UnsupportedOperationException("Aggregate functions not supported in Lucene currently")
 
-  override def count(implicit transaction: Transaction[D]): IO[Int] = IO.blocking {
+  override def count(implicit transaction: Transaction[D]): Int = {
     val indexSearcher = getIndexSearcher
     indexSearcher.count(new MatchAllDocsQuery)
   }

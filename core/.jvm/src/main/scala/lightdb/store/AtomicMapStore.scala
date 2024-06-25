@@ -1,10 +1,6 @@
 package lightdb.store
 
-import cats.effect.IO
-import fabric.rw.RW
 import lightdb.{Id, LightDB}
-import lightdb.document.Document
-import lightdb.transaction.Transaction
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
@@ -12,30 +8,24 @@ import scala.jdk.CollectionConverters._
 class AtomicMapStore extends Store {
   private lazy val map = new ConcurrentHashMap[String, Array[Byte]]
 
-  override def keyStream[D]: fs2.Stream[IO, Id[D]] = fs2.Stream
-    .fromBlockingIterator[IO](map.keys().asIterator().asScala.map(Id.apply[D]), 128)
+  override def keyStream[D]: Iterator[Id[D]] = map.keys().asIterator().asScala.map(Id.apply[D])
 
-  override def stream: fs2.Stream[IO, Array[Byte]] = fs2.Stream
-    .fromBlockingIterator[IO](map.values().iterator().asScala, 128)
+  override def stream: Iterator[Array[Byte]] = map.values().iterator().asScala
 
-  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO.blocking {
-    Option(map.get(id.value))
-  }
+  override def get[D](id: Id[D]): Option[Array[Byte]] = Option(map.get(id.value))
 
-  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO.blocking {
+  override def put[D](id: Id[D], value: Array[Byte]): Boolean = {
     map.put(id.value, value)
     true
   }
 
-  override def delete[D](id: Id[D]): IO[Unit] = IO.blocking {
-    map.remove(id.value)
-  }
+  override def delete[D](id: Id[D]): Unit = map.remove(id.value)
 
-  override def count: IO[Int] = IO.blocking(map.size())
+  override def count: Int = map.size()
 
-  override def commit(): IO[Unit] = IO.unit
+  override def commit(): Unit = ()
 
-  override def dispose(): IO[Unit] = IO.blocking(map.clear())
+  override def dispose(): Unit = map.clear()
 }
 
 object AtomicMapStore extends StoreManager {

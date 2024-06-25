@@ -1,9 +1,6 @@
 package lightdb.store
 
-import cats.effect.IO
-import fabric.rw.RW
 import lightdb.LightDB
-import lightdb.document.Document
 
 import java.util.concurrent.ConcurrentHashMap
 

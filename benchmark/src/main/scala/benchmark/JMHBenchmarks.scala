@@ -3,7 +3,7 @@ package benchmark
 import cats.effect.unsafe.implicits.global
 import fabric.rw.RW
 import lightdb.collection.Collection
-import lightdb.{Id, LightDB}
+import lightdb._
 import lightdb.document.{Document, DocumentModel}
 import lightdb.halo.HaloDBStore
 import lightdb.store.{AtomicMapStore, StoreManager}
@@ -34,7 +34,7 @@ class JMHBenchmarks {
     new File("benchmarks.json").delete()
     FileUtils.deleteDirectory(dbDir)
     dbDir.mkdirs()
-    DB.init().unsafeRunSync()
+    DB.init()
 
     val s = sqliteConnection.createStatement()
     s.executeUpdate("CREATE TABLE record(id VARCHAR NOT NULL, key TEXT, number INTEGER, PRIMARY KEY (id))")
@@ -49,27 +49,25 @@ class JMHBenchmarks {
   def records1InsertLightDB(): Unit = DB.records.transaction { implicit transaction =>
     val records = (0 until Iterations).map(_ => Record.generate())
     DB.records.set(records)
-  }.unsafeRunSync()
+  }
 
   @annotations.Benchmark
   @annotations.BenchmarkMode(Array(annotations.Mode.Throughput))
   @annotations.OutputTimeUnit(TimeUnit.MILLISECONDS)
   @annotations.OperationsPerInvocation(1000)
   def records2CountLightDB(): Unit = DB.records.transaction { implicit transaction =>
-    DB.records.count.map { count =>
-      scribe.info(s"LightDB Count: $count")
-    }
-  }.unsafeRunSync()
+    val count = DB.records.count
+    scribe.info(s"LightDB Count: $count")
+  }
 
   @annotations.Benchmark
   @annotations.BenchmarkMode(Array(annotations.Mode.Throughput))
   @annotations.OutputTimeUnit(TimeUnit.MILLISECONDS)
   @annotations.OperationsPerInvocation(1000)
   def records3ReadLightDB(): Unit = DB.records.transaction { implicit transaction =>
-    DB.records.stream.map(_.number).fold(0)((total, _) => total + 1).compile.lastOrError.map { total =>
-      scribe.info(s"LightDB Total: $total")
-    }
-  }.unsafeRunSync()
+    val total = DB.records.iterator.map(_.number).fold(0)((total, _) => total + 1)
+    scribe.info(s"LightDB Total: $total")
+  }
 
   @annotations.Benchmark
   @annotations.BenchmarkMode(Array(annotations.Mode.Throughput))

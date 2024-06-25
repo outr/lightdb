@@ -1,7 +1,5 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw.RW
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
@@ -9,11 +7,11 @@ import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 
 import java.nio.file.Path
 
-abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
+abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
   private val adam = Person("Adam", 21)
   private val brenda = Person("Brenda", 11)
   private val charlie = Person("Charlie", 35)
@@ -50,92 +48,74 @@ abstract class AbstractStoreSpec extends AsyncWordSpec with AsyncIOSpec with Mat
 
   specName should {
     "initialize the database" in {
-      DB.init().map(b => b should be(true))
+      DB.init() should be(true)
     }
     "verify the database is empty" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.count.map { count =>
-          count should be(0)
-        }
+        DB.people.count should be(0)
       }
     }
     "insert the records" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.set(names).map(o => o should not be None)
+        DB.people.set(names) should not be None
       }
     }
     "retrieve the first record by id" in {
       DB.people.transaction { implicit transaction =>
-        DB.people(adam._id).map { p =>
-          p should be(adam)
-        }
+        DB.people(adam._id) should be(adam)
       }
     }
     "count the records in the database" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.count.map { count =>
-          count should be(26)
-        }
+        DB.people.count should be(26)
       }
     }
     "stream the ids in the database" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.idStream.compile.toList.map(_.toSet).map { ids =>
-          ids should be(names.map(_._id).toSet)
-        }
+        val ids = DB.people.idIterator.toList.toSet
+        ids should be(names.map(_._id).toSet)
       }
     }
     "stream the records in the database" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.stream.map(_.age).compile.toList.map(_.toSet).map { ages =>
-          ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
-        }
+        val ages = DB.people.iterator.map(_.age).toSet
+        ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
       }
     }
     "delete some records" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.delete(List(linda, yuri)).map { deleted =>
-          deleted should be(2)
-        }
+        DB.people.delete(List(linda, yuri)) should be(2)
       }
     }
     "verify the records were deleted" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.count.map { count =>
-          count should be(24)
-        }
+        DB.people.count should be(24)
       }
     }
     "modify a record" in {
       DB.people.transaction { implicit transaction =>
         DB.people.modify(adam._id) {
-          case Some(p) => IO.pure(Some(p.copy(name = "Allan")))
+          case Some(p) => Some(p.copy(name = "Allan"))
           case None => fail("Adam was not found!")
         }
-      }.map {
+      } match {
         case Some(p) => p.name should be("Allan")
         case None => fail("Allan was not returned!")
       }
     }
     "verify the record has been renamed" in {
       DB.people.transaction { implicit transaction =>
-        DB.people(adam._id).map { p =>
-          p.name should be("Allan")
-        }
+        DB.people(adam._id).name should be("Allan")
       }
     }
     "truncate the collection" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.truncate().map { removed =>
-          removed should be(24)
-        }
+        DB.people.truncate() should be(24)
       }
     }
     "verify the collection is empty" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.count.map { count =>
-          count should be(0)
-        }
+        DB.people.count should be(0)
       }
     }
     "dispose the database" in {

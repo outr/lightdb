@@ -1,6 +1,5 @@
 package lightdb.mapdb
 
-import cats.effect.IO
 import lightdb.{Id, LightDB}
 import lightdb.store.{Store, StoreManager}
 import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}
@@ -18,29 +17,27 @@ case class MapDBStore(directory: Option[Path], chunkSize: Int = 1024) extends St
   private val db: DB = maker.make()
   private val map: HTreeMap[String, Array[Byte]] = db.hashMap("map", Serializer.STRING, Serializer.BYTE_ARRAY).createOrOpen()
 
-  override def keyStream[D]: fs2.Stream[IO, Id[D]] = fs2.Stream
-    .fromBlockingIterator[IO](map.keySet().iterator().asScala, chunkSize)
+  override def keyStream[D]: Iterator[Id[D]] = map.keySet().iterator().asScala
     .map(key => Id[D](key))
 
-  override def stream: fs2.Stream[IO, Array[Byte]] = fs2.Stream
-    .fromBlockingIterator[IO](map.values().iterator().asScala, chunkSize)
+  override def stream: Iterator[Array[Byte]] = map.values().iterator().asScala
 
-  override def get[T](id: Id[T]): IO[Option[Array[Byte]]] = IO.blocking(Option(map.getOrDefault(id.value, null)))
+  override def get[T](id: Id[T]): Option[Array[Byte]] = Option(map.getOrDefault(id.value, null))
 
-  override def put[T](id: Id[T], value: Array[Byte]): IO[Boolean] = IO.blocking {
+  override def put[T](id: Id[T], value: Array[Byte]): Boolean = {
     map.put(id.value, value)
     true
   }
 
-  override def delete[T](id: Id[T]): IO[Unit] = IO.blocking(map.remove(id.value))
+  override def delete[T](id: Id[T]): Unit = map.remove(id.value)
 
-  override def count: IO[Int] = IO.blocking(map.size())
+  override def count: Int = map.size()
 
-  override def commit(): IO[Unit] = IO.blocking(db.commit())
+  override def commit(): Unit = db.commit()
 
-  override def truncate(): IO[Unit] = IO.blocking(map.clear())
+  override def truncate(): Unit = map.clear()
 
-  override def dispose(): IO[Unit] = IO.blocking(db.close())
+  override def dispose(): Unit = db.close()
 }
 
 object MapDBStore extends StoreManager {

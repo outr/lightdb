@@ -2,7 +2,7 @@ package benchmark
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import lightdb.util.{FlushingBacklog, Unique}
+import lightdb.util.Unique
 
 import java.sql.{Connection, DriverManager, ResultSet}
 

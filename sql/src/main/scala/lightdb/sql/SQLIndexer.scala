@@ -1,6 +1,5 @@
 package lightdb.sql
 
-import cats.effect.IO
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str, bool, num, obj, str}
 import fabric.define.DefType
 import fabric.io.JsonFormatter
@@ -39,29 +38,28 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     s"CREATE TABLE IF NOT EXISTS ${collection.name}($entries)"
   }
 
-  override def init(collection: Collection[D, _]): IO[Unit] = super.init(collection).flatMap { _ =>
+  override def init(collection: Collection[D, _]): Unit = {
+    super.init(collection)
     collection.transaction { implicit transaction =>
-      IO.blocking {
-        val connection = getConnection
-        val statement = connection.createStatement()
-        try {
-          // Create the table if it doesn't exist
-          statement.executeUpdate(createTable())
+      val connection = getConnection
+      val statement = connection.createStatement()
+      try {
+        // Create the table if it doesn't exist
+        statement.executeUpdate(createTable())
 
-          // Create columns and indexes
-          val existingColumns = columns(connection)
-          indexes.foreach { index =>
-            if (index.name != "_id") {
-              if (!existingColumns.contains(index.name)) {
-                statement.executeUpdate(s"ALTER TABLE ${collection.name} ADD ${index.name}")
-              }
-              val indexName = s"${index.name}_idx"
-              statement.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON ${collection.name}(${index.name})")
+        // Create columns and indexes
+        val existingColumns = columns(connection)
+        indexes.foreach { index =>
+          if (index.name != "_id") {
+            if (!existingColumns.contains(index.name)) {
+              statement.executeUpdate(s"ALTER TABLE ${collection.name} ADD ${index.name}")
             }
+            val indexName = s"${index.name}_idx"
+            statement.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON ${collection.name}(${index.name})")
           }
-        } finally {
-          statement.close()
         }
+      } finally {
+        statement.close()
       }
     }
   }
@@ -81,14 +79,16 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
 
   protected def getConnection(implicit transaction: Transaction[D]): Connection = connectionManager.getConnection
 
-  override def transactionEnd(transaction: Transaction[D]): IO[Unit] = super.transactionEnd(transaction).map { _ =>
+  override def transactionEnd(transaction: Transaction[D]): Unit = {
+    super.transactionEnd(transaction)
     transaction.get(insertsKey).foreach { inserts =>
       inserts.close()
     }
     connectionManager.releaseConnection(transaction)
   }
 
-  override def commit(transaction: Transaction[D]): IO[Unit] = super.commit(transaction).map { _ =>
+  override def commit(transaction: Transaction[D]): Unit = {
+    super.commit(transaction)
     transaction.get(insertsKey).foreach { inserts =>
       inserts.execute()
     }
@@ -97,36 +97,35 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
-  override def postSet(doc: D, transaction: Transaction[D]): IO[Unit] = super.postSet(doc, transaction).flatMap { _ =>
+  override def postSet(doc: D, transaction: Transaction[D]): Unit = {
+    super.postSet(doc, transaction)
     indexDoc(doc)(transaction)
   }
 
-  override def postDelete(doc: D, transaction: Transaction[D]): IO[Unit] = super.postDelete(doc, transaction).flatMap { _ =>
-    IO.blocking {
-      val connection = getConnection(transaction)
-      val ps = connection.prepareStatement(s"DELETE FROM ${collection.name} WHERE _id = ?")
-      try {
-        ps.setString(1, doc._id.value)
-        ps.executeUpdate()
-      } finally {
-        ps.close()
-      }
+  override def postDelete(doc: D, transaction: Transaction[D]): Unit = {
+    super.postDelete(doc, transaction)
+    val connection = getConnection(transaction)
+    val ps = connection.prepareStatement(s"DELETE FROM ${collection.name} WHERE _id = ?")
+    try {
+      ps.setString(1, doc._id.value)
+      ps.executeUpdate()
+    } finally {
+      ps.close()
     }
   }
 
-  override def truncate(transaction: Transaction[D]): IO[Unit] = super.truncate(transaction).flatMap { _ =>
-    IO.blocking {
-      val connection = getConnection(transaction)
-      val statement = connection.createStatement()
-      try {
-        statement.executeUpdate(s"DELETE FROM ${collection.name}")
-      } finally {
-        statement.close()
-      }
+  override def truncate(transaction: Transaction[D]): Unit = {
+    super.truncate(transaction)
+    val connection = getConnection(transaction)
+    val statement = connection.createStatement()
+    try {
+      statement.executeUpdate(s"DELETE FROM ${collection.name}")
+    } finally {
+      statement.close()
     }
   }
 
-  override def count(implicit transaction: Transaction[D]): IO[Int] = IO.blocking {
+  override def count(implicit transaction: Transaction[D]): Int = {
     val connection = getConnection
     val statement = connection.createStatement()
     try {
@@ -142,7 +141,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
-  protected def indexDoc(doc: D)(implicit transaction: Transaction[D]): IO[Unit] = IO.blocking {
+  protected def indexDoc(doc: D)(implicit transaction: Transaction[D]): Unit = {
     val connection = getConnection
     val inserts = transaction.getOrCreate(insertsKey, {
       val sql = s"INSERT OR REPLACE INTO ${collection.name}(${indexes.map(_.name).mkString(", ")}) VALUES (${indexes.map(_ => "?").mkString(", ")})"
@@ -155,7 +154,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
   }
 
   override def aggregate(query: AggregateQuery[D, M])
-                        (implicit transaction: Transaction[D]): fs2.Stream[IO, MaterializedAggregate[D, M]] = fs2.Stream.force(IO.blocking {
+                        (implicit transaction: Transaction[D]): Iterator[MaterializedAggregate[D, M]] = {
     val connection = getConnection(transaction)
     val fields = query.functions.map { f =>
       val af = f.`type` match {
@@ -201,7 +200,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       offset = query.query.offset
     )
     val rs = b.execute(connection)
-    def createStream[R](f: ResultSet => R): fs2.Stream[IO, R] = {
+    def createStream[R](f: ResultSet => R): Iterator[R] = {
       val iterator = new Iterator[R] {
         private var checkedNext = false
         private var nextValue = false
@@ -222,7 +221,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
           f(rs)
         }
       }
-      fs2.Stream.fromBlockingIterator[IO](iterator, query.query.batchSize)
+      iterator
     }
     createStream[MaterializedAggregate[D, M]] { rs =>
       val json = obj(query.functions.map { f =>
@@ -230,11 +229,11 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       }: _*)
       MaterializedAggregate[D, M](json, collection.model)
     }
-  })
+  }
 
   override def doSearch[V](query: Query[D, M],
                            transaction: Transaction[D],
-                           conversion: Conversion[V]): IO[SearchResults[D, V]] = IO.blocking {
+                           conversion: Conversion[V]): SearchResults[D, V] = {
     val connection = getConnection(transaction)
     val fields = conversion match {
       case Conversion.Id => List(SQLPart("_id", Nil))
@@ -262,7 +261,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       None
     }
     val rs = b.execute(connection)
-    def createStream[R](f: ResultSet => R): fs2.Stream[IO, R] = {
+    def createIterator[R](f: ResultSet => R): Iterator[R] = {
       val iterator = new Iterator[R] {
         private var checkedNext = false
         private var nextValue = false
@@ -283,15 +282,15 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
           f(rs)
         }
       }
-      fs2.Stream.fromBlockingIterator[IO](iterator, query.batchSize)
+      iterator
     }
-    def idStream: fs2.Stream[IO, Id[D]] = createStream(rs => Id[D](rs.getString("_id")))
-    val stream: fs2.Stream[IO, V] = conversion match {
-      case Conversion.Id => idStream
-      case Conversion.Doc => idStream.evalMap { id =>
+    def idIterator: Iterator[Id[D]] = createIterator(rs => Id[D](rs.getString("_id")))
+    val stream: Iterator[V] = conversion match {
+      case Conversion.Id => idIterator
+      case Conversion.Doc => idIterator.map { id =>
         collection(id)(transaction)
       }
-      case Conversion.Materialized(indexes) => createStream[MaterializedIndex[D, M]] { rs =>
+      case Conversion.Materialized(indexes) => createIterator[MaterializedIndex[D, M]] { rs =>
         val json = obj(indexes.map { index =>
           index.name -> getJson(rs, index.name)
         }: _*)
@@ -303,7 +302,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       offset = query.offset,
       limit = query.limit,
       total = total,
-      scoredStream = stream.map(v => (v, 0.0)),
+      scoredIterator = stream.map(v => (v, 0.0)),
       transaction = transaction
     )
   }

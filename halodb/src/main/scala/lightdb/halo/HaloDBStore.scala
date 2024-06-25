@@ -1,6 +1,5 @@
 package lightdb.halo
 
-import cats.effect.IO
 import com.oath.halodb.{HaloDB, HaloDBOptions}
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
@@ -34,31 +33,25 @@ case class HaloDBStore(directory: Path,
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
 
-  override def keyStream[D]: fs2.Stream[IO, Id[D]] = fs2.Stream.fromBlockingIterator[IO](instance.newKeyIterator().asScala, 1024)
+  override def keyStream[D]: Iterator[Id[D]] = instance.newKeyIterator().asScala
     .map { record =>
       Id[D](record.getBytes.string)
     }
 
-  override def stream: fs2.Stream[IO, Array[Byte]] = fs2.Stream.fromBlockingIterator[IO](instance.newIterator().asScala, 1024)
+  override def stream: Iterator[Array[Byte]] = instance.newIterator().asScala
     .map(_.getValue)
 
-  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO.blocking {
-    Option(instance.get(id.bytes))
-  }
+  override def get[D](id: Id[D]): Option[Array[Byte]] = Option(instance.get(id.bytes))
 
-  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO.blocking {
-    instance.put(id.bytes, value)
-  }
+  override def put[D](id: Id[D], value: Array[Byte]): Boolean = instance.put(id.bytes, value)
 
-  override def delete[D](id: Id[D]): IO[Unit] = IO.blocking {
-    instance.delete(id.bytes)
-  }
+  override def delete[D](id: Id[D]): Unit = instance.delete(id.bytes)
 
-  override def count: IO[Int] = IO.blocking(instance.size().toInt)
+  override def count: Int = instance.size().toInt
 
-  override def commit(): IO[Unit] = IO.unit
+  override def commit(): Unit = ()
 
-  override def dispose(): IO[Unit] = IO.blocking {
+  override def dispose(): Unit = {
     instance.pauseCompaction()
     instance.close()
   }
