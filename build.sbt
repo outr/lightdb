@@ -56,11 +56,7 @@ val haloDBVersion: String = "0.5.6"
 
 val rocksDBVersion: String = "9.2.1"
 
-val catsEffectVersion: String = "3.5.4"
-
 val fabricVersion: String = "1.15.1"
-
-val fs2Version: String = "3.10.2"
 
 val scribeVersion: String = "3.15.0"
 
@@ -78,8 +74,6 @@ val squantsVersion: String = "1.8.3"
 
 val scalaTestVersion: String = "3.2.18"
 
-val catsEffectTestingVersion: String = "1.5.0"
-
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, core.js, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, all)
 	.settings(
@@ -94,14 +88,10 @@ lazy val core = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-eff
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
-			"com.outr" %%% "scribe-cats" % scribeVersion,
-			"org.typelevel" %%% "cats-effect" % catsEffectVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
-			"co.fs2" %%% "fs2-core" % fs2Version,
 			"org.typelevel" %%% "squants" % squantsVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %%% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
 		libraryDependencies ++= (
 			if (scalaVersion.value.startsWith("2.")) {
@@ -131,8 +121,7 @@ lazy val halodb = project.in(file("halodb"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"com.github.yahoo" % "HaloDB" % haloDBVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
@@ -143,8 +132,7 @@ lazy val rocksdb = project.in(file("rocksdb"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
@@ -154,8 +142,7 @@ lazy val mapdb = project.in(file("mapdb"))
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
 			"org.mapdb" % "mapdb" % "3.1.0",
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
 		fork := true
 	)
@@ -168,8 +155,7 @@ lazy val lucene = project.in(file("lucene"))
 		libraryDependencies ++= Seq(
 			"org.apache.lucene" % "lucene-core" % luceneVersion,
 			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
@@ -180,8 +166,7 @@ lazy val sql = project.in(file("sql"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"com.zaxxer" % "HikariCP" % hikariCPVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
@@ -192,8 +177,7 @@ lazy val sqlite = project.in(file("sqlite"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
@@ -204,8 +188,7 @@ lazy val duckdb = project.in(file("duckdb"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"org.duckdb" % "duckdb_jdbc" % duckdbVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
@@ -215,8 +198,7 @@ lazy val all = project.in(file("all"))
 		name := s"$projectName-all",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
@@ -227,12 +209,12 @@ lazy val benchmark = project.in(file("benchmark"))
 		name := s"$projectName-benchmark",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"co.fs2" %% "fs2-io" % fs2Version,
 			"org.mongodb" % "mongodb-driver-sync" % "5.0.1",
 			"org.postgresql" % "postgresql" % "42.7.3",
 			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"commons-io" % "commons-io" % "2.16.1",
+			"co.fs2" %% "fs2-io" % "3.9.4",
 			"com.outr" %% "scarango-driver" % "3.20.0"
 		)
 	)

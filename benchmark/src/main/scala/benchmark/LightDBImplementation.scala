@@ -21,7 +21,7 @@ object LightDBImplementation extends BenchmarkImplementation {
 
   override def name: String = "LightDB"
 
-  override def init(): IO[Unit] = DB.init().void
+  override def init(): IO[Unit] = IO(DB.init())
 
   override def map2TitleAka(map: Map[String, String]): TitleAkaLDB = TitleAkaLDB(
     titleId = map.value("titleId"),
@@ -51,50 +51,48 @@ object LightDBImplementation extends BenchmarkImplementation {
   private implicit var akaTransaction: Transaction[TitleAkaLDB] = _
   private implicit var basicsTransaction: Transaction[TitleBasicsLDB] = _
 
-  override def persistTitleAka(t: TitleAkaLDB): IO[Unit] = {
-    if (akaTransaction == null) akaTransaction = DB.titleAka.transaction.create().unsafeRunSync()(cats.effect.unsafe.implicits.global)
-    DB.titleAka.set(t).void
+  override def persistTitleAka(t: TitleAkaLDB): IO[Unit] = IO.blocking {
+    if (akaTransaction == null) akaTransaction = DB.titleAka.transaction.create()
+    DB.titleAka.set(t)
   }
 
-  override def persistTitleBasics(t: TitleBasicsLDB): IO[Unit] = {
-    if (basicsTransaction == null) basicsTransaction = DB.titleBasics.transaction.create().unsafeRunSync()(cats.effect.unsafe.implicits.global)
-    DB.titleBasics.set(t).void
+  override def persistTitleBasics(t: TitleBasicsLDB): IO[Unit] = IO.blocking {
+    if (basicsTransaction == null) basicsTransaction = DB.titleBasics.transaction.create()
+    DB.titleBasics.set(t)
   }
 
-  override def streamTitleAka(): fs2.Stream[IO, TitleAkaLDB] = DB.titleAka.stream
+  override def streamTitleAka(): fs2.Stream[IO, TitleAkaLDB] = fs2.Stream.fromBlockingIterator[IO](DB.titleAka.iterator, 100)
 
   override def idFor(t: TitleAkaLDB): String = t._id.value
 
   override def titleIdFor(t: TitleAkaLDB): String = t.titleId
 
-  override def get(id: String): IO[TitleAkaLDB] = DB.titleAka(Id[TitleAkaLDB](id))
+  override def get(id: String): IO[TitleAkaLDB] = IO(DB.titleAka(Id[TitleAkaLDB](id)))
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] =
+  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = IO.blocking {
     DB.titleAka
       .query
       .filter(_.titleId === titleId)
-      .stream
+      .search
       .docs
-      .compile
-      .toList
+      .list
+  }
   //  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.titleId.query(titleId).compile.toList
 
-  override def flush(): IO[Unit] = for {
-    _ <- akaTransaction.commit()
-    _ <- basicsTransaction.commit()
-  } yield ()
+  override def flush(): IO[Unit] = IO.blocking {
+    akaTransaction.commit()
+    basicsTransaction.commit()
+  }
 
-  override def verifyTitleAka(): IO[Unit] = for {
-    haloCount <- DB.titleAka.count
-    luceneCount <- DB.titleAka.indexer.count
-  } yield {
+  override def verifyTitleAka(): IO[Unit] = IO.blocking {
+    val haloCount = DB.titleAka.count
+    val luceneCount = DB.titleAka.indexer.count
     scribe.info(s"TitleAka counts -- Halo: $haloCount, Lucene: $luceneCount")
   }
 
-  override def verifyTitleBasics(): IO[Unit] = for {
-    haloCount <- DB.titleBasics.count
+  override def verifyTitleBasics(): IO[Unit] = IO.blocking {
+    val haloCount = DB.titleBasics.count
     //    luceneCount <- DB.titleBasics.indexer.count()
-  } yield {
     scribe.info(s"TitleBasic counts -- Halo: $haloCount") //, Lucene: $luceneCount")
   }
 

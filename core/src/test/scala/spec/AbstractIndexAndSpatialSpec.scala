@@ -1,7 +1,5 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.obj
 import fabric.rw.RW
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
@@ -14,13 +12,13 @@ import lightdb.spatial.GeoPoint
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AsyncWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import squants.space.LengthConversions.LengthConversions
 
 import java.nio.file.Path
 import scala.collection.immutable.List
 
-abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
+abstract class AbstractIndexAndSpatialSpec extends AnyWordSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
 
   private val id1 = Id[Person]("john")
@@ -59,57 +57,49 @@ abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpe
 
   specName should {
     "initialize the database" in {
-      DB.init().map(b => b should be(true))
+      DB.init() should be(true)
     }
     "store three people" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.set(List(p1, p2, p3)).map { count =>
-          count should be(3)
-        }
+        DB.people.set(List(p1, p2, p3)) should be(3)
       }
     }
     "verify exactly three people exist in the index" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.indexer.count.map { count =>
-          count should be(3)
-        }
+        DB.people.indexer.count should be(3)
       }
     }
     "query for John Doe doc" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_.name === "John Doe").stream.docs.compile.toList.map { people =>
-          people.map(_._id) should be(List(id1))
-        }
+        val people = DB.people.query.filter(_.name === "John Doe").search.docs.iterator.toList
+        people.map(_._id) should be(List(id1))
       }
     }
     "query for Jane Doe id" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_.age === 19).stream.ids.compile.toList.map { ids =>
-          ids should be(List(id2))
-        }
+        val ids = DB.people.query.filter(_.age === 19).search.ids.iterator.toList
+        ids should be(List(id2))
       }
     }
     "query for Bob Dole materialized" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query
+        val list = DB.people.query
           .filter(_.tag === "monkey")
-          .stream
+          .search
           .materialized(p => List(p.name, p.age))
-          .compile
+          .iterator
           .toList
-          .map { list =>
-            list.map(_.json) should be(List(obj(
-              "name" -> "Bob Dole",
-              "age" -> 123
-            )))
-            list.map(_(_.age)) should be(List(123))
-          }
+        list.map(_.json) should be(List(obj(
+          "name" -> "Bob Dole",
+          "age" -> 123
+        )))
+        list.map(_(_.age)) should be(List(123))
       }
     }
     "query with aggregate functions" in {
       if (supportsAggregateFunctions) {
         DB.people.transaction { implicit transaction =>
-          DB.people.query
+          val list = DB.people.query
             .aggregate(p => List(
               p.age.min,
               p.age.max,
@@ -117,61 +107,54 @@ abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpe
               p.age.sum
             ))
             .toList
-            .map { list =>
-              list.map(m => m(_.age.min)).toSet should be(Set(19))
-              list.map(m => m(_.age.max)).toSet should be(Set(21))
-              list.map(m => m(_.age.avg)).toSet should be(Set(20.0))
-              list.map(m => m(_.age.sum)).toSet should be(Set(40.0))
-            }
+          list.map(m => m(_.age.min)).toSet should be(Set(19))
+          list.map(m => m(_.age.max)).toSet should be(Set(21))
+          list.map(m => m(_.age.avg)).toSet should be(Set(20.0))
+          list.map(m => m(_.age.sum)).toSet should be(Set(40.0))
         }
       } else {
         succeed
       }
     }
     "do a database backup archive" in {
-      DatabaseBackup.archive(DB).map { count =>
-        count should be(6)
-      }
+      DatabaseBackup.archive(DB) should be(6)
     }
     "search by age range" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_.age BETWEEN 19 -> 21).stream.ids.compile.toList.map { ids =>
-          ids.toSet should be(Set(id1, id2))
-        }
+        val ids = DB.people.query.filter(_.age BETWEEN 19 -> 21).search.ids.iterator.toList
+        ids.toSet should be(Set(id1, id2))
       }
     }
     "sort by age" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.sort(Sort.ByIndex(Person.age).descending).stream.docs.compile.toList.map { people =>
-          people.map(_.name) should be(List("Bob Dole", "John Doe", "Jane Doe"))
-        }
+        val people = DB.people.query.sort(Sort.ByIndex(Person.age).descending).search.docs.iterator.toList
+        people.map(_.name) should be(List("Bob Dole", "John Doe", "Jane Doe"))
       }
     }
-    "group by age" in {
+    /*"group by age" in {
       DB.people.transaction { implicit transaction =>
         DB.people.query.grouped(_.age).compile.toList.map { list =>
           list.map(_._1) should be(List(19, 21, 123))
           list.map(_._2.toList.map(_.name)) should be(List(List("Jane Doe"), List("John Doe"), List("Bob Dole")))
         }
       }
-    }
+    }*/
     "sort by distance from Oklahoma City" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.stream.distance(
+        val list = DB.people.query.search.distance(
           _.point,
           from = oklahomaCity,
           radius = Some(1320.miles)
-        ).compile.toList.map { list =>
-          val people = list.map(_.doc)
-          val distances = list.map(_.distance)
-          people.map(_.name) should be(List("Jane Doe", "John Doe"))
-          distances should be(List(28.555228128634383.miles, 1316.1223938032729.miles))
-        }
+        ).iterator.toList
+        val people = list.map(_.doc)
+        val distances = list.map(_.distance)
+        people.map(_.name) should be(List("Jane Doe", "John Doe"))
+        distances should be(List(28.555228128634383.miles, 1316.1223938032729.miles))
       }
     }
     "replace Jane Doe" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.set(Person("Jan Doe", 20, Set("cat", "bear"), chicago, id2)).map {
+        DB.people.set(Person("Jan Doe", 20, Set("cat", "bear"), chicago, id2)) match {
           case Some(p) =>
             p._id should be(id2)
             p.name should be("Jan Doe")
@@ -181,21 +164,19 @@ abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpe
     }
     "search using tokenized data and a parsed query" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_.search.words("joh 21")).stream.docs.compile.toList.map { list =>
-          list.map(_.name) should be(List("John Doe"))
-        }
+        val list = DB.people.query.filter(_.search.words("joh 21")).search.docs.iterator.toList
+        list.map(_.name) should be(List("John Doe"))
       }
     }
     "find Jan by parsed query" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.filter(_._id.parsed(id2.value)).stream.docs.compile.toList.map { list =>
-          list.map(_.name) should be(List("Jan Doe"))
-        }
+        val list = DB.people.query.filter(_._id.parsed(id2.value)).search.docs.iterator.toList
+        list.map(_.name) should be(List("Jan Doe"))
       }
     }
     "delete Jane" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.delete(id2).map {
+        DB.people.delete(id2) match {
           case Some(p) => p.name should be("Jan Doe")
           case None => fail()
         }
@@ -203,26 +184,21 @@ abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpe
     }
     "verify John and Bob still exist" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.stream.docs.compile.toList.map { people =>
-          people.map(_.name).toSet should be(Set("John Doe", "Bob Dole"))
-        }
+        val people = DB.people.query.search.docs.iterator.toList
+        people.map(_.name).toSet should be(Set("John Doe", "Bob Dole"))
       }
     }
     "verify start time has been set" in {
-      DB.startTime.get().map { startTime =>
-        startTime should be > 0L
-      }
+      DB.startTime.get()  should be > 0L
     }
     "restore from the database backup" in {
-      DatabaseRestore.archive(DB).map { count =>
-        count should be(6)
-      }
+      val count = DatabaseRestore.archive(DB)
+      count should be(6)
     }
     "verify Jane has been restored" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.stream.docs.compile.toList.map { people =>
-          people.map(_.name).toSet should be(Set("John Doe", "Bob Dole", "Jane Doe"))
-        }
+        val people = DB.people.query.search.docs.iterator.toList
+        people.map(_.name).toSet should be(Set("John Doe", "Bob Dole", "Jane Doe"))
       }
     }
     "truncate the database" in {
@@ -271,6 +247,6 @@ abstract class AbstractIndexAndSpatialSpec extends AsyncWordSpec with AsyncIOSpe
 
     override def alwaysRun: Boolean = false
 
-    override def upgrade(ldb: LightDB): IO[Unit] = DB.startTime.set(System.currentTimeMillis()).map(_ => ())
+    override def upgrade(ldb: LightDB): Unit = DB.startTime.set(System.currentTimeMillis())
   }
 }

@@ -1,7 +1,7 @@
 package benchmark
 import cats.effect.{IO, Unique}
 import cats.effect.unsafe.IORuntime
-import lightdb.util.FlushingBacklog
+import benchmark.FlushingBacklog
 
 import java.sql.{Connection, DriverManager, ResultSet}
 import scala.concurrent.{ExecutionContext, Future}

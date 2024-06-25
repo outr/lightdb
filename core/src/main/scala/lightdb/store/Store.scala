@@ -1,6 +1,5 @@
 package lightdb.store
 
-import cats.effect.IO
 import fabric.Json
 import fabric.cryo.Cryo
 import fabric.io.{JsonFormatter, JsonParser}
@@ -8,26 +7,28 @@ import fabric.rw._
 import lightdb.Id
 import lightdb.document.Document
 
+import scala.annotation.tailrec
+
 trait Store {
   def useCryo: Boolean = false
 
-  def keyStream[D]: fs2.Stream[IO, Id[D]]
+  def keyStream[D]: Iterator[Id[D]]
 
-  def stream: fs2.Stream[IO, Array[Byte]]
+  def stream: Iterator[Array[Byte]]
 
-  def get[D](id: Id[D]): IO[Option[Array[Byte]]]
+  def get[D](id: Id[D]): Option[Array[Byte]]
 
-  def put[D](id: Id[D], value: Array[Byte]): IO[Boolean]
+  def put[D](id: Id[D], value: Array[Byte]): Boolean
 
-  def delete[D](id: Id[D]): IO[Unit]
+  def delete[D](id: Id[D]): Unit
 
-  def count: IO[Int]
+  def count: Int
 
-  def commit(): IO[Unit]
+  def commit(): Unit
 
-  def dispose(): IO[Unit]
+  def dispose(): Unit
 
-  def streamJson: fs2.Stream[IO, Json] = stream
+  def streamJson: Iterator[Json] = stream
     .map { bytes =>
       try {
         bytes2Json(bytes)
@@ -37,24 +38,28 @@ trait Store {
       }
     }
 
-  def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = streamJson.map(_.as[D])
+  def streamJsonDocs[D: RW]: Iterator[D] = streamJson.map(_.as[D])
 
-  def getJsonDoc[D: RW](id: Id[D]): IO[Option[D]] = get(id)
-    .map(_.map { bytes =>
+  def getJsonDoc[D: RW](id: Id[D]): Option[D] = get(id)
+    .map { bytes =>
       try {
         val json = bytes2Json(bytes)
         json.as[D]
       } catch {
         case t: Throwable => throw new RuntimeException(s"Failed to read $id with ${bytes.length} bytes.", t)
       }
-    })
+    }
 
   def putJsonDoc[D <: Document[D]](doc: D)
-                                  (implicit rw: RW[D]): IO[D] = IO(doc.json)
-    .flatMap(json => putJson(doc._id, json).map(_ => doc))
+                                  (implicit rw: RW[D]): D = {
+    putJson(doc._id, doc.json)
+    doc
+  }
 
-  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] =
-    IO.blocking(json2Bytes(json)).flatMap(bytes => put(id, bytes)).map(_ => ())
+  def putJson[D <: Document[D]](id: Id[D], json: Json): Unit = {
+    val bytes = json2Bytes(json)
+    put(id, bytes)
+  }
 
   private def json2Bytes(json: Json): Array[Byte] = if (useCryo) {
     Cryo.freeze(json)
@@ -69,16 +74,13 @@ trait Store {
     JsonParser(jsonString)
   }
 
-  def truncate(): IO[Unit] = keyStream[Any]
-    .evalMap { id =>
-      delete(id)
+  def truncate(): Unit = internalTruncate()
+
+  @tailrec
+  final def internalTruncate(): Unit = {
+    keyStream.foreach(delete)
+    if (count > 0) {
+      internalTruncate()
     }
-    .compile
-    .drain
-    .flatMap { _ =>
-      count.flatMap {
-        case 0 => IO.unit
-        case _ => truncate()
-      }
-    }
+  }
 }

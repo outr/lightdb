@@ -1,6 +1,5 @@
 package lightdb.document
 
-import cats.effect.IO
 import lightdb.collection.Collection
 import lightdb.transaction.Transaction
 import moduload.Priority
@@ -8,25 +7,25 @@ import moduload.Priority
 trait DocumentListener[D <: Document[D]] {
   def priority: Priority = Priority.Normal
 
-  def init(collection: Collection[D, _]): IO[Unit] = IO.unit
+  def init(collection: Collection[D, _]): Unit = ()
 
-  def transactionStart(transaction: Transaction[D]): IO[Unit] = IO.unit
+  def transactionStart(transaction: Transaction[D]): Unit = ()
 
-  def transactionEnd(transaction: Transaction[D]): IO[Unit] = IO.unit
+  def transactionEnd(transaction: Transaction[D]): Unit = ()
 
-  def preSet(doc: D, transaction: Transaction[D]): IO[Option[D]] = IO.pure(Some(doc))
+  def preSet(doc: D, transaction: Transaction[D]): Option[D] = Some(doc)
 
-  def postSet(doc: D, transaction: Transaction[D]): IO[Unit] = IO.unit
+  def postSet(doc: D, transaction: Transaction[D]): Unit = ()
 
-  def commit(transaction: Transaction[D]): IO[Unit] = IO.unit
+  def commit(transaction: Transaction[D]): Unit = ()
 
-  def rollback(transaction: Transaction[D]): IO[Unit] = IO.unit
+  def rollback(transaction: Transaction[D]): Unit = ()
 
-  def preDelete(doc: D, transaction: Transaction[D]): IO[Option[D]] = IO.pure(Some(doc))
+  def preDelete(doc: D, transaction: Transaction[D]): Option[D] = Some(doc)
 
-  def postDelete(doc: D, transaction: Transaction[D]): IO[Unit] = IO.unit
+  def postDelete(doc: D, transaction: Transaction[D]): Unit = ()
 
-  def truncate(transaction: Transaction[D]): IO[Unit] = IO.unit
+  def truncate(transaction: Transaction[D]): Unit = ()
 
-  def dispose(): IO[Unit] = IO.unit
+  def dispose(): Unit = ()
 }

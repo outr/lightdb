@@ -1,7 +1,5 @@
 package lightdb.util
 
-import cats.effect.IO
-
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -16,17 +14,16 @@ trait Initializable {
   /**
    * Calls initialize() exactly one time. Safe to call multiple times.
    */
-  final def init(): IO[Boolean] = if (status.compareAndSet(0, 1)) {
-    initialize().map { _ =>
-      status.set(2)
-      true
-    }
+  final def init(): Boolean = if (status.compareAndSet(0, 1)) {
+    initialize()
+    status.set(2)
+    true
   } else {
-    IO.pure(false)
+    false
   }
 
   /**
    * Define initialization functionality here, but never call directly.
    */
-  protected def initialize(): IO[Unit]
+  protected def initialize(): Unit
 }
