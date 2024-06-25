@@ -51,11 +51,6 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     "initialize the database" in {
       DB.init().map(b => b should be(true))
     }
-    "verify persisted is set to false for all three people" in {
-      p1._id.persisted should be(false)
-      p2._id.persisted should be(false)
-      p3._id.persisted should be(false)
-    }
     "store three people" in {
       DB.people.transaction { implicit transaction =>
         DB.people.set(List(p1, p2, p3)).map { count =>
@@ -69,11 +64,6 @@ abstract class AbstractIndexSpec extends AsyncWordSpec with AsyncIOSpec with Mat
           count should be(3)
         }
       }
-    }
-    "verify persisted is set to true for all three people" in {
-      p1._id.persisted should be(true)
-      p2._id.persisted should be(true)
-      p3._id.persisted should be(true)
     }
     "query for John Doe doc" in {
       DB.people.transaction { implicit transaction =>

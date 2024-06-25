@@ -9,53 +9,35 @@ import lightdb.transaction.Transaction
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
 
-class AtomicMapStore[D <: Document[D]] extends Store[D] {
-  override type Serialized = D
+class AtomicMapStore extends Store {
+  private lazy val map = new ConcurrentHashMap[String, Array[Byte]]
 
-  private lazy val map = new ConcurrentHashMap[Id[D], D]
+  override def keyStream[D]: fs2.Stream[IO, Id[D]] = fs2.Stream
+    .fromBlockingIterator[IO](map.keys().asIterator().asScala.map(Id.apply[D]), 128)
 
-  override protected def initialize(): IO[Unit] = IO.unit
+  override def stream: fs2.Stream[IO, Array[Byte]] = fs2.Stream
+    .fromBlockingIterator[IO](map.values().iterator().asScala, 128)
 
-  override protected def serialize(doc: D): IO[D] = IO.pure(doc)
+  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO.blocking {
+    Option(map.get(id.value))
+  }
 
-  override protected def deserialize(serialized: D): IO[D] = IO.pure(serialized)
-
-  override protected def setSerialized(id: Id[D],
-                                       serialized: D,
-                                       transaction: Transaction[D]): IO[Boolean] = IO.blocking {
-    map.put(id, serialized)
+  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO.blocking {
+    map.put(id.value, value)
     true
   }
 
-  override protected def getSerialized(id: Id[D],
-                                       transaction: Transaction[D]): IO[Option[D]] = IO.blocking {
-    Option(map.get(id))
+  override def delete[D](id: Id[D]): IO[Unit] = IO.blocking {
+    map.remove(id.value)
   }
 
-  override protected def streamSerialized(transaction: Transaction[D]): fs2.Stream[IO, D] = fs2.Stream
-    .fromBlockingIterator[IO](map.values().iterator().asScala, 128)
+  override def count: IO[Int] = IO.blocking(map.size())
 
-  override def count(implicit transaction: Transaction[D]): IO[Int] = IO.blocking(map.size())
-
-  override def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = fs2.Stream
-    .fromBlockingIterator[IO](map.keys().asIterator().asScala, 128)
-
-  override def delete(id: Id[D])(implicit transaction: Transaction[D]): IO[Boolean] = IO.blocking {
-    map.remove(id) != null
-  }
-
-  override def truncate()(implicit transaction: Transaction[D]): IO[Int] = IO.blocking {
-    try {
-      map.size()
-    } finally {
-      map.clear()
-    }
-  }
+  override def commit(): IO[Unit] = IO.unit
 
   override def dispose(): IO[Unit] = IO.blocking(map.clear())
 }
 
 object AtomicMapStore extends StoreManager {
-  override protected def create[D <: Document[D]](db: LightDB, name: String)
-                                                 (implicit rw: RW[D]): IO[Store[D]] = IO(new AtomicMapStore[D])
+  override protected def create(db: LightDB, name: String): Store = new AtomicMapStore
 }

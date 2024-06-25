@@ -16,7 +16,7 @@ trait DocumentModel[D <: Document[D]] { model =>
 
   private[lightdb] val _initialized = new AtomicBoolean(false)
   private[lightdb] var collection: Collection[D, _] = _
-  private[lightdb] var store: Store[D] = _
+  private[lightdb] def store: Store = collection.store
 
   final def initialized: Boolean = _initialized.get()
 

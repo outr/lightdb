@@ -8,13 +8,13 @@ import lightdb.document.Document
 import java.util.concurrent.ConcurrentHashMap
 
 trait StoreManager {
-  private val map = new ConcurrentHashMap[String, IO[Store[_]]]
+  private val map = new ConcurrentHashMap[String, Store]
 
-  def apply[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): IO[Store[D]] = {
+  def apply(db: LightDB, name: String): Store = {
     map.computeIfAbsent(name, _ => {
-      create[D](db, name).memoize.flatten
-    }).asInstanceOf[IO[Store[D]]]
+      create(db, name)
+    })
   }
 
-  protected def create[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): IO[Store[D]]
+  protected def create(db: LightDB, name: String): Store
 }

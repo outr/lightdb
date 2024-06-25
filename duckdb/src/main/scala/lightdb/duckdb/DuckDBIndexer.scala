@@ -24,7 +24,7 @@ case class DuckDBIndexer[D <: Document[D], M <: DocumentModel[D]]() extends SQLI
   )
   override protected lazy val connectionManager: ConnectionManager[D] = SingleConnectionManager(config)
 
-  override protected def indexDoc(doc: D)(implicit transaction: Transaction[D]): IO[Unit] = if (doc._id.persisted) {
+  /*override protected def indexDoc(doc: D)(implicit transaction: Transaction[D]): IO[Unit] = if (doc._id.persisted) {
     super.indexDoc(doc)
   } else {
     IO.blocking {
@@ -53,5 +53,5 @@ case class DuckDBIndexer[D <: Document[D], M <: DocumentModel[D]]() extends SQLI
         appender.close()
       }
     }
-  }
+  }*/
 }

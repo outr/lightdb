@@ -1,47 +1,84 @@
 package lightdb.store
 
 import cats.effect.IO
+import fabric.Json
+import fabric.cryo.Cryo
+import fabric.io.{JsonFormatter, JsonParser}
+import fabric.rw._
 import lightdb.Id
 import lightdb.document.Document
-import lightdb.error.IdNotFoundException
-import lightdb.transaction.Transaction
-import lightdb.util.Initializable
 
-trait Store[D <: Document[D]] extends Initializable {
-  type Serialized
+trait Store {
+  def useCryo: Boolean = false
 
-  protected def serialize(doc: D): IO[Serialized]
-  protected def deserialize(serialized: Serialized): IO[D]
+  def keyStream[D]: fs2.Stream[IO, Id[D]]
 
-  protected def setSerialized(id: Id[D], serialized: Serialized, transaction: Transaction[D]): IO[Boolean]
-  protected def getSerialized(id: Id[D], transaction: Transaction[D]): IO[Option[Serialized]]
-  protected def streamSerialized(transaction: Transaction[D]): fs2.Stream[IO, Serialized]
+  def stream: fs2.Stream[IO, Array[Byte]]
 
-  def apply(id: Id[D])(implicit transaction: Transaction[D]): IO[D] = get(id)
-    .map {
-      case Some(doc) => doc
-      case None => throw IdNotFoundException(id)
-    }
+  def get[D](id: Id[D]): IO[Option[Array[Byte]]]
 
-  def get(id: Id[D])(implicit transaction: Transaction[D]): IO[Option[D]] = getSerialized(id, transaction)
-    .flatMap {
-      case Some(serialized) => deserialize(serialized).map(Some.apply)
-      case None => IO.pure(None)
-    }
+  def put[D](id: Id[D], value: Array[Byte]): IO[Boolean]
 
-  def set(doc: D)(implicit transaction: Transaction[D]): IO[Boolean] = serialize(doc)
-    .flatMap { serialized =>
-      setSerialized(doc._id, serialized, transaction)
-    }
+  def delete[D](id: Id[D]): IO[Unit]
 
-  def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, D] = idStream
-    .evalMap(get)
-    .unNone
+  def count: IO[Int]
 
-  def count(implicit transaction: Transaction[D]): IO[Int]
-  def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]]
-  def delete(id: Id[D])(implicit transaction: Transaction[D]): IO[Boolean]
-  def truncate()(implicit transaction: Transaction[D]): IO[Int]
+  def commit(): IO[Unit]
 
   def dispose(): IO[Unit]
+
+  def streamJson: fs2.Stream[IO, Json] = stream
+    .map { bytes =>
+      try {
+        bytes2Json(bytes)
+      } catch {
+        case t: Throwable =>
+          throw new RuntimeException(s"Failed to read JSON (${bytes.string}) with ${bytes.length} bytes.", t)
+      }
+    }
+
+  def streamJsonDocs[D: RW]: fs2.Stream[IO, D] = streamJson.map(_.as[D])
+
+  def getJsonDoc[D: RW](id: Id[D]): IO[Option[D]] = get(id)
+    .map(_.map { bytes =>
+      try {
+        val json = bytes2Json(bytes)
+        json.as[D]
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Failed to read $id with ${bytes.length} bytes.", t)
+      }
+    })
+
+  def putJsonDoc[D <: Document[D]](doc: D)
+                                  (implicit rw: RW[D]): IO[D] = IO(doc.json)
+    .flatMap(json => putJson(doc._id, json).map(_ => doc))
+
+  def putJson[D <: Document[D]](id: Id[D], json: Json): IO[Unit] =
+    IO.blocking(json2Bytes(json)).flatMap(bytes => put(id, bytes)).map(_ => ())
+
+  private def json2Bytes(json: Json): Array[Byte] = if (useCryo) {
+    Cryo.freeze(json)
+  } else {
+    JsonFormatter.Compact(json).getBytes
+  }
+
+  private def bytes2Json(bytes: Array[Byte]): Json = if (useCryo) {
+    Cryo.thaw(bytes)
+  } else {
+    val jsonString = bytes.string
+    JsonParser(jsonString)
+  }
+
+  def truncate(): IO[Unit] = keyStream[Any]
+    .evalMap { id =>
+      delete(id)
+    }
+    .compile
+    .drain
+    .flatMap { _ =>
+      count.flatMap {
+        case 0 => IO.unit
+        case _ => truncate()
+      }
+    }
 }
