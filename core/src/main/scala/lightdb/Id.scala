@@ -4,13 +4,6 @@ import fabric.rw._
 import lightdb.util.Unique
 
 class Id[T](val value: String) {
-  private var _persisted: Boolean = false
-
-  /**
-   * Determines if the document has been persisted to the database.
-   */
-  def persisted: Boolean = _persisted
-
   def bytes: Array[Byte] = {
     val b = toString.getBytes("UTF-8")
     assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length} ($value)")
@@ -37,6 +30,4 @@ object Id {
   def toString[T](id: Id[T]): String = id.value
 
   def fromString[T](s: String): Id[T] = apply[T](s)
-
-  private[lightdb] def setPersisted(id: Id[_], persisted: Boolean): Unit = id._persisted = persisted
 }

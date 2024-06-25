@@ -206,8 +206,8 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
     val stream: fs2.Stream[IO, (V, Double)] = conversion match {
       case Conversion.Id => idStream
       case Conversion.Doc => idStream.evalMap {
-        case (id, score) => collection(id)(transaction).map(doc => doc -> score)
-      }
+        case (id, score) => collection.get(id)(transaction).map(_.map(doc => doc -> score))
+      }.unNone
       case m: Conversion.Materialized => fs2.Stream.fromBlockingIterator[IO](scoreDocs.iterator.map { scoreDoc =>
         val json = obj(m.indexes.map { index =>
           val s = storedFields.document(scoreDoc.doc).get(index.name)

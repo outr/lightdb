@@ -8,5 +8,5 @@ class LuceneIndexSpec extends AbstractIndexAndSpatialSpec {
 
   override protected def storeManager: StoreManager = AtomicMapStore
 
-  override protected def indexer(model: Person.type): Indexer[Person, Person.type] = LuceneIndexer(model)
+  override protected def indexer(model: Person.type): Indexer[Person, Person.type] = LuceneIndexer()
 }

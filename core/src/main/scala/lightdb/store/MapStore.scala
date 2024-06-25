@@ -11,59 +11,35 @@ import lightdb.transaction.Transaction
  *
  * Note: It is recommended to use AtomicMapStore on the JVM as a more efficient alternative to this.
  */
-class MapStore[D <: Document[D]] extends Store[D] { store =>
-  override type Serialized = D
+class MapStore extends Store { store =>
+  private var map = Map.empty[String, Array[Byte]]
 
-  private var map = Map.empty[Id[D], D]
+  override def keyStream[D]: fs2.Stream[IO, Id[D]] = fs2.Stream
+    .fromBlockingIterator[IO](map.keys.iterator.map(Id.apply[D]), 128)
 
-  override protected def initialize(): IO[Unit] = IO.unit
+  override def stream: fs2.Stream[IO, Array[Byte]] = fs2.Stream
+    .fromBlockingIterator[IO](map.values.iterator, 128)
 
-  override protected def serialize(doc: D): IO[D] = IO.pure(doc)
+  override def get[D](id: Id[D]): IO[Option[Array[Byte]]] = IO.blocking {
+    map.get(id.value)
+  }
 
-  override protected def deserialize(serialized: D): IO[D] = IO.pure(serialized)
-
-  override protected def setSerialized(id: Id[D],
-                                       serialized: D,
-                                       transaction: Transaction[D]): IO[Boolean] = IO.blocking {
+  override def put[D](id: Id[D], value: Array[Byte]): IO[Boolean] = IO.blocking {
     store.synchronized {
-      map += id -> serialized
+      map += id.value -> value
     }
     true
   }
 
-  override protected def getSerialized(id: Id[D],
-                                       transaction: Transaction[D]): IO[Option[D]] = IO.blocking {
-    map.get(id)
-  }
-
-  override protected def streamSerialized(transaction: Transaction[D]): fs2.Stream[IO, D] = fs2.Stream
-    .fromBlockingIterator[IO](map.values.iterator, 128)
-
-  override def count(implicit transaction: Transaction[D]): IO[Int] = IO.blocking(map.size)
-
-  override def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = fs2.Stream
-    .fromBlockingIterator[IO](map.keys.iterator, 128)
-
-  override def delete(id: Id[D])(implicit transaction: Transaction[D]): IO[Boolean] = IO.blocking {
+  override def delete[D](id: Id[D]): IO[Unit] = IO.blocking {
     store.synchronized {
-      if (map.contains(id)) {
-        map -= id
-        true
-      } else {
-        false
-      }
+      map -= id.value
     }
   }
 
-  override def truncate()(implicit transaction: Transaction[D]): IO[Int] = IO.blocking {
-    try {
-      map.size
-    } finally {
-      store.synchronized {
-        map = Map.empty
-      }
-    }
-  }
+  override def count: IO[Int] = IO.blocking(map.size)
+
+  override def commit(): IO[Unit] = IO.unit
 
   override def dispose(): IO[Unit] = IO.blocking(store.synchronized {
     map = Map.empty
@@ -71,6 +47,5 @@ class MapStore[D <: Document[D]] extends Store[D] { store =>
 }
 
 object MapStore extends StoreManager {
-  override protected def create[D <: Document[D]](db: LightDB, name: String)
-                                                 (implicit rw: RW[D]): IO[Store[D]] = IO(new MapStore[D])
+  override protected def create(db: LightDB, name: String): Store = new MapStore
 }

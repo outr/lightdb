@@ -8,6 +8,7 @@ import lightdb.util.Initializable
 import cats.implicits._
 import fabric.Json
 import fabric.rw.{Convertible, RW}
+import lightdb.store.Store
 
 import scala.concurrent.duration.DurationInt
 
@@ -15,6 +16,8 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
                                                           val model: M,
                                                           val db: LightDB)
                                                          (implicit rw: RW[D]) extends Initializable { collection =>
+  private[lightdb] lazy val store: Store = db.storeManager(db, name)
+
   private implicit class ListIO[R](list: List[IO[R]]) {
     def ioSeq: IO[Unit] = if (model.parallel) {
       list.parSequence.map(_ => ())
@@ -35,7 +38,6 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
 
   override protected def initialize(): IO[Unit] = for {
     _ <- IO(model.collection = this)
-    _ <- db.storeManager[D](db, name).map(store => model.store = store)
     _ <- model.listener().map(_.init(this)).ioSeq.map(_ => model._initialized.set(true))
   } yield ()
 
@@ -64,22 +66,16 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
     } yield ()
   }
 
-  def apply(id: Id[D])(implicit transaction: Transaction[D]): IO[D] = model.store(id).map { d =>
-    Id.setPersisted(d._id, persisted = true)
-    d
-  }
+  def apply(id: Id[D])(implicit transaction: Transaction[D]): IO[D] = get(id)
+    .map(_.getOrElse(throw new RuntimeException(s"$id not found in $name")))
 
-  def get(id: Id[D])(implicit transaction: Transaction[D]): IO[Option[D]] = model.store.get(id).map { o =>
-    o.foreach(d => Id.setPersisted(d._id, persisted = true))
-    o
-  }
+  def get(id: Id[D])(implicit transaction: Transaction[D]): IO[Option[D]] = model.store.getJsonDoc(id)(rw)
 
   final def set(doc: D)(implicit transaction: Transaction[D]): IO[Option[D]] = {
     recurseOption(doc, (l, d) => l.preSet(d, transaction)).flatMap {
       case Some(d) => for {
-        _ <- model.store.set(d)
+        _ <- model.store.putJson(d._id, d.json)
         _ <- model.listener().map(l => l.postSet(d, transaction)).ioSeq
-        _ = Id.setPersisted(d._id, persisted = true)
       } yield Some(d)
       case None => IO.pure(None)
     }
@@ -104,11 +100,11 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
     }
   }
 
-  def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, D] = model.store.stream
+  def stream(implicit transaction: Transaction[D]): fs2.Stream[IO, D] = model.store.streamJsonDocs[D]
 
   def count(implicit transaction: Transaction[D]): IO[Int] = model.store.count
 
-  def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = model.store.idStream
+  def idStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Id[D]] = model.store.keyStream[D]
 
   def jsonStream(implicit transaction: Transaction[D]): fs2.Stream[IO, Json] = stream.map(_.json)
 
@@ -122,16 +118,12 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
 
   final def delete(doc: D)(implicit transaction: Transaction[D]): IO[Option[D]] = {
     recurseOption(doc, (l, d) => l.preDelete(d, transaction)).flatMap {
-      case Some(d) => model.store.delete(d._id).flatMap {
-        case true => model
+      case Some(d) => model.store.delete(d._id).flatMap { _ =>
+        model
           .listener()
           .map(l => l.postDelete(d, transaction))
           .ioSeq
-          .map { _ =>
-            Id.setPersisted(d._id, persisted = false)
-            Some(d)
-          }
-        case false => IO.pure(None)
+          .map(_ => Some(d))
       }
       case None => IO.pure(None)
     }
@@ -153,11 +145,12 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
     }
 
   def truncate()(implicit transaction: Transaction[D]): IO[Int] = for {
-    removed <- model.store.truncate()
+    count <- model.store.count
+    _ <- model.store.truncate()
     _ <- model.listener()
       .map(l => l.truncate(transaction))
       .ioSeq
-  } yield removed
+  } yield count
 
   def update(): IO[Unit] = IO.unit
 

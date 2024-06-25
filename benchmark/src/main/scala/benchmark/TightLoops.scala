@@ -111,7 +111,7 @@ object TightLoops extends IOApp {
       fs2.Stream((0 until RecordCount): _*)
         .evalMap { age =>
           // Person.get is the problem!!!!
-          DB.people.query.filter(_.age === age).stream.ids.evalMap(id => DB.people(id)).compile.toList.map { list =>
+          DB.people.query.filter(_.age === age).stream.docs.compile.toList.map { list =>
             if (list.size != 1) {
               scribe.warn(s"Unable to find age = $age")
             }
