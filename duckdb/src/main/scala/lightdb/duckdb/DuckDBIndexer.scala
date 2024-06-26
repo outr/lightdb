@@ -11,7 +11,7 @@ case class DuckDBIndexer[D <: Document[D], M <: DocumentModel[D]]() extends SQLI
   private lazy val appenderKey: TransactionKey[DuckDBAppender] = TransactionKey("duckDBAppender")
 
   private lazy val path: Path = {
-    val p = collection.db.directory.resolve(collection.name).resolve("duckdb.db")
+    val p = collection.db.directory.get.resolve(collection.name).resolve("duckdb.db")
     Files.createDirectories(p.getParent)
     p
   }

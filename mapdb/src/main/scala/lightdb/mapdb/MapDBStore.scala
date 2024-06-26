@@ -41,5 +41,5 @@ case class MapDBStore(directory: Option[Path], chunkSize: Int = 1024) extends St
 }
 
 object MapDBStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new MapDBStore(Some(db.directory.resolve(name)))
+  override protected def create(db: LightDB, name: String): Store = new MapDBStore(db.directory.map(_.resolve(name)))
 }

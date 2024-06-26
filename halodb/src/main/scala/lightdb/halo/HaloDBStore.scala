@@ -58,5 +58,5 @@ case class HaloDBStore(directory: Path,
 }
 
 object HaloDBStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new HaloDBStore(db.directory.resolve(name))
+  override protected def create(db: LightDB, name: String): Store = new HaloDBStore(db.directory.get.resolve(name))
 }
