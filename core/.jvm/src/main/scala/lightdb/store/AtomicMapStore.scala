@@ -1,25 +1,26 @@
 package lightdb.store
 
+import fabric.rw.RW
 import lightdb.{Id, LightDB}
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
 
-class AtomicMapStore extends Store {
-  private lazy val map = new ConcurrentHashMap[String, Array[Byte]]
+class AtomicMapStore[D](implicit val rw: RW[D]) extends Store[D] {
+  private lazy val map = new ConcurrentHashMap[Id[D], D]
 
-  override def keyStream[D]: Iterator[Id[D]] = map.keys().asIterator().asScala.map(Id.apply[D])
+  override def idIterator: Iterator[Id[D]] = map.keys().asScala
 
-  override def stream: Iterator[Array[Byte]] = map.values().iterator().asScala
+  override def iterator: Iterator[D] = map.values().iterator().asScala
 
-  override def get[D](id: Id[D]): Option[Array[Byte]] = Option(map.get(id.value))
+  override def get(id: Id[D]): Option[D] = Option(map.get(id))
 
-  override def put[D](id: Id[D], value: Array[Byte]): Boolean = {
-    map.put(id.value, value)
+  override def put(id: Id[D], doc: D): Boolean = {
+    map.put(id, doc)
     true
   }
 
-  override def delete[D](id: Id[D]): Unit = map.remove(id.value)
+  override def delete(id: Id[D]): Unit = map.remove(id)
 
   override def count: Int = map.size()
 
@@ -29,5 +30,5 @@ class AtomicMapStore extends Store {
 }
 
 object AtomicMapStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new AtomicMapStore
+  override protected def create[D](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new AtomicMapStore
 }

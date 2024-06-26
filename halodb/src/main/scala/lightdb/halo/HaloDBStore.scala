@@ -14,9 +14,9 @@ import scala.jdk.CollectionConverters._
 
 import lightdb.store._
 
-case class HaloDBStore(directory: Path,
+case class HaloDBStore[D](directory: Path,
                        indexThreads: Int = Runtime.getRuntime.availableProcessors(),
-                       maxFileSize: Int = 1024 * 1024) extends Store {
+                       maxFileSize: Int = 1024 * 1024)(implicit val rw: RW[D]) extends ByteStore[D] {
   private lazy val instance: HaloDB = {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
@@ -33,19 +33,19 @@ case class HaloDBStore(directory: Path,
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
 
-  override def keyStream[D]: Iterator[Id[D]] = instance.newKeyIterator().asScala
+  override def idIterator: Iterator[Id[D]] = instance.newKeyIterator().asScala
     .map { record =>
       Id[D](record.getBytes.string)
     }
 
-  override def stream: Iterator[Array[Byte]] = instance.newIterator().asScala
-    .map(_.getValue)
+  override def iterator: Iterator[D] = instance.newIterator().asScala
+    .map(_.getValue).map(bytes2D)
 
-  override def get[D](id: Id[D]): Option[Array[Byte]] = Option(instance.get(id.bytes))
+  override def get(id: Id[D]): Option[D] = Option(instance.get(id.bytes)).map(bytes2D)
 
-  override def put[D](id: Id[D], value: Array[Byte]): Boolean = instance.put(id.bytes, value)
+  override def put(id: Id[D], doc: D): Boolean = instance.put(id.bytes, d2Bytes(doc))
 
-  override def delete[D](id: Id[D]): Unit = instance.delete(id.bytes)
+  override def delete(id: Id[D]): Unit = instance.delete(id.bytes)
 
   override def count: Int = instance.size().toInt
 
@@ -58,5 +58,5 @@ case class HaloDBStore(directory: Path,
 }
 
 object HaloDBStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new HaloDBStore(db.directory.get.resolve(name))
+  override protected def create[D](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new HaloDBStore(db.directory.get.resolve(name))
 }

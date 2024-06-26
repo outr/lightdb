@@ -1,5 +1,6 @@
 package lightdb.rocks
 
+import fabric.rw.RW
 import lightdb.Id
 import org.rocksdb.{RocksDB, RocksIterator}
 
@@ -8,7 +9,7 @@ import scala.collection.mutable.ListBuffer
 import lightdb._
 import lightdb.store._
 
-case class RocksDBStore(directory: Path) extends Store {
+case class RocksDBStore[D](directory: Path)(implicit val rw: RW[D]) extends ByteStore[D] {
   RocksDB.loadLibrary()
 
   private val db: RocksDB = {
@@ -31,26 +32,26 @@ case class RocksDBStore(directory: Path) extends Store {
     iterator.flatten
   }
 
-  override def keyStream[D]: Iterator[Id[D]] = createStream { i =>
+  override def idIterator: Iterator[Id[D]] = createStream { i =>
     Option(i.key()).map(key => Id[D](key.string))
   }
 
-  override def stream: Iterator[Array[Byte]] = createStream { i =>
-    Option(i.value())
+  override def iterator: Iterator[D] = createStream { i =>
+    Option(i.value()).map(bytes2D)
   }
 
-  override def get[D](id: Id[D]): Option[Array[Byte]] = Option(db.get(id.bytes))
+  override def get(id: Id[D]): Option[D] = Option(db.get(id.bytes)).map(bytes2D)
 
-  override def put[D](id: Id[D], value: Array[Byte]): Boolean = {
-    db.put(id.bytes, value)
+  override def put(id: Id[D], doc: D): Boolean = {
+    db.put(id.bytes, d2Bytes(doc))
     true
   }
 
-  override def delete[D](id: Id[D]): Unit = {
+  override def delete(id: Id[D]): Unit = {
     db.delete(id.bytes)
   }
 
-  override def count: Int = keyStream.size
+  override def count: Int = idIterator.size
 
   override def commit(): Unit = ()
 
@@ -60,5 +61,5 @@ case class RocksDBStore(directory: Path) extends Store {
 }
 
 object RocksDBStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new RocksDBStore(db.directory.get.resolve(name))
+  override protected def create[D](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new RocksDBStore(db.directory.get.resolve(name))
 }

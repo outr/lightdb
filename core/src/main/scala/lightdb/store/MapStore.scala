@@ -1,5 +1,6 @@
 package lightdb.store
 
+import fabric.rw.RW
 import lightdb.{Id, LightDB}
 
 /**
@@ -7,37 +8,33 @@ import lightdb.{Id, LightDB}
  *
  * Note: It is recommended to use AtomicMapStore on the JVM as a more efficient alternative to this.
  */
-class MapStore extends Store { store =>
-  private var map = Map.empty[String, Array[Byte]]
+ class MapStore[D](implicit val rw: RW[D]) extends Store[D] {
+  private var map = Map.empty[Id[D], D]
 
-  override def keyStream[D]: Iterator[Id[D]] = map.keys.iterator.map(Id.apply[D])
+  override def idIterator: Iterator[Id[D]] = map.keys.iterator
 
-  override def stream: Iterator[Array[Byte]] = map.values.iterator
+  override def iterator: Iterator[D] = map.values.iterator
 
-  override def get[D](id: Id[D]): Option[Array[Byte]] = map.get(id.value)
+  override def get(id: Id[D]): Option[D] = map.get(id)
 
-  override def put[D](id: Id[D], value: Array[Byte]): Boolean = {
-    store.synchronized {
-      map += id.value -> value
-    }
+  override def put(id: Id[D], doc: D): Boolean = synchronized {
+    map += id -> doc
     true
   }
 
-  override def delete[D](id: Id[D]): Unit = {
-    store.synchronized {
-      map -= id.value
-    }
+  override def delete(id: Id[D]): Unit = synchronized {
+    map -= id
   }
 
   override def count: Int = map.size
 
   override def commit(): Unit = ()
 
-  override def dispose(): Unit = store.synchronized {
+  override def dispose(): Unit = synchronized {
     map = Map.empty
   }
 }
 
 object MapStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new MapStore
+  override protected def create[D](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new MapStore
 }

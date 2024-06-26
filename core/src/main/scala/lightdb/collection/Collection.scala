@@ -15,16 +15,17 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
                                                           val model: M,
                                                           val db: LightDB)
                                                          (implicit rw: RW[D]) extends Initializable { collection =>
-  private[lightdb] lazy val store: Store = db.storeManager(db, name)
+  private[lightdb] lazy val store: Store[D] = db.storeManager[D](db, name)
 
+  @tailrec
   private def recurseOption(doc: D,
                             invoke: (DocumentListener[D], D) => Option[D],
                             listeners: List[DocumentListener[D]] = model.listener()): Option[D] = listeners.headOption match {
-    case Some(l) => invoke(l, doc) match {
-      case Some(v) => recurseOption(v, invoke, listeners.tail)
-      case None => None
-    }
     case None => Some(doc)
+    case Some(l) => invoke(l, doc) match {
+      case None => None
+      case Some(v) => recurseOption(v, invoke, listeners.tail)
+    }
   }
 
   override protected def initialize(): Unit = {
@@ -65,12 +66,12 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
   def apply(id: Id[D])(implicit transaction: Transaction[D]): D = get(id)
     .getOrElse(throw new RuntimeException(s"$id not found in $name"))
 
-  def get(id: Id[D])(implicit transaction: Transaction[D]): Option[D] = model.store.getJsonDoc(id)(rw)
+  def get(id: Id[D])(implicit transaction: Transaction[D]): Option[D] = model.store.get(id)
 
   final def set(doc: D)(implicit transaction: Transaction[D]): Option[D] = {
     recurseOption(doc, (l, d) => l.preSet(d, transaction)) match {
       case Some(d) =>
-        model.store.putJson(d._id, d.json)
+        model.store.put(d._id, d)
         model.listener().foreach(l => l.postSet(d, transaction))
         Some(d)
       case None => None
@@ -93,11 +94,11 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
     }
   }
 
-  def iterator(implicit transaction: Transaction[D]): Iterator[D] = model.store.streamJsonDocs[D]
+  def iterator(implicit transaction: Transaction[D]): Iterator[D] = model.store.iterator
 
   def count(implicit transaction: Transaction[D]): Int = model.store.count
 
-  def idIterator(implicit transaction: Transaction[D]): Iterator[Id[D]] = model.store.keyStream[D]
+  def idIterator(implicit transaction: Transaction[D]): Iterator[Id[D]] = model.store.idIterator
 
   def jsonIterator(implicit transaction: Transaction[D]): Iterator[Json] = iterator.map(_.json)
 
