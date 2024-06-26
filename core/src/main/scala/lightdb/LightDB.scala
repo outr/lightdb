@@ -10,13 +10,13 @@ import lightdb.upgrade.DatabaseUpgrade
 import scribe.{Level, Logger}
 
 import java.nio.file.Path
+import java.util.{Timer, TimerTask}
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 
 trait LightDB extends Initializable {
-  // TODO: Support in-memory
-  def directory: Path
+  def directory: Option[Path]
 
   def storeManager: StoreManager
 
@@ -83,8 +83,13 @@ trait LightDB extends Initializable {
     // Set initialized
     databaseInitialized.set(true)
     // Start updater
-    // TODO: Create thread to do updates
-//    recursiveUpdates().unsafeRunAndForget()(cats.effect.unsafe.implicits.global)
+    timer.schedule(updateTask, updateFrequency.toMillis, updateFrequency.toMillis)
+  }
+
+  private lazy val timer = new Timer
+
+  private lazy val updateTask = new TimerTask {
+    override def run(): Unit = update()
   }
 
   private def initLogging(): Unit = {
@@ -115,19 +120,6 @@ trait LightDB extends Initializable {
 
   def disposed: Boolean = _disposed.get()
 
-  @tailrec
-  private def recursiveUpdates(): Unit = {
-    Thread.sleep(updateFrequency.toMillis)
-    try {
-      if (!disposed) update()
-    } catch {
-      case t: Throwable => scribe.error(s"Update process threw an error. Continuing...", t)
-    }
-    if (!disposed) {
-      recursiveUpdates()
-    }
-  }
-
   def truncate(): Unit = collections.foreach { c =>
     val collection = c.asInstanceOf[Collection[KeyValue, KeyValue.type]]
     collection.transaction { implicit transaction =>
@@ -138,6 +130,7 @@ trait LightDB extends Initializable {
   def update(): Unit = collections.foreach(_.update())
 
   def dispose(): Unit = if (_disposed.compareAndSet(false, true)) {
+    updateTask.cancel()
     collections.foreach(_.dispose())
   }
 
@@ -164,7 +157,6 @@ trait LightDB extends Initializable {
     )
   }
 
-  @tailrec
   private def doUpgrades(upgrades: List[DatabaseUpgrade],
                          stillBlocking: Boolean): Unit = upgrades.headOption match {
     case Some(upgrade) =>
@@ -172,15 +164,13 @@ trait LightDB extends Initializable {
       upgrade.upgrade(this)
       val applied = appliedUpgrades.get()
       appliedUpgrades.set(applied + upgrade.label)
-      doUpgrades(upgrades.tail, continueBlocking)
-
-      // TODO: Support upgrades in async thread
-//      if (stillBlocking && !continueBlocking) {
-//        io.unsafeRunAndForget()(cats.effect.unsafe.IORuntime.global)
-//        IO.unit
-//      } else {
-//        io
-//      }
+      if (stillBlocking && !continueBlocking) {
+        scribe.Platform.executionContext.execute(new Runnable {
+          override def run(): Unit = doUpgrades(upgrades.tail, continueBlocking)
+        })
+      } else {
+        doUpgrades(upgrades.tail, continueBlocking)
+      }
     case None => scribe.info("Upgrades completed successfully")
   }
 }

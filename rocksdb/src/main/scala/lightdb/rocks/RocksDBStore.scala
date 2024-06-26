@@ -60,5 +60,5 @@ case class RocksDBStore(directory: Path) extends Store {
 }
 
 object RocksDBStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new RocksDBStore(db.directory.resolve(name))
+  override protected def create(db: LightDB, name: String): Store = new RocksDBStore(db.directory.get.resolve(name))
 }

@@ -19,21 +19,20 @@ import lightdb.filter.Filter
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
 import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
 import lightdb.transaction.{Transaction, TransactionKey}
+import lightdb.util.PaginatedIterator
 
 case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Boolean = true,
                                                                   analyzer: Analyzer = new StandardAnalyzer) extends Indexer[D, M] {
   private lazy val indexSearcherKey: TransactionKey[IndexSearcher] = TransactionKey("indexSearcher")
 
-  private lazy val path: Option[Path] = if (persistent) {
-    val p = collection.db.directory.resolve(collection.name).resolve("index")
-    Files.createDirectories(p)
-    Some(p)
-  } else {
-    None
+  private lazy val path: Option[Path] =  collection.db.directory match {
+    case Some(p) if persistent => Some(p.resolve(collection.name).resolve("index"))
+    case _ => None
   }
+
   private lazy val directory = path
     .map(p => FSDirectory.open(p))
-    .getOrElse(new ByteBuffersDirectory())
+    .getOrElse(new ByteBuffersDirectory())      // TODO: Figure out how to use MemoryIndex for in-memory only
   private lazy val config = {
     val c = new IndexWriterConfig(analyzer)
     c.setCommitOnClose(true)
@@ -233,13 +232,12 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
         val limit = query.limit.map(l => math.min(l, total)).getOrElse(total) - query.offset
         val pages = math.ceil(limit.toDouble / query.batchSize.toDouble).toInt
         val iterator = if (pages > 1) {
-//          val streams = (1 until pages).toList.map { page =>
-//            fs2.Stream.force(createIterator(query.copy(offset = page * query.batchSize), transaction, conversion)
-//              .map(_._1))
-//          }
-//          streams.foldLeft(page1)((combined, stream) => combined ++ stream)
-          // TODO: Implement
-          ???
+          // TODO: Write test coverage of this
+          PaginatedIterator(page1, page => if (page < pages) {
+            Some(createIterator(query.copy(offset = page * query.batchSize), transaction, conversion)._1)
+          } else {
+            None
+          })
         } else {
           page1
         }

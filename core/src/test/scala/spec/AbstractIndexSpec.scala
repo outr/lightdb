@@ -120,14 +120,13 @@ abstract class AbstractIndexSpec extends AnyWordSpec with Matchers { spec =>
         people.map(_.name) should be(List("Bob Dole", "John Doe", "Jane Doe"))
       }
     }
-    /*"group by age" in {
+    "group by age" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.grouped(_.age).compile.toList.map { list =>
-          list.map(_._1) should be(List(19, 21, 123))
-          list.map(_._2.toList.map(_.name)) should be(List(List("Jane Doe"), List("John Doe"), List("Bob Dole")))
-        }
+        val list = DB.people.query.grouped(_.age).toList
+        list.map(_._1) should be(List(19, 21, 123))
+        list.map(_._2.toList.map(_.name)) should be(List(List("Jane Doe"), List("John Doe"), List("Bob Dole")))
       }
-    }*/
+    }
     "replace Jane Doe" in {
       DB.people.transaction { implicit transaction =>
         DB.people.set(p2.copy(
@@ -200,7 +199,7 @@ abstract class AbstractIndexSpec extends AnyWordSpec with Matchers { spec =>
   protected def indexer(model: Person.type): Indexer[Person, Person.type]
 
   object DB extends LightDB {
-    override lazy val directory: Path = Path.of(s"db/$specName")
+    override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 

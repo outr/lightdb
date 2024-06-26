@@ -29,7 +29,6 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
         val t = index.rw.definition match {
           case DefType.Str => "VARCHAR"
           case DefType.Int => "INTEGER"
-          case DefType.Obj(_, Some("lightdb.spatial.GeoPoint")) => "VARCHAR"    // TODO: Support
           case d => throw new UnsupportedOperationException(s"${index.name} has an unsupported type: $d")
         }
         s"${index.name} $t"

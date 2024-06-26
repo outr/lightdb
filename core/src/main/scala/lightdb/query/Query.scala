@@ -8,6 +8,7 @@ import lightdb.filter.Filter
 import lightdb.index.{Index, Indexer, Materialized, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 import lightdb.transaction.Transaction
+import lightdb.util.GroupedIterator
 import squants.space.Length
 
 case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M],
@@ -87,20 +88,16 @@ case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M]
 
   def aggregate(f: M => List[AggregateFunction[_, _, D]]): AggregateQuery[D, M] = AggregateQuery(this, f(collection.model))
 
-  // TODO: Revisit this
-  /*def grouped[F](f: M => Index[F, D],
+  def grouped[F](f: M => Index[F, D],
                  direction: SortDirection = SortDirection.Ascending)
-                (implicit transaction: Transaction[D]): Iterator[(F, List[D])] = {
+                (implicit transaction: Transaction[D]): GroupedIterator[D, F] = {
     val index = f(collection.model)
-    sort(Sort.ByIndex(index, direction))
+    val iterator = sort(Sort.ByIndex(index, direction))
       .search
       .docs
       .iterator
-      .toList
-      .stream
-      .docs
-      .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)
-  }*/
+    GroupedIterator[D, F](iterator, doc => index.get(doc).head)
+  }
 
   def first(implicit transaction: Transaction[D]): Option[D] = search.docs.iterator.nextOption()
 

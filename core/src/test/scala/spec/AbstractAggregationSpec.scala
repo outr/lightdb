@@ -95,7 +95,7 @@ abstract class AbstractAggregationSpec extends AnyWordSpec with Matchers { spec 
   protected def indexer(model: Person.type): Indexer[Person, Person.type]
 
   object DB extends LightDB {
-    override lazy val directory: Path = Path.of(s"db/$specName")
+    override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
     override protected def truncateOnInit: Boolean = true
 
     val people: IndexedCollection[Person, Person.type] = collection("people", Person, indexer(Person))

@@ -126,7 +126,7 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
   protected def storeManager: StoreManager
 
   object DB extends LightDB {
-    override lazy val directory: Path = Path.of(s"db/$specName")
+    override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val people: Collection[Person, Person.type] = collection("people", Person)
 
