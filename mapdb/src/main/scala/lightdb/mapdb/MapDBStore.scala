@@ -1,13 +1,14 @@
 package lightdb.mapdb
 
+import fabric.rw.RW
 import lightdb.{Id, LightDB}
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{ByteStore, Store, StoreManager}
 import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}
 
 import scala.jdk.CollectionConverters._
 import java.nio.file.Path
 
-case class MapDBStore(directory: Option[Path], chunkSize: Int = 1024) extends Store {
+case class MapDBStore[D](directory: Option[Path], chunkSize: Int = 1024)(implicit val rw: RW[D]) extends ByteStore[D] {
   private val maker: DBMaker.Maker = directory match {
     case Some(path) =>
       path.toFile.getParentFile.mkdirs()
@@ -17,19 +18,19 @@ case class MapDBStore(directory: Option[Path], chunkSize: Int = 1024) extends St
   private val db: DB = maker.make()
   private val map: HTreeMap[String, Array[Byte]] = db.hashMap("map", Serializer.STRING, Serializer.BYTE_ARRAY).createOrOpen()
 
-  override def keyStream[D]: Iterator[Id[D]] = map.keySet().iterator().asScala
+  override def idIterator: Iterator[Id[D]] = map.keySet().iterator().asScala
     .map(key => Id[D](key))
 
-  override def stream: Iterator[Array[Byte]] = map.values().iterator().asScala
+  override def iterator: Iterator[D] = map.values().iterator().asScala.map(bytes2D)
 
-  override def get[T](id: Id[T]): Option[Array[Byte]] = Option(map.getOrDefault(id.value, null))
+  override def get(id: Id[D]): Option[D] = Option(map.getOrDefault(id.value, null)).map(bytes2D)
 
-  override def put[T](id: Id[T], value: Array[Byte]): Boolean = {
-    map.put(id.value, value)
+  override def put(id: Id[D], doc: D): Boolean = {
+    map.put(id.value, d2Bytes(doc))
     true
   }
 
-  override def delete[T](id: Id[T]): Unit = map.remove(id.value)
+  override def delete(id: Id[D]): Unit = map.remove(id.value)
 
   override def count: Int = map.size()
 
@@ -41,5 +42,5 @@ case class MapDBStore(directory: Option[Path], chunkSize: Int = 1024) extends St
 }
 
 object MapDBStore extends StoreManager {
-  override protected def create(db: LightDB, name: String): Store = new MapDBStore(db.directory.map(_.resolve(name)))
+  override protected def create[D](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new MapDBStore(db.directory.map(_.resolve(name)))
 }

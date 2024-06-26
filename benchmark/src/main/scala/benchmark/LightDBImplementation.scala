@@ -102,7 +102,7 @@ object LightDBImplementation extends BenchmarkImplementation {
 
     override def directory: Path = Paths.get("imdb")
 
-    override def storeManager: StoreManager = AtomicMapStore
+    override def storeManager: StoreManager = HaloDBStore
 
     val titleAka: IndexedCollection[TitleAkaLDB, TitleAkaLDB.type] = collection("titleAka", TitleAkaLDB, LuceneIndexer())
     val titleBasics: Collection[TitleBasicsLDB, TitleBasicsLDB.type] = collection("titleBasics", TitleBasicsLDB)
