@@ -36,7 +36,7 @@ Computationally focused database using pluggable store + indexer
   - [ ] MDoc support
 - [ ] New Integrations
   - [ ] Add btree supported indexes in Store
-  - [ ] Add Redis support
+  - [X] Add Redis support
   - [ ] Support SQL as a Store as well as Indexer
   - [X] Support H2 as another SQL database
   - [ ] Provide a Scala.js implementation of Store using Web Storage API
