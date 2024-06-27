@@ -75,14 +75,14 @@ val squantsVersion: String = "1.8.3"
 val scalaTestVersion: String = "3.2.18"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, core.js, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, h2, all)
+	.aggregate(core.jvm, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, h2, all)
 	.settings(
 		name := projectName,
 		publish := {},
 		publishLocal := {}
 	)
 
-lazy val core = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-effect supports native, NativePlatform)
+lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlatform
 	.crossType(CrossType.Pure)
 	.settings(
 		name := s"$projectName-core",
@@ -114,7 +114,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform) // TODO: Add when cats-eff
 		fork := true
 	)
 
-lazy val halodb = project.in(file("halodb"))
+lazy val halodb = project.in(file("store/halodb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-halo",
@@ -125,7 +125,7 @@ lazy val halodb = project.in(file("halodb"))
 		)
 	)
 
-lazy val rocksdb = project.in(file("rocksdb"))
+lazy val rocksdb = project.in(file("store/rocksdb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-rocks",
@@ -136,7 +136,7 @@ lazy val rocksdb = project.in(file("rocksdb"))
 		)
 	)
 
-lazy val mapdb = project.in(file("mapdb"))
+lazy val mapdb = project.in(file("store/mapdb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-mapdb",
@@ -147,7 +147,7 @@ lazy val mapdb = project.in(file("mapdb"))
 		fork := true
 	)
 
-lazy val lucene = project.in(file("lucene"))
+lazy val lucene = project.in(file("index/lucene"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-lucene",
@@ -160,7 +160,7 @@ lazy val lucene = project.in(file("lucene"))
 		)
 	)
 
-lazy val sql = project.in(file("sql"))
+lazy val sql = project.in(file("index/sql"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-sql",
@@ -171,7 +171,7 @@ lazy val sql = project.in(file("sql"))
 		)
 	)
 
-lazy val sqlite = project.in(file("sqlite"))
+lazy val sqlite = project.in(file("index/sqlite"))
 	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-sqlite",
@@ -182,7 +182,7 @@ lazy val sqlite = project.in(file("sqlite"))
 		)
 	)
 
-lazy val duckdb = project.in(file("duckdb"))
+lazy val duckdb = project.in(file("index/duckdb"))
 	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-duckdb",
@@ -193,7 +193,7 @@ lazy val duckdb = project.in(file("duckdb"))
 		)
 	)
 
-lazy val h2 = project.in(file("h2"))
+lazy val h2 = project.in(file("index/h2"))
 	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-h2",
