@@ -53,7 +53,7 @@ val rocksDBVersion: String = "9.2.1"
 
 val catsEffectVersion: String = "3.5.4"
 
-val fabricVersion: String = "1.15.1"
+val fabricVersion: String = "1.15.2"
 
 val fs2Version: String = "3.10.2"
 
