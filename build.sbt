@@ -75,7 +75,7 @@ val squantsVersion: String = "1.8.3"
 val scalaTestVersion: String = "3.2.18"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, core.js, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, all)
+	.aggregate(core.jvm, core.js, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, h2, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -205,7 +205,7 @@ lazy val h2 = project.in(file("h2"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", halodb, rocksdb, mapdb, lucene, sqlite, duckdb)
+	.dependsOn(core.jvm, core.jvm % "test->test", halodb, rocksdb, mapdb, lucene, sqlite, duckdb, h2)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

@@ -14,7 +14,7 @@ case class H2Indexer[D <: Document[D], M <: DocumentModel[D]]() extends SQLIndex
   override protected lazy val config: SQLConfig = SQLConfig(
     jdbcUrl = s"jdbc:h2:${path.toFile.getCanonicalPath}"
   )
-  override protected lazy val connectionManager: ConnectionManager[D] = HikariConnectionManager(config)
+  override protected lazy val connectionManager: ConnectionManager[D] = SingleConnectionManager(config)
 
   override protected def upsertPrefix: String = "MERGE"
 
