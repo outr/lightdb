@@ -26,15 +26,18 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       if (index.name == "_id") {
         "_id VARCHAR PRIMARY KEY"
       } else {
-        val t = index.rw.definition match {
-          case DefType.Str => "VARCHAR"
-          case DefType.Int => "INTEGER"
-          case d => throw new UnsupportedOperationException(s"${index.name} has an unsupported type: $d")
-        }
+        val t = def2Type(index.name, index.rw.definition)
         s"${index.name} $t"
       }
     }.mkString(", ")
     s"CREATE TABLE IF NOT EXISTS ${collection.name}($entries)"
+  }
+
+  private def def2Type(name: String, d: DefType): String = d match {
+    case DefType.Str => "VARCHAR"
+    case DefType.Int | DefType.Bool => "INTEGER"
+    case DefType.Opt(d) => def2Type(name, d)
+    case d => throw new UnsupportedOperationException(s"$name has an unsupported type: $d")
   }
 
   override def init(collection: Collection[D, _]): Unit = {

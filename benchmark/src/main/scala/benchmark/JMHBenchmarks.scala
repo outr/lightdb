@@ -120,7 +120,7 @@ class JMHBenchmarks {
   }
 
   object DB extends LightDB {
-    override def directory: Path = Path.of("db/jmh")
+    override def directory: Option[Path] = Some(Path.of("db/jmh"))
 
     val records: Collection[Record, Record.type] = collection("records", Record)
 
