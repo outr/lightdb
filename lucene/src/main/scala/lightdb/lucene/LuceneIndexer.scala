@@ -192,13 +192,21 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
     val s = new LuceneSort(sortFields: _*)
     val indexSearcher = getIndexSearcher(transaction)
     val limit = query.limit.map(l => math.min(l - query.offset, query.batchSize)).getOrElse(query.batchSize)
-    val collectorManager = new TopFieldCollectorManager(s, 2147483630, null, Int.MaxValue, false)
-    val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
+    def search(total: Option[Int]): TopFieldDocs = {
+      val collectorManager = new TopFieldCollectorManager(s, total.getOrElse(query.offset + limit), null, Int.MaxValue, false)
+      val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
+      val totalHits = topFieldDocs.totalHits.value.toInt
+      if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty) {
+        search(Some(totalHits))
+      } else {
+        topFieldDocs
+      }
+    }
+    val topFieldDocs: TopFieldDocs = search(None)
     val scoreDocs: List[ScoreDoc] = topFieldDocs
       .scoreDocs
       .toList
       .drop(query.offset)
-//      .slice(query.offset, query.offset + limit)
     val total: Int = topFieldDocs.totalHits.value.toInt
     val storedFields: StoredFields = indexSearcher.storedFields()
     val idsAndScores = scoreDocs.map(doc => Id[D](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
@@ -230,18 +238,6 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
                            conversion: Conversion[V]): SearchResults[D, V] =
     createIterator(query, transaction, conversion) match {
       case (page1, total) =>
-//        val limit = query.limit.map(l => math.min(l, total)).getOrElse(total) - query.offset
-//        val pages = math.ceil(limit.toDouble / query.batchSize.toDouble).toInt
-//        val iterator = if (pages > 1) {
-//          // TODO: Write test coverage of this
-//          PaginatedIterator(page1, page => if (page < pages) {
-//            Some(createIterator(query.copy(offset = page * query.batchSize), transaction, conversion)._1)
-//          } else {
-//            None
-//          })
-//        } else {
-//          page1
-//        }
         SearchResults(
           offset = query.offset,
           limit = query.limit,
