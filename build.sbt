@@ -214,6 +214,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"commons-io" % "commons-io" % "2.16.1",
 			"co.fs2" %% "fs2-io" % "3.9.4",
-			"com.outr" %% "scarango-driver" % "3.20.0"
+			"com.outr" %% "scarango-driver" % "3.20.0",
+			"org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4"
 		)
 	)

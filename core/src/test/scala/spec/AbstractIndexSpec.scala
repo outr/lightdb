@@ -56,7 +56,7 @@ abstract class AbstractIndexSpec extends AnyWordSpec with Matchers { spec =>
     }
     "verify exactly three people exist in the index" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.indexer.count should be(3)
+        DB.people.indexer.countInternal should be(3)
       }
     }
     "query for John Doe doc" in {
