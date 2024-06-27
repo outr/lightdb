@@ -144,7 +144,7 @@ object TightLoops {
   object DB extends LightDB {
     override lazy val directory: Option[Path] = Some(Path.of(s"db/tightLoops"))
 
-    val people: IndexedCollection[Person, Person.type] = collection("people", Person, H2Indexer())
+    val people: IndexedCollection[Person, Person.type] = collection("people", Person, LuceneIndexer())
 
     override def storeManager: StoreManager = HaloDBStore
 

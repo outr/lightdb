@@ -56,6 +56,10 @@ val haloDBVersion: String = "0.5.6"
 
 val rocksDBVersion: String = "9.2.1"
 
+val mapdbVersion: String = "3.1.0"
+
+val jedisVersion: String = "5.1.3"
+
 val fabricVersion: String = "1.15.2"
 
 val scribeVersion: String = "3.15.0"
@@ -75,7 +79,7 @@ val squantsVersion: String = "1.8.3"
 val scalaTestVersion: String = "3.2.18"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, halodb, rocksdb, mapdb, lucene, sql, sqlite, duckdb, h2, all)
+	.aggregate(core.jvm, halodb, rocksdb, mapdb, redis, lucene, sql, sqlite, duckdb, h2, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -141,7 +145,18 @@ lazy val mapdb = project.in(file("store/mapdb"))
 	.settings(
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
-			"org.mapdb" % "mapdb" % "3.1.0",
+			"org.mapdb" % "mapdb" % mapdbVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		),
+		fork := true
+	)
+
+lazy val redis = project.in(file("store/redis"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-redis",
+		libraryDependencies ++= Seq(
+			"redis.clients" % "jedis" % jedisVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
 		fork := true
@@ -205,7 +220,7 @@ lazy val h2 = project.in(file("index/h2"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", halodb, rocksdb, mapdb, lucene, sqlite, duckdb, h2)
+	.dependsOn(core.jvm, core.jvm % "test->test", halodb, rocksdb, mapdb, redis, lucene, sqlite, duckdb, h2)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

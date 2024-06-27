@@ -141,11 +141,11 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
   def update(): Unit = ()
 
   @tailrec
-  final def dispose(): Unit = if (transaction.active.isEmpty) {
+  final def dispose(): Unit = if (this.transaction.active.isEmpty) {
     model.listener().foreach(l => l.dispose())
     store.dispose()
   } else {
-    scribe.warn(s"Waiting to dispose $name. ${transaction.active.size} transactions are still active...")
+    scribe.warn(s"Waiting to dispose $name. ${this.transaction.active.size} transactions are still active...")
     Thread.sleep(1.second.toMillis)
     dispose()
   }

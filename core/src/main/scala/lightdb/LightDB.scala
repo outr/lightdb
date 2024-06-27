@@ -131,7 +131,9 @@ trait LightDB extends Initializable {
 
   def dispose(): Unit = if (_disposed.compareAndSet(false, true)) {
     updateTask.cancel()
-    collections.foreach(_.dispose())
+    collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).foreach { collection =>
+      collection.dispose()
+    }
   }
 
   object stored {

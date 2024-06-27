@@ -7,11 +7,12 @@ import org.rocksdb.{RocksDB, RocksIterator}
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ListBuffer
 import lightdb._
-import lightdb.document.SetType
+import lightdb.document.{Document, SetType}
 import lightdb.store._
+import lightdb.transaction.Transaction
 
-case class RocksDBStore[D](directory: Path, internalCounter: Boolean = false)
-                          (implicit val rw: RW[D]) extends ByteStore[D] {
+case class RocksDBStore[D <: Document[D]](directory: Path, internalCounter: Boolean = false)
+                                      (implicit val rw: RW[D]) extends ByteStore[D] {
   RocksDB.loadLibrary()
 
   private val db: RocksDB = {
@@ -34,19 +35,19 @@ case class RocksDBStore[D](directory: Path, internalCounter: Boolean = false)
     iterator.flatten
   }
 
-  override def idIterator: Iterator[Id[D]] = createStream { i =>
+  override def idIterator(implicit transaction: Transaction[D]): Iterator[Id[D]] = createStream { i =>
     Option(i.key()).map(key => Id[D](key.string))
   }
 
-  override def iterator: Iterator[D] = createStream { i =>
+  override def iterator(implicit transaction: Transaction[D]): Iterator[D] = createStream { i =>
     Option(i.value()).map(bytes2D)
   }
 
-  override def get(id: Id[D]): Option[D] = Option(db.get(id.bytes)).map(bytes2D)
+  override def get(id: Id[D])(implicit transaction: Transaction[D]): Option[D] = Option(db.get(id.bytes)).map(bytes2D)
 
-  override def contains(id: Id[D]): Boolean = db.keyExists(id.bytes)
+  override def contains(id: Id[D])(implicit transaction: Transaction[D]): Boolean = db.keyExists(id.bytes)
 
-  override def put(id: Id[D], doc: D): Option[SetType] = {
+  override def put(id: Id[D], doc: D)(implicit transaction: Transaction[D]): Option[SetType] = {
     val `type` = if (!internalCounter) {
       SetType.Unknown
     } else if (contains(id)) {
@@ -58,15 +59,15 @@ case class RocksDBStore[D](directory: Path, internalCounter: Boolean = false)
     Some(`type`)
   }
 
-  override def delete(id: Id[D]): Boolean = {
+  override def delete(id: Id[D])(implicit transaction: Transaction[D]): Boolean = {
     val exists = contains(id)
     db.delete(id.bytes)
     exists
   }
 
-  override def count: Int = idIterator.size
+  override def count(implicit transaction: Transaction[D]): Int = idIterator.size
 
-  override def commit(): Unit = ()
+  override def commit()(implicit transaction: Transaction[D]): Unit = ()
 
   override def dispose(): Unit = {
     db.close()
@@ -74,5 +75,5 @@ case class RocksDBStore[D](directory: Path, internalCounter: Boolean = false)
 }
 
 object RocksDBStore extends StoreManager {
-  override protected def create[D](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new RocksDBStore(db.directory.get.resolve(name))
+  override protected def create[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new RocksDBStore(db.directory.get.resolve(name))
 }
