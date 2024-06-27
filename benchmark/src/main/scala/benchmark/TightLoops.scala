@@ -4,6 +4,7 @@ import fabric.rw.RW
 import lightdb.{Id, LightDB, StoredValue}
 import lightdb.document.{Document, DocumentModel}
 import lightdb.duckdb.DuckDBIndexer
+import lightdb.h2.H2Indexer
 import lightdb.halo.HaloDBStore
 import lightdb.index.{Indexed, IndexedCollection}
 import lightdb.lucene.LuceneIndexer
@@ -143,7 +144,7 @@ object TightLoops {
   object DB extends LightDB {
     override lazy val directory: Option[Path] = Some(Path.of(s"db/tightLoops"))
 
-    val people: IndexedCollection[Person, Person.type] = collection("people", Person, LuceneIndexer())
+    val people: IndexedCollection[Person, Person.type] = collection("people", Person, H2Indexer())
 
     override def storeManager: StoreManager = HaloDBStore
 
