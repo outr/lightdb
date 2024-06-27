@@ -38,6 +38,6 @@ Computationally focused database using pluggable store + indexer
   - [ ] Add btree supported indexes in Store
   - [ ] Add Redis support
   - [ ] Support SQL as a Store as well as Indexer
-  - [ ] Support H2 as another SQL database
+  - [X] Support H2 as another SQL database
   - [ ] Provide a Scala.js implementation of Store using Web Storage API
   - [ ] Provide a Scala.js implementation using IndexedDB

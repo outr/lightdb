@@ -53,8 +53,8 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
         val existingColumns = columns(connection)
         indexes.foreach { index =>
           if (index.name != "_id") {
-            if (!existingColumns.contains(index.name)) {
-              statement.executeUpdate(s"ALTER TABLE ${collection.name} ADD ${index.name}")
+            if (!existingColumns.contains(index.name.toLowerCase)) {
+              statement.executeUpdate(s"ALTER TABLE ${collection.name} ADD ${index.name} ${def2Type(index.name, index.rw.definition)}")
             }
             val indexName = s"${index.name}_idx"
             statement.executeUpdate(s"CREATE INDEX IF NOT EXISTS $indexName ON ${collection.name}(${index.name})")
@@ -72,7 +72,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
       val rs = ps.executeQuery()
       val meta = rs.getMetaData
       (1 to meta.getColumnCount).map { index =>
-        meta.getColumnName(index)
+        meta.getColumnName(index).toLowerCase
       }.toSet
     } finally {
       ps.close()
@@ -143,10 +143,12 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
+  protected def upsertPrefix: String = "INSERT OR REPLACE"
+
   protected def indexDoc(doc: D)(implicit transaction: Transaction[D]): Unit = {
     val connection = getConnection
     val inserts = transaction.getOrCreate(insertsKey, {
-      val sql = s"INSERT OR REPLACE INTO ${collection.name}(${indexes.map(_.name).mkString(", ")}) VALUES (${indexes.map(_ => "?").mkString(", ")})"
+      val sql = s"$upsertPrefix INTO ${collection.name}(${indexes.map(_.name).mkString(", ")}) VALUES (${indexes.map(_ => "?").mkString(", ")})"
       val ps = connection.prepareStatement(sql)
       // TODO: Make this configurable
       val maxBatch = 10_000
@@ -154,6 +156,8 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     })
     inserts.insert(doc)
   }
+
+  protected def concatPrefix: String = "GROUP_CONCAT"
 
   override def aggregate(query: AggregateQuery[D, M])
                         (implicit transaction: Transaction[D]): Iterator[MaterializedAggregate[D, M]] = {
@@ -165,7 +169,7 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
         case AggregateType.Avg => Some("AVG")
         case AggregateType.Sum => Some("SUM")
         case AggregateType.Count | AggregateType.CountDistinct => Some("COUNT")
-        case AggregateType.Concat | AggregateType.ConcatDistinct => Some("GROUP_CONCAT")
+        case AggregateType.Concat | AggregateType.ConcatDistinct => Some(concatPrefix)
         case AggregateType.Group => None
       }
       val fieldName = af match {
