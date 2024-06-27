@@ -26,7 +26,7 @@ object AggregateSupport {
   private def ConcatRW[F](implicit fRW: RW[F]): RW[List[F]] = RW.from[List[F]](
     r = list => arr(list.map(fRW.read)),
     w = _.asString.split(";;").toList.map { s =>
-      val json = string2Json[F](s)(fRW)
+      val json = string2Json(s, fRW.definition)
       json.as[F]
     },
     d = DefType.Json

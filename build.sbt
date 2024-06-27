@@ -56,7 +56,7 @@ val haloDBVersion: String = "0.5.6"
 
 val rocksDBVersion: String = "9.2.1"
 
-val fabricVersion: String = "1.15.1"
+val fabricVersion: String = "1.15.2"
 
 val scribeVersion: String = "3.15.0"
 
@@ -67,8 +67,6 @@ val hikariCPVersion: String = "5.1.0"
 val sqliteVersion: String = "3.46.0.0"
 
 val duckdbVersion: String = "1.0.0"
-
-val keysemaphoreVersion: String = "0.3.0-M1"
 
 val squantsVersion: String = "1.8.3"
 

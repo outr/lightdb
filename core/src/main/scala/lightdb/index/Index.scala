@@ -50,11 +50,19 @@ case class Index[F, D <: Document[D]](name: String,
 }
 
 object Index {
-  def string2Json[F](s: String)(rw: RW[F]): Json = rw.definition match {
+  def string2Json(s: String, definition: DefType): Json = definition match {
     case DefType.Str => str(s)
     case DefType.Int => num(s.toLong)
     case DefType.Dec => num(BigDecimal(s))
-    case DefType.Bool => bool(s.toBoolean)
+    case DefType.Bool => bool(s match {
+      case "1" | "true" => true
+      case _ => false
+    })
+    case DefType.Opt(d) => if (s == null) {
+      Null
+    } else {
+      string2Json(s, d)
+    }
     case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
   }
 }

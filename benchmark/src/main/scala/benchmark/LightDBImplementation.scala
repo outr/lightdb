@@ -1,7 +1,7 @@
 package benchmark
 
 import cats.effect.IO
-import fabric.rw.RW
+import fabric.rw.{Asable, RW}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.halo.HaloDBStore
@@ -74,8 +74,9 @@ object LightDBImplementation extends BenchmarkImplementation {
       .query
       .filter(_.titleId === titleId)
       .search
-      .docs
+      .materialized(t => t.indexes)
       .list
+      .map(_.json.as[TitleAkaLDB])
   }
   //  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.titleId.query(titleId).compile.toList
 
@@ -100,11 +101,11 @@ object LightDBImplementation extends BenchmarkImplementation {
   object DB extends LightDB {
     override protected def truncateOnInit: Boolean = true
 
-    override def directory: Path = Paths.get("imdb")
+    override def directory: Option[Path] = Some(Paths.get("imdb"))
 
     override def storeManager: StoreManager = HaloDBStore
 
-    val titleAka: IndexedCollection[TitleAkaLDB, TitleAkaLDB.type] = collection("titleAka", TitleAkaLDB, LuceneIndexer())
+    val titleAka: IndexedCollection[TitleAkaLDB, TitleAkaLDB.type] = collection("titleAka", TitleAkaLDB, SQLiteIndexer())
     val titleBasics: Collection[TitleBasicsLDB, TitleBasicsLDB.type] = collection("titleBasics", TitleBasicsLDB)
 
     //    val titleAka: Collection[TitleAkaLDB] = collection("titleAka", TitleAkaLDB)
@@ -118,15 +119,21 @@ object LightDBImplementation extends BenchmarkImplementation {
                          title: String,
                          region: Option[String],
                          language: Option[String],
-                         types: List[String],
-                         attributes: List[String],
+                         types: List[String] = Nil,
+                         attributes: List[String] = Nil,
                          isOriginalTitle: Option[Boolean],
                          _id: Id[TitleAka]) extends Document[TitleAka]
 
   object TitleAkaLDB extends DocumentModel[TitleAkaLDB] with Indexed[TitleAkaLDB] {
     override implicit val rw: RW[TitleAkaLDB] = RW.gen
 
-    val titleId: I[String] = index.one("titleId", _.titleId)
+    val titleId: I[String] = index.one("titleId", _.titleId, store = true)
+
+    val ordering: I[Int] = index.one("ordering", _.ordering, store = true)
+    val title: I[String] = index.one("title", _.title, store = true)
+    val region: I[Option[String]] = index.one("region", _.region, store = true)
+    val language: I[Option[String]] = index.one("language", _.language, store = true)
+    val isOriginalTitle: I[Option[Boolean]] = index.one("isOriginalTitle", _.isOriginalTitle, store = true)
   }
 
   case class TitleBasicsLDB(tconst: String, titleType: String, primaryTitle: String, originalTitle: String, isAdult: Boolean, startYear: Int, endYear: Int, runtimeMinutes: Int, genres: List[String], _id: Id[TitleBasics]) extends Document[TitleBasics]

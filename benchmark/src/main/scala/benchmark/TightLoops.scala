@@ -127,7 +127,7 @@ object TightLoops {
     }
 
   object DB extends LightDB {
-    override lazy val directory: Path = Path.of(s"db/tightLoops")
+    override lazy val directory: Option[Path] = Some(Path.of(s"db/tightLoops"))
 
     val people: IndexedCollection[Person, Person.type] = collection("people", Person, LuceneIndexer())
 
