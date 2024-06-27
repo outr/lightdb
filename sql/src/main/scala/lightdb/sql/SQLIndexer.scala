@@ -7,7 +7,7 @@ import fabric.rw.Convertible
 import lightdb.Id
 import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
-import lightdb.document.{Document, DocumentModel}
+import lightdb.document.{Document, DocumentModel, SetType}
 import lightdb.filter.Filter
 import lightdb.index.{Index, Indexer, MaterializedAggregate, MaterializedIndex}
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
@@ -99,8 +99,8 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
-  override def postSet(doc: D, transaction: Transaction[D]): Unit = {
-    super.postSet(doc, transaction)
+  override def postSet(doc: D, `type`: SetType, transaction: Transaction[D]): Unit = {
+    super.postSet(doc, `type`, transaction)
     indexDoc(doc)(transaction)
   }
 
@@ -127,11 +127,11 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     }
   }
 
-  override def count(implicit transaction: Transaction[D]): Int = {
+  override protected def countInternal(implicit transaction: Transaction[D]): Int = {
     val connection = getConnection
     val statement = connection.createStatement()
     try {
-      val rs = statement.executeQuery(s"SELECT COUNT(_id) FROM ${collection.name}")
+      val rs = statement.executeQuery(s"SELECT COUNT(*) FROM ${collection.name}")
       try {
         rs.next()
         rs.getInt(1)

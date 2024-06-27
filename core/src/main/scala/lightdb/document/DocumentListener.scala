@@ -15,7 +15,7 @@ trait DocumentListener[D <: Document[D]] {
 
   def preSet(doc: D, transaction: Transaction[D]): Option[D] = Some(doc)
 
-  def postSet(doc: D, transaction: Transaction[D]): Unit = ()
+  def postSet(doc: D, `type`: SetType, transaction: Transaction[D]): Unit = ()
 
   def commit(transaction: Transaction[D]): Unit = ()
 

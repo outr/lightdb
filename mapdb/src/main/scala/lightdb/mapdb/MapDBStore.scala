@@ -1,6 +1,7 @@
 package lightdb.mapdb
 
 import fabric.rw.RW
+import lightdb.document.SetType
 import lightdb.{Id, LightDB}
 import lightdb.store.{ByteStore, Store, StoreManager}
 import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}
@@ -18,6 +19,8 @@ case class MapDBStore[D](directory: Option[Path], chunkSize: Int = 1024)(implici
   private val db: DB = maker.make()
   private val map: HTreeMap[String, Array[Byte]] = db.hashMap("map", Serializer.STRING, Serializer.BYTE_ARRAY).createOrOpen()
 
+  override def internalCounter: Boolean = true
+
   override def idIterator: Iterator[Id[D]] = map.keySet().iterator().asScala
     .map(key => Id[D](key))
 
@@ -25,12 +28,16 @@ case class MapDBStore[D](directory: Option[Path], chunkSize: Int = 1024)(implici
 
   override def get(id: Id[D]): Option[D] = Option(map.getOrDefault(id.value, null)).map(bytes2D)
 
-  override def put(id: Id[D], doc: D): Boolean = {
-    map.put(id.value, d2Bytes(doc))
-    true
+  override def put(id: Id[D], doc: D): Option[SetType] = {
+    val `type` = if (map.put(id.value, d2Bytes(doc)) != null) {
+      SetType.Replace
+    } else {
+      SetType.Insert
+    }
+    Some(`type`)
   }
 
-  override def delete(id: Id[D]): Unit = map.remove(id.value)
+  override def delete(id: Id[D]): Boolean = map.remove(id.value) != null
 
   override def count: Int = map.size()
 

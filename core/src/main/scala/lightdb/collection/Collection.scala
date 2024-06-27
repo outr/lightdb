@@ -1,7 +1,7 @@
 package lightdb.collection
 
 import lightdb.{Id, LightDB}
-import lightdb.document.{Document, DocumentListener, DocumentModel}
+import lightdb.document.{Document, DocumentListener, DocumentModel, SetType}
 import lightdb.transaction.Transaction
 import lightdb.util.Initializable
 import fabric.Json
@@ -71,9 +71,13 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
   final def set(doc: D)(implicit transaction: Transaction[D]): Option[D] = {
     recurseOption(doc, (l, d) => l.preSet(d, transaction)) match {
       case Some(d) =>
-        model.store.put(d._id, d)
-        model.listener().foreach(l => l.postSet(d, transaction))
-        Some(d)
+        val typeOption = model.store.put(d._id, d)
+        typeOption match {
+          case Some(setType) =>
+            model.listener().foreach(l => l.postSet(d, setType, transaction))
+            Some(d)
+          case None => None
+        }
       case None => None
     }
   }
