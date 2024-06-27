@@ -2,8 +2,9 @@ package lightdb.store
 
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
+import lightdb.document.Document
 
-trait ByteStore[D] extends Store[D] {
+trait ByteStore[D <: Document[D]] extends Store[D] {
   protected def bytes2D(bytes: Array[Byte]): D = {
     val jsonString = bytes.string
     val json = JsonParser(jsonString)
