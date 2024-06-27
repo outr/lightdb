@@ -59,6 +59,7 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
     def release(transaction: Transaction[D]): Unit = {
       transaction.commit()
       model.listener().foreach(l => l.transactionEnd(transaction))
+      store.transactionEnd()(transaction)
       remove(transaction)
     }
   }

@@ -30,6 +30,8 @@ trait Store[D <: Document[D]] {
 
   def truncate()(implicit transaction: Transaction[D]): Unit = internalTruncate()
 
+  def transactionEnd()(implicit transaction: Transaction[D]): Unit = {}
+
   def dispose(): Unit
 
   @tailrec
