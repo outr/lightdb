@@ -5,18 +5,18 @@ import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.RW
 import lightdb.{Id, LightDB}
-import lightdb.document.Document
+import lightdb.document.{Document, SetType}
 import lightdb.store.{Store, StoreManager}
 import lightdb.transaction.Transaction
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
-
 import lightdb.store._
 
 case class HaloDBStore[D](directory: Path,
-                       indexThreads: Int = Runtime.getRuntime.availableProcessors(),
-                       maxFileSize: Int = 1024 * 1024)(implicit val rw: RW[D]) extends ByteStore[D] {
+                          indexThreads: Int = Runtime.getRuntime.availableProcessors(),
+                          maxFileSize: Int = 1024 * 1024,
+                          internalCounter: Boolean = false)(implicit val rw: RW[D]) extends ByteStore[D] {
   private lazy val instance: HaloDB = {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
@@ -43,9 +43,26 @@ case class HaloDBStore[D](directory: Path,
 
   override def get(id: Id[D]): Option[D] = Option(instance.get(id.bytes)).map(bytes2D)
 
-  override def put(id: Id[D], doc: D): Boolean = instance.put(id.bytes, d2Bytes(doc))
+  override def put(id: Id[D], doc: D): Option[SetType] = {
+    val `type` = if (!internalCounter) {
+      SetType.Unknown
+    } else if (contains(id)) {
+      SetType.Replace
+    } else {
+      SetType.Insert
+    }
+    if (instance.put(id.bytes, d2Bytes(doc))) {
+      Some(`type`)
+    } else {
+      None
+    }
+  }
 
-  override def delete(id: Id[D]): Unit = instance.delete(id.bytes)
+  override def delete(id: Id[D]): Boolean = {
+    val exists = contains(id)
+    instance.delete(id.bytes)
+    exists
+  }
 
   override def count: Int = instance.size().toInt
 

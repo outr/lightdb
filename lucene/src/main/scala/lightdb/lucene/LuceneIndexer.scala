@@ -14,7 +14,7 @@ import org.apache.lucene.document.{DoubleField, DoublePoint, Field, IntField, In
 
 import java.nio.file.{Files, Path}
 import lightdb.aggregate.AggregateQuery
-import lightdb.document.{Document, DocumentModel}
+import lightdb.document.{Document, DocumentModel, SetType}
 import lightdb.filter.Filter
 import lightdb.query.{Query, SearchResults, Sort, SortDirection}
 import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
@@ -52,8 +52,8 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
     }
   }
 
-  override def postSet(doc: D, transaction: Transaction[D]): Unit = {
-    super.postSet(doc, transaction)
+  override def postSet(doc: D, `type`: SetType, transaction: Transaction[D]): Unit = {
+    super.postSet(doc, `type`, transaction)
     indexDoc(doc, indexes)
   }
 
@@ -258,7 +258,7 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
                         (implicit transaction: Transaction[D]): Iterator[MaterializedAggregate[D, M]] =
     throw new UnsupportedOperationException("Aggregate functions not supported in Lucene currently")
 
-  override def count(implicit transaction: Transaction[D]): Int = {
+  override protected def countInternal(implicit transaction: Transaction[D]): Int = {
     val indexSearcher = getIndexSearcher
     indexSearcher.count(new MatchAllDocsQuery)
   }

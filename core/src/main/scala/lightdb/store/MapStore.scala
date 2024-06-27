@@ -1,6 +1,7 @@
 package lightdb.store
 
 import fabric.rw.RW
+import lightdb.document.SetType
 import lightdb.{Id, LightDB}
 
 /**
@@ -11,19 +12,30 @@ import lightdb.{Id, LightDB}
  class MapStore[D](implicit val rw: RW[D]) extends Store[D] {
   private var map = Map.empty[Id[D], D]
 
+  override def internalCounter: Boolean = true
+
   override def idIterator: Iterator[Id[D]] = map.keys.iterator
 
   override def iterator: Iterator[D] = map.values.iterator
 
   override def get(id: Id[D]): Option[D] = map.get(id)
 
-  override def put(id: Id[D], doc: D): Boolean = synchronized {
+  override def contains(id: Id[D]): Boolean = map.contains(id)
+
+  override def put(id: Id[D], doc: D): Option[SetType] = synchronized {
+    val `type` = if (contains(id)) {
+      SetType.Replace
+    } else {
+      SetType.Insert
+    }
     map += id -> doc
-    true
+    Some(`type`)
   }
 
-  override def delete(id: Id[D]): Unit = synchronized {
+  override def delete(id: Id[D]): Boolean = synchronized {
+    val exists = contains(id)
     map -= id
+    exists
   }
 
   override def count: Int = map.size

@@ -7,9 +7,11 @@ import org.rocksdb.{RocksDB, RocksIterator}
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ListBuffer
 import lightdb._
+import lightdb.document.SetType
 import lightdb.store._
 
-case class RocksDBStore[D](directory: Path)(implicit val rw: RW[D]) extends ByteStore[D] {
+case class RocksDBStore[D](directory: Path, internalCounter: Boolean = false)
+                          (implicit val rw: RW[D]) extends ByteStore[D] {
   RocksDB.loadLibrary()
 
   private val db: RocksDB = {
@@ -42,13 +44,24 @@ case class RocksDBStore[D](directory: Path)(implicit val rw: RW[D]) extends Byte
 
   override def get(id: Id[D]): Option[D] = Option(db.get(id.bytes)).map(bytes2D)
 
-  override def put(id: Id[D], doc: D): Boolean = {
+  override def contains(id: Id[D]): Boolean = db.keyExists(id.bytes)
+
+  override def put(id: Id[D], doc: D): Option[SetType] = {
+    val `type` = if (!internalCounter) {
+      SetType.Unknown
+    } else if (contains(id)) {
+      SetType.Replace
+    } else {
+      SetType.Insert
+    }
     db.put(id.bytes, d2Bytes(doc))
-    true
+    Some(`type`)
   }
 
-  override def delete(id: Id[D]): Unit = {
+  override def delete(id: Id[D]): Boolean = {
+    val exists = contains(id)
     db.delete(id.bytes)
+    exists
   }
 
   override def count: Int = idIterator.size
