@@ -68,6 +68,8 @@ val sqliteVersion: String = "3.46.0.0"
 
 val duckdbVersion: String = "1.0.0"
 
+val h2Version: String = "2.2.224"
+
 val squantsVersion: String = "1.8.3"
 
 val scalaTestVersion: String = "3.2.18"
@@ -187,6 +189,17 @@ lazy val duckdb = project.in(file("duckdb"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"org.duckdb" % "duckdb_jdbc" % duckdbVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val h2 = project.in(file("h2"))
+	.dependsOn(sql, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-h2",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"com.h2database" % "h2" % h2Version,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
