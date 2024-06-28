@@ -76,7 +76,7 @@ val h2Version: String = "2.2.224"
 
 val squantsVersion: String = "1.8.3"
 
-val scalaTestVersion: String = "3.2.18"
+val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, halodb, rocksdb, mapdb, redis, lucene, sql, sqlite, duckdb, h2, all)
