@@ -59,7 +59,7 @@ val fs2Version: String = "3.10.2"
 
 val scribeVersion: String = "3.15.0"
 
-val luceneVersion: String = "9.11.0"
+val luceneVersion: String = "9.11.1"
 
 val sqliteVersion: String = "3.46.0.0"
 
