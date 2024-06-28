@@ -6,7 +6,7 @@ import com.outr.arango.query._
 import com.outr.arango.query.dsl.ref2Wrapped
 import com.outr.arango.{Document, DocumentModel, Field, Graph, Id, Index}
 import fabric.rw.RW
-import lightdb.util.FlushingBacklog
+import benchmark.FlushingBacklog
 
 object ScarangoImplementation extends BenchmarkImplementation {
   override type TitleAka = TitleAkaADB

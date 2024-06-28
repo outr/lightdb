@@ -1,9 +1,8 @@
 package lightdb.backup
 
-import cats.effect.IO
 import fabric.io.JsonFormatter
-import lightdb.{Document, KeyValue, LightDB}
-import lightdb.model.AbstractCollection
+import lightdb.collection.Collection
+import lightdb.{KeyValue, LightDB}
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -17,65 +16,61 @@ object DatabaseBackup {
    * @return the number of records backed up
    */
   def archive(db: LightDB,
-              archive: File = new File("backup.zip")): IO[Int] = {
+              archive: File = new File("backup.zip")): Int = {
     val out = new ZipOutputStream(new FileOutputStream(archive))
-    collectionStreams(db)
-      .evalMap {
-        case (fileName, stream) =>
+    try {
+      db
+        .collections
+        .map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]])
+        .map { collection =>
+          val fileName = this.fileName(collection)
           val entry = new ZipEntry(s"backup/$fileName")
           out.putNextEntry(entry)
-          stream
-            .map { line =>
-              val bytes = s"$line\n".getBytes("UTF-8")
-              out.write(bytes)
+          val count = collection.transaction { implicit transaction =>
+            try {
+              collection
+                .jsonIterator
+                .map(JsonFormatter.Compact.apply)
+                .map { line =>
+                  val bytes = s"$line\n".getBytes("UTF-8")
+                  out.write(bytes)
+                }
+                .size
+            } finally {
+              out.closeEntry()
             }
-            .compile
-            .count
-            .map(_.toInt)
-            .flatTap { _ =>
-              IO(out.closeEntry())
-            }
-      }
-      .compile
-      .toList
-      .map(_.sum)
-      .guarantee(IO {
-        out.flush()
-        out.close()
-      })
+          }
+          count
+        }
+        .sum
+    } finally {
+      out.flush()
+      out.close()
+    }
   }
 
   /**
    * Does a full backup of the supplied database to the directory specified
    */
-  def apply(db: LightDB, directory: File): IO[Int] = {
+  def apply(db: LightDB, directory: File): Int = {
     directory.mkdirs()
-    collectionStreams(db)
-      .evalMap {
-        case (fileName, stream) =>
-          val file = new File(directory, fileName)
-          val writer = new PrintWriter(file)
-          stream
+    db
+      .collections
+      .map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]])
+      .map { collection =>
+        val fileName = this.fileName(collection)
+        val file = new File(directory, fileName)
+        val writer = new PrintWriter(file)
+        collection.transaction { implicit transaction =>
+          collection
+            .jsonIterator
+            .map(JsonFormatter.Compact.apply)
             .map(writer.println)
-            .compile
-            .count
-            .map(_.toInt)
-            .guarantee(IO {
-              writer.flush()
-              writer.close()
-            })
+            .size
+        }
       }
-      .compile
-      .toList
-      .map(_.sum)
+      .sum
   }
 
-  private def collectionStreams(db: LightDB): fs2.Stream[IO, (String, fs2.Stream[IO, String])] = fs2.Stream(db.collections: _*)
-    .map { c =>
-      val collection = c.asInstanceOf[AbstractCollection[KeyValue]]
-      s"${c.collectionName}.jsonl" -> backupCollectionStream(collection)
-    }
-
-  private def backupCollectionStream[D <: Document[D]](collection: AbstractCollection[D]): fs2.Stream[IO, String] =
-    collection.jsonStream.map(JsonFormatter.Compact(_))
+  private def fileName(collection: Collection[_, _]): String = s"${collection.name}.jsonl"
 }

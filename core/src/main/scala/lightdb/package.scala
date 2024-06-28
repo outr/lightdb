@@ -1,5 +1,7 @@
+import lightdb.util.IteratorExtras
+
+import scala.language.implicitConversions
+
 package object lightdb {
-  implicit class ByteArrayExtras(val bytes: Array[Byte]) extends AnyVal {
-    def string: String = new String(bytes, "UTF-8")
-  }
+  implicit def iterator2Extra[T](iterator: Iterator[T]): IteratorExtras[T] = IteratorExtras(iterator)
 }

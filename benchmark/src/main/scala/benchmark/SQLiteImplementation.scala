@@ -2,7 +2,7 @@ package benchmark
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import lightdb.util.FlushingBacklog
+import lightdb.util.Unique
 
 import java.sql.{Connection, DriverManager, ResultSet}
 
@@ -76,7 +76,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
-    id = map.option("id").getOrElse(lightdb.Unique()),
+    id = map.option("id").getOrElse(Unique()),
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
     title = map.value("title"),
@@ -88,7 +88,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   )
 
   override def map2TitleBasics(map: Map[String, String]): TitleBasicsPG = TitleBasicsPG(
-    id = map.option("id").getOrElse(lightdb.Unique()),
+    id = map.option("id").getOrElse(Unique()),
     tconst = map.value("tconst"),
     titleType = map.value("titleType"),
     primaryTitle = map.value("primaryTitle"),

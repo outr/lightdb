@@ -1,46 +1,68 @@
 package lightdb.index
 
-import fabric.rw._
 import fabric._
 import fabric.define.DefType
-import lightdb.{Document, Unique}
-import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateType}
-import lightdb.query.Filter
+import fabric.rw.{Convertible, RW}
+import lightdb.document.Document
+import lightdb.filter.{AggregateSupport, Filter, FilterSupport}
+import lightdb.spatial.GeoPoint
+import squants.space.Length
 
-trait Index[F, D <: Document[D]] extends FilterSupport[F, D, Filter[D]] {
-  indexSupport.index.register(this)
-
-  def fieldName: String
-  def indexSupport: IndexSupport[D]
-  def get: D => List[F]
+case class Index[F, D <: Document[D]](name: String,
+                                      get: D => List[F],
+                                      store: Boolean,
+                                      sorted: Boolean,
+                                      tokenized: Boolean)
+                                     (implicit val rw: RW[F]) extends FilterSupport[F, D, Filter[D]] with AggregateSupport[F, D] with Materializable[D, F] {
   def getJson: D => List[Json] = (doc: D) => get(doc).map(_.json)
 
-  lazy val max: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Max", this, AggregateType.Max)
-  lazy val min: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Min", this, AggregateType.Min)
-  lazy val avg: AggregateFunction[Double, F, D] = AggregateFunction(s"${fieldName}Avg", this, AggregateType.Avg)
-  lazy val sum: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Sum", this, AggregateType.Sum)
-  lazy val count: AggregateFunction[Int, F, D] = AggregateFunction(s"${fieldName}Count", this, AggregateType.Count)
-  lazy val countDistinct: AggregateFunction[Int, F, D] = AggregateFunction(s"${fieldName}CountDistinct", this, AggregateType.CountDistinct)
-  lazy val group: AggregateFunction[F, F, D] = AggregateFunction(s"${fieldName}Group", this, AggregateType.Group)
-  lazy val concat: AggregateFunction[List[F], F, D] = AggregateFunction(s"${fieldName}Concat", this, AggregateType.Concat)(Index.ConcatRW)
-  lazy val concatDistinct: AggregateFunction[List[F], F, D] = AggregateFunction(s"${fieldName}ConcatDistinct", this, AggregateType.ConcatDistinct)(Index.ConcatRW)
+  override def is(value: F): Filter[D] = Filter.Equals(this, value)
 
-  def aggregateFilterSupport(name: String): FilterSupport[F, D, AggregateFilter[D]]
+  override protected def rangeLong(from: Option[Long], to: Option[Long]): Filter[D] =
+    Filter.RangeLong(this.asInstanceOf[Index[Long, D]], from, to)
+
+  override protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter[D] =
+    Filter.RangeDouble(this.asInstanceOf[Index[Double, D]], from, to)
+
+  override def IN(values: Seq[F]): Filter[D] = Filter.In(this, values)
+
+  override def parsed(query: String, allowLeadingWildcard: Boolean): Filter[D] =
+    Filter.Parsed(this, query, allowLeadingWildcard)
+
+  override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): Filter[D] = {
+    val words = s.split("\\s+").map { w =>
+      if (matchStartsWith && matchEndsWith) {
+        s"%$w%"
+      } else if (matchStartsWith) {
+        s"%$w"
+      } else if (matchEndsWith) {
+        s"$w%"
+      } else {
+        w
+      }
+    }.mkString(" ")
+    parsed(words, allowLeadingWildcard = matchEndsWith)
+  }
+
+  override def distance(from: GeoPoint, radius: Length)
+                       (implicit evidence: F =:= GeoPoint): Filter[D] =
+    Filter.Distance(this.asInstanceOf[Index[GeoPoint, D]], from, radius)
 }
 
 object Index {
-  private def ConcatRW[F](implicit fRW: RW[F]): RW[List[F]] = RW.from[List[F]](
-    r = list => arr(list.map(fRW.read)),
-    w = _.asString.split(";;").toList.map { s =>
-      val json = fRW.definition match {
-        case DefType.Str => str(s)
-        case DefType.Int => num(s.toLong)
-        case DefType.Dec => num(BigDecimal(s))
-        case DefType.Bool => bool(s.toBoolean)
-        case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
-      }
-      json.as[F]
-    },
-    d = DefType.Json
-  )
+  def string2Json(s: String, definition: DefType): Json = definition match {
+    case DefType.Str => str(s)
+    case DefType.Int => num(s.toLong)
+    case DefType.Dec => num(BigDecimal(s))
+    case DefType.Bool => bool(s match {
+      case "1" | "true" => true
+      case _ => false
+    })
+    case DefType.Opt(d) => if (s == null) {
+      Null
+    } else {
+      string2Json(s, d)
+    }
+    case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
+  }
 }

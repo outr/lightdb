@@ -1,143 +1,107 @@
 package lightdb.query
 
-import cats.Eq
-import cats.effect.IO
+import lightdb.Id
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
-import lightdb.index.{Index, IndexSupport, Materialized}
-import lightdb.model.AbstractCollection
-import lightdb.spatial.GeoPoint
-import lightdb.util.DistanceCalculator
-import lightdb.{Document, Id}
+import lightdb.collection.Collection
+import lightdb.document.{Document, DocumentModel}
+import lightdb.filter.Filter
+import lightdb.index.{Index, Indexer, Materialized, MaterializedIndex}
+import lightdb.spatial.{DistanceAndDoc, GeoPoint}
+import lightdb.transaction.Transaction
+import lightdb.util.GroupedIterator
 import squants.space.Length
 
-case class Query[D <: Document[D], V](indexSupport: IndexSupport[D],
-                                      collection: AbstractCollection[D],
-                                      convert: D => IO[V],
-                                      filter: Option[Filter[D]] = None,
-                                      sort: List[Sort] = Nil,
-                                      scoreDocs: Boolean = false,
-                                      offset: Int = 0,
-                                      pageSize: Int = 1_000,
-                                      limit: Option[Int] = None,
-                                      materializedIndexes: List[Index[_, D]] = Nil,
-                                      countTotal: Boolean = true) {
-  def evalConvert[T](converter: D => IO[T]): Query[D, T] = copy(convert = converter)
-  def convert[T](converter: D => T): Query[D, T] = copy(convert = doc => IO.blocking(converter(doc)))
-
-  def filter(filter: Filter[D], and: Boolean = false): Query[D, V] = {
-    if (and && this.filter.nonEmpty) {
-      copy(filter = Some(this.filter.get && filter))
-    } else {
-      copy(filter = Some(filter))
+case class Query[D <: Document[D], M <: DocumentModel[D]](indexer: Indexer[D, M],
+                                                          collection: Collection[D, M],
+                                                          filter: Option[Filter[D]] = None,
+                                                          sort: List[Sort] = Nil,
+                                                          scoreDocs: Boolean = false,
+                                                          offset: Int = 0,
+                                                          limit: Option[Int] = None,
+                                                          batchSize: Int = 512,
+                                                          materializedIndexes: List[Index[_, D]] = Nil,
+                                                          countTotal: Boolean = true) { query =>
+  def clearFilters: Query[D, M] = copy(filter = None)
+  def filter(f: M => Filter[D]): Query[D, M] = {
+    val filter = f(collection.model)
+    val combined = this.filter match {
+      case Some(current) => current && filter
+      case None => filter
     }
+    copy(filter = Some(combined))
   }
 
-  def filters(filters: Filter[D]*): Query[D, V] = if (filters.nonEmpty) {
-    var filter = filters.head
-    filters.tail.foreach { f =>
-      filter = filter && f
-    }
-    this.filter(filter)
-  } else {
-    this
-  }
+  def sort(sort: Sort*): Query[D, M] = copy(sort = this.sort ::: sort.toList)
 
-  def sort(sort: Sort*): Query[D, V] = copy(sort = this.sort ::: sort.toList)
+  def clearSort: Query[D, M] = copy(sort = Nil)
 
-  def distance(field: Index[GeoPoint, D],
-               from: GeoPoint,
-               sort: Boolean = true,
-               radius: Option[Length] = None): Query[D, DistanceAndDoc[D]] = {
-    var q = convert(doc => {
-      DistanceAndDoc(
-        doc = doc,
-        distance = DistanceCalculator(from, field.get(doc).head)
-      )
-    })
-    if (sort) {
-      q = q.sort(Sort.ByDistance(field, from))
-    }
-    radius.foreach { r =>
-      q = q.filter(indexSupport.distanceFilter(
-        field = field,
-        from = from,
-        radius = r
-      ))
-    }
-    q
-  }
+  def scoreDocs(b: Boolean): Query[D, M] = copy(scoreDocs = b)
 
-  def clearSort: Query[D, V] = copy(sort = Nil)
+  def offset(offset: Int): Query[D, M] = copy(offset = offset)
 
-  def scoreDocs(b: Boolean): Query[D, V] = copy(scoreDocs = b)
+  def limit(limit: Int): Query[D, M] = copy(limit = Some(limit))
 
-  def offset(offset: Int): Query[D, V] = copy(offset = offset)
+  def countTotal(b: Boolean): Query[D, M] = copy(countTotal = b)
 
-  def pageSize(size: Int): Query[D, V] = copy(pageSize = size)
+  object search {
+    def apply[V](conversion: indexer.Conversion[V])
+                 (implicit transaction: Transaction[D]): SearchResults[D, V] = indexer.doSearch(
+      query = query,
+      transaction = transaction,
+      conversion = conversion
+    )
 
-  def limit(limit: Int): Query[D, V] = copy(limit = Some(limit))
-
-  def countTotal(b: Boolean): Query[D, V] = copy(countTotal = b)
-
-  def search()(implicit context: SearchContext[D]): IO[PagedResults[D, V]] = indexSupport.doSearch(
-    query = this,
-    context = context,
-    offset = offset,
-    limit = limit,
-    after = None
-  )
-
-  def pageStream(implicit context: SearchContext[D]): fs2.Stream[IO, PagedResults[D, V]] = {
-    val io = search().map { page1 =>
-      fs2.Stream.emit(page1) ++ fs2.Stream.unfoldEval(page1) { page =>
-        page.next().map(_.map(p => p -> p))
+    def docs(implicit transaction: Transaction[D]): SearchResults[D, D] = apply[D](indexer.Conversion.Doc)
+    def ids(implicit transaction: Transaction[D]): SearchResults[D, Id[D]] = apply(indexer.Conversion.Id)
+    def materialized(f: M => List[Index[_, D]])
+                    (implicit transaction: Transaction[D]): SearchResults[D, MaterializedIndex[D, M]] = {
+      val indexes = f(collection.model)
+      val notStored = indexes.filter(!_.store).map(_.name)
+      if (notStored.nonEmpty) {
+        throw new RuntimeException(s"Cannot use non-stored indexes in Materialized: ${notStored.mkString(", ")}")
       }
+      apply(indexer.Conversion.Materialized(indexes))
     }
-    fs2.Stream.force(io)
+    def distance(f: M => Index[GeoPoint, D],
+                 from: GeoPoint,
+                 sort: Boolean = true,
+                 radius: Option[Length] = None)
+                (implicit transaction: Transaction[D]): SearchResults[D, DistanceAndDoc[D]] = {
+      val index = f(collection.model)
+      var q = Query.this
+      if (sort) {
+        q = q.clearSort.sort(Sort.ByDistance(index, from))
+      }
+      radius.foreach { r =>
+        q = q.filter(_ => index.distance(from, r))
+      }
+      q.distanceSearch(index, from, sort, radius)
+    }
   }
 
-  def docStream(implicit context: SearchContext[D]): fs2.Stream[IO, D] = pageStream.flatMap(_.docStream)
+  private def distanceSearch(index: Index[GeoPoint, D],
+                             from: GeoPoint,
+                             sort: Boolean,
+                             radius: Option[Length])
+                            (implicit transaction: Transaction[D]): SearchResults[D, DistanceAndDoc[D]] =
+    search(indexer.Conversion.Distance(index, from, sort, radius))
 
-  def idStream(implicit context: SearchContext[D]): fs2.Stream[IO, Id[D]] = pageStream.flatMap(_.idStream)
+  def aggregate(f: M => List[AggregateFunction[_, _, D]]): AggregateQuery[D, M] = AggregateQuery(this, f(collection.model))
 
-  def materialized(indexes: Index[_, D]*)
-                  (implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = {
-    copy(materializedIndexes = indexes.toList).pageStream.flatMap(_.materializedStream)
-  }
-
-  def aggregate(functions: AggregateFunction[_, _, D]*): AggregateQuery[D] = AggregateQuery[D](this, functions.toList)
-
-  def stream(implicit context: SearchContext[D]): fs2.Stream[IO, V] = pageStream.flatMap(_.stream)
-
-  def grouped[F](index: Index[F, D],
+  def grouped[F](f: M => Index[F, D],
                  direction: SortDirection = SortDirection.Ascending)
-                (implicit context: SearchContext[D]): fs2.Stream[IO, (F, fs2.Chunk[D])] = sort(Sort.ByField(index, direction))
-    .docStream
-    .groupAdjacentBy(doc => index.get(doc).head)(Eq.fromUniversalEquals)
-
-  object scored {
-    def stream(implicit context: SearchContext[D]): fs2.Stream[IO, (V, Double)] = pageStream.flatMap(_.scoredStream)
-
-    def toList: IO[List[(V, Double)]] = indexSupport.withSearchContext { implicit context =>
-      stream.compile.toList
-    }
+                (implicit transaction: Transaction[D]): GroupedIterator[D, F] = {
+    val index = f(collection.model)
+    val iterator = sort(Sort.ByIndex(index, direction))
+      .search
+      .docs
+      .iterator
+    GroupedIterator[D, F](iterator, doc => index.get(doc).head)
   }
 
-  def toIdList: IO[List[Id[D]]] = indexSupport.withSearchContext { implicit context =>
-    idStream.compile.toList
-  }
+  def first(implicit transaction: Transaction[D]): Option[D] = search.docs.iterator.nextOption()
 
-  def toList: IO[List[V]] = indexSupport.withSearchContext { implicit context =>
-    stream.compile.toList
-  }
+  def one(implicit transaction: Transaction[D]): D = first.getOrElse(throw new RuntimeException(s"No results for query: $this"))
 
-  def first: IO[Option[V]] = indexSupport.withSearchContext { implicit context =>
-    stream.take(1).compile.last
-  }
-
-  def one: IO[V] = first.map(_.getOrElse(throw new RuntimeException(s"No results for query: $this")))
-
-  def count: IO[Int] = indexSupport.withSearchContext { implicit context =>
-    idStream.compile.count.map(_.toInt)
-  }
+  def count(implicit transaction: Transaction[D]): Int = search.ids.iterator.size
 }

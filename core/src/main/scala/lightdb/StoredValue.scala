@@ -1,28 +1,27 @@
 package lightdb
 
-import cats.effect.IO
-import cats.implicits.catsSyntaxApplicativeByName
 import fabric.rw._
-import lightdb.model.Collection
+import lightdb.collection.Collection
 
 case class StoredValue[T](key: String,
-                          collection: Collection[KeyValue],
+                          collection: Collection[KeyValue, KeyValue.type],
                           default: () => T,
                           persistence: Persistence)(implicit rw: RW[T]) {
   private lazy val id = Id[KeyValue](key)
 
   private var cached: Option[T] = None
 
-  def get(): IO[T] = cached match {
-    case Some(t) => IO.pure(t)
+  def get(): T = cached match {
+    case Some(t) => t
     case None if persistence == Persistence.Memory =>
       val t = default()
       cached = Some(t)
-      IO.pure(t)
-    case None => collection.get(id).map {
-      case Some(kv) => kv.value.as[T]
-      case None => default()
-    }.map { t =>
+      t
+    case None => collection.transaction { implicit transaction =>
+      val t = collection.get(id) match {
+        case Some(kv) => kv.value.as[T]
+        case None => default()
+      }
       if (persistence != Persistence.Stored) {
         cached = Some(t)
       }
@@ -30,59 +29,26 @@ case class StoredValue[T](key: String,
     }
   }
 
-  def exists(): IO[Boolean] = collection.get(id).map(_.nonEmpty)
-
-  def set(value: T): IO[T] = if (persistence == Persistence.Memory) {
-    cached = Some(value)
-    IO.pure(value)
-  } else {
-    collection
-      .set(KeyValue(id, value.asJson))
-      .map { _ =>
-        if (persistence != Persistence.Stored) {
-          cached = Some(value)
-        }
-        value
-      }
+  def exists(): Boolean = collection.transaction { implicit transaction =>
+    collection.get(id).nonEmpty
   }
 
-  // TODO: Figure out why withLock is causing it to get stuck
-  def modify(f: T => IO[T]): IO[T] = { //collection.withLock(id) { implicit lock =>
-    if (persistence == Persistence.Memory) {
-      get().flatMap(f).map { value =>
+  def set(value: T): T = if (persistence == Persistence.Memory) {
+    cached = Some(value)
+    value
+  } else {
+    collection.transaction { implicit transaction =>
+      collection.set(KeyValue(id, value.asJson))
+      if (persistence != Persistence.Stored) {
         cached = Some(value)
-        value
       }
-    } else {
-      for {
-        current <- get()
-        modified <- f(current)
-        _ <- set(modified).whenA(current != modified)
-      } yield modified
+      value
     }
   }
-  //}
 
-  def clear(): IO[Unit] = collection.delete(id).map { _ =>
-    cached = None
+  def clear(): Unit = collection.transaction { implicit transaction =>
+    collection.delete(id).map { _ =>
+      cached = None
+    }
   }
-}
-
-sealed trait Persistence
-
-object Persistence {
-  /**
-   * Stored on disk only
-   */
-  case object Stored extends Persistence
-
-  /**
-   * Stored on disk and cached in memory
-   */
-  case object Cached extends Persistence
-
-  /**
-   * Stored in memory only
-   */
-  case object Memory extends Persistence
 }
