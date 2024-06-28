@@ -1,6 +1,5 @@
 package lightdb.upgrade
 
-import cats.effect.IO
 import lightdb.LightDB
 
 trait DatabaseUpgrade {
@@ -9,5 +8,5 @@ trait DatabaseUpgrade {
   def blockStartup: Boolean
   def alwaysRun: Boolean
 
-  def upgrade(db: LightDB): IO[Unit]
+  def upgrade(db: LightDB): Unit
 }

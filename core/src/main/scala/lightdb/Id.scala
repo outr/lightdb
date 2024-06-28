@@ -1,12 +1,20 @@
 package lightdb
 
 import fabric.rw._
+import lightdb.util.Unique
 
-class Id[T](val value: String) extends AnyVal {
+class Id[T](val value: String) {
   def bytes: Array[Byte] = {
     val b = toString.getBytes("UTF-8")
     assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length} ($value)")
     b
+  }
+
+  override def hashCode(): Int = value.hashCode
+
+  override def equals(obj: Any): Boolean = obj match {
+    case that: Id[_] => this.value == that.value
+    case _ => false
   }
 
   override def toString: String = value

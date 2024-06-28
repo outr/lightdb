@@ -1,15 +1,15 @@
 package lightdb.aggregate
 
-import cats.effect.IO
-import lightdb.Document
-import lightdb.index.Materialized
-import lightdb.query.{Query, SearchContext, SortDirection}
+import lightdb.document.{Document, DocumentModel}
+import lightdb.index.{Index, Materialized, MaterializedAggregate}
+import lightdb.query.{Query, SortDirection}
+import lightdb.transaction.Transaction
 
-case class AggregateQuery[D <: Document[D]](query: Query[D, _],
+case class AggregateQuery[D <: Document[D], M <: DocumentModel[D]](query: Query[D, M],
                                             functions: List[AggregateFunction[_, _, D]],
                                             filter: Option[AggregateFilter[D]] = None,
                                             sort: List[(AggregateFunction[_, _, D], SortDirection)] = Nil) {
-  def filter(filter: AggregateFilter[D], and: Boolean = false): AggregateQuery[D] = {
+  def filter(filter: AggregateFilter[D], and: Boolean = false): AggregateQuery[D, M] = {
     if (and && this.filter.nonEmpty) {
       copy(filter = Some(this.filter.get && filter))
     } else {
@@ -17,7 +17,7 @@ case class AggregateQuery[D <: Document[D]](query: Query[D, _],
     }
   }
 
-  def filters(filters: AggregateFilter[D]*): AggregateQuery[D] = if (filters.nonEmpty) {
+  def filters(filters: AggregateFilter[D]*): AggregateQuery[D, M] = if (filters.nonEmpty) {
     var filter = filters.head
     filters.tail.foreach { f =>
       filter = filter && f
@@ -28,13 +28,11 @@ case class AggregateQuery[D <: Document[D]](query: Query[D, _],
   }
 
   def sort(function: AggregateFunction[_, _, D],
-           direction: SortDirection = SortDirection.Ascending): AggregateQuery[D] = copy(
+           direction: SortDirection = SortDirection.Ascending): AggregateQuery[D, M] = copy(
     sort = sort ::: List((function, direction))
   )
 
-  def stream(implicit context: SearchContext[D]): fs2.Stream[IO, Materialized[D]] = query.indexSupport.aggregate(this)
+  def iterator(implicit transaction: Transaction[D]): Iterator[MaterializedAggregate[D, M]] = query.indexer.aggregate(this)
 
-  def toList: IO[List[Materialized[D]]] = query.indexSupport.withSearchContext { implicit context =>
-    stream.compile.toList
-  }
+  def toList(implicit transaction: Transaction[D]): List[MaterializedAggregate[D, M]] = iterator.toList
 }
