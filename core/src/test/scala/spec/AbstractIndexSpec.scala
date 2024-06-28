@@ -1,7 +1,7 @@
 package spec
 
-import fabric.obj
-import fabric.rw.RW
+import fabric._
+import fabric.rw._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.document.{Document, DocumentModel}
 import lightdb.index.{Indexed, IndexedCollection, Indexer}

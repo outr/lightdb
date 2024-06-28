@@ -3,7 +3,7 @@ package lightdb.sql
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str, bool, num, obj, str}
 import fabric.define.DefType
 import fabric.io.JsonFormatter
-import fabric.rw.Convertible
+import fabric.rw._
 import lightdb.Id
 import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
@@ -325,35 +325,35 @@ trait SQLIndexer[D <: Document[D], M <: DocumentModel[D]] extends Indexer[D, M] 
     case v => throw new UnsupportedOperationException(s"$fieldName returned $v (${v.getClass.getName})")
   }
 
-  private def filter2Part(f: Filter[_]): SQLPart = f match {
-    case f: Filter.Equals[_, _] => SQLPart(s"${f.index.name} = ?", List(f.getJson))
-    case f: Filter.In[_, _] => SQLPart(s"${f.index.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
-    case f: Filter.Combined[_] =>
+  private def filter2Part(f: Filter[D]): SQLPart = f match {
+    case f: Filter.Equals[_, D] => SQLPart(s"${f.index.name} = ?", List(f.getJson))
+    case f: Filter.In[_, D] => SQLPart(s"${f.index.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
+    case f: Filter.Combined[D] =>
       val parts = f.filters.map(f => filter2Part(f))
       SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
-    case f: Filter.RangeLong[_] => (f.from, f.to) match {
+    case f: Filter.RangeLong[D] => (f.from, f.to) match {
       case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
       case (None, Some(to)) => SQLPart(s"${f.index.name} <= ?", List(to.json))
       case (Some(from), None) => SQLPart(s"${f.index.name} >= ?", List(from.json))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
-    case f: Filter.RangeDouble[_] => (f.from, f.to) match {
+    case f: Filter.RangeDouble[D] => (f.from, f.to) match {
       case (Some(from), Some(to)) => SQLPart(s"${f.index.name} BETWEEN ? AND ?", List(from.json, to.json))
       case (None, Some(to)) => SQLPart(s"${f.index.name} <= ?", List(to.json))
       case (Some(from), None) => SQLPart(s"${f.index.name} >= ?", List(from.json))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
-    case f: Filter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
-    case f: Filter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
+    case f: Filter.Parsed[_, D] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
+    case f: Filter.Distance[D] => throw new UnsupportedOperationException("Distance not supported in SQL!")
   }
 
-  private def af2Part(f: AggregateFilter[_]): SQLPart = f match {
-    case f: AggregateFilter.Equals[_, _] => SQLPart(s"${f.name} = ?", List(f.getJson))
-    case f: AggregateFilter.In[_, _] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
-    case f: AggregateFilter.Combined[_] =>
+  private def af2Part(f: AggregateFilter[D]): SQLPart = f match {
+    case f: AggregateFilter.Equals[_, D] => SQLPart(s"${f.name} = ?", List(f.getJson))
+    case f: AggregateFilter.In[_, D] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
+    case f: AggregateFilter.Combined[D] =>
       val parts = f.filters.map(f => af2Part(f))
       SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
-    case f: AggregateFilter.RangeLong[_] => (f.from, f.to) match {
+    case f: AggregateFilter.RangeLong[D] => (f.from, f.to) match {
       case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(from.json, to.json))
       case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(to.json))
       case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(from.json))

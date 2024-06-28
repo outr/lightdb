@@ -2,6 +2,7 @@ package lightdb.sql
 
 import lightdb.document.Document
 import lightdb.index.Index
+import fabric._
 
 import java.sql.PreparedStatement
 

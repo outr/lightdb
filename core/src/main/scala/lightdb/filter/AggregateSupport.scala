@@ -2,7 +2,7 @@ package lightdb.filter
 
 import fabric._
 import fabric.define.DefType
-import fabric.rw.{Asable, RW}
+import fabric.rw._
 import lightdb.aggregate.{AggregateFunction, AggregateType}
 import lightdb.document.Document
 import lightdb.index.Index
