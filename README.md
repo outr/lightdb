@@ -7,10 +7,12 @@ Computationally focused database using pluggable store + indexer
 - Yahoo's HaloDB (https://github.com/yahoo/HaloDB) - Preferred for performance
 - MapDB (https://mapdb.org)
 - Facebook's RocksDB (https://rocksdb.org)
+- Redis (https://redis.io)
 
 ## Provided Indexers
 - Apache Lucene (https://lucene.apache.org) - Most featureful
 - SQLite (https://www.sqlite.org) - Fastest
+- H2 (https://h2database.com)
 - DuckDB (https://duckdb.org) - Experimental
 
 ## 1.0 TODO
@@ -34,10 +36,14 @@ Computationally focused database using pluggable store + indexer
   - [X] Generic unit tests with multiple implementations
   - [ ] Document classes
   - [ ] MDoc support
-- [ ] New Integrations
-  - [ ] Add btree supported indexes in Store
+- [X] New Integrations
   - [X] Add Redis support
-  - [ ] Support SQL as a Store as well as Indexer
   - [X] Support H2 as another SQL database
-  - [ ] Provide a Scala.js implementation of Store using Web Storage API
-  - [ ] Provide a Scala.js implementation using IndexedDB
+  
+## 1.1 TODO
+- [ ] Add btree supported indexes in Store
+- [ ] Support SQL as a Store as well as Indexer
+- [ ] Support Lucene as a Store as well as Indexer
+- [ ] Provide a Scala.js implementation of Store using Web Storage API
+- [ ] Provide a Scala.js implementation using IndexedDB
+- [ ] ScalaNative support
