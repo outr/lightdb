@@ -1,19 +1,20 @@
-package benchmark
-import cats.effect.{IO, Unique}
-import cats.effect.unsafe.IORuntime
+package benchmark.imdb
+
 import benchmark.FlushingBacklog
+import cats.effect.IO
+import cats.effect.unsafe.IORuntime
+import lightdb.util.Unique
 
 import java.sql.{Connection, DriverManager, ResultSet}
-import scala.concurrent.{ExecutionContext, Future}
 
-object PostgresImplementation extends BenchmarkImplementation {
+object SQLiteImplementation extends BenchmarkImplementation {
   implicit val runtime: IORuntime = IORuntime.global
 
   override type TitleAka = TitleAkaPG
   override type TitleBasics = TitleBasicsPG
 
   private lazy val connection: Connection = {
-    val c = DriverManager.getConnection("jdbc:postgresql://localhost:5432/imdb", "postgres", "password")
+    val c = DriverManager.getConnection("jdbc:sqlite:imdb.db")
     c.setAutoCommit(false)
     c
   }
@@ -65,7 +66,7 @@ object PostgresImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def name: String = "PostgreSQL"
+  override def name: String = "SQLite"
 
   override def init(): IO[Unit] = IO.blocking {
     executeUpdate("DROP TABLE IF EXISTS title_aka")
@@ -76,7 +77,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
-    id = map.option("id").getOrElse(lightdb.util.Unique()),
+    id = map.option("id").getOrElse(Unique()),
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
     title = map.value("title"),
@@ -88,7 +89,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   )
 
   override def map2TitleBasics(map: Map[String, String]): TitleBasicsPG = TitleBasicsPG(
-    id = map.option("id").getOrElse(lightdb.util.Unique()),
+    id = map.option("id").getOrElse(Unique()),
     tconst = map.value("tconst"),
     titleType = map.value("titleType"),
     primaryTitle = map.value("primaryTitle"),

@@ -1,6 +1,7 @@
 package lightdb.duckdb
 
 import lightdb.document.{Document, DocumentModel}
+import lightdb.index.{Indexer, IndexerManager}
 import lightdb.sql.{ConnectionManager, SQLConfig, SQLIndexer, SingleConnectionManager}
 import lightdb.transaction.{Transaction, TransactionKey}
 import org.duckdb.{DuckDBAppender, DuckDBConnection}
@@ -51,4 +52,8 @@ case class DuckDBIndexer[D <: Document[D], M <: DocumentModel[D]]() extends SQLI
       }
     }
   }*/
+}
+
+object DuckDBIndexer extends IndexerManager {
+  override def create[D <: Document[D], M <: DocumentModel[D]](): Indexer[D, M] = DuckDBIndexer()
 }

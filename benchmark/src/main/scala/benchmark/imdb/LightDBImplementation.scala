@@ -1,4 +1,4 @@
-package benchmark
+package benchmark.imdb
 
 import cats.effect.IO
 import fabric.rw.{Asable, RW}
@@ -6,9 +6,8 @@ import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.halo.HaloDBStore
 import lightdb.index.{Indexed, IndexedCollection}
-import lightdb.lucene.LuceneIndexer
 import lightdb.sqlite.SQLiteIndexer
-import lightdb.store.{AtomicMapStore, StoreManager}
+import lightdb.store.StoreManager
 import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}

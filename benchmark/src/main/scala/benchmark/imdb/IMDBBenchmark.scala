@@ -1,20 +1,19 @@
-package benchmark
+package benchmark.imdb
 
-import cats.effect.unsafe.IORuntime
+import benchmark.IOIterator
 import cats.effect.IO
-
-import java.io.{BufferedOutputStream, BufferedReader, File, FileInputStream, FileOutputStream, FileReader, PrintWriter}
-import java.util.zip.GZIPInputStream
-import scala.io.Source
+import cats.effect.unsafe.IORuntime
 import fs2._
 import fs2.io.file._
 import perfolation._
-import scribe.{Level, Logger}
 
-import java.net.{URI, URL}
-import scala.annotation.tailrec
-import sys.process._
+import java.io._
+import java.net.URI
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.zip.GZIPInputStream
+import scala.annotation.tailrec
+import scala.io.Source
+import scala.sys.process._
 
 object IMDBBenchmark { // extends IOApp {
   val limit: Limit = Limit.OneMillion

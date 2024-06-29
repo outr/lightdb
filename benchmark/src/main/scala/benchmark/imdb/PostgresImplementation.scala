@@ -1,19 +1,19 @@
-package benchmark
+package benchmark.imdb
 
+import benchmark.FlushingBacklog
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import lightdb.util.Unique
 
 import java.sql.{Connection, DriverManager, ResultSet}
 
-object SQLiteImplementation extends BenchmarkImplementation {
+object PostgresImplementation extends BenchmarkImplementation {
   implicit val runtime: IORuntime = IORuntime.global
 
   override type TitleAka = TitleAkaPG
   override type TitleBasics = TitleBasicsPG
 
   private lazy val connection: Connection = {
-    val c = DriverManager.getConnection("jdbc:sqlite:imdb.db")
+    val c = DriverManager.getConnection("jdbc:postgresql://localhost:5432/imdb", "postgres", "password")
     c.setAutoCommit(false)
     c
   }
@@ -65,7 +65,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def name: String = "SQLite"
+  override def name: String = "PostgreSQL"
 
   override def init(): IO[Unit] = IO.blocking {
     executeUpdate("DROP TABLE IF EXISTS title_aka")
@@ -76,7 +76,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
-    id = map.option("id").getOrElse(Unique()),
+    id = map.option("id").getOrElse(lightdb.util.Unique()),
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
     title = map.value("title"),
@@ -88,7 +88,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   )
 
   override def map2TitleBasics(map: Map[String, String]): TitleBasicsPG = TitleBasicsPG(
-    id = map.option("id").getOrElse(Unique()),
+    id = map.option("id").getOrElse(lightdb.util.Unique()),
     tconst = map.value("tconst"),
     titleType = map.value("titleType"),
     primaryTitle = map.value("primaryTitle"),
