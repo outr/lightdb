@@ -1,4 +1,4 @@
-package benchmark
+package benchmark.imdb
 
 import cats.effect.IO
 

@@ -2,7 +2,7 @@ package lightdb.lucene
 
 import fabric._
 import fabric.define.DefType
-import lightdb.index.{Index, Indexer, MaterializedAggregate, MaterializedIndex}
+import lightdb.index.{Index, Indexer, IndexerManager, MaterializedAggregate, MaterializedIndex}
 import lightdb.Id
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -285,4 +285,8 @@ case class LuceneIndexer[D <: Document[D], M <: DocumentModel[D]](persistent: Bo
       val fieldSortName = if (separate) s"${index.name}Sort" else index.name
       LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
   }
+}
+
+object LuceneIndexer extends IndexerManager {
+  override def create[D <: Document[D], M <: DocumentModel[D]](): Indexer[D, M] = LuceneIndexer()
 }

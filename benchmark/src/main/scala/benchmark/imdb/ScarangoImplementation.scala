@@ -1,12 +1,12 @@
-package benchmark
+package benchmark.imdb
 
+import benchmark.FlushingBacklog
 import cats.effect.IO
 import com.outr.arango.collection.DocumentCollection
 import com.outr.arango.query._
 import com.outr.arango.query.dsl.ref2Wrapped
 import com.outr.arango.{Document, DocumentModel, Field, Graph, Id, Index}
 import fabric.rw.RW
-import benchmark.FlushingBacklog
 
 object ScarangoImplementation extends BenchmarkImplementation {
   override type TitleAka = TitleAkaADB

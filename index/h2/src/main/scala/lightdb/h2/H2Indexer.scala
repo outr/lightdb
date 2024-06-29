@@ -1,6 +1,7 @@
 package lightdb.h2
 
 import lightdb.document.{Document, DocumentModel}
+import lightdb.index.{Indexer, IndexerManager}
 import lightdb.sql.{ConnectionManager, HikariConnectionManager, SQLConfig, SQLIndexer, SingleConnectionManager}
 
 import java.nio.file.{Files, Path}
@@ -19,4 +20,8 @@ case class H2Indexer[D <: Document[D], M <: DocumentModel[D]]() extends SQLIndex
   override protected def upsertPrefix: String = "MERGE"
 
   override protected def concatPrefix: String = "LISTAGG"
+}
+
+object H2Indexer extends IndexerManager {
+  override def create[D <: Document[D], M <: DocumentModel[D]](): Indexer[D, M] = H2Indexer()
 }
