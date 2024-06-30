@@ -1,6 +1,6 @@
 package benchmark.bench
 
-import benchmark.bench.impl.LightDBBench
+import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
 import fabric.rw.Convertible
 import lightdb.duckdb.DuckDBIndexer
@@ -24,6 +24,10 @@ object Runner {
     "ldbHaloSQLite" -> LightDBBench(HaloDBStore, SQLiteIndexer),
     "ldbHaloH2" -> LightDBBench(HaloDBStore, H2Indexer),
     "ldbHaloDuck" -> LightDBBench(HaloDBStore, DuckDBIndexer),
+    "SQLite" -> SQLiteBench,
+    "PostgreSQL" -> PostgreSQLBench,
+    "H2" -> H2Bench,
+    "Derby" -> DerbyBench
   )
 
   def main(args: Array[String]): Unit = {
@@ -37,11 +41,19 @@ object Runner {
           val status = StatusCallback()
           status.start()
           scribe.info(s"Executing ${task.name} task...")
-          task.f(status)
+          val count = task.f(status)
           status.finish()
+          if (count != task.maxProgress.toInt) {
+            throw new RuntimeException(s"${bench.name} - ${task.name} expected ${task.maxProgress.toInt}, but received: $count")
+          }
           val logs = status.logs
           scribe.info(s"Completed in ${logs.last.elapsed} seconds")
-          BenchmarkReport(task.name, task.maxProgress, logs)
+          BenchmarkReport(
+            benchName = bench.name,
+            name = task.name,
+            maxProgress = task.maxProgress,
+            size = bench.size(),
+            logs = logs)
         }
         scribe.info(s"Disposing $implName benchmark...")
         bench.dispose()

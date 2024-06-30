@@ -5,7 +5,7 @@ import com.sun.management.OperatingSystemMXBean
 
 import java.lang.management.ManagementFactory
 
-case class StatusCallback(every: Long = 1_000L) {
+case class StatusCallback(every: Long = 10_000L) {
   val progress = new AtomicDouble(0.0)
 
   def logs: List[StatusLog] = _logs.reverse

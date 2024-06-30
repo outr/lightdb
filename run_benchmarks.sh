@@ -1,8 +1,15 @@
 #!/bin/bash
 
-declare -a arr=("ldbHaloLucene" "ldbMapLucene" "ldbRocksLucene" "ldbAtomicLucene" "ldbMapLucene" "ldbHaloSQLite" "ldbHaloH2" "ldbHaloDuck")
+set -e
+
+#declare -a arr=("ldbHaloLucene" "ldbMapLucene" "ldbRocksLucene" "ldbAtomicLucene" "ldbMapLucene" "ldbHaloSQLite" "ldbHaloH2" "ldbHaloDuck")
+#declare -a arr=("ldbHaloLucene" "SQLite")
+#declare -a arr=("PostgreSQL")
+declare -a arr=("ldbHaloLucene" "SQLite" "H2" "Derby")
 
 for i in "${arr[@]}"
 do
   sbt "benchmark / runMain benchmark.bench.Runner $i"
 done
+
+sbt "benchmark / runMain benchmark.bench.ReportGenerator"
