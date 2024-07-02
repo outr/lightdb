@@ -28,32 +28,36 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
 
   def set(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Unit = docs.foreach(set)
 
-  def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] =
+  def get[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Option[Doc] = {
+    val (field, value) = f(model)
     store.get(field, value)
+  }
 
-  def apply[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Doc =
-    get[V](field, value).getOrElse(throw DocNotFoundException(name, field.name, value))
+  def apply[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Doc =
+    get[V](f).getOrElse {
+      val (field, value) = f(model)
+      throw DocNotFoundException(name, field.name, value)
+    }
 
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc])
-            (implicit transaction: Transaction[Doc], ev: Model =:= DocumentModel[_]): Option[Doc] = transaction.mayLock(id, lock) {
-    val idField = ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
-    f(get(idField, id)) match {
+            (implicit transaction: Transaction[Doc]): Option[Doc] = transaction.mayLock(id, lock) {
+    val idField = model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
+    f(get(_ => idField -> id)) match {
       case Some(doc) =>
         set(doc)
         Some(doc)
       case None if deleteOnNone =>
-        delete(idField, id)
+        delete(_ => idField -> id)
         None
       case None => None
     }
   }
 
-  def delete[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean =
+  def delete[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
+    val (field, value) = f(model)
     store.delete(field, value)
-
-  def delete[V](field: Field.Unique[Doc, V], values: Seq[V])(implicit transaction: Transaction[Doc]): Int =
-    values.map(v => delete(field, v)).count(identity)
+  }
 
   def count(implicit transaction: Transaction[Doc]): Int = store.count
 

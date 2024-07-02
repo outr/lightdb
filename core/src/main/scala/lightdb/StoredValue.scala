@@ -18,7 +18,7 @@ case class StoredValue[T](key: String,
       cached = Some(t)
       t
     case None => collection.transaction { implicit transaction =>
-      val t = collection.get(KeyValue._id, id) match {
+      val t = collection.get(_._id -> id) match {
         case Some(kv) => kv.value.as[T]
         case None => default()
       }
@@ -30,7 +30,7 @@ case class StoredValue[T](key: String,
   }
 
   def exists(): Boolean = collection.transaction { implicit transaction =>
-    collection.get(KeyValue._id, id).nonEmpty
+    collection.get(_._id -> id).nonEmpty
   }
 
   def set(value: T): T = if (persistence == Persistence.Memory) {
@@ -47,7 +47,7 @@ case class StoredValue[T](key: String,
   }
 
   def clear(): Unit = collection.transaction { implicit transaction =>
-    if (collection.delete(KeyValue._id, id)) {
+    if (collection.delete(_._id -> id)) {
       cached = None
     }
   }
