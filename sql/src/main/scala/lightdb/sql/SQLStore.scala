@@ -4,7 +4,8 @@ import fabric._
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
 import lightdb.sql.connect.{ConnectionManager, SQLConfig}
-import lightdb.{Converter, Field, Filter, Query, SearchResults, Sort, SortDirection, Store, Transaction}
+import lightdb.store.Store
+import lightdb.{Converter, Field, Filter, Query, SearchResults, Sort, SortDirection, Transaction}
 
 import java.sql.{PreparedStatement, ResultSet}
 import scala.language.implicitConversions
