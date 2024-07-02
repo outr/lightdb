@@ -1,4 +1,7 @@
-package lightdb
+package lightdb.collection
+
+import lightdb.doc.DocModel
+import lightdb.{Query, Store, Transaction}
 
 case class Collection[Doc, Model <: DocModel[Doc]](name: String,
                                                    model: Model,
