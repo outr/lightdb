@@ -1,10 +1,9 @@
 package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
-import fabric.Json
-import fabric.rw.{Asable, RW}
+import lightdb.sql.SQLiteStore
 import lightdb.util.Unique
-import next.{Collection, Converter, DocModel, Field, SQLiteStore}
+import lightdb.{Collection, Converter, DocModel, Field}
 
 import java.nio.file.Path
 import java.sql.ResultSet

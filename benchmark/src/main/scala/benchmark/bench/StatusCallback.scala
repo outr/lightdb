@@ -1,12 +1,12 @@
 package benchmark.bench
 
-import com.google.common.util.concurrent.AtomicDouble
 import com.sun.management.OperatingSystemMXBean
 
 import java.lang.management.ManagementFactory
+import java.util.concurrent.atomic.AtomicReference
 
 case class StatusCallback(every: Long = 30_000L) {
-  val progress = new AtomicDouble(0.0)
+  val progress = new AtomicReference[Double](0.0)
 
   def logs: List[StatusLog] = _logs.reverse
 

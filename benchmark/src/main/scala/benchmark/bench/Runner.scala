@@ -1,16 +1,8 @@
 package benchmark.bench
 
-import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, NextBench, PostgreSQLBench, SQLiteBench, SQLiteJOOQBench, SQLiteTweaked2Bench}
+import benchmark.bench.impl.{DerbyBench, H2Bench, NextBench, PostgreSQLBench, SQLiteBench, SQLiteJOOQBench, SQLiteTweaked2Bench}
 import fabric.io.JsonFormatter
 import fabric.rw.Convertible
-import lightdb.duckdb.DuckDBIndexer
-import lightdb.h2.H2Indexer
-import lightdb.halo.HaloDBStore
-import lightdb.lucene.LuceneIndexer
-import lightdb.mapdb.MapDBStore
-import lightdb.rocks.RocksDBStore
-import lightdb.sqlite.SQLiteIndexer
-import lightdb.store.{AtomicMapStore, MapStore}
 import org.apache.commons.io.FileUtils
 
 import java.io.File
@@ -18,14 +10,14 @@ import java.nio.file.{Files, Path}
 
 object Runner {
   val implementations: Map[String, Bench] = Map(
-    "ldbHaloLucene" -> LightDBBench(HaloDBStore, LuceneIndexer),
-    "ldbMapLucene" -> LightDBBench(MapDBStore, LuceneIndexer),
-    "ldbRocksLucene" -> LightDBBench(RocksDBStore, LuceneIndexer),
-    "ldbAtomicLucene" -> LightDBBench(AtomicMapStore, LuceneIndexer),
-    "ldbMapLucene" -> LightDBBench(MapStore, LuceneIndexer),
-    "ldbHaloSQLite" -> LightDBBench(HaloDBStore, SQLiteIndexer),
-    "ldbHaloH2" -> LightDBBench(HaloDBStore, H2Indexer),
-    "ldbHaloDuck" -> LightDBBench(HaloDBStore, DuckDBIndexer),
+//    "ldbHaloLucene" -> LightDBBench(HaloDBStore, LuceneIndexer),
+//    "ldbMapLucene" -> LightDBBench(MapDBStore, LuceneIndexer),
+//    "ldbRocksLucene" -> LightDBBench(RocksDBStore, LuceneIndexer),
+//    "ldbAtomicLucene" -> LightDBBench(AtomicMapStore, LuceneIndexer),
+//    "ldbMapLucene" -> LightDBBench(MapStore, LuceneIndexer),
+//    "ldbHaloSQLite" -> LightDBBench(HaloDBStore, SQLiteIndexer),
+//    "ldbHaloH2" -> LightDBBench(HaloDBStore, H2Indexer),
+//    "ldbHaloDuck" -> LightDBBench(HaloDBStore, DuckDBIndexer),
     "SQLite" -> SQLiteBench,
     "SQLiteJOOQ" -> SQLiteJOOQBench,
     "SQLiteTweaked2" -> SQLiteTweaked2Bench,
