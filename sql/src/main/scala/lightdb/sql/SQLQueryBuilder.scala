@@ -1,7 +1,9 @@
 package lightdb.sql
 
 import lightdb.collection.Collection
-import java.sql.{Connection, ResultSet}
+import lightdb.sql.SQLQueryBuilder.setValue
+
+import java.sql.{Connection, PreparedStatement, ResultSet}
 
 case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
                                 transaction: SQLTransaction[Doc],
@@ -91,12 +93,16 @@ case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
       ps
     }
     args.zipWithIndex.foreach {
-      case (value, index) => value match {
-        case s: String => ps.setString(index + 1, s)
-        case i: Int => ps.setInt(index + 1, i)
-        case _ => throw new UnsupportedOperationException(s"Unsupported value: $value (${value.getClass.getName})")
-      }
+      case (value, index) => setValue(ps, index, value)
     }
     ps.executeQuery()
+  }
+}
+
+object SQLQueryBuilder {
+  def setValue(ps: PreparedStatement, index: Int, value: Any): Unit = value match {
+    case s: String => ps.setString(index + 1, s)
+    case i: Int => ps.setInt(index + 1, i)
+    case _ => throw new UnsupportedOperationException(s"Unsupported value: $value (${value.getClass.getName})")
   }
 }

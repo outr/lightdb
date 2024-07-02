@@ -3,7 +3,7 @@ package benchmark.bench.impl
 import benchmark.bench.{Bench, StatusCallback}
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
-import lightdb.sql.{SQLDocConversion, SQLiteStore}
+import lightdb.sql.{SQLConversion, SQLiteStore}
 import lightdb.util.Unique
 import lightdb.{Field, collection}
 
@@ -88,11 +88,16 @@ object NextBench extends Bench {
 
   override def dispose(): Unit = people.dispose()
 
-  val people: Collection[Person, Person.type] = collection.Collection("people", Person, SQLiteStore(Path.of("db/people.db")), cacheQueries = true)
+  val people: Collection[Person, Person.type] = collection.Collection(
+    name = "people",
+    model = Person,
+    store = new SQLiteStore(Some(Path.of("db/people.db"))),
+    cacheQueries = true
+  )
 
   case class Person(name: String, age: Int, id: String)
 
-  object Person extends DocModel[Person] with SQLDocConversion[Person] {
+  object Person extends DocModel[Person] with SQLConversion[Person] {
     override def convertFromSQL(rs: ResultSet): Person = Person(
       name = rs.getString("name"),
       age = rs.getInt("age"),
