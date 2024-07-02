@@ -8,7 +8,6 @@ import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Unique
 import lightdb.{Id, LightDB}
-import org.apache.commons.io.FileUtils
 
 import java.io.File
 import java.nio.file.Path
@@ -18,10 +17,6 @@ case class LightDBBench(sm: StoreManager, im: IndexerManager) extends Bench {
   override def name: String = s"LightDB - ${sm.getClass.getSimpleName.replace("$", "")} - ${im.getClass.getSimpleName.replace("$", "")}"
 
   override def init(): Unit = {
-    val dbDir = new File("db")
-    FileUtils.deleteDirectory(dbDir)
-    dbDir.mkdirs()
-
     scribe.info("DB init...")
     DB.init()
     scribe.info("Initialized!")

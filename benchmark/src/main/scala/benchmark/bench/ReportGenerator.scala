@@ -67,13 +67,13 @@ object ReportGenerator {
           xAxes = List(
             ChartScale(
               scaleLabel = ChartLabel(fontSize = Some(32), labelString = Some("Implementation")),
-              ticks = ChartLabel(fontSize = Some(24), fontColor = Some("white"))
+              ticks = ChartTicks(fontSize = Some(24), fontColor = Some("white"))
             )
           ),
           yAxes = List(
             ChartScale(
               scaleLabel = ChartLabel(fontSize = Some(32), labelString = Some("Seconds Elapsed")),
-              ticks = ChartLabel(fontSize = Some(24))
+              ticks = ChartTicks(fontSize = Some(24))
             )
           )
         ))
@@ -143,7 +143,7 @@ object ChartScales {
   implicit val rw: RW[ChartScales] = RW.gen
 }
 
-case class ChartScale(scaleLabel: ChartLabel, ticks: ChartLabel)
+case class ChartScale(scaleLabel: ChartLabel, ticks: ChartTicks)
 
 object ChartScale {
   implicit val rw: RW[ChartScale] = RW.gen
@@ -157,4 +157,15 @@ case class ChartLabel(display: Boolean = true,
 
 object ChartLabel {
   implicit val rw: RW[ChartLabel] = RW.gen
+}
+
+case class ChartTicks(display: Boolean = true,
+                      beginAtZero: Boolean = true,
+                      fontColor: Option[String] = None,
+                      fontSize: Option[Int] = None,
+                      fontStyle: Option[String] = None,
+                      labelString: Option[String] = None)
+
+object ChartTicks {
+  implicit val rw: RW[ChartTicks] = RW.gen
 }

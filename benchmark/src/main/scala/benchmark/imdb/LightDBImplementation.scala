@@ -2,6 +2,7 @@ package benchmark.imdb
 
 import cats.effect.IO
 import fabric.rw.{Asable, RW}
+import lightdb.{Id, LightDB}
 import lightdb.collection.Collection
 import lightdb.document.{Document, DocumentModel}
 import lightdb.halo.HaloDBStore
@@ -10,7 +11,6 @@ import lightdb.sqlite.SQLiteIndexer
 import lightdb.store.StoreManager
 import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB}
 
 import java.nio.file.{Path, Paths}
 
