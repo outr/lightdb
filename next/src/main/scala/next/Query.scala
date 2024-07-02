@@ -8,6 +8,7 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
                                               offset: Int = 0,
                                               limit: Option[Int] = None,
                                               countTotal: Boolean = false) { query =>
+  def clearFilters: Query[Doc, Model] = copy(filter = None)
   def filter(f: Model => Filter[Doc]): Query[Doc, Model] = {
     val filter = f(collection.model)
     val combined = this.filter match {
@@ -16,9 +17,11 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
     }
     copy(filter = Some(combined))
   }
-
+  def clearSort: Query[Doc, Model] = copy(sort = Nil)
   def sort(sort: Sort*): Query[Doc, Model] = copy(sort = this.sort ::: sort.toList)
-
+  def offset(offset: Int): Query[Doc, Model] = copy(offset = offset)
+  def limit(limit: Int): Query[Doc, Model] = copy(limit = Some(limit))
+  def clearLimit: Query[Doc, Model] = copy(limit = None)
   object search {
     def apply[V](conversion: collection.store.Conversion[V])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = collection.store.doSearch(
