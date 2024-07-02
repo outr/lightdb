@@ -1,7 +1,8 @@
-package lightdb
+package lightdb.store
 
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
+import lightdb.{Field, Query, SearchResults, Transaction}
 
 abstract class Store[Doc, Model <: DocModel[Doc]] {
   def init(collection: Collection[Doc, Model]): Unit
