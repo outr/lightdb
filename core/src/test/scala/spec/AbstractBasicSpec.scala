@@ -5,39 +5,39 @@ import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB}
+import lightdb.{Field, Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
 import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
-  private val adam = Person("Adam", 21)
-  private val brenda = Person("Brenda", 11)
-  private val charlie = Person("Charlie", 35)
-  private val diana = Person("Diana", 15)
-  private val evan = Person("Evan", 53)
-  private val fiona = Person("Fiona", 23)
-  private val greg = Person("Greg", 12)
-  private val hanna = Person("Hanna", 62)
-  private val ian = Person("Ian", 89)
-  private val jenna = Person("Jenna", 4)
-  private val kevin = Person("Kevin", 33)
-  private val linda = Person("Linda", 72)
-  private val mike = Person("Mike", 42)
-  private val nancy = Person("Nancy", 22)
-  private val oscar = Person("Oscar", 21)
-  private val penny = Person("Penny", 2)
-  private val quintin = Person("Quintin", 99)
-  private val ruth = Person("Ruth", 102)
-  private val sam = Person("Sam", 81)
-  private val tori = Person("Tori", 30)
-  private val uba = Person("Uba", 21)
-  private val veronica = Person("Veronica", 13)
-  private val wyatt = Person("Wyatt", 30)
-  private val xena = Person("Xena", 63)
-  private val yuri = Person("Yuri", 30)
-  private val zoey = Person("Zoey", 101)
+  private val adam = Person("Adam", 21, Person.id("adam"))
+  private val brenda = Person("Brenda", 11, Person.id("brenda"))
+  private val charlie = Person("Charlie", 35, Person.id("charlie"))
+  private val diana = Person("Diana", 15, Person.id("diana"))
+  private val evan = Person("Evan", 53, Person.id("evan"))
+  private val fiona = Person("Fiona", 23, Person.id("fiona"))
+  private val greg = Person("Greg", 12, Person.id("greg"))
+  private val hanna = Person("Hanna", 62, Person.id("hanna"))
+  private val ian = Person("Ian", 89, Person.id("ian"))
+  private val jenna = Person("Jenna", 4, Person.id("jenna"))
+  private val kevin = Person("Kevin", 33, Person.id("kevin"))
+  private val linda = Person("Linda", 72, Person.id("linda"))
+  private val mike = Person("Mike", 42, Person.id("mike"))
+  private val nancy = Person("Nancy", 22, Person.id("nancy"))
+  private val oscar = Person("Oscar", 21, Person.id("oscar"))
+  private val penny = Person("Penny", 2, Person.id("penny"))
+  private val quintin = Person("Quintin", 99, Person.id("quintin"))
+  private val ruth = Person("Ruth", 102, Person.id("ruth"))
+  private val sam = Person("Sam", 81, Person.id("sam"))
+  private val tori = Person("Tori", 30, Person.id("tori"))
+  private val uba = Person("Uba", 21, Person.id("uba"))
+  private val veronica = Person("Veronica", 13, Person.id("veronica"))
+  private val wyatt = Person("Wyatt", 30, Person.id("wyatt"))
+  private val xena = Person("Xena", 63, Person.id("xena"))
+  private val yuri = Person("Yuri", 30, Person.id("yuri"))
+  private val zoey = Person("Zoey", 101, Person.id("zoey"))
 
   private val names = List(
     adam, brenda, charlie, diana, evan, fiona, greg, hanna, ian, jenna, kevin, linda, mike, nancy, oscar, penny,
@@ -140,5 +140,8 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
     implicit val rw: RW[Person] = RW.gen
+
+    val name: Field[Person, String] = field("name", _.name)
+    val age: Field[Person, Int] = field("age", _.age)
   }
 }

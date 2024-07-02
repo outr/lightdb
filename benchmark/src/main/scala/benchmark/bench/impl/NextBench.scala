@@ -108,7 +108,7 @@ object NextBench extends Bench {
       id = rs.getString("id")
     )
 
-    val name: Field.Basic[Person, String] = field("name", _.name)
+    val name: Field[Person, String] = field("name", _.name)
     val age: Field.Index[Person, Int] = field.index("age", _.age)
     val id: Field.Unique[Person, String] = field.unique("id", _.id)
   }

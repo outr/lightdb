@@ -1,6 +1,7 @@
 package lightdb.sql
 
 import fabric._
+import fabric.rw.Asable
 import lightdb.collection.Collection
 import lightdb.doc.{DocModel, JsonConversion}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig}
@@ -134,7 +135,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     override def hasNext: Boolean = rs.next()
 
     override def next(): V = conversion match {
-      case Conversion.Value(field) => rs.getObject(field.name).asInstanceOf[V]
+      case Conversion.Value(field) => toJson(rs.getObject(field.name)).as[V](field.rw)
       case Conversion.Doc => getDoc(rs).asInstanceOf[V]
       case Conversion.Converted(c) => c(getDoc(rs))
       case Conversion.Json(fields) =>

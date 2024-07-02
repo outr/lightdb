@@ -1,5 +1,6 @@
 package lightdb.doc
 
+import fabric.rw.RW
 import lightdb.Field
 
 import scala.language.implicitConversions
@@ -17,13 +18,14 @@ trait DocModel[Doc] {
       field
     }
 
-    def apply[V](name: String, get: Doc => V): Field.Basic[Doc, V] =
-      add[V, Field.Basic[Doc, V]](Field.Basic(name, get))
+    def apply[V: RW](name: String, get: Doc => V): Field[Doc, V] = {
+      add[V, Field[Doc, V]](Field.Basic(name, get))
+    }
 
-    def index[V](name: String, get: Doc => V): Field.Index[Doc, V] =
+    def index[V: RW](name: String, get: Doc => V): Field.Index[Doc, V] =
       add[V, Field.Index[Doc, V]](Field.Index(name, get))
 
-    def unique[V](name: String, get: Doc => V): Field.Unique[Doc, V] =
+    def unique[V: RW](name: String, get: Doc => V): Field.Unique[Doc, V] =
       add[V, Field.Unique[Doc, V]](Field.Unique(name, get))
   }
 }
