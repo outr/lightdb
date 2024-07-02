@@ -4,7 +4,7 @@ import fabric.rw.RW
 import lightdb.util.Unique
 
 case class Id[Doc](value: String) extends AnyVal {
-  override def toString: String = value
+  override def toString: String = s"Id($value)"
 }
 
 object Id {
