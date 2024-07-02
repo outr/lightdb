@@ -1,5 +1,6 @@
 package lightdb.sql
 
+import lightdb.Id
 import lightdb.collection.Collection
 import lightdb.sql.SQLQueryBuilder.setValue
 
@@ -101,6 +102,7 @@ case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
 
 object SQLQueryBuilder {
   def setValue(ps: PreparedStatement, index: Int, value: Any): Unit = value match {
+    case id: Id[_] => ps.setString(index + 1, id.value)
     case s: String => ps.setString(index + 1, s)
     case i: Int => ps.setInt(index + 1, i)
     case _ => throw new UnsupportedOperationException(s"Unsupported value: $value (${value.getClass.getName})")

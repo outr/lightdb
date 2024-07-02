@@ -49,11 +49,8 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     val ps = preparedStatement
     collection.model.fields.zipWithIndex.foreach {
       case (field, index) =>
-        field.get(doc) match {
-          case s: String => ps.setString(index + 1, s)
-          case i: Int => ps.setInt(index + 1, i)
-          case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
-        }
+        val value = field.get(doc)
+        SQLQueryBuilder.setValue(ps, index, value)
     }
     ps.addBatch()
     transaction.batch += 1

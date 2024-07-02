@@ -4,8 +4,10 @@ import benchmark.bench.{Bench, StatusCallback}
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
 import lightdb.sql.{SQLConversion, SQLiteStore}
+import lightdb.store.StoreManager
+import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Unique
-import lightdb.{Field, collection}
+import lightdb.{Field, LightDB, collection}
 
 import java.nio.file.Path
 import java.sql.ResultSet
@@ -14,9 +16,9 @@ import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParalle
 object NextBench extends Bench {
   override def name: String = "NextBench-Converter"
 
-  override def init(): Unit = people.init()
+  override def init(): Unit = DB.init()
 
-  override protected def insertRecords(status: StatusCallback): Int = people.transaction { implicit transaction =>
+  override protected def insertRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
     (0 until RecordCount)
       .foldLeft(0)((total, index) => {
         val person = Person(
@@ -24,17 +26,17 @@ object NextBench extends Bench {
           age = index,
           id = Unique()
         )
-        people.set(person)
+        DB.people.set(person)
         status.progress.set(index + 1)
         total + 1
       })
   }
 
-  override protected def streamRecords(status: StatusCallback): Int = people.transaction { implicit transaction =>
+  override protected def streamRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
     (0 until StreamIterations)
       .foldLeft(0)((total, iteration) => {
         var count = 0
-        people.iterator.foreach { person =>
+        DB.people.iterator.foreach { person =>
           count += 1
         }
         if (count != RecordCount) {
@@ -45,13 +47,13 @@ object NextBench extends Bench {
       })
   }
 
-  override protected def searchEachRecord(status: StatusCallback): Int = people.transaction { implicit transaction =>
+  override protected def searchEachRecord(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
     var counter = 0
     (0 until StreamIterations)
       .foreach { iteration =>
         (0 until RecordCount)
           .foreach { index =>
-            val list = people.query.filter(_.age === index).search.docs.iterator.toList
+            val list = DB.people.query.filter(_.age === index).search.docs.iterator.toList
             val person = list.head
             if (person.age != index) {
               scribe.warn(s"${person.age} was not $index")
@@ -66,13 +68,13 @@ object NextBench extends Bench {
     counter
   }
 
-  override protected def searchAllRecords(status: StatusCallback): Int = people.transaction { implicit transaction =>
+  override protected def searchAllRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
     var counter = 0
     (0 until StreamIterations)
       .par
       .foreach { iteration =>
         var count = 0
-        people.query.search.docs.iterator.foreach { person =>
+        DB.people.query.search.docs.iterator.foreach { person =>
           count += 1
           counter += 1
         }
@@ -86,14 +88,16 @@ object NextBench extends Bench {
 
   override def size(): Long = -1L
 
-  override def dispose(): Unit = people.dispose()
+  override def dispose(): Unit = DB.people.dispose()
 
-  val people: Collection[Person, Person.type] = collection.Collection(
-    name = "people",
-    model = Person,
-    store = new SQLiteStore(Some(Path.of("db/people.db"))),
-    cacheQueries = true
-  )
+  object DB extends LightDB {
+    override lazy val directory: Option[Path] = Some(Path.of("db"))
+
+    val people: Collection[Person, Person.type] = collection("people", Person, cacheQueries = true)
+
+    override def storeManager: StoreManager = SQLiteStore
+    override def upgrades: List[DatabaseUpgrade] = Nil
+  }
 
   case class Person(name: String, age: Int, id: String)
 
