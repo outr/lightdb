@@ -39,6 +39,10 @@ trait Transaction[Doc] { transaction =>
   } else {
     f
   }
+
+  def commit(): Unit
+
+  def rollback(): Unit
 }
 
 object Transaction {

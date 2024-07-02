@@ -11,7 +11,7 @@ import org.scalatest.wordspec.AnyWordSpec
 
 import java.nio.file.Path
 
-abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
+abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   private val adam = Person("Adam", 21)
   private val brenda = Person("Brenda", 11)
   private val charlie = Person("Charlie", 35)
@@ -62,7 +62,7 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
     }
     "retrieve the first record by id" in {
       DB.people.transaction { implicit transaction =>
-        DB.people(Person._id, adam._id) should be(adam)
+        DB.people(_._id -> adam._id) should be(adam)
       }
     }
     "count the records in the database" in {
@@ -84,7 +84,8 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
     }
     "delete some records" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.delete(Person._id, List(linda, yuri)) should be(2)
+        DB.people.delete(_._id -> linda._id) should be(true)
+        DB.people.delete(_._id -> yuri._id) should be(true)
       }
     }
     "verify the records were deleted" in {
@@ -105,7 +106,7 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
     }
     "verify the record has been renamed" in {
       DB.people.transaction { implicit transaction =>
-        DB.people(adam._id).name should be("Allan")
+        DB.people(_._id -> adam._id).name should be("Allan")
       }
     }
     "truncate the collection" in {

@@ -172,7 +172,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       group = Nil,
       having = Nil,
       sort = query.sort.collect {
-        case Sort.ByIndex(index, direction) =>
+        case Sort.ByField(index, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
           SQLPart(s"${index.name} $dir", Nil)
       },

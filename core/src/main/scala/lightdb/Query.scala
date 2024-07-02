@@ -3,6 +3,7 @@ package lightdb
 import fabric.Json
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
+import lightdb.util.GroupedIterator
 
 case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],
                                               filter: Option[Filter[Doc]] = None,
@@ -39,5 +40,16 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
       apply(collection.store.Conversion.Json(fields.toList))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, T] =
       apply(collection.store.Conversion.Converted(f))
+  }
+
+  def grouped[F](f: Model => Field[Doc, F],
+                 direction: SortDirection = SortDirection.Ascending)
+                (implicit transaction: Transaction[Doc]): GroupedIterator[Doc, F] = {
+    val field = f(collection.model)
+    val iterator = sort(Sort.ByField(field, direction))
+      .search
+      .docs
+      .iterator
+    GroupedIterator[Doc, F](iterator, doc => field.get(doc))
   }
 }

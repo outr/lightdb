@@ -23,6 +23,14 @@ case class SQLTransaction[Doc](connectionManager: ConnectionManager[Doc]) extend
     resultSets = rs :: resultSets
   }
 
+  override def commit(): Unit = if (connection != null) {
+    connection.commit()
+  }
+
+  override def rollback(): Unit = if (connection != null) {
+    connection.rollback()
+  }
+
   def close(): Unit = {
     if (batch > 0) {
       ps.executeBatch()

@@ -10,7 +10,10 @@ import java.nio.file.Path
 class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLStore[Doc, Model] {
   override protected lazy val config: SQLConfig = {
     val path = file match {
-      case Some(f) => f.toFile.getCanonicalPath
+      case Some(f) =>
+        val file = f.toFile
+        Option(file.getParentFile).foreach(_.mkdirs())
+        file.getCanonicalPath
       case None => ":memory:"
     }
     SQLConfig(
