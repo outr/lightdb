@@ -79,7 +79,7 @@ val squantsVersion: String = "1.8.3"
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, halodb, rocksdb, mapdb, redis, lucene, sql, sqlite, duckdb, h2, all)
+	.aggregate(core.jvm, sql, sqlite, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -93,7 +93,6 @@ lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlat
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
-			"org.typelevel" %%% "squants" % squantsVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
@@ -118,39 +117,29 @@ lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlat
 		fork := true
 	)
 
-lazy val next = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlatform
-	.crossType(CrossType.Pure)
+lazy val sql = project.in(file("sql"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-next",
+		name := s"$projectName-sql",
+		fork := true,
 		libraryDependencies ++= Seq(
-			"com.outr" %%% "scribe" % scribeVersion,
-			"org.typelevel" %%% "fabric-io" % fabricVersion,
-			"com.outr" %% "scribe-slf4j" % scribeVersion,
-			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
-		),
-		libraryDependencies ++= (
-			if (scalaVersion.value.startsWith("2.")) {
-				Seq(
-					"org.scala-lang.modules" %% "scala-collection-compat" % collectionCompatVersion,
-					"org.scala-lang" % "scala-reflect" % scalaVersion.value
-				)
-			} else {
-				Nil
-			}
-			),
-		Compile / unmanagedSourceDirectories ++= {
-			val major = if (scalaVersion.value.startsWith("2.")) "-2" else "-3"
-			List(CrossType.Pure, CrossType.Full).flatMap(
-				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
-			)
-		}
-	)
-	.jvmSettings(
-		fork := true
+			"com.zaxxer" % "HikariCP" % hikariCPVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
 	)
 
-lazy val halodb = project.in(file("store/halodb"))
+lazy val sqlite = project.in(file("sqlite"))
+	.dependsOn(sql, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-sqlite",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+/*lazy val halodb = project.in(file("store/halodb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-halo",
@@ -249,10 +238,10 @@ lazy val h2 = project.in(file("index/h2"))
 			"com.h2database" % "h2" % h2Version,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
-	)
+	)*/
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", halodb, rocksdb, mapdb, redis, lucene, sqlite, duckdb, h2)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
@@ -262,7 +251,7 @@ lazy val all = project.in(file("all"))
 	)
 
 lazy val benchmark = project.in(file("benchmark"))
-	.dependsOn(all, next.jvm)
+	.dependsOn(all)
 	.enablePlugins(JmhPlugin)
 	.settings(
 		name := s"$projectName-benchmark",
