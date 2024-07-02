@@ -1,7 +1,7 @@
 package benchmark
 
 import fabric.rw.RW
-import lightdb.{Id, LightDB, StoredValue}
+import lightdb.StoredValue
 import lightdb.document.{Document, DocumentModel}
 import lightdb.duckdb.DuckDBIndexer
 import lightdb.h2.H2Indexer
@@ -13,6 +13,7 @@ import lightdb.store.{AtomicMapStore, StoreManager}
 import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Unique
+import lightdb.{Id, LightDB}
 import org.apache.commons.io.FileUtils
 import perfolation.double2Implicits
 

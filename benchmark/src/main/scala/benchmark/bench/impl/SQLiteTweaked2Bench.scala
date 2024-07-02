@@ -1,20 +1,23 @@
 package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
+import fabric.define.DefType
+import fabric.rw.{Asable, Convertible, RW}
+import fabric.{Json, NumInt, Obj, Str}
 import lightdb.util.Unique
 
 import java.io.File
-import java.sql.{Connection, DriverManager}
+import java.sql.{Connection, DriverManager, ResultSet}
 import scala.collection.parallel.CollectionConverters._
 
-object SQLiteBench extends Bench {
+object SQLiteTweaked2Bench extends Bench {
   private lazy val connection: Connection = {
-    val c = DriverManager.getConnection("jdbc:sqlite:db/sqlite.db")
+    val c = DriverManager.getConnection("jdbc:sqlite:db/sqlite-tweaked2.db")
     c.setAutoCommit(false)
     c
   }
 
-  override def name: String = "SQLite"
+  override def name: String = "SQLite-Tweaked2"
 
   override def init(): Unit = {
     executeUpdate("DROP TABLE IF EXISTS people")
@@ -24,7 +27,9 @@ object SQLiteBench extends Bench {
 
   override protected def insertRecords(status: StatusCallback): Int = {
     var batchSize = 0
-    val ps = connection.prepareStatement("INSERT INTO people(id, name, age) VALUES (?, ?, ?)")
+    val obj = Person.rw.definition.asInstanceOf[DefType.Obj]
+    val ats = obj.map.keys.toList
+    val ps = connection.prepareStatement(s"INSERT OR REPLACE INTO people(${ats.mkString(", ")}) VALUES (${ats.map(_ => "?").mkString(", ")})")
     try {
       (0 until RecordCount)
         .foldLeft(0)((total, index) => {
@@ -32,9 +37,14 @@ object SQLiteBench extends Bench {
             name = Unique(),
             age = index
           )
-          ps.setString(1, person.id)
-          ps.setString(2, person.name)
-          ps.setInt(3, person.age)
+          val json = person.json
+          ats.zipWithIndex.foreach {
+            case (key, index) => json(key) match {
+              case Str(s, _) => ps.setString(index + 1, s)
+              case NumInt(l, _) => ps.setLong(index + 1, l)
+              case j => throw new RuntimeException(s"Unsupported JSON: $j for $key")
+            }
+          }
           ps.addBatch()
           batchSize += 1
           if (batchSize > 1_000_000) {
@@ -72,11 +82,7 @@ object SQLiteBench extends Bench {
       val rs = s.executeQuery("SELECT * FROM people")
       var count = 0
       while (rs.next()) {
-        val person = Person(
-          name = rs.getString("name"),
-          age = rs.getInt("age"),
-          id = rs.getString("id")
-        )
+        val person = personBuilder(rs)
         count += 1
       }
       rs.close()
@@ -98,11 +104,7 @@ object SQLiteBench extends Bench {
             ps.setInt(1, index)
             val rs = ps.executeQuery()
             rs.next()
-            val person = Person(
-              name = rs.getString("name"),
-              age = rs.getInt("age"),
-              id = rs.getString("id")
-            )
+            val person = personBuilder(rs)
             if (person.age != index) {
               scribe.warn(s"${person.age} was not $index")
             }
@@ -118,6 +120,23 @@ object SQLiteBench extends Bench {
     counter
   }
 
+  private val personBuilder = {
+    val d = Person.rw.definition.asInstanceOf[DefType.Obj]
+    def t2Json(key: String, dt: DefType): ResultSet => (String, Json) = dt match {
+      case DefType.Str => rs => key -> Str(rs.getString(key))
+      case DefType.Int => rs => key -> NumInt(rs.getLong(key))
+      case DefType.Opt(dt) => t2Json(key, dt)
+      case _ => throw new RuntimeException(s"Unsupported DefType: $dt")
+    }
+    val list = d.map.toList.map {
+      case (key, dt) => t2Json(key, dt)
+    }
+    (rs: ResultSet) => {
+      val json = Obj(list.map(_(rs)): _*)
+      json.as[Person]
+    }
+  }
+
   override protected def searchAllRecords(status: StatusCallback): Int = {
     var counter = 0
     (0 until StreamIterations)
@@ -127,11 +146,8 @@ object SQLiteBench extends Bench {
         val rs = s.executeQuery("SELECT * FROM people")
         var count = 0
         while (rs.next()) {
-          val person = Person(
-            name = rs.getString("name"),
-            age = rs.getInt("age"),
-            id = rs.getString("id")
-          )
+          val person = personBuilder(rs)
+
           count += 1
           counter += 1
         }
@@ -145,7 +161,7 @@ object SQLiteBench extends Bench {
     counter
   }
 
-  override def size(): Long = new File("db/sqlite.db").length()
+  override def size(): Long = new File("db/sqlite-tweaked.db").length()
 
   override def dispose(): Unit = connection.close()
 
@@ -159,4 +175,8 @@ object SQLiteBench extends Bench {
   }
 
   case class Person(name: String, age: Int, id: String = Unique())
+
+  object Person {
+    implicit val rw: RW[Person] = RW.gen
+  }
 }

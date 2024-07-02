@@ -118,6 +118,38 @@ lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlat
 		fork := true
 	)
 
+lazy val next = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlatform
+	.crossType(CrossType.Pure)
+	.settings(
+		name := s"$projectName-next",
+		libraryDependencies ++= Seq(
+			"com.outr" %%% "scribe" % scribeVersion,
+			"org.typelevel" %%% "fabric-io" % fabricVersion,
+			"com.outr" %% "scribe-slf4j" % scribeVersion,
+			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
+			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
+		),
+		libraryDependencies ++= (
+			if (scalaVersion.value.startsWith("2.")) {
+				Seq(
+					"org.scala-lang.modules" %% "scala-collection-compat" % collectionCompatVersion,
+					"org.scala-lang" % "scala-reflect" % scalaVersion.value
+				)
+			} else {
+				Nil
+			}
+			),
+		Compile / unmanagedSourceDirectories ++= {
+			val major = if (scalaVersion.value.startsWith("2.")) "-2" else "-3"
+			List(CrossType.Pure, CrossType.Full).flatMap(
+				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
+			)
+		}
+	)
+	.jvmSettings(
+		fork := true
+	)
+
 lazy val halodb = project.in(file("store/halodb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
@@ -230,7 +262,7 @@ lazy val all = project.in(file("all"))
 	)
 
 lazy val benchmark = project.in(file("benchmark"))
-	.dependsOn(all)
+	.dependsOn(all, next.jvm)
 	.enablePlugins(JmhPlugin)
 	.settings(
 		name := s"$projectName-benchmark",
@@ -245,6 +277,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"co.fs2" %% "fs2-io" % "3.9.4",
 			"com.outr" %% "scarango-driver" % "3.20.0",
 			"org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
+			"org.jooq" % "jooq" % "3.19.10",
 			"io.quickchart" % "QuickChart" % "1.2.0"
 		)
 	)
