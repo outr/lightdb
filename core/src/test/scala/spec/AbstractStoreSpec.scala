@@ -2,7 +2,9 @@ package spec
 
 import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.doc.{Document, DocumentModel}
+import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.store.StoreManager
+import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -60,7 +62,7 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
     }
     "retrieve the first record by id" in {
       DB.people.transaction { implicit transaction =>
-        DB.people(adam._id) should be(adam)
+        DB.people(Person._id, adam._id) should be(adam)
       }
     }
     "count the records in the database" in {
@@ -70,7 +72,7 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
     }
     "stream the ids in the database" in {
       DB.people.transaction { implicit transaction =>
-        val ids = DB.people.idIterator.toList.toSet
+        val ids = DB.people.query.search.value(Person._id).iterator.toList.toSet
         ids should be(names.map(_._id).toSet)
       }
     }
@@ -82,7 +84,7 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
     }
     "delete some records" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.delete(List(linda, yuri)) should be(2)
+        DB.people.delete(Person._id, List(linda, yuri)) should be(2)
       }
     }
     "verify the records were deleted" in {
@@ -121,6 +123,8 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
     }
   }
 
+  def storeManager: StoreManager
+
   object DB extends LightDB {
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
@@ -133,7 +137,7 @@ abstract class AbstractStoreSpec extends AnyWordSpec with Matchers { spec =>
 
   case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]
 
-  object Person extends DocumentModel[Person] {
+  object Person extends DocumentModel[Person] with JsonConversion[Person] {
     implicit val rw: RW[Person] = RW.gen
   }
 }

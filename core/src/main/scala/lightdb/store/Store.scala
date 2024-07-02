@@ -13,10 +13,18 @@ abstract class Store[Doc, Model <: DocModel[Doc]] {
 
   def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
 
+  def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc]
+
+  def delete[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean
+
+  def count(implicit transaction: Transaction[Doc]): Int
+
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc]
 
   def doSearch[V](query: Query[Doc, Model], conversion: Conversion[V])
                  (implicit transaction: Transaction[Doc]): SearchResults[Doc, V]
+
+  def truncate()(implicit transaction: Transaction[Doc]): Int
 
   def dispose(): Unit
 

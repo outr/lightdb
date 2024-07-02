@@ -2,7 +2,7 @@ package lightdb.sql
 
 import fabric._
 import lightdb.collection.Collection
-import lightdb.doc.DocModel
+import lightdb.doc.{DocModel, JsonConversion}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig}
 import lightdb.store.Store
 import lightdb.{Field, Filter, Query, SearchResults, Sort, SortDirection, Transaction}
@@ -63,6 +63,53 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     }
   }
 
+  override def get[V](field: Field.Unique[Doc, V], value: V)
+                     (implicit transaction: Transaction[Doc]): Option[Doc] = {
+    val b = new SQLQueryBuilder[Doc](
+      collection = collection,
+      transaction = transaction,
+      fields = collection.model.fields.map(f => SQLPart(f.name)),
+      filters = List(filter2Part(field === value)),
+      group = Nil,
+      having = Nil,
+      sort = Nil,
+      limit = Some(1),
+      offset = 0
+    )
+    val rs = b.execute(connectionManager.getConnection)
+    try {
+      if (rs.next()) {
+        Some(getDoc(rs))
+      } else {
+        None
+      }
+    } finally {
+      rs.close()
+    }
+  }
+
+  override def delete[V](field: Field.Unique[Doc, V], value: V)
+                        (implicit transaction: Transaction[Doc]): Boolean = {
+    val connection = connectionManager.getConnection
+    val ps = connection.prepareStatement(s"DELETE FROM ${collection.name} WHERE ${field.name} = ?")
+    try {
+      SQLQueryBuilder.setValue(ps, 0, value)
+      ps.executeUpdate() > 0
+    } finally {
+      ps.close()
+    }
+  }
+
+  override def count(implicit transaction: Transaction[Doc]): Int = {
+    val rs = executeQuery(s"SELECT COUNT(*) FROM ${collection.name}")
+    try {
+      rs.next()
+      rs.getInt(1)
+    } finally {
+      rs.close()
+    }
+  }
+
   override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = {
     val connection = connectionManager.getConnection
     val s = connection.createStatement()
@@ -73,7 +120,12 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   }
 
   private def getDoc(rs: ResultSet): Doc = collection.model match {
-    case c: SQLDocConversion[Doc] => c.convertFromSQL(rs)
+    case c: JsonConversion[Doc] =>
+      val values = collection.model.fields.map { field =>
+        field.name -> toJson(rs.getObject(field.name))
+      }
+      c.convertFromJson(obj(values: _*))
+    case c: SQLConversion[Doc] => c.convertFromSQL(rs)
     case _ =>
       val map = collection.model.fields.map { field =>
         field.name -> obj2Value(rs.getObject(field.name))
@@ -177,6 +229,23 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       s.executeUpdate(sql)
     } finally {
       s.close()
+    }
+  }
+
+  private def executeQuery(sql: String)(implicit transaction: Transaction[Doc]): ResultSet = {
+    val connection = connectionManager.getConnection
+    val s = connection.createStatement()
+    transaction.register(s)
+    s.executeQuery(sql)
+  }
+
+  override def truncate()(implicit transaction: Transaction[Doc]): Int = {
+    val connection = connectionManager.getConnection
+    val ps = connection.prepareStatement(s"DELETE FROM ${collection.name}")
+    try {
+      ps.executeUpdate()
+    } finally {
+      ps.close()
     }
   }
 
