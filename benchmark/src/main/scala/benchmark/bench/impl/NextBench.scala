@@ -1,9 +1,11 @@
 package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
+import lightdb.collection.Collection
+import lightdb.doc.DocModel
 import lightdb.sql.SQLiteStore
 import lightdb.util.Unique
-import lightdb.{Collection, Converter, DocModel, Field}
+import lightdb.{Converter, Field, collection}
 
 import java.nio.file.Path
 import java.sql.ResultSet
@@ -86,7 +88,7 @@ object NextBench extends Bench {
 
   override def dispose(): Unit = people.dispose()
 
-  val people: Collection[Person, Person.type] = Collection("people", Person, SQLiteStore(Path.of("db/people.db"), PersonConverter), cacheQueries = true)
+  val people: Collection[Person, Person.type] = collection.Collection("people", Person, SQLiteStore(Path.of("db/people.db"), PersonConverter), cacheQueries = true)
 
   case class Person(name: String, age: Int, id: String)
 

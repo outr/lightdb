@@ -1,7 +1,8 @@
 package lightdb.sql
 
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.{Converter, DocModel}
+import lightdb.Converter
+import lightdb.doc.DocModel
 
 import java.nio.file.Path
 import java.sql.ResultSet

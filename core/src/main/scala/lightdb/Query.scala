@@ -1,6 +1,8 @@
 package lightdb
 
 import fabric.Json
+import lightdb.collection.Collection
+import lightdb.doc.DocModel
 
 case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],
                                               filter: Option[Filter[Doc]] = None,

@@ -1,4 +1,6 @@
-package lightdb
+package lightdb.doc
+
+import lightdb.Field
 
 import scala.language.implicitConversions
 

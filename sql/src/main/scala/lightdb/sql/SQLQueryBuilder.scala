@@ -1,7 +1,6 @@
 package lightdb.sql
 
-import lightdb.Collection
-
+import lightdb.collection.Collection
 import java.sql.{Connection, ResultSet}
 
 case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
