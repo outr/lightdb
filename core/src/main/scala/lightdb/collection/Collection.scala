@@ -15,18 +15,27 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
     store.init(this)
   }
 
-  def transaction[Return](f: Transaction[Doc] => Return): Return = {
-    val transaction = store.createTransaction()
-    try {
-      f(transaction)
-    } finally {
-      store.releaseTransaction(transaction)
+  object transaction {
+    def apply[Return](f: Transaction[Doc] => Return): Return = {
+      val transaction = create()
+      try {
+        f(transaction)
+      } finally {
+        release(transaction)
+      }
     }
+
+    def create(): Transaction[Doc] = store.createTransaction()
+
+    def release(transaction: Transaction[Doc]): Unit = store.releaseTransaction(transaction)
   }
 
-  def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = store.set(doc)
+  def set(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
+    store.set(doc)
+    doc
+  }
 
-  def set(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Unit = docs.foreach(set)
+  def set(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(set)
 
   def get[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Option[Doc] = {
     val (field, value) = f(model)

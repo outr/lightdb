@@ -74,12 +74,14 @@ val duckdbVersion: String = "1.0.0"
 
 val h2Version: String = "2.2.224"
 
-val squantsVersion: String = "1.8.3"
+val catsVersion: String = "3.5.4"
+
+val fs2Version: String = "3.10.2"
 
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, all)
+	.aggregate(core.jvm, sql, sqlite, async, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -136,6 +138,17 @@ lazy val sqlite = project.in(file("sqlite"))
 		libraryDependencies ++= Seq(
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val async = project.in(file("async"))
+	.dependsOn(core.jvm)
+	.settings(
+		name := s"$projectName-async",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.typelevel" %% "cats-effect" % catsVersion,
+			"co.fs2" %% "fs2-core" % fs2Version
 		)
 	)
 
