@@ -5,7 +5,7 @@ import lightdb.collection.Collection
 import lightdb.doc.DocModel
 import lightdb.sql.connect.{ConnectionManager, SQLConfig}
 import lightdb.store.Store
-import lightdb.{Converter, Field, Filter, Query, SearchResults, Sort, SortDirection, Transaction}
+import lightdb.{Field, Filter, Query, SearchResults, Sort, SortDirection, Transaction}
 
 import java.sql.{PreparedStatement, ResultSet}
 import scala.language.implicitConversions
@@ -13,7 +13,6 @@ import scala.language.implicitConversions
 trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   private var collection: Collection[Doc, Model] = _
 
-  def converter: Converter[ResultSet, Doc]
   protected def config: SQLConfig
   protected def connectionManager: ConnectionManager[Doc]
 
@@ -73,19 +72,34 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     rs2Iterator(rs, Conversion.Doc)
   }
 
+  private def getDoc(rs: ResultSet): Doc = collection.model match {
+    case c: SQLDocConversion[Doc] => c.convertFromSQL(rs)
+    case _ =>
+      val map = collection.model.fields.map { field =>
+        field.name -> obj2Value(rs.getObject(field.name))
+      }.toMap
+      collection.model.map2Doc(map)
+  }
+
   private def rs2Iterator[V](rs: ResultSet, conversion: Conversion[V]): Iterator[V] = new Iterator[V] {
     override def hasNext: Boolean = rs.next()
 
     override def next(): V = conversion match {
       case Conversion.Value(field) => rs.getObject(field.name).asInstanceOf[V]
-      case Conversion.Doc => converter.convert(rs).asInstanceOf[V]
-      case Conversion.Converted(c) => c(converter.convert(rs))
+      case Conversion.Doc => getDoc(rs).asInstanceOf[V]
+      case Conversion.Converted(c) => c(getDoc(rs))
       case Conversion.Json(fields) =>
         obj(fields.map(f => f.name -> toJson(rs.getObject(f.name))): _*).asInstanceOf[V]
     }
   }
 
-  private def toJson(value: Any): Json = value match {
+  private def obj2Value(obj: Any): Any = obj match {
+    case s: String => s
+    case i: java.lang.Integer => i.intValue()
+    case _ => throw new RuntimeException(s"Unsupported object: $obj (${obj.getClass.getName})")
+  }
+
+  private def toJson(value: Any): Json = obj2Value(value) match {
     case null => Null
     case s: String => str(s)
     case i: Int => num(i)

@@ -3,9 +3,9 @@ package benchmark.bench.impl
 import benchmark.bench.{Bench, StatusCallback}
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
-import lightdb.sql.SQLiteStore
+import lightdb.sql.{SQLDocConversion, SQLiteStore}
 import lightdb.util.Unique
-import lightdb.{Converter, Field, collection}
+import lightdb.{Field, collection}
 
 import java.nio.file.Path
 import java.sql.ResultSet
@@ -88,21 +88,19 @@ object NextBench extends Bench {
 
   override def dispose(): Unit = people.dispose()
 
-  val people: Collection[Person, Person.type] = collection.Collection("people", Person, SQLiteStore(Path.of("db/people.db"), PersonConverter), cacheQueries = true)
+  val people: Collection[Person, Person.type] = collection.Collection("people", Person, SQLiteStore(Path.of("db/people.db")), cacheQueries = true)
 
   case class Person(name: String, age: Int, id: String)
 
-  object Person extends DocModel[Person] {
-    val name: Field.Basic[Person, String] = field("name", _.name)
-    val age: Field.Index[Person, Int] = field.index("age", _.age)
-    val id: Field.Unique[Person, String] = field.unique("id", _.id)
-  }
-
-  object PersonConverter extends Converter[ResultSet, Person] {
-    override def convert(rs: ResultSet): Person = Person(
+  object Person extends DocModel[Person] with SQLDocConversion[Person] {
+    override def convertFromSQL(rs: ResultSet): Person = Person(
       name = rs.getString("name"),
       age = rs.getInt("age"),
       id = rs.getString("id")
     )
+
+    val name: Field.Basic[Person, String] = field("name", _.name)
+    val age: Field.Index[Person, Int] = field.index("age", _.age)
+    val id: Field.Unique[Person, String] = field.unique("id", _.id)
   }
 }
