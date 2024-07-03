@@ -274,6 +274,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.postgresql" % "postgresql" % "42.7.3",
 			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
+			"com.h2database" % "h2" % h2Version,
 			"org.apache.derby" % "derby" % "10.17.1.0",
 			"commons-io" % "commons-io" % "2.16.1",
 			"co.fs2" %% "fs2-io" % "3.9.4",

@@ -1,7 +1,7 @@
 package benchmark.bench
 
 trait Bench {
-  val RecordCount: Int = 1_000_000
+  val RecordCount: Int = 10_000_000
   val StreamIterations: Int = 1
   val SearchIterations: Int = 1
 

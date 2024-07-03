@@ -5,7 +5,7 @@ import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Field, Id, LightDB}
+import lightdb.{Field, Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -82,6 +82,46 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
       }
     }
+    "query with aggregate functions" in {
+      DB.people.transaction { implicit transaction =>
+        val list = DB.people.query
+          .aggregate(p => List(
+            p.age.min,
+            p.age.max,
+            p.age.avg,
+            p.age.sum
+          ))
+          .toList
+        list.map(m => m(_.age.min)).toSet should be(Set(2))
+        list.map(m => m(_.age.max)).toSet should be(Set(102))
+        list.map(m => m(_.age.avg)).toSet should be(Set(41.80769230769231))
+        list.map(m => m(_.age.sum)).toSet should be(Set(1087))
+      }
+    }
+    "search by age range" in {
+      DB.people.transaction { implicit transaction =>
+        val ids = DB.people.query.filter(_.age BETWEEN 19 -> 22).search.value(Person._id).list
+        ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
+      }
+    }
+    "sort by age" in {
+      DB.people.transaction { implicit transaction =>
+        val people = DB.people.query.sort(Sort.ByField(Person.age).descending).search.docs.list
+        people.map(_.name).take(3) should be(List("Ruth", "Zoey", "Quintin"))
+      }
+    }
+    "group by age" in {
+      DB.people.transaction { implicit transaction =>
+        val list = DB.people.query.grouped(_.age).toList
+        list.map(_._1) should be(List(2, 4, 11, 12, 13, 15, 21, 22, 23, 30, 33, 35, 42, 53, 62, 63, 72, 81, 89, 99, 101, 102))
+        list.map(_._2.map(_.name)) should be(List(
+          List("Penny"), List("Jenna"), List("Brenda"), List("Greg"), List("Veronica"), List("Diana"),
+          List("Adam", "Oscar", "Uba"), List("Nancy"), List("Fiona"), List("Tori", "Wyatt", "Yuri"), List("Kevin"),
+          List("Charlie"), List("Mike"), List("Evan"), List("Hanna"), List("Xena"), List("Linda"), List("Sam"),
+          List("Ian"), List("Quintin"), List("Zoey"), List("Ruth")
+        ))
+      }
+    }
     "delete some records" in {
       DB.people.transaction { implicit transaction =>
         DB.people.delete(_._id -> linda._id) should be(true)
@@ -109,6 +149,9 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         DB.people(_._id -> adam._id).name should be("Allan")
       }
     }
+    "verify start time has been set" in {
+      DB.startTime.get() should be > 0L
+    }
     "truncate the collection" in {
       DB.people.transaction { implicit transaction =>
         DB.people.truncate() should be(24)
@@ -129,11 +172,13 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   object DB extends LightDB {
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
+    val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
+
     val people: Collection[Person, Person.type] = collection("people", Person)
 
     override def storeManager: StoreManager = spec.storeManager
 
-    override def upgrades: List[DatabaseUpgrade] = Nil
+    override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
   }
 
   case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]
@@ -143,5 +188,15 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
     val name: Field[Person, String] = field("name", _.name)
     val age: Field[Person, Int] = field("age", _.age)
+  }
+
+  object InitialSetupUpgrade extends DatabaseUpgrade {
+    override def applyToNew: Boolean = true
+
+    override def blockStartup: Boolean = true
+
+    override def alwaysRun: Boolean = false
+
+    override def upgrade(ldb: LightDB): Unit = DB.startTime.set(System.currentTimeMillis())
   }
 }

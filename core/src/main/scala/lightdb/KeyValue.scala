@@ -8,4 +8,6 @@ case class KeyValue(_id: Id[KeyValue], value: Json) extends Document[KeyValue]
 
 object KeyValue extends DocumentModel[KeyValue] with JsonConversion[KeyValue] {
   override implicit val rw: RW[KeyValue] = RW.gen
+
+  val value: Field[KeyValue, Json] = field("value", _.value)
 }

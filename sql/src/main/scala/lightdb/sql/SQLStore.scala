@@ -1,33 +1,75 @@
 package lightdb.sql
 
 import fabric._
-import fabric.rw.Asable
+import fabric.define.DefType
+import fabric.io.JsonParser
+import fabric.rw.{Asable, Convertible}
+import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.doc.{DocModel, JsonConversion}
+import lightdb.filter.Filter
+import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig}
 import lightdb.store.Store
-import lightdb.{Field, Filter, Query, SearchResults, Sort, SortDirection, Transaction}
+import lightdb.{Field, Query, SearchResults, Sort, SortDirection, Transaction}
 
-import java.sql.{PreparedStatement, ResultSet}
+import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
 trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   private var collection: Collection[Doc, Model] = _
 
-  protected def config: SQLConfig
   protected def connectionManager: ConnectionManager[Doc]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
     this.collection = collection
     collection.transaction { implicit transaction =>
-      executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.name}(${collection.model.fields.map(_.name).mkString(", ")})")
-      collection.model.fields.foreach {
-        case _: Field.Basic[Doc, _] => // Nothing to do
-        case index: Field.Index[Doc, _] =>
-          executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
-        case index: Field.Unique[Doc, _] =>
-          executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
+      initTransaction()
+    }
+  }
+
+  protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
+    // Create the table
+    executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.name}(${collection.model.fields.map(_.name).mkString(", ")})")
+
+    // Add/Remove columns
+    val existingColumns = columns(connectionManager.getConnection)
+    val fieldNames = collection.model.fields.map(_.name).toSet
+    // Drop columns
+    existingColumns.foreach { name =>
+      if (!fieldNames.contains(name)) {
+        scribe.info(s"Removing column ${collection.name}.$name.")
+        executeUpdate(s"ALTER TABLE ${collection.name} DROP COLUMN $name")
       }
+    }
+    // Add columns
+    fieldNames.foreach { name =>
+      if (!existingColumns.contains(name)) {
+        scribe.info(s"Adding column ${collection.name}.$name.")
+        executeUpdate(s"ALTER TABLE ${collection.name} ADD COLUMN $name")
+      }
+    }
+
+    // Add indexes
+    collection.model.fields.foreach {
+      case _: Field.Basic[Doc, _] => // Nothing to do
+      case index: Field.Index[Doc, _] =>
+        executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
+      case index: Field.Unique[Doc, _] =>
+        executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
+    }
+  }
+
+  private def columns(connection: Connection): Set[String] = {
+    val ps = connection.prepareStatement(s"SELECT * FROM ${collection.name} LIMIT 1")
+    try {
+      val rs = ps.executeQuery()
+      val meta = rs.getMetaData
+      (1 to meta.getColumnCount).map { index =>
+        meta.getColumnName(index).toLowerCase
+      }.toSet
+    } finally {
+      ps.close()
     }
   }
 
@@ -120,7 +162,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   private def getDoc(rs: ResultSet): Doc = collection.model match {
     case c: JsonConversion[Doc] =>
       val values = collection.model.fields.map { field =>
-        field.name -> toJson(rs.getObject(field.name))
+        field.name -> toJson(rs.getObject(field.name), field.rw.definition)
       }
       c.convertFromJson(obj(values: _*))
     case c: SQLConversion[Doc] => c.convertFromSQL(rs)
@@ -134,28 +176,46 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   private def rs2Iterator[V](rs: ResultSet, conversion: Conversion[V]): Iterator[V] = new Iterator[V] {
     override def hasNext: Boolean = rs.next()
 
-    override def next(): V = conversion match {
-      case Conversion.Value(field) => toJson(rs.getObject(field.name)).as[V](field.rw)
-      case Conversion.Doc => getDoc(rs).asInstanceOf[V]
-      case Conversion.Converted(c) => c(getDoc(rs))
-      case Conversion.Json(fields) =>
-        obj(fields.map(f => f.name -> toJson(rs.getObject(f.name))): _*).asInstanceOf[V]
+    override def next(): V = {
+      def jsonFromFields(fields: List[Field[Doc, _]]): Json =
+        obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw.definition)): _*)
+      conversion match {
+        case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw.definition).as[V](field.rw)
+        case Conversion.Doc => getDoc(rs).asInstanceOf[V]
+        case Conversion.Converted(c) => c(getDoc(rs))
+        case Conversion.Materialized(fields) =>
+          val json = jsonFromFields(fields)
+          MaterializedIndex[Doc, Model](json, collection.model).asInstanceOf[V]
+        case Conversion.Json(fields) =>
+          jsonFromFields(fields).asInstanceOf[V]
+      }
     }
   }
 
   private def obj2Value(obj: Any): Any = obj match {
+    case null => null
     case s: String => s
+    case b: java.lang.Boolean => b.booleanValue()
     case i: java.lang.Integer => i.intValue()
+    case l: java.lang.Long => l.longValue()
+    case f: java.lang.Float => f.doubleValue()
+    case d: java.lang.Double => d.doubleValue()
+    case bi: java.math.BigInteger => BigDecimal(bi)
     case _ => throw new RuntimeException(s"Unsupported object: $obj (${obj.getClass.getName})")
   }
 
-  private def toJson(value: Any): Json = obj2Value(value) match {
+  private def toJson(value: Any, dt: DefType): Json = obj2Value(value) match {
     case null => Null
-    case s: String => str(s)
+    case s: String if dt == DefType.Str => str(s)
+    case s: String if dt == DefType.Json => JsonParser(s)
+    case s: String => throw new RuntimeException(s"Unsupported: $s / $dt")
+    case b: Boolean => bool(b)
     case i: Int => num(i)
     case l: Long => num(l)
+    case f: Float => num(f.toDouble)
     case d: Double => num(d)
-    case b: Boolean => bool(b)
+    case bd: BigDecimal => num(bd)
+    case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[V])
@@ -163,6 +223,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     val fields = conversion match {
       case Conversion.Value(field) => List(field)
       case Conversion.Doc | Conversion.Converted(_) => collection.model.fields
+      case Conversion.Materialized(fields) => fields
       case Conversion.Json(fields) => fields
     }
     val b = SQLQueryBuilder(
@@ -198,6 +259,86 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     )
   }
 
+  override def aggregate(query: AggregateQuery[Doc, Model])
+                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
+    val fields = query.functions.map { f =>
+      val af = f.`type` match {
+        case AggregateType.Max => Some("MAX")
+        case AggregateType.Min => Some("MIN")
+        case AggregateType.Avg => Some("AVG")
+        case AggregateType.Sum => Some("SUM")
+        case AggregateType.Count | AggregateType.CountDistinct => Some("COUNT")
+        case AggregateType.Concat | AggregateType.ConcatDistinct => Some(concatPrefix)
+        case AggregateType.Group => None
+      }
+      val fieldName = af match {
+        case Some(s) =>
+          val pre = f.`type` match {
+            case AggregateType.CountDistinct | AggregateType.ConcatDistinct => "DISTINCT "
+            case _ => ""
+          }
+          val post = f.`type` match {
+            case AggregateType.Concat => ", ';;'"
+            case _ => ""
+          }
+          s"$s($pre${f.field.name}$post)"
+        case None => f.field.name
+      }
+      SQLPart(s"$fieldName AS ${f.name}", Nil)
+    }
+    val filters = query.query.filter.map(filter2Part).toList
+    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct.map(s => SQLPart(s, Nil))
+    val having = query.filter.map(af2Part).toList
+    val sort = (query.sort ::: query.query.sort).collect {
+      case Sort.ByField(index, direction) =>
+        val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+        SQLPart(s"${index.name} $dir", Nil)
+    }
+    val b = SQLQueryBuilder(
+      collection = collection,
+      transaction = transaction,
+      fields = fields,
+      filters = filters,
+      group = group,
+      having = having,
+      sort = sort,
+      limit = query.query.limit,
+      offset = query.query.offset
+    )
+    val connection = connectionManager.getConnection
+    val rs = b.execute(connection)
+    transaction.register(rs)
+    def createStream[R](f: ResultSet => R): Iterator[R] = {
+      val iterator = new Iterator[R] {
+        private var checkedNext = false
+        private var nextValue = false
+
+        override def hasNext: Boolean = {
+          if (!checkedNext) {
+            nextValue = rs.next()
+            checkedNext = true
+          }
+          nextValue
+        }
+
+        override def next(): R = {
+          if (!checkedNext) {
+            rs.next()
+          }
+          checkedNext = false
+          f(rs)
+        }
+      }
+      iterator
+    }
+    createStream[MaterializedAggregate[Doc, Model]] { rs =>
+      val json = obj(query.functions.map { f =>
+        f.name -> toJson(rs.getObject(f.name), f.tRW.definition)
+      }: _*)
+      MaterializedAggregate[Doc, Model](json, collection.model)
+    }
+  }
+
   private def filter2Part(f: Filter[Doc]): SQLPart = f match {
     case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(f.value))
     case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList)
@@ -220,7 +361,29 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     case f: Filter.Distance[Doc] => throw new UnsupportedOperationException("Distance not supported in SQL!")
   }
 
-  private def executeUpdate(sql: String)(implicit transaction: Transaction[Doc]): Unit = {
+  private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {
+    case f: AggregateFilter.Equals[Doc, _] => SQLPart(s"${f.name} = ?", List(f.getJson))
+    case f: AggregateFilter.In[Doc, _] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
+    case f: AggregateFilter.Combined[Doc] =>
+      val parts = f.filters.map(f => af2Part(f))
+      SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
+    case f: AggregateFilter.RangeLong[Doc] => (f.from, f.to) match {
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(from.json, to.json))
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(from.json))
+      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+    }
+    case f: AggregateFilter.RangeDouble[_] => (f.from, f.to) match {
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(from.json, to.json))
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(to.json))
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(from.json))
+      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+    }
+    case f: AggregateFilter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
+    case f: AggregateFilter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
+  }
+
+  protected def executeUpdate(sql: String)(implicit transaction: Transaction[Doc]): Unit = {
     val connection = connectionManager.getConnection
     val s = connection.createStatement()
     try {
@@ -236,6 +399,8 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     transaction.register(s)
     s.executeQuery(sql)
   }
+
+  protected def concatPrefix: String = "GROUP_CONCAT"
 
   override def truncate()(implicit transaction: Transaction[Doc]): Int = {
     val connection = connectionManager.getConnection

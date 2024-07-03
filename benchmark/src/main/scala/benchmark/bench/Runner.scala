@@ -1,6 +1,6 @@
 package benchmark.bench
 
-import benchmark.bench.impl.{DerbyBench, H2Bench, NextBench, PostgreSQLBench, SQLiteBench, SQLiteJOOQBench, SQLiteTweaked2Bench}
+import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
 import fabric.rw.Convertible
 import org.apache.commons.io.FileUtils
@@ -10,21 +10,11 @@ import java.nio.file.{Files, Path}
 
 object Runner {
   val implementations: Map[String, Bench] = Map(
-//    "ldbHaloLucene" -> LightDBBench(HaloDBStore, LuceneIndexer),
-//    "ldbMapLucene" -> LightDBBench(MapDBStore, LuceneIndexer),
-//    "ldbRocksLucene" -> LightDBBench(RocksDBStore, LuceneIndexer),
-//    "ldbAtomicLucene" -> LightDBBench(AtomicMapStore, LuceneIndexer),
-//    "ldbMapLucene" -> LightDBBench(MapStore, LuceneIndexer),
-//    "ldbHaloSQLite" -> LightDBBench(HaloDBStore, SQLiteIndexer),
-//    "ldbHaloH2" -> LightDBBench(HaloDBStore, H2Indexer),
-//    "ldbHaloDuck" -> LightDBBench(HaloDBStore, DuckDBIndexer),
     "SQLite" -> SQLiteBench,
-    "SQLiteJOOQ" -> SQLiteJOOQBench,
-    "SQLiteTweaked2" -> SQLiteTweaked2Bench,
     "PostgreSQL" -> PostgreSQLBench,
     "H2" -> H2Bench,
     "Derby" -> DerbyBench,
-    "Next" -> NextBench
+    "LightDB" -> LightDBBench
   )
 
   def main(args: Array[String]): Unit = {

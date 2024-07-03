@@ -1,7 +1,8 @@
 package lightdb.collection
 
-import lightdb.doc.{DocModel, DocumentModel}
-import lightdb.error.DocNotFoundException
+import fabric.define.DefType
+import lightdb.doc.{DocModel, DocumentModel, JsonConversion}
+import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.store.Store
 import lightdb.util.Initializable
 import lightdb.{Field, Id, Query, Transaction}
@@ -13,6 +14,18 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
                                                    cacheQueries: Boolean = false) extends Initializable {
   override protected def initialize(): Unit = {
     store.init(this)
+
+    model match {
+      case jc: JsonConversion[_] =>
+        val fieldNames = model.fields.map(_.name).toSet
+        val missing = jc.rw.definition.asInstanceOf[DefType.Obj].map.keys.filterNot { fieldName =>
+          fieldNames.contains(fieldName)
+        }.toList
+        if (missing.nonEmpty) {
+          throw ModelMissingFieldsException(name, missing)
+        }
+      case _ => // Can't do validation
+    }
   }
 
   object transaction {
