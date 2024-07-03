@@ -1,13 +1,12 @@
 package lightdb.sql
 
-import lightdb.collection.Collection
 import lightdb.sql.connect.ConnectionManager
 import lightdb.{LightDB, Transaction}
 import lightdb.doc.DocModel
 import lightdb.store.{Store, StoreManager}
 import org.sqlite.SQLiteConfig
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 
 class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLStore[Doc, Model] {
@@ -30,7 +29,10 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
     super.initTransaction()
 
-//    executeUpdate(s"SELECT load_extension('mod_spatialite.so');")
+    val file = Files.createTempFile("mod_spatialite", ".so")
+    val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
+    Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
+    executeUpdate(s"SELECT load_extension('${file.toAbsolutePath.toString}');")
   }
 
   override protected object connectionManager extends ConnectionManager[Doc] {
