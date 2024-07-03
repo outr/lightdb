@@ -1,5 +1,7 @@
 package lightdb
 
+import lightdb.spatial.GeoPoint
+
 trait Sort
 
 object Sort {

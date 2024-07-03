@@ -1,8 +1,10 @@
 package lightdb
 
 import fabric.Json
+import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
+import lightdb.filter.Filter
 import lightdb.util.GroupedIterator
 
 case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],
@@ -41,6 +43,9 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, T] =
       apply(collection.store.Conversion.Converted(f))
   }
+
+  def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
+    AggregateQuery(this, f(collection.model))
 
   def grouped[F](f: Model => Field[Doc, F],
                  direction: SortDirection = SortDirection.Ascending)

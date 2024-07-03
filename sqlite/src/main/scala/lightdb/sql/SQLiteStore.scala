@@ -1,14 +1,17 @@
 package lightdb.sql
 
-import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.LightDB
+import lightdb.collection.Collection
+import lightdb.sql.connect.ConnectionManager
+import lightdb.{LightDB, Transaction}
 import lightdb.doc.DocModel
 import lightdb.store.{Store, StoreManager}
+import org.sqlite.SQLiteConfig
 
 import java.nio.file.Path
+import java.sql.Connection
 
 class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLStore[Doc, Model] {
-  override protected lazy val config: SQLConfig = {
+  private lazy val connection: Connection = {
     val path = file match {
       case Some(f) =>
         val file = f.toFile
@@ -16,11 +19,27 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
         file.getCanonicalPath
       case None => ":memory:"
     }
-    SQLConfig(
-      jdbcUrl = s"jdbc:sqlite:$path"
-    )
+
+    val config = new SQLiteConfig
+    config.enableLoadExtension(true)
+    val c = config.createConnection(s"jdbc:sqlite:$path")
+    c.setAutoCommit(false)
+    c
   }
-  override protected lazy val connectionManager: ConnectionManager[Doc] = SingleConnectionManager(config)
+
+  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
+    super.initTransaction()
+
+//    executeUpdate(s"SELECT load_extension('mod_spatialite.so');")
+  }
+
+  override protected object connectionManager extends ConnectionManager[Doc] {
+    override def getConnection(implicit transaction: Transaction[Doc]): Connection = connection
+
+    override def currentConnection(implicit transaction: Transaction[Doc]): Option[Connection] = Some(connection)
+
+    override def releaseConnection(implicit transaction: Transaction[Doc]): Unit = {}
+  }
 }
 
 object SQLiteStore extends StoreManager {

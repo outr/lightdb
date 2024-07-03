@@ -1,111 +1,115 @@
-//package benchmark.bench.impl
-//
-//import benchmark.bench.{Bench, StatusCallback}
-//import fabric.rw.RW
-//import lightdb.document.{Document, DocumentModel}
-//import lightdb.index.{Indexed, IndexedCollection, IndexerManager}
-//import lightdb.store.StoreManager
-//import lightdb.upgrade.DatabaseUpgrade
-//import lightdb.util.Unique
-//import lightdb.{Id, LightDB}
-//
-//import java.io.File
-//import java.nio.file.Path
-//import scala.collection.parallel.CollectionConverters._
-//
-//case class LightDBBench(sm: StoreManager, im: IndexerManager) extends Bench {
-//  override def name: String = s"LightDB - ${sm.getClass.getSimpleName.replace("$", "")} - ${im.getClass.getSimpleName.replace("$", "")}"
-//
-//  override def init(): Unit = {
-//    scribe.info("DB init...")
-//    DB.init()
-//    scribe.info("Initialized!")
-//  }
-//
-//  override protected def insertRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-//    (0 until RecordCount)
-//      .foreach { index =>
-//        DB.people.set(Person(
-//          name = Unique(),
-//          age = index
-//        ))
-//        status.progress.set(index + 1)
-//      }
-//    RecordCount
-//  }
-//
-//  override protected def streamRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-//    (0 until StreamIterations)
-//      .foreach { iteration =>
-//        val count = DB.people.iterator.size
-//        if (count != RecordCount) {
-//          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
-//        }
-//        status.progress.set((iteration + 1) * count)
-//      }
-//    StreamIterations * RecordCount
-//  }
-//
-//  override protected def searchEachRecord(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-//    (0 until StreamIterations)
-//      .foreach { iteration =>
-//        (0 until RecordCount)
-//          .foreach { index =>
-//            val list = DB.people.query.filter(_.age === index).search.docs.list
-//            if (list.size != 1) {
-//              scribe.warn(s"Unable to find age = $index")
-//            }
-//            if (list.head.age != index) {
-//              scribe.warn(s"${list.head.age} was not $index")
-//            }
-//            status.progress.set((iteration + 1) * (index + 1))
-//          }
-//      }
-//    StreamIterations * RecordCount
-//  }
-//
-//  override protected def searchAllRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-//    (0 until StreamIterations)
-//      .par
-//      .foreach { iteration =>
-//        val count = DB.people.query.search.docs.iterator.foldLeft(0)((count, _) => count + 1)
-//        if (count != RecordCount) {
-//          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
-//        }
-//        status.progress.set(iteration + 1)
-//      }
-//    StreamIterations * RecordCount
-//  }
-//
-//  override def size(): Long = {
-//    def recurse(file: File): Long = if (file.isDirectory) {
-//      file.listFiles().map(recurse).sum
-//    } else {
-//      file.length()
-//    }
-//    recurse(new File("db"))
-//  }
-//
-//  override def dispose(): Unit = DB.dispose()
-//
-//  object DB extends LightDB {
-//    override lazy val directory: Option[Path] = Some(Path.of(s"db/bench"))
-//
-//    val people: IndexedCollection[Person, Person.type] = collection("people", Person, im.create[Person, Person.type]())
-//
-//    override def storeManager: StoreManager = sm
-//
-//    override def upgrades: List[DatabaseUpgrade] = Nil
-//  }
-//
-//  case class Person(name: String,
-//                    age: Int,
-//                    _id: Id[Person] = Person.id()) extends Document[Person]
-//
-//  object Person extends DocumentModel[Person] with Indexed[Person] {
-//    implicit val rw: RW[Person] = RW.gen
-//
-//    val name: I[String] = index.one("name", _.name, store = true)
-//    val age: I[Int] = index.one("age", _.age, store = true)
-//  }
-//}
+package benchmark.bench.impl
+
+import benchmark.bench.{Bench, StatusCallback}
+import lightdb.collection.Collection
+import lightdb.doc.DocModel
+import lightdb.sql.{SQLConversion, SQLiteStore}
+import lightdb.store.StoreManager
+import lightdb.upgrade.DatabaseUpgrade
+import lightdb.util.Unique
+import lightdb.{Field, LightDB}
+
+import java.nio.file.Path
+import java.sql.ResultSet
+import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
+
+object LightDBBench extends Bench {
+  override def name: String = "LightDB"
+
+  override def init(): Unit = DB.init()
+
+  override protected def insertRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
+    (0 until RecordCount)
+      .foldLeft(0)((total, index) => {
+        val person = Person(
+          name = Unique(),
+          age = index,
+          id = Unique()
+        )
+        DB.people.set(person)
+        status.progress.set(index + 1)
+        total + 1
+      })
+  }
+
+  override protected def streamRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
+    (0 until StreamIterations)
+      .foldLeft(0)((total, iteration) => {
+        var count = 0
+        DB.people.iterator.foreach { person =>
+          count += 1
+        }
+        if (count != RecordCount) {
+          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
+        }
+        status.progress.set(iteration + 1)
+        total + count
+      })
+  }
+
+  override protected def searchEachRecord(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
+    var counter = 0
+    (0 until StreamIterations)
+      .foreach { iteration =>
+        (0 until RecordCount)
+          .foreach { index =>
+            val list = DB.people.query.filter(_.age === index).search.docs.iterator.toList
+            val person = list.head
+            if (person.age != index) {
+              scribe.warn(s"${person.age} was not $index")
+            }
+            if (list.size > 1) {
+              scribe.warn(s"More than one result for $index")
+            }
+            counter += 1
+            status.progress.set((iteration + 1) * (index + 1))
+          }
+      }
+    counter
+  }
+
+  override protected def searchAllRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
+    var counter = 0
+    (0 until StreamIterations)
+      .par
+      .foreach { iteration =>
+        var count = 0
+        DB.people.query.search.docs.iterator.foreach { person =>
+          count += 1
+          counter += 1
+        }
+        if (count != RecordCount) {
+          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
+        }
+        status.progress.set(iteration + 1)
+      }
+    counter
+  }
+
+  override def size(): Long = -1L
+
+  override def dispose(): Unit = DB.people.dispose()
+
+  object DB extends LightDB {
+    override lazy val directory: Option[Path] = Some(Path.of("db"))
+
+    val people: Collection[Person, Person.type] = collection("people", Person, cacheQueries = true)
+
+    override def storeManager: StoreManager = SQLiteStore
+    override def upgrades: List[DatabaseUpgrade] = Nil
+  }
+
+  case class Person(name: String, age: Int, id: String)
+
+  object Person extends DocModel[Person] with SQLConversion[Person] {
+    override def convertFromSQL(rs: ResultSet): Person = Person(
+      name = rs.getString("name"),
+      age = rs.getInt("age"),
+      id = rs.getString("id")
+    )
+
+    val name: Field[Person, String] = field("name", _.name)
+    val age: Field.Index[Person, Int] = field.index("age", _.age)
+    val id: Field.Unique[Person, String] = field.unique("id", _.id)
+  }
+}

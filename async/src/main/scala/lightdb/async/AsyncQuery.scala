@@ -2,9 +2,10 @@ package lightdb.async
 
 import cats.effect.IO
 import fabric.Json
-import lightdb.{Field, Filter, Query, SearchResults, Sort, SortDirection, Transaction}
+import lightdb.{Field, Query, SearchResults, Sort, SortDirection, Transaction}
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
+import lightdb.filter.Filter
 import lightdb.util.GroupedIterator
 
 case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],

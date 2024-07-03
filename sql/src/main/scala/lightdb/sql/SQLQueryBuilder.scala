@@ -1,10 +1,12 @@
 package lightdb.sql
 
+import fabric.Json
+import fabric.io.JsonFormatter
 import lightdb.Id
 import lightdb.collection.Collection
 import lightdb.sql.SQLQueryBuilder.setValue
 
-import java.sql.{Connection, PreparedStatement, ResultSet}
+import java.sql.{Connection, PreparedStatement, ResultSet, Types}
 
 case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
                                 transaction: SQLTransaction[Doc],
@@ -102,9 +104,15 @@ case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
 
 object SQLQueryBuilder {
   def setValue(ps: PreparedStatement, index: Int, value: Any): Unit = value match {
+    case null => ps.setNull(index + 1, Types.NULL)
     case id: Id[_] => ps.setString(index + 1, id.value)
     case s: String => ps.setString(index + 1, s)
+    case b: Boolean => ps.setBoolean(index + 1, b)
     case i: Int => ps.setInt(index + 1, i)
+    case l: Long => ps.setLong(index + 1, l)
+    case f: Float => ps.setFloat(index + 1, f)
+    case d: Double => ps.setDouble(index + 1, d)
+    case json: Json => ps.setString(index + 1, JsonFormatter.Compact(json))
     case _ => throw new UnsupportedOperationException(s"Unsupported value: $value (${value.getClass.getName})")
   }
 }
