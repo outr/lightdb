@@ -6,10 +6,12 @@ import fabric.io.JsonParser
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
+import lightdb.distance._
 import lightdb.doc.{DocModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
-import lightdb.sql.connect.{ConnectionManager, SQLConfig}
+import lightdb.spatial.DistanceAndDoc
+import lightdb.sql.connect.ConnectionManager
 import lightdb.store.Store
 import lightdb.{Field, Query, SearchResults, Sort, SortDirection, Transaction}
 
@@ -17,20 +19,29 @@ import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
 trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
-  private var collection: Collection[Doc, Model] = _
+  private var _collection: Collection[Doc, Model] = _
+  protected final def collection: Collection[Doc, Model] = _collection
 
   protected def connectionManager: ConnectionManager[Doc]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
-    this.collection = collection
+    this._collection = collection
     collection.transaction { implicit transaction =>
       initTransaction()
     }
   }
 
+  protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
+    executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.name}(${collection.model.fields.filterNot(f => f.rw.definition.className.contains("lightdb.spatial.GeoPoint")).map(_.name).mkString(", ")})")
+  }
+
+  protected def addColumn(field: Field[Doc, _])(implicit transaction: Transaction[Doc]): Unit = {
+    scribe.info(s"Adding column ${collection.name}.${field.name}")
+    executeUpdate(s"ALTER TABLE ${collection.name} ADD COLUMN ${field.name}")
+  }
+
   protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
-    // Create the table
-    executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.name}(${collection.model.fields.map(_.name).mkString(", ")})")
+    createTable()
 
     // Add/Remove columns
     val existingColumns = columns(connectionManager.getConnection)
@@ -43,10 +54,10 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       }
     }
     // Add columns
-    fieldNames.foreach { name =>
+    collection.model.fields.foreach { field =>
+      val name = field.name
       if (!existingColumns.contains(name)) {
-        scribe.info(s"Adding column ${collection.name}.$name.")
-        executeUpdate(s"ALTER TABLE ${collection.name} ADD COLUMN $name")
+        addColumn(field)
       }
     }
 
@@ -77,8 +88,12 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = transaction.close()
 
-  private lazy val insertSQL: String =
-    s"INSERT OR REPLACE INTO ${collection.name}(${collection.model.fields.map(_.name).mkString(", ")}) VALUES(${collection.model.fields.map(_ => "?").mkString(", ")})"
+  protected def field2Value(field: Field[Doc, _]): String = "?"
+
+  private lazy val insertSQL: String = {
+    val values = collection.model.fields.map(field2Value)
+    s"INSERT OR REPLACE INTO ${collection.name}(${collection.model.fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+  }
 
   private def preparedStatement(implicit transaction: Transaction[Doc]): PreparedStatement = transaction.synchronized {
     if (transaction.ps == null) {
@@ -188,6 +203,11 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
           MaterializedIndex[Doc, Model](json, collection.model).asInstanceOf[V]
         case Conversion.Json(fields) =>
           jsonFromFields(fields).asInstanceOf[V]
+        case Conversion.Distance(field, _, _, _) =>
+          val fieldName = s"${field.name}Distance"
+          val distance = rs.getDouble(fieldName)
+          val doc = getDoc(rs)
+          DistanceAndDoc(doc, distance.meters).asInstanceOf[V]
       }
     }
   }
@@ -204,7 +224,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     case _ => throw new RuntimeException(s"Unsupported object: $obj (${obj.getClass.getName})")
   }
 
-  private def toJson(value: Any, dt: DefType): Json = obj2Value(value) match {
+  protected def toJson(value: Any, dt: DefType): Json = obj2Value(value) match {
     case null => Null
     case s: String if dt == DefType.Str => str(s)
     case s: String if dt == DefType.Json => JsonParser(s)
@@ -218,25 +238,32 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
+  protected def fieldNamesForDistance(conversion: Conversion.Distance): List[String] =
+    throw new UnsupportedOperationException("Distance conversions not supported")
+
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[V])
                           (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
-    val fields = conversion match {
-      case Conversion.Value(field) => List(field)
-      case Conversion.Doc | Conversion.Converted(_) => collection.model.fields
-      case Conversion.Materialized(fields) => fields
-      case Conversion.Json(fields) => fields
+    val fieldNames = conversion match {
+      case Conversion.Value(field) => List(field.name)
+      case Conversion.Doc | Conversion.Converted(_) => collection.model.fields.map(_.name)
+      case Conversion.Materialized(fields) => fields.map(_.name)
+      case Conversion.Json(fields) => fields.map(_.name)
+      case d: Conversion.Distance => fieldNamesForDistance(d)
     }
     val b = SQLQueryBuilder(
       collection = collection,
       transaction = transaction,
-      fields = fields.map(f => SQLPart(f.name)),
+      fields = fieldNames.map(name => SQLPart(name)),
       filters = query.filter.map(filter2Part).toList,
       group = Nil,
       having = Nil,
       sort = query.sort.collect {
         case Sort.ByField(index, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-          SQLPart(s"${index.name} $dir", Nil)
+          SQLPart(s"${index.name} $dir")
+        case Sort.ByDistance(field, _, direction) =>
+          val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+          SQLPart(s"${field.name}Distance $dir")
       },
       limit = query.limit,
       offset = query.offset
@@ -290,9 +317,9 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct.map(s => SQLPart(s, Nil))
     val having = query.filter.map(af2Part).toList
     val sort = (query.sort ::: query.query.sort).collect {
-      case Sort.ByField(index, direction) =>
+      case Sort.ByField(field, direction) =>
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-        SQLPart(s"${index.name} $dir", Nil)
+        SQLPart(s"${field.name} $dir", Nil)
     }
     val b = SQLQueryBuilder(
       collection = collection,
@@ -339,6 +366,9 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     }
   }
 
+  protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
+    throw new UnsupportedOperationException("Distance filtering not supported in SQL!")
+
   private def filter2Part(f: Filter[Doc]): SQLPart = f match {
     case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(f.value))
     case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList)
@@ -358,7 +388,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: Filter.Parsed[Doc, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
-    case f: Filter.Distance[Doc] => throw new UnsupportedOperationException("Distance not supported in SQL!")
+    case f: Filter.Distance[Doc] => distanceFilter(f)
   }
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {
@@ -412,6 +442,5 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     }
   }
 
-  override def dispose(): Unit = {
-  }
+  override def dispose(): Unit = connectionManager.dispose()
 }

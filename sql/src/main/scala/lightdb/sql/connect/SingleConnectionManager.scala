@@ -16,4 +16,9 @@ case class SingleConnectionManager[Doc](config: SQLConfig) extends ConnectionMan
   override def currentConnection(implicit transaction: Transaction[Doc]): Option[Connection] = Some(connection)
 
   override def releaseConnection(implicit transaction: Transaction[Doc]): Unit = {}
+
+  override def dispose(): Unit = {
+    connection.commit()
+    connection.close()
+  }
 }

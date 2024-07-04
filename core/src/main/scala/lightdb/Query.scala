@@ -3,8 +3,11 @@ package lightdb
 import fabric.Json
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
+import lightdb.distance.Distance
 import lightdb.doc.DocModel
 import lightdb.filter.Filter
+import lightdb.materialized.MaterializedIndex
+import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 import lightdb.util.GroupedIterator
 
 case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],
@@ -42,6 +45,33 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
       apply(collection.store.Conversion.Json(fields.toList))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, T] =
       apply(collection.store.Conversion.Converted(f))
+    def materialized(f: Model => List[Field[Doc, _]])
+                    (implicit transaction: Transaction[Doc]): SearchResults[Doc, MaterializedIndex[Doc, Model]] = {
+      val fields = f(collection.model)
+      apply(collection.store.Conversion.Materialized(fields))
+    }
+    def distance(f: Model => Field[Doc, GeoPoint],
+                 from: GeoPoint,
+                 sort: Boolean = true,
+                 radius: Option[Distance] = None)
+                (implicit transaction: Transaction[Doc]): SearchResults[Doc, DistanceAndDoc[Doc]] = {
+      val field = f(collection.model)
+      var q = Query.this
+      if (sort) {
+        q = q.clearSort.sort(Sort.ByDistance(field, from))
+      }
+      radius.foreach { r =>
+        q = q.filter(_ => field.distance(from, r))
+      }
+      q.distanceSearch(field, from, sort, radius)
+    }
+  }
+
+  protected def distanceSearch(field: Field[Doc, GeoPoint],
+                               from: GeoPoint,
+                               sort: Boolean, radius: Option[Distance])
+                              (implicit transaction: Transaction[Doc]): SearchResults[Doc, DistanceAndDoc[Doc]] = {
+    search(collection.store.Conversion.Distance(field, from, sort, radius))
   }
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
