@@ -40,4 +40,6 @@ case class HikariConnectionManager[Doc](config: SQLConfig) extends ConnectionMan
 
   override def releaseConnection(implicit transaction: Transaction[Doc]): Unit =
     currentConnection.foreach(closeConnection)
+
+  override def dispose(): Unit = dataSource.close()
 }

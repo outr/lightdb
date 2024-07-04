@@ -2,22 +2,34 @@ package lightdb.distance
 
 import perfolation.double2Implicits
 
-case class Distance(value: Double, unit: DistanceUnit) {
-  def to(unit: DistanceUnit): Distance = {
-    val meters = value * this.unit.asMeters
-    val v = meters / unit.asMeters
-    Distance(v, unit)
-  }
-  def toKilometers: Distance = to(DistanceUnit.Kilometers)
-  def toMeters: Distance = to(DistanceUnit.Meters)
-  def toCentimeters: Distance = to(DistanceUnit.Centimeters)
-  def toMillimeters: Distance = to(DistanceUnit.Millimeters)
-  def toMicrometers: Distance = to(DistanceUnit.Micrometers)
-  def toNanometers: Distance = to(DistanceUnit.Nanometers)
-  def toMiles: Distance = to(DistanceUnit.Miles)
-  def toYards: Distance = to(DistanceUnit.Yards)
-  def toFeet: Distance = to(DistanceUnit.Feet)
-  def toInches: Distance = to(DistanceUnit.Inches)
-  def toNauticalMiles: Distance = to(DistanceUnit.NauticalMiles)
-  override def toString: String = s"${value.f(f = 4)} ${unit.abbreviation}"
+case class Distance(valueInMeters: Double) extends AnyVal {
+  def to(unit: DistanceUnit): Double = valueInMeters / unit.asMeters
+  def toKilometers: Double = to(DistanceUnit.Kilometers)
+  def toMeters: Double = to(DistanceUnit.Meters)
+  def toCentimeters: Double = to(DistanceUnit.Centimeters)
+  def toMillimeters: Double = to(DistanceUnit.Millimeters)
+  def toMicrometers: Double = to(DistanceUnit.Micrometers)
+  def toNanometers: Double = to(DistanceUnit.Nanometers)
+  def toMiles: Double = to(DistanceUnit.Miles)
+  def toYards: Double = to(DistanceUnit.Yards)
+  def toFeet: Double = to(DistanceUnit.Feet)
+  def toInches: Double = to(DistanceUnit.Inches)
+  def toNauticalMiles: Double = to(DistanceUnit.NauticalMiles)
+
+  def km: Double = toKilometers
+  def m: Double = toMeters
+  def cm: Double = toCentimeters
+  def mm: Double = toMillimeters
+  def μm: Double = toMicrometers
+  def nm: Double = toNanometers
+  def mi: Double = toMiles
+  def yd: Double = toYards
+  def ft: Double = toFeet
+  def in: Double = toInches
+  def NM: Double = toNauticalMiles
+
+  def format(unit: DistanceUnit, minimumFractionDigits: Int = 2): String =
+    s"${to(unit).f(f = minimumFractionDigits)} ${unit.abbreviation}"
+
+  override def toString: String = format(DistanceUnit.Meters)
 }

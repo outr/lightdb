@@ -4,6 +4,7 @@ import fabric.Json
 import fabric.io.JsonFormatter
 import lightdb.Id
 import lightdb.collection.Collection
+import lightdb.spatial.GeoPoint
 import lightdb.sql.SQLQueryBuilder.setValue
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Types}
@@ -79,6 +80,7 @@ case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
     }
     val args = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
     val sql = b.toString()
+    scribe.debug(s"Executing Query: $sql (${args.mkString(", ")})")
     val ps = if (collection.cacheQueries) {
       transaction.synchronized {
         transaction.cache.get(sql) match {
@@ -113,6 +115,7 @@ object SQLQueryBuilder {
     case f: Float => ps.setFloat(index + 1, f)
     case d: Double => ps.setDouble(index + 1, d)
     case json: Json => ps.setString(index + 1, JsonFormatter.Compact(json))
+    case point: GeoPoint => ps.setString(index + 1, s"POINT(${point.longitude} ${point.latitude})")
     case _ => throw new UnsupportedOperationException(s"Unsupported value: $value (${value.getClass.getName})")
   }
 }

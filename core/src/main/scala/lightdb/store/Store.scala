@@ -4,6 +4,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
+import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 import lightdb.{Field, Query, SearchResults, Transaction}
 
 abstract class Store[Doc, Model <: DocModel[Doc]] {
@@ -41,5 +42,9 @@ abstract class Store[Doc, Model <: DocModel[Doc]] {
     case class Json(fields: List[Field[Doc, _]]) extends Conversion[fabric.Json]
     case class Materialized(fields: List[Field[Doc, _]]) extends Conversion[MaterializedIndex[Doc, Model]]
     case class Converted[T](f: Doc => T) extends Conversion[T]
+    case class Distance(field: Field[Doc, GeoPoint],
+                        from: GeoPoint,
+                        sort: Boolean,
+                        radius: Option[lightdb.distance.Distance]) extends Conversion[DistanceAndDoc[Doc]]
   }
 }

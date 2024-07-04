@@ -10,4 +10,6 @@ trait ConnectionManager[Doc] {
   def currentConnection(implicit transaction: Transaction[Doc]): Option[Connection]
 
   def releaseConnection(implicit transaction: Transaction[Doc]): Unit
+
+  def dispose(): Unit
 }

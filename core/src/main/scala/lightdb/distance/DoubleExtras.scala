@@ -1,7 +1,7 @@
 package lightdb.distance
 
 case class DoubleExtras(d: Double) extends AnyVal {
-  def to(unit: DistanceUnit): Distance = Distance(d, unit)
+  def to(unit: DistanceUnit): Distance = Distance(d * unit.asMeters)
 
   def km: Distance = to(DistanceUnit.Kilometers)
   def m: Distance = to(DistanceUnit.Meters)
