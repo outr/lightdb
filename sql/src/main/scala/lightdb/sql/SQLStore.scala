@@ -3,10 +3,10 @@ package lightdb.sql
 import fabric._
 import fabric.define.DefType
 import fabric.io.JsonParser
-import fabric.rw.{Asable, Convertible}
+import fabric.rw._
 import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
-import lightdb.distance._
+import lightdb.distance.Distance
 import lightdb.doc.{DocModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
@@ -207,7 +207,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
           val fieldName = s"${field.name}Distance"
           val distance = rs.getDouble(fieldName)
           val doc = getDoc(rs)
-          DistanceAndDoc(doc, distance.meters).asInstanceOf[V]
+          DistanceAndDoc(doc, Distance(distance)).asInstanceOf[V]
       }
     }
   }
