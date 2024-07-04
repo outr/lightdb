@@ -1,6 +1,6 @@
 package lightdb
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
 import lightdb.store.{Store, StoreManager}

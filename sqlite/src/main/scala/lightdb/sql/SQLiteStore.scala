@@ -1,6 +1,6 @@
 package lightdb.sql
 
-import fabric.{Json, obj}
+import fabric.{Json, num, obj}
 import fabric.define.DefType
 import lightdb.sql.connect.ConnectionManager
 import lightdb.{Field, LightDB, Transaction}
@@ -44,8 +44,8 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
   override protected def toJson(value: Any, dt: DefType): Json = if (dt.className.contains("lightdb.spatial.GeoPoint")) {
     value.toString match {
       case PointRegex(longitude, latitude) => obj(
-        "latitude" -> latitude.toDouble,
-        "longitude" -> longitude.toDouble
+        "latitude" -> num(latitude.toDouble),
+        "longitude" -> num(longitude.toDouble)
       )
     }
   } else {

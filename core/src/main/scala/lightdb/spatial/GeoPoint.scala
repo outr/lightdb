@@ -1,6 +1,6 @@
 package lightdb.spatial
 
-import fabric.rw.RW
+import fabric.rw._
 
 case class GeoPoint(latitude: Double, longitude: Double)
 

@@ -1,6 +1,7 @@
 package lightdb.doc
 
 import lightdb.Field
+import fabric.rw._
 
 trait RecordDocumentModel[Doc <: RecordDocument[Doc]] extends DocumentModel[Doc] {
   protected def indexCreated: Boolean = false
