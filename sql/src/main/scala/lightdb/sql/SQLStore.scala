@@ -49,18 +49,18 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
 
     // Add/Remove columns
     val existingColumns = columns(connection)
-    val fieldNames = collection.model.fields.map(_.name).toSet
+    val fieldNames = collection.model.fields.map(_.name.toLowerCase).toSet
     // Drop columns
     existingColumns.foreach { name =>
-      if (!fieldNames.contains(name)) {
-        scribe.info(s"Removing column ${collection.name}.$name.")
+      if (!fieldNames.contains(name.toLowerCase)) {
+        scribe.info(s"Removing column ${collection.name}.$name (existing: ${existingColumns.mkString(", ")}, expected: ${fieldNames.mkString(", ")}).")
         executeUpdate(s"ALTER TABLE ${collection.name} DROP COLUMN $name")
       }
     }
     // Add columns
     collection.model.fields.foreach { field =>
       val name = field.name
-      if (!existingColumns.contains(name)) {
+      if (!existingColumns.contains(name.toLowerCase)) {
         addColumn(field)
       }
     }
@@ -128,9 +128,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val ps = preparedStatement
     collection.model.fields.zipWithIndex.foreach {
-      case (field, index) =>
-        val value = field.get(doc)
-        SQLArg.FieldArg(doc, field).set(ps, index + 1)
+      case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
     }
     ps.addBatch()
     transaction.batch += 1
@@ -199,7 +197,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   private def getDoc(rs: ResultSet): Doc = collection.model match {
     case c: JsonConversion[Doc] =>
       val values = collection.model.fields.map { field =>
-        field.name -> toJson(rs.getObject(field.name), field.rw.definition)
+        field.name -> toJson(rs.getObject(field.name), field.rw)
       }
       c.convertFromJson(obj(values: _*))
     case c: SQLConversion[Doc] => c.convertFromSQL(rs)
@@ -215,9 +213,9 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
 
     override def next(): V = {
       def jsonFromFields(fields: List[Field[Doc, _]]): Json =
-        obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw.definition)): _*)
+        obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
       conversion match {
-        case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw.definition).as[V](field.rw)
+        case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
         case Conversion.Doc => getDoc(rs).asInstanceOf[V]
         case Conversion.Converted(c) => c(getDoc(rs))
         case Conversion.Materialized(fields) =>
@@ -246,11 +244,11 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     case _ => throw new RuntimeException(s"Unsupported object: $obj (${obj.getClass.getName})")
   }
 
-  protected def toJson(value: Any, dt: DefType): Json = obj2Value(value) match {
+  protected def toJson(value: Any, rw: RW[_]): Json = obj2Value(value) match {
     case null => Null
-    case s: String if dt == DefType.Str => str(s)
-    case s: String if dt == DefType.Json => JsonParser(s)
-    case s: String => throw new RuntimeException(s"Unsupported: $s / $dt")
+    case s: String if rw.definition == DefType.Str => str(s)
+    case s: String if rw.definition == DefType.Json => JsonParser(s)
+    case s: String => JsonParser(s)
     case b: Boolean => bool(b)
     case i: Int => num(i)
     case l: Long => num(l)
@@ -382,7 +380,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     }
     createStream[MaterializedAggregate[Doc, Model]] { rs =>
       val json = obj(query.functions.map { f =>
-        f.name -> toJson(rs.getObject(f.name), f.tRW.definition)
+        f.name -> toJson(rs.getObject(f.name), f.tRW)
       }: _*)
       MaterializedAggregate[Doc, Model](json, collection.model)
     }

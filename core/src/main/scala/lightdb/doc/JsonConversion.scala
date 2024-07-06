@@ -4,7 +4,7 @@ import fabric.Json
 import fabric.rw.{Asable, RW}
 
 trait JsonConversion[Doc] extends DocModel[Doc] {
-  implicit val rw: RW[Doc]
+  implicit def rw: RW[Doc]
 
   def convertFromJson(json: Json): Doc = json.as[Doc]
 

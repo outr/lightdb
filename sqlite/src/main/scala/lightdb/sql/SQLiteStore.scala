@@ -2,6 +2,7 @@ package lightdb.sql
 
 import fabric.{Json, num, obj}
 import fabric.define.DefType
+import fabric.rw.RW
 import lightdb.sql.connect.ConnectionManager
 import lightdb.{Field, LightDB, Transaction}
 import lightdb.doc.DocModel
@@ -46,7 +47,7 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
     super.createTable()
   }
 
-  override protected def toJson(value: Any, dt: DefType): Json = if (dt.className.contains("lightdb.spatial.GeoPoint")) {
+  override protected def toJson(value: Any, rw: RW[_]): Json = if (rw.definition.className.contains("lightdb.spatial.GeoPoint")) {
     value.toString match {
       case PointRegex(longitude, latitude) => obj(
         "latitude" -> num(latitude.toDouble),
@@ -54,7 +55,7 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
       )
     }
   } else {
-    super.toJson(value, dt)
+    super.toJson(value, rw)
   }
 
   override protected def field2Value(field: Field[Doc, _]): String = if (field.rw.definition.className.contains("lightdb.spatial.GeoPoint")) {
