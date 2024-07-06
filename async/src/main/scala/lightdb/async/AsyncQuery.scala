@@ -2,9 +2,9 @@ package lightdb.async
 
 import cats.effect.IO
 import fabric.Json
-import lightdb.{Field, Query, SearchResults, Sort, SortDirection, Transaction}
+import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection, Transaction}
 import lightdb.collection.Collection
-import lightdb.doc.DocModel
+import lightdb.doc.{DocModel, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.util.GroupedIterator
 
@@ -47,14 +47,29 @@ case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, M
       }
 
     def docs(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Doc]] = apply(collection.store.Conversion.Doc)
-    def value[F](field: Field[Doc, F])
+    def value[F](f: Model => Field[Doc, F])
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, F]] =
-      apply(collection.store.Conversion.Value(field))
-    def json(fields: Field[Doc, _]*)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Json]] =
-      apply(collection.store.Conversion.Json(fields.toList))
+      apply(collection.store.Conversion.Value(f(collection.model)))
+    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[AsyncSearchResults[Doc, Id[Doc]]] =
+      value(m => ev(m)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]])
+    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Json]] =
+      apply(collection.store.Conversion.Json(f(collection.model)))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, T]] =
       apply(collection.store.Conversion.Converted(f))
   }
+
+  def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] = {
+    fs2.Stream.force(search.docs.map(_.stream))
+  }
+
+  def toList(implicit transaction: Transaction[Doc]): IO[List[Doc]] = stream.compile.toList
+
+  def first(implicit transaction: Transaction[Doc]): IO[Option[Doc]] = stream.take(1).compile.last
+
+  def one(implicit transaction: Transaction[Doc]): IO[Doc] = stream.take(1).compile.lastOrError
+
+  def count(implicit transaction: Transaction[Doc]): IO[Int] = copy(limit = Some(1), countTotal = true)
+    .search.docs.map(_.total.get)
 
   def grouped[F](f: Model => Field[Doc, F],
                  direction: SortDirection = SortDirection.Ascending)

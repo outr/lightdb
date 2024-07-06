@@ -11,7 +11,7 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
                                                    model: Model,
                                                    store: Store[Doc, Model],
                                                    maxInsertBatch: Int = 1_000_000,
-                                                   cacheQueries: Boolean = false) extends Initializable {
+                                                   cacheQueries: Boolean = false) extends Initializable { collection =>
   override protected def initialize(): Unit = {
     store.init(this)
 
@@ -43,6 +43,56 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
     def release(transaction: Transaction[Doc]): Unit = store.releaseTransaction(transaction)
   }
 
+  /**
+   * Convenience feature for simple one-off operations removing the need to manually create a transaction around it.
+   */
+  object t {
+    def set(doc: Doc): Doc = transaction { implicit transaction =>
+      collection.set(doc)
+    }
+
+    def set(docs: Seq[Doc]): Seq[Doc] = transaction { implicit transaction =>
+      collection.set(docs)
+    }
+
+    def get[V](f: Model => (Field.Unique[Doc, V], V)): Option[Doc] = transaction { implicit transaction =>
+      collection.get(f)
+    }
+
+    def apply[V](f: Model => (Field.Unique[Doc, V], V)): Doc = transaction { implicit transaction =>
+      collection(f)
+    }
+
+    def get(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): Option[Doc] = transaction { implicit transaction =>
+      collection.get(id)
+    }
+
+    def apply(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): Doc = transaction { implicit transaction =>
+      collection(id)
+    }
+
+    def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
+              (f: Option[Doc] => Option[Doc]): Option[Doc] = transaction { implicit transaction =>
+      collection.modify(id, lock, deleteOnNone)(f)
+    }
+
+    def delete[V](f: Model => (Field.Unique[Doc, V], V)): Boolean = transaction { implicit transaction =>
+      collection.delete(f)
+    }
+
+    def delete(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): Boolean = transaction { implicit transaction =>
+      collection.delete(id)
+    }
+
+    def count: Int = transaction { implicit transaction =>
+      collection.count
+    }
+
+    def truncate(): Int = transaction { implicit transaction =>
+      collection.truncate()
+    }
+  }
+
   def set(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
     store.set(doc)
     doc
@@ -59,6 +109,15 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
     get[V](f).getOrElse {
       val (field, value) = f(model)
       throw DocNotFoundException(name, field.name, value)
+    }
+
+  def get(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Option[Doc] = {
+    store.get(ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]], id)
+  }
+
+  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Doc =
+    store.get(ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]], id).getOrElse {
+      throw DocNotFoundException(name, "_id", id)
     }
 
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
@@ -79,6 +138,10 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
   def delete[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
     val (field, value) = f(model)
     store.delete(field, value)
+  }
+
+  def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Boolean = {
+    store.delete(ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]], id)
   }
 
   def count(implicit transaction: Transaction[Doc]): Int = store.count
