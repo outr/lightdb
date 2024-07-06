@@ -31,11 +31,16 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
     c
   }
 
-  override protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
+  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
     val file = Files.createTempFile("mod_spatialite", ".so")
     val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
     Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
     executeUpdate(s"SELECT load_extension('${file.toAbsolutePath.toString}');")
+
+    super.initTransaction()
+  }
+
+  override protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
     executeUpdate("SELECT InitSpatialMetaData()")
 
     super.createTable()
@@ -65,7 +70,7 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
   }
 
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
-    SQLPart(s"ST_Distance(${f.field.name}, GeomFromText(?, 4326), true) <= ?", List(f.from, f.radius.m))
+    SQLPart(s"ST_Distance(${f.field.name}, GeomFromText(?, 4326), true) <= ?", List(SQLArg.GeoPointArg(f.from), SQLArg.DoubleArg(f.radius.m)))
 
   override protected def addColumn(field: Field[Doc, _])(implicit transaction: Transaction[Doc]): Unit = {
     if (field.rw.definition.className.contains("lightdb.spatial.GeoPoint")) {

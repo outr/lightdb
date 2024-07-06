@@ -41,10 +41,14 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   }
 
   protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
-    createTable()
+    val connection = connectionManager.getConnection
+    val existingTables = tables(connection)
+    if (!existingTables.contains(collection.name)) {
+      createTable()
+    }
 
     // Add/Remove columns
-    val existingColumns = columns(connectionManager.getConnection)
+    val existingColumns = columns(connection)
     val fieldNames = collection.model.fields.map(_.name).toSet
     // Drop columns
     existingColumns.foreach { name =>
@@ -68,6 +72,24 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
         executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
       case index: Field.Unique[Doc, _] =>
         executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
+    }
+  }
+
+  private def tables(connection: Connection): Set[String] = {
+    val ps = connection.prepareStatement(s"SELECT name FROM sqlite_master WHERE type = 'table';")
+    try {
+      val rs = ps.executeQuery()
+      try {
+        var set = Set.empty[String]
+        while (rs.next()) {
+          set += rs.getString("name")
+        }
+        set
+      } finally {
+        rs.close
+      }
+    } finally {
+      ps.close()
     }
   }
 
@@ -108,7 +130,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     collection.model.fields.zipWithIndex.foreach {
       case (field, index) =>
         val value = field.get(doc)
-        SQLQueryBuilder.setValue(ps, index, value)
+        SQLArg.FieldArg(doc, field).set(ps, index + 1)
     }
     ps.addBatch()
     transaction.batch += 1
@@ -148,7 +170,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     val connection = connectionManager.getConnection
     val ps = connection.prepareStatement(s"DELETE FROM ${collection.name} WHERE ${field.name} = ?")
     try {
-      SQLQueryBuilder.setValue(ps, 0, value)
+      SQLArg.FieldArg(field, value).set(ps, 1)
       ps.executeUpdate() > 0
     } finally {
       ps.close()
@@ -370,21 +392,21 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     throw new UnsupportedOperationException("Distance filtering not supported in SQL!")
 
   private def filter2Part(f: Filter[Doc]): SQLPart = f match {
-    case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(f.value))
-    case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList)
+    case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
+    case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
     case f: Filter.Combined[Doc] =>
       val parts = f.filters.map(f => filter2Part(f))
       SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
     case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(from, to))
-      case (None, Some(to)) => SQLPart(s"${f.field.name} <= ?", List(to))
-      case (Some(from), None) => SQLPart(s"${f.field.name} >= ?", List(from))
+      case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
+      case (None, Some(to)) => SQLPart(s"${f.field.name} <= ?", List(SQLArg.LongArg(to)))
+      case (Some(from), None) => SQLPart(s"${f.field.name} >= ?", List(SQLArg.LongArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: Filter.RangeDouble[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(from, to))
-      case (None, Some(to)) => SQLPart(s"${f.field.name} <= ?", List(to))
-      case (Some(from), None) => SQLPart(s"${f.field.name} >= ?", List(from))
+      case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
+      case (None, Some(to)) => SQLPart(s"${f.field.name} <= ?", List(SQLArg.DoubleArg(to)))
+      case (Some(from), None) => SQLPart(s"${f.field.name} >= ?", List(SQLArg.DoubleArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: Filter.Parsed[Doc, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
@@ -392,21 +414,21 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   }
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {
-    case f: AggregateFilter.Equals[Doc, _] => SQLPart(s"${f.name} = ?", List(f.getJson))
-    case f: AggregateFilter.In[Doc, _] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.getJson)
+    case f: AggregateFilter.Equals[Doc, _] => SQLPart(s"${f.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
+    case f: AggregateFilter.In[Doc, _] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
     case f: AggregateFilter.Combined[Doc] =>
       val parts = f.filters.map(f => af2Part(f))
       SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
     case f: AggregateFilter.RangeLong[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(from.json, to.json))
-      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(to.json))
-      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(from.json))
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(SQLArg.LongArg(to)))
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(SQLArg.LongArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: AggregateFilter.RangeDouble[_] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(from.json, to.json))
-      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(to.json))
-      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(from.json))
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(SQLArg.DoubleArg(to)))
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(SQLArg.DoubleArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: AggregateFilter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")

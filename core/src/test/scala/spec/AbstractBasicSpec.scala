@@ -77,7 +77,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "stream the ids in the database" in {
       DB.people.transaction { implicit transaction =>
-        val ids = DB.people.query.search.value(Person._id).iterator.toList.toSet
+        val ids = DB.people.query.search.id.iterator.toList.toSet
         ids should be(names.map(_._id).toSet)
       }
     }
@@ -105,7 +105,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "search by age range" in {
       DB.people.transaction { implicit transaction =>
-        val ids = DB.people.query.filter(_.age BETWEEN 19 -> 22).search.value(Person._id).list
+        val ids = DB.people.query.filter(_.age BETWEEN 19 -> 22).search.value(_._id).list
         ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
       }
     }
