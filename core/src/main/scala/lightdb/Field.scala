@@ -9,8 +9,8 @@ import lightdb.filter.{Filter, FilterSupport}
 import lightdb.materialized.Materializable
 import lightdb.spatial.GeoPoint
 
-sealed trait Field[Doc, V] extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
-  implicit def rw: RW[V]
+sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
+  implicit def rw: RW[V] = getRW
 
   def get: Doc => V
 
@@ -48,9 +48,9 @@ sealed trait Field[Doc, V] extends FilterSupport[V, Doc, Filter[Doc]] with Aggre
 }
 
 object Field {
-  case class Basic[Doc, V](name: String, get: Doc => V)(implicit val rw: RW[V]) extends Field[Doc, V]
-  case class Index[Doc, V](name: String, get: Doc => V)(implicit val rw: RW[V]) extends Field[Doc, V]
-  case class Unique[Doc, V](name: String, get: Doc => V)(implicit val rw: RW[V]) extends Field[Doc, V]
+  case class Basic[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
+  case class Index[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
+  case class Unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
 
   def string2Json(s: String, definition: DefType): Json = definition match {
     case DefType.Str => str(s)
