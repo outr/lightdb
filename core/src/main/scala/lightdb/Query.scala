@@ -4,7 +4,7 @@ import fabric.Json
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
-import lightdb.doc.DocModel
+import lightdb.doc.{DocModel, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, GeoPoint}
@@ -38,11 +38,13 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
     )
 
     def docs(implicit transaction: Transaction[Doc]): SearchResults[Doc, Doc] = apply(collection.store.Conversion.Doc)
-    def value[F](field: Field[Doc, F])
+    def value[F](f: Model => Field[Doc, F])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, F] =
-      apply(collection.store.Conversion.Value(field))
-    def json(fields: Field[Doc, _]*)(implicit transaction: Transaction[Doc]): SearchResults[Doc, Json] =
-      apply(collection.store.Conversion.Json(fields.toList))
+      apply(collection.store.Conversion.Value(f(collection.model)))
+    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): SearchResults[Doc, Id[Doc]] =
+      value(m => ev(m)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]])
+    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): SearchResults[Doc, Json] =
+      apply(collection.store.Conversion.Json(f(collection.model)))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, T] =
       apply(collection.store.Conversion.Converted(f))
     def materialized(f: Model => List[Field[Doc, _]])
@@ -66,6 +68,15 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
       q.distanceSearch(field, from, sort, radius)
     }
   }
+
+  def toList(implicit transaction: Transaction[Doc]): List[Doc] = search.docs.list
+
+  def first(implicit transaction: Transaction[Doc]): Option[Doc] = search.docs.iterator.nextOption()
+
+  def one(implicit transaction: Transaction[Doc]): Doc = first.getOrElse(throw new NullPointerException("No results"))
+
+  def count(implicit transaction: Transaction[Doc]): Int = copy(limit = Some(1), countTotal = true)
+    .search.docs.total.get
 
   protected def distanceSearch(field: Field[Doc, GeoPoint],
                                from: GeoPoint,

@@ -60,9 +60,14 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         DB.people.set(names) should not be None
       }
     }
-    "retrieve the first record by id" in {
+    "retrieve the first record by _id -> id" in {
       DB.people.transaction { implicit transaction =>
         DB.people(_._id -> adam._id) should be(adam)
+      }
+    }
+    "retrieve the first record by id" in {
+      DB.people.transaction { implicit transaction =>
+        DB.people(adam._id) should be(adam)
       }
     }
     "count the records in the database" in {
