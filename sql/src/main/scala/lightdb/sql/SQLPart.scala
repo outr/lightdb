@@ -1,3 +1,3 @@
 package lightdb.sql
 
-case class SQLPart(sql: String, args: List[Any] = Nil)
+case class SQLPart(sql: String, args: List[SQLArg] = Nil)
