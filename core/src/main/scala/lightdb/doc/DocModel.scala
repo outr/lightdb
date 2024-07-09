@@ -6,6 +6,10 @@ import lightdb.Field
 import scala.language.implicitConversions
 
 trait DocModel[Doc] {
+  type F[V] = Field[Doc, V]
+  type I[V] = Field.Index[Doc, V]
+  type U[V] = Field.Unique[Doc, V]
+
   def map2Doc(map: Map[String, Any]): Doc
 
   private var _fields = List.empty[Field[Doc, _]]

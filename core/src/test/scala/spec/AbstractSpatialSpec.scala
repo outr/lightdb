@@ -87,7 +87,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   object DB extends LightDB {
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people: Collection[Person, Person.type] = collection("people", Person)
+    val people: Collection[Person, Person.type] = collection(Person)
 
     override def storeManager: StoreManager = spec.storeManager
 
@@ -102,8 +102,8 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: Field[Person, String] = field("name", _.name)
-    val age: Field[Person, Int] = field("age", _.age)
-    val point: Field.Index[Person, GeoPoint] = field.index("point", _.point)
+    val name: F[String] = field("name", _.name)
+    val age: F[Int] = field("age", _.age)
+    val point: I[GeoPoint] = field.index("point", _.point)
   }
 }

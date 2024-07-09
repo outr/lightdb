@@ -179,7 +179,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-    val people: Collection[Person, Person.type] = collection("people", Person)
+    val people: Collection[Person, Person.type] = collection(Person)
 
     override def storeManager: StoreManager = spec.storeManager
 
@@ -191,8 +191,8 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val name: Field[Person, String] = field("name", _.name)
-    val age: Field[Person, Int] = field("age", _.age)
+    val name: F[String] = field("name", _.name)
+    val age: F[Int] = field("age", _.age)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {

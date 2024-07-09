@@ -1,12 +1,12 @@
-package lightdb.upgrade
+package lightdb.async
 
-import lightdb.LightDB
+import cats.effect.IO
 
-trait DatabaseUpgrade {
+trait AsyncDatabaseUpgrade {
   def label: String = getClass.getSimpleName.replace("$", "")
   def applyToNew: Boolean
   def blockStartup: Boolean
   def alwaysRun: Boolean
 
-  def upgrade(db: LightDB): Unit
+  def upgrade(db: AsyncLightDB): IO[Unit]
 }

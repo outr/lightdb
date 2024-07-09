@@ -30,6 +30,7 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
   def offset(offset: Int): Query[Doc, Model] = copy(offset = offset)
   def limit(limit: Int): Query[Doc, Model] = copy(limit = Some(limit))
   def clearLimit: Query[Doc, Model] = copy(limit = None)
+  def countTotal(b: Boolean): Query[Doc, Model] = copy(countTotal = b)
   object search {
     def apply[V](conversion: collection.store.Conversion[V])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = collection.store.doSearch(

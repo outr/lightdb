@@ -30,6 +30,8 @@ abstract class Store[Doc, Model <: DocModel[Doc]] {
   def aggregate(query: AggregateQuery[Doc, Model])
                (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]]
 
+  def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int
+
   def truncate()(implicit transaction: Transaction[Doc]): Int
 
   def dispose(): Unit

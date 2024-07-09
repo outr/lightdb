@@ -1,6 +1,7 @@
 package lightdb.sql
 
 import fabric._
+import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.spatial.GeoPoint
@@ -25,7 +26,14 @@ object SQLArg {
       case d: Double => ps.setDouble(index, d)
       case json: Json => ps.setString(index, JsonFormatter.Compact(json))
       case point: GeoPoint => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
-      case _ => ps.setString(index, JsonFormatter.Compact(value.json(field.rw)))
+      case _ =>
+        val json = value.json(field.rw)
+        val string = if (field.rw.definition == DefType.Str) {
+          json.asString
+        } else {
+          JsonFormatter.Compact(json)
+        }
+        ps.setString(index, string)
     }
   }
 
