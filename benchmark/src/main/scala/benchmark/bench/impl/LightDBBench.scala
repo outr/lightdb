@@ -2,20 +2,20 @@ package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
 import lightdb.collection.Collection
-import lightdb.doc.DocModel
+import lightdb.doc.{DocModel, Document, DocumentModel}
 import lightdb.sql.{SQLConversion, SQLiteStore}
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Unique
-import lightdb.{Field, LightDB}
+import lightdb.{Field, Id, LightDB}
 import fabric.rw._
 
 import java.nio.file.Path
 import java.sql.ResultSet
 import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
 
-object LightDBBench extends Bench {
-  override def name: String = "LightDB"
+case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
+  override def name: String = s"LightDB ${storeManager.getClass.getSimpleName.replace("$", "")}"
 
   override def init(): Unit = DB.init()
 
@@ -24,8 +24,7 @@ object LightDBBench extends Bench {
       .foldLeft(0)((total, index) => {
         val person = Person(
           name = Unique(),
-          age = index,
-          id = Unique()
+          age = index
         )
         DB.people.set(person)
         status.progress.set(index + 1)
@@ -92,25 +91,24 @@ object LightDBBench extends Bench {
   override def dispose(): Unit = DB.people.dispose()
 
   object DB extends LightDB {
-    override lazy val directory: Option[Path] = Some(Path.of("db"))
+    override lazy val directory: Option[Path] = Some(Path.of(s"db/${storeManager.getClass.getSimpleName.replace("$", "")}"))
 
     val people: Collection[Person, Person.type] = collection(Person, cacheQueries = true)
 
-    override def storeManager: StoreManager = SQLiteStore
+    override def storeManager: StoreManager = bench.storeManager
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
 
-  case class Person(name: String, age: Int, id: String)
+  case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]
 
-  object Person extends DocModel[Person] with SQLConversion[Person] {
+  object Person extends DocumentModel[Person] with SQLConversion[Person] {
     override def convertFromSQL(rs: ResultSet): Person = Person(
       name = rs.getString("name"),
       age = rs.getInt("age"),
-      id = rs.getString("id")
+      _id = id(rs.getString("_id"))
     )
 
     val name: Field[Person, String] = field("name", _.name)
     val age: Field.Index[Person, Int] = field.index("age", _.age)
-    val id: Field.Unique[Person, String] = field.unique("id", _.id)
   }
 }

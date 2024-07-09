@@ -7,13 +7,14 @@ import fabric.rw._
 import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
-import lightdb.doc.{DocModel, JsonConversion}
+import lightdb.doc.{DocModel, DocumentModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
 import lightdb.spatial.DistanceAndDoc
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.Store
-import lightdb.{Field, Query, SearchResults, Sort, SortDirection, Transaction}
+import lightdb.store.{Conversion, Store, StoreMode}
+import lightdb.transaction.Transaction
+import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
@@ -21,6 +22,11 @@ import scala.language.implicitConversions
 trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   private var _collection: Collection[Doc, Model] = _
   protected final def collection: Collection[Doc, Model] = _collection
+
+  private lazy val fields = collection.model.fields match {
+    case fields if storeMode == StoreMode.Indexes => fields.filterNot(_.isInstanceOf[Field.Basic[_, _]])
+    case fields => fields
+  }
 
   protected def connectionManager: ConnectionManager[Doc]
 
@@ -49,7 +55,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
 
     // Add/Remove columns
     val existingColumns = columns(connection)
-    val fieldNames = collection.model.fields.map(_.name.toLowerCase).toSet
+    val fieldNames = fields.map(_.name.toLowerCase).toSet
     // Drop columns
     existingColumns.foreach { name =>
       if (!fieldNames.contains(name.toLowerCase)) {
@@ -58,7 +64,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       }
     }
     // Add columns
-    collection.model.fields.foreach { field =>
+    fields.foreach { field =>
       val name = field.name
       if (!existingColumns.contains(name.toLowerCase)) {
         addColumn(field)
@@ -66,7 +72,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     }
 
     // Add indexes
-    collection.model.fields.foreach {
+    fields.foreach {
       case _: Field.Basic[Doc, _] => // Nothing to do
       case index: Field.Index[Doc, _] =>
         executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
@@ -113,8 +119,8 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   protected def field2Value(field: Field[Doc, _]): String = "?"
 
   private lazy val insertSQL: String = try {
-    val values = collection.model.fields.map(field2Value)
-    s"INSERT OR REPLACE INTO ${collection.name}(${collection.model.fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+    val values = fields.map(field2Value)
+    s"INSERT OR REPLACE INTO ${collection.name}(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
   } catch {
     case t: Throwable => throw new RuntimeException(s"Failure building SQL Insert on ${collection.name}", t)
   }
@@ -129,7 +135,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   }
 
   override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = withPreparedStatement { ps =>
-    collection.model.fields.zipWithIndex.foreach {
+    fields.zipWithIndex.foreach {
       case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
     }
     ps.addBatch()
@@ -145,7 +151,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     val b = new SQLQueryBuilder[Doc](
       collection = collection,
       transaction = transaction,
-      fields = collection.model.fields.map(f => SQLPart(f.name)),
+      fields = fields.map(f => SQLPart(f.name)),
       filters = List(filter2Part(field === value)),
       group = Nil,
       having = Nil,
@@ -193,24 +199,27 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     transaction.register(s)
     val rs = s.executeQuery(s"SELECT * FROM ${collection.name}")
     transaction.register(rs)
-    rs2Iterator(rs, Conversion.Doc)
+    rs2Iterator(rs, Conversion.Doc())
   }
 
   private def getDoc(rs: ResultSet): Doc = collection.model match {
+    case _ if storeMode == StoreMode.Indexes =>
+      val id = Id[Doc](rs.getString("_id"))
+      collection.t(_ => collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]] -> id)
     case c: JsonConversion[Doc] =>
-      val values = collection.model.fields.map { field =>
+      val values = fields.map { field =>
         field.name -> toJson(rs.getObject(field.name), field.rw)
       }
       c.convertFromJson(obj(values: _*))
     case c: SQLConversion[Doc] => c.convertFromSQL(rs)
     case _ =>
-      val map = collection.model.fields.map { field =>
+      val map = fields.map { field =>
         field.name -> obj2Value(rs.getObject(field.name))
       }.toMap
       collection.model.map2Doc(map)
   }
 
-  private def rs2Iterator[V](rs: ResultSet, conversion: Conversion[V]): Iterator[V] = new Iterator[V] {
+  private def rs2Iterator[V](rs: ResultSet, conversion: Conversion[Doc, V]): Iterator[V] = new Iterator[V] {
     override def hasNext: Boolean = rs.next()
 
     override def next(): V = {
@@ -218,7 +227,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
         obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
       conversion match {
         case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
-        case Conversion.Doc => getDoc(rs).asInstanceOf[V]
+        case Conversion.Doc() => getDoc(rs).asInstanceOf[V]
         case Conversion.Converted(c) => c(getDoc(rs))
         case Conversion.Materialized(fields) =>
           val json = jsonFromFields(fields)
@@ -260,17 +269,17 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
-  protected def fieldNamesForDistance(conversion: Conversion.Distance): List[String] =
+  protected def fieldNamesForDistance(conversion: Conversion.Distance[Doc]): List[String] =
     throw new UnsupportedOperationException("Distance conversions not supported")
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[V])
+  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
                           (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
     val fieldNames = conversion match {
       case Conversion.Value(field) => List(field.name)
-      case Conversion.Doc | Conversion.Converted(_) => collection.model.fields.map(_.name)
+      case Conversion.Doc() | Conversion.Converted(_) => fields.map(_.name)
       case Conversion.Materialized(fields) => fields.map(_.name)
       case Conversion.Json(fields) => fields.map(_.name)
-      case d: Conversion.Distance => fieldNamesForDistance(d)
+      case d: Conversion.Distance[Doc] => fieldNamesForDistance(d)
     }
     val b = SQLQueryBuilder(
       collection = collection,

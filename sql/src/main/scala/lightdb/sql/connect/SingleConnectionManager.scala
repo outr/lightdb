@@ -1,7 +1,6 @@
 package lightdb.sql.connect
 
-import lightdb.Transaction
-
+import lightdb.transaction.Transaction
 import java.sql.{Connection, DriverManager}
 
 case class SingleConnectionManager[Doc](config: SQLConfig) extends ConnectionManager[Doc] {

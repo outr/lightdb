@@ -4,16 +4,17 @@ import fabric.{Json, num, obj}
 import fabric.define.DefType
 import fabric.rw._
 import lightdb.sql.connect.ConnectionManager
-import lightdb.{Field, LightDB, Transaction}
+import lightdb.{Field, LightDB}
 import lightdb.doc.DocModel
 import lightdb.filter.Filter
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.transaction.Transaction
 import org.sqlite.SQLiteConfig
 
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 
-class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLStore[Doc, Model] {
+class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
 
   private lazy val connection: Connection = {
@@ -64,7 +65,7 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
     super.field2Value(field)
   }
 
-  override protected def fieldNamesForDistance(d: Conversion.Distance): List[String] = {
+  override protected def fieldNamesForDistance(d: Conversion.Distance[Doc]): List[String] = {
     s"AsText(${d.field.name}) AS ${d.field.name}" ::
     s"ST_Distance(GeomFromText('POINT(${d.from.longitude} ${d.from.latitude})', 4326), ${d.field.name}, true) AS ${d.field.name}Distance" ::
     collection.model.fields.filterNot(_ eq d.field).map(_.name)
@@ -96,6 +97,6 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path]) extends SQLSt
 }
 
 object SQLiteStore extends StoreManager {
-  override def create[Doc, Model <: DocModel[Doc]](db: LightDB, name: String): Store[Doc, Model] =
-    new SQLiteStore[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite.db")))
+  override def create[Doc, Model <: DocModel[Doc]](db: LightDB, name: String, storeMode: StoreMode): Store[Doc, Model] =
+    new SQLiteStore[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite.db")), storeMode)
 }

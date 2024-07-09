@@ -3,6 +3,9 @@ package benchmark.bench
 import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
 import fabric.rw._
+import lightdb.sql.SQLiteStore
+import lightdb.store.MapStore
+import lightdb.store.split.SplitStoreManager
 import org.apache.commons.io.FileUtils
 
 import java.io.File
@@ -14,7 +17,8 @@ object Runner {
     "PostgreSQL" -> PostgreSQLBench,
     "H2" -> H2Bench,
     "Derby" -> DerbyBench,
-    "LightDB" -> LightDBBench
+    "LightDB-SQLite" -> LightDBBench(SQLiteStore),
+    "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore))
   )
 
   def main(args: Array[String]): Unit = {

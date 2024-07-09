@@ -1,9 +1,10 @@
 package lightdb.async
 
 import cats.effect.IO
-import lightdb.{Field, Id, Transaction}
+import lightdb.{Field, Id}
 import lightdb.collection.Collection
 import lightdb.doc.{DocModel, DocumentModel}
+import lightdb.transaction.Transaction
 
 case class AsyncCollection[Doc, Model <: DocModel[Doc]](underlying: Collection[Doc, Model]) extends AnyVal {
   def transaction[Return](f: Transaction[Doc] => IO[Return]): IO[Return] = {

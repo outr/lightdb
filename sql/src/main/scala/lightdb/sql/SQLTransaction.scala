@@ -1,7 +1,7 @@
 package lightdb.sql
 
-import lightdb.Transaction
 import lightdb.sql.connect.ConnectionManager
+import lightdb.transaction.Transaction
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
 import scala.util.Try

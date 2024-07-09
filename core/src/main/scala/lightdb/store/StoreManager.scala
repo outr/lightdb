@@ -4,5 +4,7 @@ import lightdb.LightDB
 import lightdb.doc.DocModel
 
 trait StoreManager {
-  def create[Doc, Model <: DocModel[Doc]](db: LightDB, name: String): Store[Doc, Model]
+  def create[Doc, Model <: DocModel[Doc]](db: LightDB,
+                                          name: String,
+                                          storeMode: StoreMode): Store[Doc, Model]
 }

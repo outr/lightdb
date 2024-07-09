@@ -1,7 +1,7 @@
 package lightdb.async
 
 import cats.effect.IO
-import lightdb.Transaction
+import lightdb.transaction.Transaction
 
 case class AsyncSearchResults[Doc, V](offset: Int,
                                       limit: Option[Int],

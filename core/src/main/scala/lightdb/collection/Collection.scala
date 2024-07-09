@@ -4,8 +4,9 @@ import fabric.define.DefType
 import lightdb.doc.{DocModel, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.store.Store
+import lightdb.transaction.Transaction
 import lightdb.util.Initializable
-import lightdb.{Field, Id, Query, Transaction}
+import lightdb.{Field, Id, Query}
 
 case class Collection[Doc, Model <: DocModel[Doc]](name: String,
                                                    model: Model,

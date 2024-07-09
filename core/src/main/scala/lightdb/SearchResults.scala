@@ -1,5 +1,7 @@
 package lightdb
 
+import lightdb.transaction.Transaction
+
 case class SearchResults[Doc, V](offset: Int,
                                  limit: Option[Int],
                                  total: Option[Int],

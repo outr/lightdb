@@ -1,4 +1,6 @@
-package lightdb
+package lightdb.transaction
+
+import lightdb.Id
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
