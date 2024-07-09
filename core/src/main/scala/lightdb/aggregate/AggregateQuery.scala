@@ -31,6 +31,9 @@ case class AggregateQuery[Doc, Model <: DocModel[Doc]](query: Query[Doc, Model],
     sort = sort ::: List((function, direction))
   )
 
+  def count(implicit transaction: Transaction[Doc]): Int =
+    query.collection.store.aggregateCount(this)
+
   def iterator(implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
     query.collection.store.aggregate(this)
 

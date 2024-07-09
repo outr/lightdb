@@ -112,21 +112,23 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
 
   protected def field2Value(field: Field[Doc, _]): String = "?"
 
-  private lazy val insertSQL: String = {
+  private lazy val insertSQL: String = try {
     val values = collection.model.fields.map(field2Value)
     s"INSERT OR REPLACE INTO ${collection.name}(${collection.model.fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+  } catch {
+    case t: Throwable => throw new RuntimeException(s"Failure building SQL Insert on ${collection.name}", t)
   }
 
-  private def preparedStatement(implicit transaction: Transaction[Doc]): PreparedStatement = transaction.synchronized {
+  private def withPreparedStatement[Return](f: PreparedStatement => Return)
+                                           (implicit transaction: Transaction[Doc]): Return = transaction.synchronized {
     if (transaction.ps == null) {
       val connection = connectionManager.getConnection
       transaction.ps = connection.prepareStatement(insertSQL)
     }
-    transaction.ps
+    f(transaction.ps)
   }
 
-  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
-    val ps = preparedStatement
+  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = withPreparedStatement { ps =>
     collection.model.fields.zipWithIndex.foreach {
       case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
     }
@@ -306,8 +308,8 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     )
   }
 
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
+  private def aggregate2SQLQuery(query: AggregateQuery[Doc, Model])
+                                (implicit transaction: Transaction[Doc]): SQLQueryBuilder[Doc] = {
     val fields = query.functions.map { f =>
       val af = f.`type` match {
         case AggregateType.Max => Some("MAX")
@@ -341,7 +343,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
         SQLPart(s"${field.name} $dir", Nil)
     }
-    val b = SQLQueryBuilder(
+    SQLQueryBuilder(
       collection = collection,
       transaction = transaction,
       fields = fields,
@@ -352,6 +354,11 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       limit = query.query.limit,
       offset = query.query.offset
     )
+  }
+
+  override def aggregate(query: AggregateQuery[Doc, Model])
+                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
+    val b = aggregate2SQLQuery(query)
     val connection = connectionManager.getConnection
     val rs = b.execute(connection)
     transaction.register(rs)
@@ -384,6 +391,13 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       }: _*)
       MaterializedAggregate[Doc, Model](json, collection.model)
     }
+  }
+
+  override def aggregateCount(query: AggregateQuery[Doc, Model])
+                             (implicit transaction: Transaction[Doc]): Int = {
+    val b = aggregate2SQLQuery(query)
+    val connection = connectionManager.getConnection
+    b.queryTotal(connection)
   }
 
   protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =

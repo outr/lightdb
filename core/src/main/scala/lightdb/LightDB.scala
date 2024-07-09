@@ -60,7 +60,7 @@ trait LightDB extends Initializable {
   /**
    * Backing key/value store used for persistent internal settings, StoredValues, and general key/value storage.
    */
-  val backingStore: Collection[KeyValue, KeyValue.type] = collection("_backingStore", KeyValue)
+  val backingStore: Collection[KeyValue, KeyValue.type] = collection(KeyValue, name = Some("_backingStore"))
 
   override protected def initialize(): Unit = {
     scribe.info(s"$name database initializing...")
@@ -89,21 +89,22 @@ trait LightDB extends Initializable {
    * before the database is initialized, but collections that are added after init will automatically be initialized
    * during this method call.
    *
-   * @param name the collection's name
    * @param model the model to use for this collection
+   * @param name the collection's name (defaults to None meaning it will be generated based on the model name)
    * @param store specify the store. If this is not set, the database's storeManager will be used to create one
    * @param maxInsertBatch the maximum number of inserts to include in a batch. Defaults to 1 million.
    * @param cacheQueries whether to cache queries in memory. This improves performance when running the same queries
    *                     with different parameters fairly drastically, but consumes a lot of memory if many queries are
    *                     executed in a single transaction.
    */
-  def collection[Doc, Model <: DocModel[Doc]](name: String,
-                                              model: Model,
+  def collection[Doc, Model <: DocModel[Doc]](model: Model,
+                                              name: Option[String] = None,
                                               store: Option[Store[Doc, Model]] = None,
                                               maxInsertBatch: Int = 1_000_000,
                                               cacheQueries: Boolean = false): Collection[Doc, Model] = {
-    val s = store.getOrElse(storeManager.create[Doc, Model](this, name))
-    val c = Collection[Doc, Model](name, model, s, maxInsertBatch, cacheQueries)
+    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val s = store.getOrElse(storeManager.create[Doc, Model](this, n))
+    val c = Collection[Doc, Model](n, model, s, maxInsertBatch, cacheQueries)
     synchronized {
       _collections = c :: _collections
     }

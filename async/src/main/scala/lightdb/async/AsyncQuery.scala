@@ -2,6 +2,7 @@ package lightdb.async
 
 import cats.effect.IO
 import fabric.Json
+import lightdb.aggregate.AggregateFunction
 import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection, Transaction}
 import lightdb.collection.Collection
 import lightdb.doc.{DocModel, DocumentModel}
@@ -14,7 +15,7 @@ case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, M
                                                    offset: Int = 0,
                                                    limit: Option[Int] = None,
                                                    countTotal: Boolean = false) { query =>
-  private def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal)
+  private[async] def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal)
 
   def clearFilters: AsyncQuery[Doc, Model] = copy(filter = None)
   def filter(f: Model => Filter[Doc]): AsyncQuery[Doc, Model] = {
@@ -30,6 +31,7 @@ case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, M
   def offset(offset: Int): AsyncQuery[Doc, Model] = copy(offset = offset)
   def limit(limit: Int): AsyncQuery[Doc, Model] = copy(limit = Some(limit))
   def clearLimit: AsyncQuery[Doc, Model] = copy(limit = None)
+  def countTotal(b: Boolean): AsyncQuery[Doc, Model] = copy(countTotal = b)
   object search {
     def apply[V](conversion: collection.store.Conversion[V])
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, V]] =
@@ -70,6 +72,9 @@ case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, M
 
   def count(implicit transaction: Transaction[Doc]): IO[Int] = copy(limit = Some(1), countTotal = true)
     .search.docs.map(_.total.get)
+
+  def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AsyncAggregateQuery[Doc, Model] =
+    AsyncAggregateQuery(toQuery, f(collection.model))
 
   def grouped[F](f: Model => Field[Doc, F],
                  direction: SortDirection = SortDirection.Ascending)
