@@ -1,6 +1,6 @@
 //package benchmark
 //
-//import fabric.rw.RW
+//import fabric.rw._
 //import lightdb.StoredValue
 //import lightdb.document.{Document, DocumentModel}
 //import lightdb.duckdb.DuckDBIndexer

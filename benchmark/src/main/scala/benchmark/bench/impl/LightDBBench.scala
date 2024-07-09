@@ -8,6 +8,7 @@ import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Unique
 import lightdb.{Field, LightDB}
+import fabric.rw._
 
 import java.nio.file.Path
 import java.sql.ResultSet
@@ -93,7 +94,7 @@ object LightDBBench extends Bench {
   object DB extends LightDB {
     override lazy val directory: Option[Path] = Some(Path.of("db"))
 
-    val people: Collection[Person, Person.type] = collection("people", Person, cacheQueries = true)
+    val people: Collection[Person, Person.type] = collection(Person, cacheQueries = true)
 
     override def storeManager: StoreManager = SQLiteStore
     override def upgrades: List[DatabaseUpgrade] = Nil

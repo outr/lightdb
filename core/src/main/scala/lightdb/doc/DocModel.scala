@@ -1,6 +1,6 @@
 package lightdb.doc
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.Field
 
 import scala.language.implicitConversions

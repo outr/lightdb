@@ -1,6 +1,6 @@
 package benchmark.bench
 
-import fabric.rw.RW
+import fabric.rw._
 
 case class StatusLog(progress: Double,
                      timeStamp: Long,

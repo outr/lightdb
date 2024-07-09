@@ -3,7 +3,7 @@ package lightdb.halo
 import com.oath.halodb.{HaloDB, HaloDBOptions}
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.{Id, LightDB}
 import lightdb.document.{Document, SetType}
 import lightdb.store.{Store, StoreManager}

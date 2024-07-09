@@ -1,6 +1,6 @@
 package lightdb.rocks
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.Id
 import org.rocksdb.{RocksDB, RocksIterator}
 
