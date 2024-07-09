@@ -4,6 +4,12 @@ import fabric.rw._
 import lightdb.util.Unique
 
 case class Id[Doc](value: String) extends AnyVal {
+  def bytes: Array[Byte] = {
+    val b = toString.getBytes("UTF-8")
+    assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length} ($value)")
+    b
+  }
+
   override def toString: String = s"Id($value)"
 }
 

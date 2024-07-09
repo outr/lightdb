@@ -16,6 +16,7 @@ case class SplitStore[Doc, Model <: DocModel[Doc]](storage: Store[Doc, Model],
   private implicit def transaction2Split(transaction: Transaction[Doc]): SplitTransaction[Doc] = transaction.asInstanceOf[SplitTransaction[Doc]]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
+    super.init(collection)
     storage.init(collection)
     searching.init(collection)
   }

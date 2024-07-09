@@ -16,7 +16,9 @@ class LuceneStore[Doc, Model <: DocModel[Doc]](directory: Option[Path], val stor
     case None => new MemoryIndex
   }
 
-  override def init(collection: Collection[Doc, Model]): Unit = ???
+  override def init(collection: Collection[Doc, Model]): Unit = {
+    super.init(collection)
+  }
 
   override def createTransaction(): Transaction[Doc] = ???
 
