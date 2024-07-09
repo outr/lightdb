@@ -2,8 +2,8 @@ package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
 import lightdb.collection.Collection
-import lightdb.doc.{DocModel, Document, DocumentModel}
-import lightdb.sql.{SQLConversion, SQLiteStore}
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Unique
@@ -36,7 +36,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     (0 until StreamIterations)
       .foldLeft(0)((total, iteration) => {
         var count = 0
-        DB.people.iterator.foreach { person =>
+        DB.people.iterator.foreach { _ =>
           count += 1
         }
         if (count != RecordCount) {
@@ -102,6 +102,8 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
   case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with SQLConversion[Person] {
+    override implicit val rw: RW[Person] = RW.gen
+
     override def convertFromSQL(rs: ResultSet): Person = Person(
       name = rs.getString("name"),
       age = rs.getInt("age"),

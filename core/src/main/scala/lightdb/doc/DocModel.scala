@@ -6,6 +6,8 @@ import lightdb.Field
 import scala.language.implicitConversions
 
 trait DocModel[Doc] {
+  implicit def rw: RW[Doc]
+
   type F[V] = Field[Doc, V]
   type I[V] = Field.Index[Doc, V]
   type U[V] = Field.Unique[Doc, V]

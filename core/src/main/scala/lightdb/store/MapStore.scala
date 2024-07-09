@@ -9,13 +9,9 @@ import lightdb.transaction.{SimpleTransaction, Transaction}
 
 class MapStore[Doc, Model <: DocModel[Doc]](val storeMode: StoreMode) extends Store[Doc, Model] {
   private var map = Map.empty[Id[Doc], Doc]
-  private var collection: Collection[Doc, Model] = _
-
-  private def id(doc: Doc): Id[Doc] = doc.asInstanceOf[Document[_]]._id.asInstanceOf[Id[Doc]]
-  private lazy val idField: Field.Unique[Doc, Id[Doc]] = collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
-    this.collection = collection
+    super.init(collection)
   }
 
   override def createTransaction(): Transaction[Doc] = SimpleTransaction()

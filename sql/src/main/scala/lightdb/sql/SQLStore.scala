@@ -20,9 +20,6 @@ import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
 trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
-  private var _collection: Collection[Doc, Model] = _
-  protected final def collection: Collection[Doc, Model] = _collection
-
   private lazy val fields = collection.model.fields match {
     case fields if storeMode == StoreMode.Indexes => fields.filterNot(_.isInstanceOf[Field.Basic[_, _]])
     case fields => fields
@@ -31,7 +28,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   protected def connectionManager: ConnectionManager[Doc]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
-    this._collection = collection
+    super.init(collection)
     collection.transaction { implicit transaction =>
       initTransaction()
     }
