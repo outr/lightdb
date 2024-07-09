@@ -1,8 +1,8 @@
 package lightdb.sql.connect
 
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
-import lightdb.Transaction
 import lightdb.sql._
+import lightdb.transaction.Transaction
 
 import java.sql.Connection
 

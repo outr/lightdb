@@ -192,7 +192,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     implicit val rw: RW[Person] = RW.gen
 
     val name: F[String] = field("name", _.name)
-    val age: F[Int] = field("age", _.age)
+    val age: F[Int] = field.index("age", _.age)
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {

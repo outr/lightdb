@@ -1,5 +1,7 @@
 package lightdb
 
+import lightdb.transaction.Transaction
+
 import scala.language.implicitConversions
 
 package object sql {

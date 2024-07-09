@@ -81,7 +81,7 @@ val fs2Version: String = "3.10.2"
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, async, all)
+	.aggregate(core.jvm, sql, sqlite, lucene, halodb, async, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -141,6 +141,30 @@ lazy val sqlite = project.in(file("sqlite"))
 		)
 	)
 
+lazy val lucene = project.in(file("lucene"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-lucene",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.apache.lucene" % "lucene-core" % luceneVersion,
+			"org.apache.lucene" % "lucene-memory" % luceneVersion,
+			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val halodb = project.in(file("halodb"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-halo",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"com.github.yahoo" % "HaloDB" % haloDBVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val async = project.in(file("async"))
 	.dependsOn(core.jvm)
 	.settings(
@@ -196,41 +220,6 @@ lazy val redis = project.in(file("store/redis"))
 		fork := true
 	)
 
-lazy val lucene = project.in(file("index/lucene"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
-	.settings(
-		name := s"$projectName-lucene",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"org.apache.lucene" % "lucene-core" % luceneVersion,
-			"org.apache.lucene" % "lucene-memory" % luceneVersion,
-			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		)
-	)
-
-lazy val sql = project.in(file("index/sql"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
-	.settings(
-		name := s"$projectName-sql",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"com.zaxxer" % "HikariCP" % hikariCPVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		)
-	)
-
-lazy val sqlite = project.in(file("index/sqlite"))
-	.dependsOn(sql, core.jvm % "test->test")
-	.settings(
-		name := s"$projectName-sqlite",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		)
-	)
-
 lazy val duckdb = project.in(file("index/duckdb"))
 	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
@@ -254,7 +243,7 @@ lazy val h2 = project.in(file("index/h2"))
 	)*/
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, lucene, halodb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

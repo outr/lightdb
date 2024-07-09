@@ -3,7 +3,7 @@ package lightdb
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Initializable
 
@@ -103,7 +103,7 @@ trait LightDB extends Initializable {
                                               maxInsertBatch: Int = 1_000_000,
                                               cacheQueries: Boolean = false): Collection[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val s = store.getOrElse(storeManager.create[Doc, Model](this, n))
+    val s = store.getOrElse(storeManager.create[Doc, Model](this, n, StoreMode.All))
     val c = Collection[Doc, Model](n, model, s, maxInsertBatch, cacheQueries)
     synchronized {
       _collections = c :: _collections

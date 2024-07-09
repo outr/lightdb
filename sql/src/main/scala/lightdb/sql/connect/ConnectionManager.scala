@@ -1,7 +1,6 @@
 package lightdb.sql.connect
 
-import lightdb.Transaction
-
+import lightdb.transaction.Transaction
 import java.sql.Connection
 
 trait ConnectionManager[Doc] {

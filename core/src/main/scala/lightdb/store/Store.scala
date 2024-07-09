@@ -3,11 +3,13 @@ package lightdb.store
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb.doc.DocModel
-import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
-import lightdb.spatial.{DistanceAndDoc, GeoPoint}
-import lightdb.{Field, Query, SearchResults, Transaction}
+import lightdb.materialized.MaterializedAggregate
+import lightdb.transaction.Transaction
+import lightdb.{Field, Query, SearchResults}
 
 abstract class Store[Doc, Model <: DocModel[Doc]] {
+  def storeMode: StoreMode
+
   def init(collection: Collection[Doc, Model]): Unit
 
   def createTransaction(): Transaction[Doc]
@@ -24,7 +26,7 @@ abstract class Store[Doc, Model <: DocModel[Doc]] {
 
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc]
 
-  def doSearch[V](query: Query[Doc, Model], conversion: Conversion[V])
+  def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
                  (implicit transaction: Transaction[Doc]): SearchResults[Doc, V]
 
   def aggregate(query: AggregateQuery[Doc, Model])
@@ -35,18 +37,4 @@ abstract class Store[Doc, Model <: DocModel[Doc]] {
   def truncate()(implicit transaction: Transaction[Doc]): Int
 
   def dispose(): Unit
-
-  sealed trait Conversion[V]
-
-  object Conversion {
-    case class Value[F](field: Field[Doc, F]) extends Conversion[F]
-    case object Doc extends Conversion[Doc]
-    case class Json(fields: List[Field[Doc, _]]) extends Conversion[fabric.Json]
-    case class Materialized(fields: List[Field[Doc, _]]) extends Conversion[MaterializedIndex[Doc, Model]]
-    case class Converted[T](f: Doc => T) extends Conversion[T]
-    case class Distance(field: Field[Doc, GeoPoint],
-                        from: GeoPoint,
-                        sort: Boolean,
-                        radius: Option[lightdb.distance.Distance]) extends Conversion[DistanceAndDoc[Doc]]
-  }
 }

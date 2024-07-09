@@ -3,10 +3,12 @@ package lightdb.async
 import cats.effect.IO
 import fabric.Json
 import lightdb.aggregate.AggregateFunction
-import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection, Transaction}
+import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
 import lightdb.collection.Collection
 import lightdb.doc.{DocModel, DocumentModel}
 import lightdb.filter.Filter
+import lightdb.store.Conversion
+import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
 case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],
@@ -33,7 +35,7 @@ case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, M
   def clearLimit: AsyncQuery[Doc, Model] = copy(limit = None)
   def countTotal(b: Boolean): AsyncQuery[Doc, Model] = copy(countTotal = b)
   object search {
-    def apply[V](conversion: collection.store.Conversion[V])
+    def apply[V](conversion: Conversion[Doc, V])
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, V]] =
       IO.blocking(collection.store.doSearch(
         query = toQuery,
@@ -48,16 +50,16 @@ case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, M
         )
       }
 
-    def docs(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Doc]] = apply(collection.store.Conversion.Doc)
+    def docs(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Doc]] = apply(Conversion.Doc())
     def value[F](f: Model => Field[Doc, F])
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, F]] =
-      apply(collection.store.Conversion.Value(f(collection.model)))
+      apply(Conversion.Value(f(collection.model)))
     def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[AsyncSearchResults[Doc, Id[Doc]]] =
       value(m => ev(m)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]])
     def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Json]] =
-      apply(collection.store.Conversion.Json(f(collection.model)))
+      apply(Conversion.Json(f(collection.model)))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, T]] =
-      apply(collection.store.Conversion.Converted(f))
+      apply(Conversion.Converted(f))
   }
 
   def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] = {

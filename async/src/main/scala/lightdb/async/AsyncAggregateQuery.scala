@@ -4,7 +4,8 @@ import cats.effect.IO
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery}
 import lightdb.doc.DocModel
 import lightdb.materialized.MaterializedAggregate
-import lightdb.{Query, SortDirection, Transaction}
+import lightdb.transaction.Transaction
+import lightdb.{Query, SortDirection}
 
 case class AsyncAggregateQuery[Doc, Model <: DocModel[Doc]](query: Query[Doc, Model],
                                                             functions: List[AggregateFunction[_, _, Doc]],
