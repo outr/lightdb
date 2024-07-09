@@ -1,7 +1,7 @@
 package benchmark.bench
 
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw.{Asable, Convertible, RW}
+import fabric.rw._
 import io.quickchart.QuickChart
 import org.apache.commons.io.FileUtils
 

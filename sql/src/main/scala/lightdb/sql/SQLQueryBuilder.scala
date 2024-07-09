@@ -13,25 +13,7 @@ case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
                                 sort: List[SQLPart] = Nil,
                                 limit: Option[Int] = None,
                                 offset: Int) {
-  def queryTotal(connection: Connection): Int = {
-    val b = copy(
-      fields = List(SQLPart("COUNT(*) AS count", Nil)),
-      group = Nil,
-      having = Nil,
-      sort = Nil,
-      limit = None,
-      offset = 0
-    )
-    val rs = b.execute(connection)
-    try {
-      rs.next()
-      rs.getInt(1)
-    } finally {
-      rs.close()
-    }
-  }
-
-  def execute(connection: Connection): ResultSet = {
+  lazy val sql: String = {
     val b = new StringBuilder
     b.append("SELECT\n")
     b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
@@ -73,8 +55,29 @@ case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
       b.append("OFFSET\n")
       b.append(s"\t$offset\n")
     }
-    val args = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
-    val sql = b.toString()
+    b.toString()
+  }
+
+  lazy val args: List[SQLArg] = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
+
+  def queryTotal(connection: Connection): Int = {
+    val b = copy(
+      sort = Nil,
+      limit = None,
+      offset = 0
+    )
+    val rs = b.executeInternal(connection, "SELECT COUNT(*) FROM (", ") AS innerQuery")
+    try {
+      rs.next()
+      rs.getInt(1)
+    } finally {
+      rs.close()
+    }
+  }
+
+  def execute(connection: Connection): ResultSet = executeInternal(connection)
+
+  private def executeInternal(connection: Connection, pre: String = "", post: String = ""): ResultSet = {
     scribe.debug(s"Executing Query: $sql (${args.mkString(", ")})")
     val ps = if (collection.cacheQueries) {
       transaction.synchronized {
@@ -88,9 +91,13 @@ case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
         }
       }
     } else {
-      val ps = connection.prepareStatement(sql)
-      transaction.register(ps)
-      ps
+      try {
+        val ps = connection.prepareStatement(s"$pre$sql$post")
+        transaction.register(ps)
+        ps
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Failed to execute query:\n$sql\nParams: ${args.mkString(", ")}", t)
+      }
     }
     args.zipWithIndex.foreach {
       case (value, index) => value.set(ps, index + 1)

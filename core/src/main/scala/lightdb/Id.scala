@@ -1,6 +1,6 @@
 package lightdb
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.util.Unique
 
 case class Id[Doc](value: String) extends AnyVal {

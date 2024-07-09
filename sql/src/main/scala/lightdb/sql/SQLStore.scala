@@ -387,7 +387,15 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     }
     createStream[MaterializedAggregate[Doc, Model]] { rs =>
       val json = obj(query.functions.map { f =>
-        f.name -> toJson(rs.getObject(f.name), f.tRW)
+        val o = rs.getObject(f.name)
+        val json = if (f.`type` == AggregateType.Concat) {
+          arr(o.toString.split(";;").toList.map(s => toJson(s, f.rw)): _*)
+        } else if (f.`type` == AggregateType.ConcatDistinct) {
+          arr(o.toString.split(",").toList.map(s => toJson(s, f.rw)): _*)
+        } else {
+          toJson(o, f.tRW)
+        }
+        f.name -> json
       }: _*)
       MaterializedAggregate[Doc, Model](json, collection.model)
     }

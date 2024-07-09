@@ -10,7 +10,8 @@ case class AsyncAggregateQuery[Doc, Model <: DocModel[Doc]](query: Query[Doc, Mo
                                                             functions: List[AggregateFunction[_, _, Doc]],
                                                             filter: Option[AggregateFilter[Doc]] = None,
                                                             sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
-  def filter(filter: AggregateFilter[Doc], and: Boolean = false): AsyncAggregateQuery[Doc, Model] = {
+  def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AsyncAggregateQuery[Doc, Model] = {
+    val filter = f(query.collection.model)
     if (and && this.filter.nonEmpty) {
       copy(filter = Some(this.filter.get && filter))
     } else {
@@ -18,19 +19,22 @@ case class AsyncAggregateQuery[Doc, Model <: DocModel[Doc]](query: Query[Doc, Mo
     }
   }
 
-  def filters(filters: AggregateFilter[Doc]*): AsyncAggregateQuery[Doc, Model] = if (filters.nonEmpty) {
-    var filter = filters.head
-    filters.tail.foreach { f =>
-      filter = filter && f
+  def filters(f: Model => List[AggregateFilter[Doc]]): AsyncAggregateQuery[Doc, Model] = {
+    val filters = f(query.collection.model)
+    if (filters.nonEmpty) {
+      var filter = filters.head
+      filters.tail.foreach { f =>
+        filter = filter && f
+      }
+      this.filter(_ => filter)
+    } else {
+      this
     }
-    this.filter(filter)
-  } else {
-    this
   }
 
-  def sort(function: AggregateFunction[_, _, Doc],
+  def sort(f: Model => AggregateFunction[_, _, Doc],
            direction: SortDirection = SortDirection.Ascending): AsyncAggregateQuery[Doc, Model] = copy(
-    sort = sort ::: List((function, direction))
+    sort = sort ::: List((f(query.collection.model), direction))
   )
 
   private lazy val aggregateQuery = AggregateQuery(

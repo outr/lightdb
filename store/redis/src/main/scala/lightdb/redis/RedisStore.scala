@@ -1,6 +1,6 @@
 package lightdb.redis
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.{Id, LightDB}
 import lightdb.document.{Document, SetType}
 import lightdb.store.{Store, StoreManager, StringStore}

@@ -1,6 +1,6 @@
 package lightdb.aggregate
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.distance.Distance
 import lightdb.Field
 import lightdb.filter.FilterSupport

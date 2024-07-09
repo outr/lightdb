@@ -2,7 +2,7 @@ package lightdb.sql
 
 import fabric.{Json, num, obj}
 import fabric.define.DefType
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.sql.connect.ConnectionManager
 import lightdb.{Field, LightDB, Transaction}
 import lightdb.doc.DocModel

@@ -1,7 +1,7 @@
 //package benchmark
 //
 //import cats.effect.unsafe.implicits.global
-//import fabric.rw.RW
+//import fabric.rw._
 //import lightdb.collection.Collection
 //import lightdb._
 //import lightdb.document.{Document, DocumentModel}

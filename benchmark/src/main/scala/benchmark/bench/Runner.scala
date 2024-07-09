@@ -2,7 +2,7 @@ package benchmark.bench
 
 import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
-import fabric.rw.Convertible
+import fabric.rw._
 import org.apache.commons.io.FileUtils
 
 import java.io.File

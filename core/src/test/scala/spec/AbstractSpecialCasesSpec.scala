@@ -1,11 +1,12 @@
 package spec
 
-import fabric.rw.RW
+import fabric._
+import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Field, Id, LightDB}
+import lightdb.{Id, LightDB, Sort}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -21,8 +22,8 @@ trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers {
     }
     "insert a couple SpecialOne instances" in {
       DB.specialOne.t.set(List(
-        SpecialOne("First", WrappedString("Apple"), Person("Andrew", 1)),
-        SpecialOne("Second", WrappedString("Banana"), Person("Bianca", 2))
+        SpecialOne("First", WrappedString("Apple"), Person("Andrew", 1), _id = Id("first")),
+        SpecialOne("Second", WrappedString("Banana"), Person("Bianca", 2), _id = Id("second"))
       ))
     }
     "verify the SpecialOne instances were stored properly" in {
@@ -31,6 +32,19 @@ trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers {
         list.map(_.name).toSet should be(Set("First", "Second"))
         list.map(_.wrappedString).toSet should be(Set(WrappedString("Apple"), WrappedString("Banana")))
         list.map(_.person).toSet should be(Set(Person("Andrew", 1), Person("Bianca", 2)))
+        list.map(_._id).toSet should be(Set(SpecialOne.id("first"), SpecialOne.id("second")))
+      }
+    }
+    "verify the storage of data is correct" in {
+      DB.specialOne.transaction { implicit transaction =>
+        val list = DB.specialOne.query.sort(Sort.ByField(SpecialOne.name).asc).search.json(ref => List(ref._id)).list
+        list should be(List(obj("_id" -> "first"), obj("_id" -> "second")))
+      }
+    }
+    "group ids" in {
+      DB.specialOne.transaction { implicit transaction =>
+        val list = DB.specialOne.query.aggregate(ref => List(ref._id.concat)).toList
+        list.map(_(_._id.concat)) should be(List(List(SpecialOne.id("first"), SpecialOne.id("second"))))
       }
     }
     "truncate the database" in {

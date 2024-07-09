@@ -1,6 +1,6 @@
 package lightdb.mapdb
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.document.{Document, SetType}
 import lightdb.{Id, LightDB}
 import lightdb.store.{ByteStore, Store, StoreManager}
