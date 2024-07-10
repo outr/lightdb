@@ -4,7 +4,7 @@ import fabric.Json
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
-import lightdb.doc.{DocModel, DocumentModel}
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, GeoPoint}
@@ -12,12 +12,12 @@ import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
-case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],
-                                              filter: Option[Filter[Doc]] = None,
-                                              sort: List[Sort] = Nil,
-                                              offset: Int = 0,
-                                              limit: Option[Int] = None,
-                                              countTotal: Boolean = false) { query =>
+case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
+                                                   filter: Option[Filter[Doc]] = None,
+                                                   sort: List[Sort] = Nil,
+                                                   offset: Int = 0,
+                                                   limit: Option[Int] = None,
+                                                   countTotal: Boolean = false) { query =>
   def clearFilters: Query[Doc, Model] = copy(filter = None)
   def filter(f: Model => Filter[Doc]): Query[Doc, Model] = {
     val filter = f(collection.model)
@@ -44,8 +44,8 @@ case class Query[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model]
     def value[F](f: Model => Field[Doc, F])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, F] =
       apply(Conversion.Value(f(collection.model)))
-    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): SearchResults[Doc, Id[Doc]] =
-      value(m => ev(m)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]])
+    def id(implicit transaction: Transaction[Doc]): SearchResults[Doc, Id[Doc]] =
+      value(m => m._id)
     def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): SearchResults[Doc, Json] =
       apply(Conversion.Json(f(collection.model)))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, T] =

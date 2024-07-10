@@ -1,18 +1,18 @@
 package lightdb.collection
 
 import fabric.define.DefType
-import lightdb.doc.{DocModel, DocumentModel, JsonConversion}
+import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.store.Store
 import lightdb.transaction.Transaction
 import lightdb.util.Initializable
 import lightdb.{Field, Id, Query}
 
-case class Collection[Doc, Model <: DocModel[Doc]](name: String,
-                                                   model: Model,
-                                                   store: Store[Doc, Model],
-                                                   maxInsertBatch: Int = 1_000_000,
-                                                   cacheQueries: Boolean = false) extends Initializable { collection =>
+case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                        model: Model,
+                                                        store: Store[Doc, Model],
+                                                        maxInsertBatch: Int = 1_000_000,
+                                                        cacheQueries: Boolean = false) extends Initializable { collection =>
   override protected def initialize(): Unit = {
     store.init(this)
 
@@ -64,11 +64,11 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
       collection(f)
     }
 
-    def get(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): Option[Doc] = transaction { implicit transaction =>
+    def get(id: Id[Doc]): Option[Doc] = transaction { implicit transaction =>
       collection.get(id)
     }
 
-    def apply(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): Doc = transaction { implicit transaction =>
+    def apply(id: Id[Doc]): Doc = transaction { implicit transaction =>
       collection(id)
     }
 
@@ -112,12 +112,12 @@ case class Collection[Doc, Model <: DocModel[Doc]](name: String,
       throw DocNotFoundException(name, field.name, value)
     }
 
-  def get(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Option[Doc] = {
-    store.get(ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]], id)
+  def get(id: Id[Doc])(implicit transaction: Transaction[Doc]): Option[Doc] = {
+    store.get(model._id, id)
   }
 
-  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Doc =
-    store.get(ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]], id).getOrElse {
+  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Doc =
+    store.get(model._id, id).getOrElse {
       throw DocNotFoundException(name, "_id", id)
     }
 

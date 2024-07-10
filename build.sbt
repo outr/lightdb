@@ -141,6 +141,17 @@ lazy val sqlite = project.in(file("sqlite"))
 		)
 	)
 
+lazy val h2 = project.in(file("h2"))
+	.dependsOn(sql, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-h2",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"com.h2database" % "h2" % h2Version,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val lucene = project.in(file("lucene"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
@@ -176,17 +187,7 @@ lazy val async = project.in(file("async"))
 		)
 	)
 
-/*lazy val halodb = project.in(file("store/halodb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
-	.settings(
-		name := s"$projectName-halo",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"com.github.yahoo" % "HaloDB" % haloDBVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		)
-	)
-
+/*
 lazy val rocksdb = project.in(file("store/rocksdb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(

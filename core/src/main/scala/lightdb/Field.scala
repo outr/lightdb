@@ -2,6 +2,7 @@ package lightdb
 
 import fabric.{Json, Null, bool, num, str}
 import fabric.define.DefType
+import fabric.io.JsonParser
 import fabric.rw._
 import lightdb.aggregate.AggregateSupport
 import lightdb.distance.Distance
@@ -13,6 +14,8 @@ sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, 
   implicit def rw: RW[V] = getRW
 
   def get: Doc => V
+
+  def getJson(doc: Doc): Json = get(doc).json
 
   override def is(value: V): Filter[Doc] = Filter.Equals(this, value)
 
@@ -52,7 +55,7 @@ object Field {
   case class Index[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
   case class Unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
 
-  def string2Json(s: String, definition: DefType): Json = definition match {
+  def string2Json(name: String, s: String, definition: DefType): Json = definition match {
     case DefType.Str => str(s)
     case DefType.Int => num(s.toLong)
     case DefType.Dec => num(BigDecimal(s))
@@ -60,10 +63,13 @@ object Field {
       case "1" | "true" => true
       case _ => false
     })
+    case DefType.Json | DefType.Obj(_, _) =>
+      scribe.info(s"Parsing $name: $s / $definition")
+      JsonParser(s)
     case DefType.Opt(d) => if (s == null) {
       Null
     } else {
-      string2Json(s, d)
+      string2Json(name, s, d)
     }
     case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
   }

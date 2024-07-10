@@ -3,11 +3,11 @@ package lightdb.store
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb.{Field, Id, LightDB, Query, SearchResults}
-import lightdb.doc.{DocModel, Document, DocumentModel}
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.{SimpleTransaction, Transaction}
 
-class MapStore[Doc, Model <: DocModel[Doc]](val storeMode: StoreMode) extends Store[Doc, Model] {
+class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode: StoreMode) extends Store[Doc, Model] {
   private var map = Map.empty[Id[Doc], Doc]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
@@ -69,7 +69,7 @@ class MapStore[Doc, Model <: DocModel[Doc]](val storeMode: StoreMode) extends St
 }
 
 object MapStore extends StoreManager {
-  override def create[Doc, Model <: DocModel[Doc]](db: LightDB,
-                                                   name: String,
-                                                   storeMode: StoreMode): Store[Doc, Model] = new MapStore[Doc, Model](storeMode)
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         name: String,
+                                                                         storeMode: StoreMode): Store[Doc, Model] = new MapStore[Doc, Model](storeMode)
 }

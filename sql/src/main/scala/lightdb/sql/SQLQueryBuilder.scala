@@ -1,10 +1,11 @@
 package lightdb.sql
 
 import lightdb.collection.Collection
+import lightdb.doc.Document
 
 import java.sql.{Connection, ResultSet}
 
-case class SQLQueryBuilder[Doc](collection: Collection[Doc, _],
+case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
                                 transaction: SQLTransaction[Doc],
                                 fields: List[SQLPart] = Nil,
                                 filters: List[SQLPart] = Nil,

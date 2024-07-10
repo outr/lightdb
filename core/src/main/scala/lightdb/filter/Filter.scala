@@ -1,5 +1,6 @@
 package lightdb.filter
 
+import fabric.Json
 import lightdb.Field
 import lightdb.spatial.GeoPoint
 
@@ -16,9 +17,13 @@ object Filter {
   def and[Doc](filters: Filter[Doc]*): Filter[Doc] = filters.tail
     .foldLeft(filters.head)((combined, filter) => combined && filter)
 
-  case class Equals[Doc, F](field: Field[Doc, F], value: F) extends Filter[Doc]
+  case class Equals[Doc, F](field: Field[Doc, F], value: F) extends Filter[Doc] {
+    def getJson: Json = field.rw.read(value)
+  }
 
-  case class In[Doc, F](field: Field[Doc, F], values: Seq[F]) extends Filter[Doc]
+  case class In[Doc, F](field: Field[Doc, F], values: Seq[F]) extends Filter[Doc] {
+    def getJson: List[Json] = values.toList.map(field.rw.read)
+  }
 
   case class Combined[Doc](filters: List[Filter[Doc]]) extends Filter[Doc]
 

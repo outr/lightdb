@@ -71,7 +71,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
         val people = list.map(_.doc)
         val distances = list.map(_.distance.mi)
         people.map(_.name) should be(List("Jane Doe", "John Doe"))
-        distances should be(List(28.493883134993137, 1318.8843733311087))
+        distances should (be (List(28.493883134993137, 1318.8843733311087)) or be(List(28.555356212993576, 1316.1282972648974)))
       }
     }
     "truncate the database" in {

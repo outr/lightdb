@@ -23,6 +23,7 @@ case class HikariConnectionManager[Doc](config: SQLConfig) extends ConnectionMan
   }
 
   private def closeConnection(connection: Connection): Unit = {
+    connection.commit()
     connection.close()
   }
 

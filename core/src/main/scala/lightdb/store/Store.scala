@@ -2,18 +2,23 @@ package lightdb.store
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.doc.{DocModel, Document, DocumentModel}
+import lightdb.doc.{DocumentModel, Document}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.{Field, Id, Query, SearchResults}
 
-abstract class Store[Doc, Model <: DocModel[Doc]] {
+abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected var collection: Collection[Doc, Model] = _
 
   protected def id(doc: Doc): Id[Doc] = doc.asInstanceOf[Document[_]]._id.asInstanceOf[Id[Doc]]
   protected lazy val idField: Field.Unique[Doc, Id[Doc]] = collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
 
   def storeMode: StoreMode
+
+  protected lazy val fields: List[Field[Doc, _]] = collection.model.fields match {
+    case fields if storeMode == StoreMode.Indexes => fields.filterNot(_.isInstanceOf[Field.Basic[_, _]])
+    case fields => fields
+  }
 
   def init(collection: Collection[Doc, Model]): Unit = {
     this.collection = collection

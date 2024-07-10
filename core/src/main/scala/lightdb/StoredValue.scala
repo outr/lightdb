@@ -19,7 +19,7 @@ case class StoredValue[T](key: String,
       t
     case None => collection.transaction { implicit transaction =>
       val t = collection.get(_._id -> id) match {
-        case Some(kv) => kv.value.as[T]
+        case Some(kv) => kv.json.as[T]
         case None => default()
       }
       if (persistence != Persistence.Stored) {

@@ -12,6 +12,8 @@ import org.scalatest.wordspec.AnyWordSpec
 import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
+  protected def aggregationSupported: Boolean = true
+
   private val adam = Person("Adam", 21, Person.id("adam"))
   private val brenda = Person("Brenda", 11, Person.id("brenda"))
   private val charlie = Person("Charlie", 35, Person.id("charlie"))
@@ -88,19 +90,23 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
       }
     }
     "query with aggregate functions" in {
-      DB.people.transaction { implicit transaction =>
-        val list = DB.people.query
-          .aggregate(p => List(
-            p.age.min,
-            p.age.max,
-            p.age.avg,
-            p.age.sum
-          ))
-          .toList
-        list.map(m => m(_.age.min)).toSet should be(Set(2))
-        list.map(m => m(_.age.max)).toSet should be(Set(102))
-        list.map(m => m(_.age.avg)).toSet should be(Set(41.80769230769231))
-        list.map(m => m(_.age.sum)).toSet should be(Set(1087))
+      if (aggregationSupported) {
+        DB.people.transaction { implicit transaction =>
+          val list = DB.people.query
+            .aggregate(p => List(
+              p.age.min,
+              p.age.max,
+              p.age.avg,
+              p.age.sum
+            ))
+            .toList
+          list.map(m => m(_.age.min)).toSet should be(Set(2))
+          list.map(m => m(_.age.max)).toSet should be(Set(102))
+          list.map(m => m(_.age.avg)).toSet should be(Set(41.80769230769231))
+          list.map(m => m(_.age.sum)).toSet should be(Set(1087))
+        }
+      } else {
+        succeed
       }
     }
     "search by age range" in {

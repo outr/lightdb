@@ -1,7 +1,7 @@
 package lightdb.store
 
 import lightdb.Field
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 
@@ -14,7 +14,7 @@ object Conversion {
 
   case class Json[Doc](fields: List[Field[Doc, _]]) extends Conversion[Doc, fabric.Json]
 
-  case class Materialized[Doc, Model <: DocModel[Doc]](fields: List[Field[Doc, _]]) extends Conversion[Doc, MaterializedIndex[Doc, Model]]
+  case class Materialized[Doc <: Document[Doc], Model <: DocumentModel[Doc]](fields: List[Field[Doc, _]]) extends Conversion[Doc, MaterializedIndex[Doc, Model]]
 
   case class Converted[Doc, T](f: Doc => T) extends Conversion[Doc, T]
 

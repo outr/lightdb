@@ -5,7 +5,7 @@ import fabric.define.DefType
 import fabric.rw._
 import lightdb.sql.connect.ConnectionManager
 import lightdb.{Field, LightDB}
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
@@ -14,7 +14,7 @@ import org.sqlite.SQLiteConfig
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 
-class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
+class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
 
   private lazy val connection: Connection = {
@@ -46,6 +46,24 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path], val storeMode
     executeUpdate("SELECT InitSpatialMetaData()")
 
     super.createTable()
+  }
+
+  override protected def tables(connection: Connection): Set[String] = {
+    val ps = connection.prepareStatement(s"SELECT name FROM sqlite_master WHERE type = 'table';")
+    try {
+      val rs = ps.executeQuery()
+      try {
+        var set = Set.empty[String]
+        while (rs.next()) {
+          set += rs.getString("name").toLowerCase
+        }
+        set
+      } finally {
+        rs.close
+      }
+    } finally {
+      ps.close()
+    }
   }
 
   override protected def toJson(value: Any, rw: RW[_]): Json = if (rw.definition.className.contains("lightdb.spatial.GeoPoint")) {
@@ -97,6 +115,6 @@ class SQLiteStore[Doc, Model <: DocModel[Doc]](file: Option[Path], val storeMode
 }
 
 object SQLiteStore extends StoreManager {
-  override def create[Doc, Model <: DocModel[Doc]](db: LightDB, name: String, storeMode: StoreMode): Store[Doc, Model] =
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB, name: String, storeMode: StoreMode): Store[Doc, Model] =
     new SQLiteStore[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite.db")), storeMode)
 }

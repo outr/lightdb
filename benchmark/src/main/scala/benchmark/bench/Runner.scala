@@ -4,6 +4,7 @@ import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench,
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.halodb.HaloDBStore
+import lightdb.lucene.LuceneStore
 import lightdb.sql.SQLiteStore
 import lightdb.store.MapStore
 import lightdb.store.split.SplitStoreManager
@@ -20,7 +21,9 @@ object Runner {
     "Derby" -> DerbyBench,
     "LightDB-SQLite" -> LightDBBench(SQLiteStore),
     "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore)),
-    "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore))
+    "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
+    "LightDB-Lucene" -> LightDBBench(LuceneStore),
+    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore))
   )
 
   def main(args: Array[String]): Unit = {

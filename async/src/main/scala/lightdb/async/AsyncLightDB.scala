@@ -2,7 +2,7 @@ package lightdb.async
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.{KeyValue, LightDB}
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
@@ -69,11 +69,11 @@ trait AsyncLightDB { db =>
    */
   protected def truncateOnInit: Boolean = false
 
-  def collection[Doc, Model <: DocModel[Doc]](model: Model,
-                                              name: Option[String] = None,
-                                              store: Option[Store[Doc, Model]] = None,
-                                              maxInsertBatch: Int = 1_000_000,
-                                              cacheQueries: Boolean = false): AsyncCollection[Doc, Model] =
+  def collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                   name: Option[String] = None,
+                                                   store: Option[Store[Doc, Model]] = None,
+                                                   maxInsertBatch: Int = 1_000_000,
+                                                   cacheQueries: Boolean = false): AsyncCollection[Doc, Model] =
     AsyncCollection(underlying.collection[Doc, Model](model, name, store, maxInsertBatch, cacheQueries))
 
   // TODO: AsyncStored
