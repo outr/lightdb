@@ -3,10 +3,10 @@ package lightdb.async
 import cats.effect.IO
 import lightdb.{Field, Id}
 import lightdb.collection.Collection
-import lightdb.doc.{DocModel, DocumentModel}
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction
 
-case class AsyncCollection[Doc, Model <: DocModel[Doc]](underlying: Collection[Doc, Model]) extends AnyVal {
+case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](underlying: Collection[Doc, Model]) extends AnyVal {
   def transaction[Return](f: Transaction[Doc] => IO[Return]): IO[Return] = {
     val transaction = underlying.transaction.create()
     f(transaction).guarantee(IO {
@@ -29,10 +29,10 @@ case class AsyncCollection[Doc, Model <: DocModel[Doc]](underlying: Collection[D
   def apply[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Doc] =
     IO.blocking(underlying(f))
 
-  def get(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[Option[Doc]] =
+  def get(id: Id[Doc])(implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
     IO.blocking(underlying.get(id))
 
-  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[Doc] =
+  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): IO[Doc] =
     IO.blocking(underlying(id))
 
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)

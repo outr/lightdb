@@ -2,7 +2,7 @@ package lightdb.store.split
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.Transaction
@@ -10,9 +10,9 @@ import lightdb.{Field, Query, SearchResults}
 
 import scala.language.implicitConversions
 
-case class SplitStore[Doc, Model <: DocModel[Doc]](storage: Store[Doc, Model],
-                                                   searching: Store[Doc, Model],
-                                                   storeMode: StoreMode) extends Store[Doc, Model] {
+case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage: Store[Doc, Model],
+                                                                         searching: Store[Doc, Model],
+                                                                         storeMode: StoreMode) extends Store[Doc, Model] {
   private implicit def transaction2Split(transaction: Transaction[Doc]): SplitTransaction[Doc] = transaction.asInstanceOf[SplitTransaction[Doc]]
 
   override def init(collection: Collection[Doc, Model]): Unit = {

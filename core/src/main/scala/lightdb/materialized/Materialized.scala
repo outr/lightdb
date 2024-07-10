@@ -2,9 +2,9 @@ package lightdb.materialized
 
 import fabric.Json
 import fabric.rw._
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 
-trait Materialized[Doc, Model <: DocModel[Doc]] {
+trait Materialized[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def json: Json
   def model: Model
 

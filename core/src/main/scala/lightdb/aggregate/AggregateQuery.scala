@@ -1,14 +1,14 @@
 package lightdb.aggregate
 
 import lightdb.{Query, SortDirection}
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 
-case class AggregateQuery[Doc, Model <: DocModel[Doc]](query: Query[Doc, Model],
-                                            functions: List[AggregateFunction[_, _, Doc]],
-                                            filter: Option[AggregateFilter[Doc]] = None,
-                                            sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
+case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],
+                                                            functions: List[AggregateFunction[_, _, Doc]],
+                                                            filter: Option[AggregateFilter[Doc]] = None,
+                                                            sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
   def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AggregateQuery[Doc, Model] = {
     val filter = f(query.collection.model)
     if (and && this.filter.nonEmpty) {

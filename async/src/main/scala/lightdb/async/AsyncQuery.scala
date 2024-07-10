@@ -3,20 +3,20 @@ package lightdb.async
 import cats.effect.IO
 import fabric.Json
 import lightdb.aggregate.AggregateFunction
-import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
+import lightdb.{Field, Id, Query, Sort, SortDirection}
 import lightdb.collection.Collection
-import lightdb.doc.{DocModel, DocumentModel}
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
-case class AsyncQuery[Doc, Model <: DocModel[Doc]](collection: Collection[Doc, Model],
-                                                   filter: Option[Filter[Doc]] = None,
-                                                   sort: List[Sort] = Nil,
-                                                   offset: Int = 0,
-                                                   limit: Option[Int] = None,
-                                                   countTotal: Boolean = false) { query =>
+case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
+                                                        filter: Option[Filter[Doc]] = None,
+                                                        sort: List[Sort] = Nil,
+                                                        offset: Int = 0,
+                                                        limit: Option[Int] = None,
+                                                        countTotal: Boolean = false) { query =>
   private[async] def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal)
 
   def clearFilters: AsyncQuery[Doc, Model] = copy(filter = None)

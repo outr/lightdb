@@ -2,7 +2,7 @@ package lightdb
 
 import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.Initializable
@@ -97,11 +97,11 @@ trait LightDB extends Initializable {
    *                     with different parameters fairly drastically, but consumes a lot of memory if many queries are
    *                     executed in a single transaction.
    */
-  def collection[Doc, Model <: DocModel[Doc]](model: Model,
-                                              name: Option[String] = None,
-                                              store: Option[Store[Doc, Model]] = None,
-                                              maxInsertBatch: Int = 1_000_000,
-                                              cacheQueries: Boolean = false): Collection[Doc, Model] = {
+  def collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                   name: Option[String] = None,
+                                                   store: Option[Store[Doc, Model]] = None,
+                                                   maxInsertBatch: Int = 1_000_000,
+                                                   cacheQueries: Boolean = false): Collection[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val s = store.getOrElse(storeManager.create[Doc, Model](this, n, StoreMode.All))
     val c = Collection[Doc, Model](n, model, s, maxInsertBatch, cacheQueries)
@@ -138,7 +138,7 @@ trait LightDB extends Initializable {
   }
 
   def truncate(): Unit = collections.foreach { c =>
-    val collection = c.asInstanceOf[Collection[Any, _]]
+    val collection = c.asInstanceOf[Collection[KeyValue, KeyValue.type]]
     collection.transaction { implicit transaction =>
       collection.truncate()(transaction)
     }

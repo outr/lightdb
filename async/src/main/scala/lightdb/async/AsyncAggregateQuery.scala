@@ -2,15 +2,15 @@ package lightdb.async
 
 import cats.effect.IO
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery}
-import lightdb.doc.DocModel
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.{Query, SortDirection}
 
-case class AsyncAggregateQuery[Doc, Model <: DocModel[Doc]](query: Query[Doc, Model],
-                                                            functions: List[AggregateFunction[_, _, Doc]],
-                                                            filter: Option[AggregateFilter[Doc]] = None,
-                                                            sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
+case class AsyncAggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],
+                                                                 functions: List[AggregateFunction[_, _, Doc]],
+                                                                 filter: Option[AggregateFilter[Doc]] = None,
+                                                                 sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
   def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AsyncAggregateQuery[Doc, Model] = {
     val filter = f(query.collection.model)
     if (and && this.filter.nonEmpty) {

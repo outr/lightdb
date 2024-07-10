@@ -2,7 +2,7 @@ package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
 import lightdb.collection.Collection
-import lightdb.doc.{Document, DocumentModel}
+import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
@@ -101,7 +101,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
 
   case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]
 
-  object Person extends DocumentModel[Person] with SQLConversion[Person] {
+  object Person extends DocumentModel[Person] with SQLConversion[Person] with JsonConversion[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
     override def convertFromSQL(rs: ResultSet): Person = Person(

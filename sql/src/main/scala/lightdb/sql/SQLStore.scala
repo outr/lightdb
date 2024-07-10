@@ -7,7 +7,7 @@ import fabric.rw._
 import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
-import lightdb.doc.{DocModel, DocumentModel, JsonConversion}
+import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
 import lightdb.spatial.DistanceAndDoc
@@ -19,12 +19,7 @@ import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
-trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
-  private lazy val fields = collection.model.fields match {
-    case fields if storeMode == StoreMode.Indexes => fields.filterNot(_.isInstanceOf[Field.Basic[_, _]])
-    case fields => fields
-  }
-
+trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[Doc, Model] {
   protected def connectionManager: ConnectionManager[Doc]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
@@ -35,7 +30,23 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   }
 
   protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
-    executeUpdate(s"CREATE TABLE IF NOT EXISTS ${collection.name}(${collection.model.fields.filterNot(f => f.rw.definition.className.contains("lightdb.spatial.GeoPoint")).map(_.name).mkString(", ")})")
+    val entries = fields.collect {
+      case field if !field.rw.definition.className.contains("lightdb.spatial.GeoPoint") =>
+        if (field == collection.model._id) {
+          "_id VARCHAR PRIMARY KEY"
+        } else {
+          val t = def2Type(field.name, field.rw.definition)
+          s"${field.name} $t"
+        }
+    }.mkString(", ")
+    executeUpdate(s"CREATE TABLE ${collection.name}($entries)")
+  }
+
+  private def def2Type(name: String, d: DefType): String = d match {
+    case DefType.Str | DefType.Json | DefType.Obj(_, _) => "VARCHAR"
+    case DefType.Int | DefType.Bool => "INTEGER"
+    case DefType.Opt(d) => def2Type(name, d)
+    case d => throw new UnsupportedOperationException(s"$name has an unsupported type: $d")
   }
 
   protected def addColumn(field: Field[Doc, _])(implicit transaction: Transaction[Doc]): Unit = {
@@ -46,7 +57,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
   protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
     val connection = connectionManager.getConnection
     val existingTables = tables(connection)
-    if (!existingTables.contains(collection.name)) {
+    if (!existingTables.contains(collection.name.toLowerCase)) {
       createTable()
     }
 
@@ -78,23 +89,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     }
   }
 
-  private def tables(connection: Connection): Set[String] = {
-    val ps = connection.prepareStatement(s"SELECT name FROM sqlite_master WHERE type = 'table';")
-    try {
-      val rs = ps.executeQuery()
-      try {
-        var set = Set.empty[String]
-        while (rs.next()) {
-          set += rs.getString("name")
-        }
-        set
-      } finally {
-        rs.close
-      }
-    } finally {
-      ps.close()
-    }
-  }
+  protected def tables(connection: Connection): Set[String]
 
   private def columns(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement(s"SELECT * FROM ${collection.name} LIMIT 1")
@@ -115,9 +110,11 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
 
   protected def field2Value(field: Field[Doc, _]): String = "?"
 
+  protected def upsertPrefix: String = "INSERT OR REPLACE"
+
   private lazy val insertSQL: String = try {
     val values = fields.map(field2Value)
-    s"INSERT OR REPLACE INTO ${collection.name}(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+    s"$upsertPrefix INTO ${collection.name}(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
   } catch {
     case t: Throwable => throw new RuntimeException(s"Failure building SQL Insert on ${collection.name}", t)
   }
@@ -203,12 +200,12 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
     case _ if storeMode == StoreMode.Indexes =>
       val id = Id[Doc](rs.getString("_id"))
       collection.t(_ => collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]] -> id)
+    case c: SQLConversion[Doc] => c.convertFromSQL(rs)
     case c: JsonConversion[Doc] =>
       val values = fields.map { field =>
         field.name -> toJson(rs.getObject(field.name), field.rw)
       }
       c.convertFromJson(obj(values: _*))
-    case c: SQLConversion[Doc] => c.convertFromSQL(rs)
     case _ =>
       val map = fields.map { field =>
         field.name -> obj2Value(rs.getObject(field.name))
@@ -309,7 +306,7 @@ trait SQLStore[Doc, Model <: DocModel[Doc]] extends Store[Doc, Model] {
       offset = query.offset,
       limit = query.limit,
       total = total,
-      iterator = iterator,
+      iteratorWithScore = iterator.map(v => v -> 0.0),
       transaction = transaction
     )
   }

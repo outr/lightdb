@@ -1,10 +1,10 @@
 package lightdb.async
 
 import cats.effect.IO
-import lightdb.doc.{DocModel, DocumentModel}
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.{Field, Id}
 
-case class AsyncTransactionConvenience[Doc, Model <: DocModel[Doc]](collection: AsyncCollection[Doc, Model]) {
+case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: AsyncCollection[Doc, Model]) {
   def set(doc: Doc): IO[Doc] = collection.transaction { implicit transaction =>
     collection.set(doc)
   }
@@ -21,11 +21,11 @@ case class AsyncTransactionConvenience[Doc, Model <: DocModel[Doc]](collection: 
     collection(f)
   }
 
-  def get(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): IO[Option[Doc]] = collection.transaction { implicit transaction =>
+  def get(id: Id[Doc]): IO[Option[Doc]] = collection.transaction { implicit transaction =>
     collection.get(id)
   }
 
-  def apply(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): IO[Doc] = collection.transaction { implicit transaction =>
+  def apply(id: Id[Doc]): IO[Doc] = collection.transaction { implicit transaction =>
     collection(id)
   }
 
