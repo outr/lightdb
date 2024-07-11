@@ -41,7 +41,7 @@ object SQLiteBench extends Bench {
             ps.executeBatch()
             batchSize = 0
           }
-          status.progress.set(index + 1)
+          status.progress()
           total + 1
         })
     } finally {
@@ -84,7 +84,7 @@ object SQLiteBench extends Bench {
       if (count != RecordCount) {
         scribe.warn(s"RecordCount was not $RecordCount, it was $count")
       }
-      status.progress.set(iteration + 1)
+      status.progress()
       total + count
     })
 
@@ -111,7 +111,7 @@ object SQLiteBench extends Bench {
             }
             rs.close()
             counter += 1
-            status.progress.set((iteration + 1) * (index + 1))
+            status.progress()
           }
         ps.close()
       }
@@ -140,7 +140,7 @@ object SQLiteBench extends Bench {
         if (count != RecordCount) {
           scribe.warn(s"RecordCount was not $RecordCount, it was $count")
         }
-        status.progress.set(iteration + 1)
+        status.progress()
       }
     counter
   }

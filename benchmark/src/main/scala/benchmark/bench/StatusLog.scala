@@ -2,7 +2,7 @@ package benchmark.bench
 
 import fabric.rw._
 
-case class StatusLog(progress: Double,
+case class StatusLog(progress: Long,
                      timeStamp: Long,
                      elapsed: Double,
                      heap: Long,

@@ -1,9 +1,10 @@
 package lightdb.async
 
 import cats.effect.IO
+import lightdb.doc.Document
 import lightdb.transaction.Transaction
 
-case class AsyncSearchResults[Doc, V](offset: Int,
+case class AsyncSearchResults[Doc <: Document[Doc], V](offset: Int,
                                       limit: Option[Int],
                                       total: Option[Int],
                                       stream: fs2.Stream[IO, V],

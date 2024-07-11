@@ -17,6 +17,8 @@ sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, 
 
   def getJson(doc: Doc): Json = get(doc).json
 
+  def indexed: Boolean = false
+
   override def is(value: V): Filter[Doc] = Filter.Equals(this, value)
 
   override protected def rangeLong(from: Option[Long], to: Option[Long]): Filter[Doc] =
@@ -52,10 +54,15 @@ sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, 
 
 object Field {
   case class Basic[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
-  case class Index[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
-  case class Unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
+  case class Index[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW) {
+    override def indexed: Boolean = true
+  }
+  case class Unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW) {
+    override def indexed: Boolean = true
+  }
 
   def string2Json(name: String, s: String, definition: DefType): Json = definition match {
+    case _ if s == null => Null
     case DefType.Str => str(s)
     case DefType.Int => num(s.toLong)
     case DefType.Dec => num(BigDecimal(s))
@@ -63,14 +70,12 @@ object Field {
       case "1" | "true" => true
       case _ => false
     })
-    case DefType.Json | DefType.Obj(_, _) =>
-      scribe.info(s"Parsing $name: $s / $definition")
+    case DefType.Opt(d) => string2Json(name, s, d)
+    case DefType.Enum(_) => str(s)
+    case _ => try {
       JsonParser(s)
-    case DefType.Opt(d) => if (s == null) {
-      Null
-    } else {
-      string2Json(name, s, d)
+    } catch {
+      case t: Throwable => throw new RuntimeException(s"Failure to convert $name = $s to $definition", t)
     }
-    case d => throw new RuntimeException(s"Unsupported DefType $d ($s)")
   }
 }

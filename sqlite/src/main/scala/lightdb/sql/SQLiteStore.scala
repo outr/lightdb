@@ -100,6 +100,8 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
     }
   }
 
+  override def size: Long = file.map(_.toFile.length()).getOrElse(0L)
+
   override protected object connectionManager extends ConnectionManager[Doc] {
     override def getConnection(implicit transaction: Transaction[Doc]): Connection = connection
 

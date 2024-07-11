@@ -101,7 +101,7 @@ trait LightDB extends Initializable {
                                                    name: Option[String] = None,
                                                    store: Option[Store[Doc, Model]] = None,
                                                    maxInsertBatch: Int = 1_000_000,
-                                                   cacheQueries: Boolean = false): Collection[Doc, Model] = {
+                                                   cacheQueries: Boolean = Collection.DefaultCacheQueries): Collection[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val s = store.getOrElse(storeManager.create[Doc, Model](this, n, StoreMode.All))
     val c = Collection[Doc, Model](n, model, s, maxInsertBatch, cacheQueries)

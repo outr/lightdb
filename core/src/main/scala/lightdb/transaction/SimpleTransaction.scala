@@ -1,6 +1,8 @@
 package lightdb.transaction
 
-case class SimpleTransaction[Doc]() extends Transaction[Doc] {
+import lightdb.doc.Document
+
+case class SimpleTransaction[Doc <: Document[Doc]]() extends Transaction[Doc] {
   override def commit(): Unit = {}
 
   override def rollback(): Unit = {}

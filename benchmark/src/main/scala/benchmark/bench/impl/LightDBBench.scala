@@ -27,7 +27,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
           age = index
         )
         DB.people.set(person)
-        status.progress.set(index + 1)
+        status.progress()
         total + 1
       })
   }
@@ -42,7 +42,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
         if (count != RecordCount) {
           scribe.warn(s"RecordCount was not $RecordCount, it was $count")
         }
-        status.progress.set(iteration + 1)
+        status.progress()
         total + count
       })
   }
@@ -52,6 +52,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     (0 until StreamIterations)
       .foreach { iteration =>
         (0 until RecordCount)
+          .par
           .foreach { index =>
             val list = DB.people.query.filter(_.age === index).search.docs.iterator.toList
             val person = list.head
@@ -62,7 +63,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
               scribe.warn(s"More than one result for $index")
             }
             counter += 1
-            status.progress.set((iteration + 1) * (index + 1))
+            status.progress()
           }
       }
     counter
@@ -81,12 +82,12 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
         if (count != RecordCount) {
           scribe.warn(s"RecordCount was not $RecordCount, it was $count")
         }
-        status.progress.set(iteration + 1)
+        status.progress()
       }
     counter
   }
 
-  override def size(): Long = -1L
+  override def size(): Long = DB.people.store.size
 
   override def dispose(): Unit = DB.people.dispose()
 

@@ -5,10 +5,11 @@ import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.error.NonIndexedFieldException
 import lightdb.filter.Filter
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, GeoPoint}
-import lightdb.store.Conversion
+import lightdb.store.{Conversion, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
@@ -35,10 +36,24 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
   def countTotal(b: Boolean): Query[Doc, Model] = copy(countTotal = b)
   object search {
     def apply[V](conversion: Conversion[Doc, V])
-                (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = collection.store.doSearch(
-      query = query,
-      conversion = conversion
-    )
+                (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
+      val storeMode = collection.store.storeMode
+      if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode == StoreMode.All)) {
+        val notIndexed = filter.toList.flatMap(_.fields).filter(!_.indexed)
+        storeMode match {
+          case StoreMode.Indexes => if (notIndexed.nonEmpty) {
+            throw NonIndexedFieldException(query, notIndexed)
+          }
+          case StoreMode.All => if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
+            scribe.warn(s"Inefficient query filtering on non-indexed field(s): ${notIndexed.map(_.name).mkString(", ")}")
+          }
+        }
+      }
+      collection.store.doSearch(
+        query = query,
+        conversion = conversion
+      )
+    }
 
     def docs(implicit transaction: Transaction[Doc]): SearchResults[Doc, Doc] = apply(Conversion.Doc())
     def value[F](f: Model => Field[Doc, F])
@@ -101,4 +116,17 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
       .iterator
     GroupedIterator[Doc, F](iterator, doc => field.get(doc))
   }
+}
+
+object Query {
+  /**
+   * If true, validates queries before execution and errors for runtime validation errors like attempting to filter on
+   * a field that is not indexed when StoreMode is Indexed. Defaults to true.
+   */
+  var Validation: Boolean = true
+
+  /**
+   * If true, logs a warning for queries that are using non-indexed fields. Defaults to true.
+   */
+  var WarnFilteringWithoutIndex: Boolean = true
 }

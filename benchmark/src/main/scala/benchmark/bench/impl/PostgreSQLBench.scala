@@ -36,7 +36,7 @@ object PostgreSQLBench extends Bench {
           ps.setString(2, person.name)
           ps.setInt(3, person.age)
           ps.addBatch()
-          status.progress.set(index + 1)
+          status.progress()
           batchSize += 1
           if (batchSize > 1_000_000) {
             ps.executeBatch()
@@ -79,7 +79,7 @@ object PostgreSQLBench extends Bench {
       if (count != RecordCount) {
         scribe.warn(s"RecordCount was not $RecordCount, it was $count")
       }
-      status.progress.set(iteration + 1)
+      status.progress()
       total + count
     })
 
@@ -106,7 +106,7 @@ object PostgreSQLBench extends Bench {
             }
             rs.close()
             counter += 1
-            status.progress.set((iteration + 1) * (index + 1))
+            status.progress()
           }
         ps.close()
       }
@@ -130,12 +130,12 @@ object PostgreSQLBench extends Bench {
         if (count != RecordCount) {
           scribe.warn(s"RecordCount was not $RecordCount, it was $count")
         }
-        status.progress.set(iteration + 1)
+        status.progress()
       }
     counter
   }
 
-  override def size(): Long = new File("db/sqlite.db").length()
+  override def size(): Long = -1L
 
   override def dispose(): Unit = connection.close()
 

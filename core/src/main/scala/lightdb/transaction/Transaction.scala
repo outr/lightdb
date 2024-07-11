@@ -1,12 +1,13 @@
 package lightdb.transaction
 
 import lightdb.Id
+import lightdb.doc.Document
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-trait Transaction[Doc] { transaction =>
+trait Transaction[Doc <: Document[Doc]] { transaction =>
   private var locks = Set.empty[Id[Doc]]
 
   def lock(id: Id[Doc], delay: FiniteDuration = 100.millis): Unit = {
@@ -51,7 +52,7 @@ object Transaction {
   private lazy val locks = new ConcurrentHashMap[Id[_], Transaction[_]]
 
   @tailrec
-  private def lock[Doc](id: Id[Doc],
+  private def lock[Doc <: Document[Doc]](id: Id[Doc],
                         transaction: Transaction[Doc],
                         delay: FiniteDuration): Unit = {
     val existingTransaction = locks
@@ -68,7 +69,7 @@ object Transaction {
     }
   }
 
-  private def unlock[Doc](id: Id[Doc], transaction: Transaction[Doc]): Unit = locks
+  private def unlock[Doc <: Document[Doc]](id: Id[Doc], transaction: Transaction[Doc]): Unit = locks
     .compute(id, (_, currentTransaction) => {
       if (currentTransaction == transaction) {
         null

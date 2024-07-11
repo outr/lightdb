@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.12.0-SNAPSHOT"
+ThisBuild / version := "0.12.0-SNAPSHOT1"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -81,7 +81,7 @@ val fs2Version: String = "3.10.2"
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, lucene, halodb, async, all)
+	.aggregate(core.jvm, sql, sqlite, h2, lucene, halodb, async, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -244,7 +244,7 @@ lazy val h2 = project.in(file("index/h2"))
 	)*/
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, lucene, halodb)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, h2, lucene, halodb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

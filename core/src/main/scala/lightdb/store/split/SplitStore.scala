@@ -13,7 +13,12 @@ import scala.language.implicitConversions
 case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage: Store[Doc, Model],
                                                                          searching: Store[Doc, Model],
                                                                          storeMode: StoreMode) extends Store[Doc, Model] {
-  private implicit def transaction2Split(transaction: Transaction[Doc]): SplitTransaction[Doc] = transaction.asInstanceOf[SplitTransaction[Doc]]
+  private implicit def transaction2Split(transaction: Transaction[Doc]): SplitTransaction[Doc] = transaction match {
+    case t: SplitTransaction[Doc] => t
+    case t => map(t)
+  }
+
+  private var map = Map.empty[Transaction[Doc], SplitTransaction[Doc]]
 
   override def init(collection: Collection[Doc, Model]): Unit = {
     super.init(collection)
@@ -21,14 +26,25 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     searching.init(collection)
   }
 
-  override def createTransaction(): Transaction[Doc] = SplitTransaction(
-    storage = storage.createTransaction(),
-    searching = searching.createTransaction()
-  )
+  override def createTransaction(): Transaction[Doc] = {
+    val t = SplitTransaction(
+      storage = storage.createTransaction(),
+      searching = searching.createTransaction()
+    )
+    synchronized {
+      map += t.storage -> t
+      map += t.searching -> t
+    }
+    t
+  }
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = {
     storage.releaseTransaction(transaction.storage)
     searching.releaseTransaction(transaction.searching)
+    synchronized {
+      map -= transaction.storage
+      map -= transaction.searching
+    }
   }
 
   override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
@@ -71,6 +87,8 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     storage.truncate()(transaction.storage)
     searching.truncate()(transaction.searching)
   }
+
+  override def size: Long = storage.size + searching.size
 
   override def dispose(): Unit = {
     storage.dispose()

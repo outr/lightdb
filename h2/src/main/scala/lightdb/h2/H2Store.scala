@@ -3,16 +3,17 @@ package lightdb.h2
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.SQLStore
-import lightdb.sql.connect.{ConnectionManager, HikariConnectionManager, SQLConfig}
+import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.util.Unique
 
+import java.io.File
 import java.nio.file.Path
 import java.sql.Connection
 
 class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
-  override protected lazy val connectionManager: ConnectionManager[Doc] = HikariConnectionManager(SQLConfig(
-    jdbcUrl = s"jdbc:h2:${file.map(_.toFile.getCanonicalPath).getOrElse(s"test:${Unique()}")}"
+  override protected lazy val connectionManager: ConnectionManager[Doc] = SingleConnectionManager(SQLConfig(
+    jdbcUrl = s"jdbc:h2:${file.map(_.toFile.getCanonicalPath).getOrElse(s"test:${Unique()}")};NON_KEYWORDS=VALUE,USER"
   ))
 
   override protected def upsertPrefix: String = "MERGE"
@@ -34,6 +35,12 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Pa
       ps.close()
     }
   }
+
+  override def size: Long = file.map { path =>
+    val baseFile = path.toFile
+    val file = new File(baseFile.getParentFile, s"${baseFile.getName}.mv.db")
+    file.length()
+  }.getOrElse(0L)
 }
 
 object H2Store extends StoreManager {

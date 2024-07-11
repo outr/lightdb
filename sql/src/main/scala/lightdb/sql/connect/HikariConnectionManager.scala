@@ -1,12 +1,13 @@
 package lightdb.sql.connect
 
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
+import lightdb.doc.Document
 import lightdb.sql._
 import lightdb.transaction.Transaction
 
 import java.sql.Connection
 
-case class HikariConnectionManager[Doc](config: SQLConfig) extends ConnectionManager[Doc] {
+case class HikariConnectionManager[Doc <: Document[Doc]](config: SQLConfig) extends ConnectionManager[Doc] {
   private lazy val dataSource: HikariDataSource = {
     val hc = new HikariConfig
     hc.setJdbcUrl(config.jdbcUrl)
