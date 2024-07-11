@@ -15,7 +15,32 @@ case class SQLTransaction[Doc <: Document[Doc]](connectionManager: ConnectionMan
   private var statements = List.empty[Statement]
   private var resultSets = List.empty[ResultSet]
 
-  private[sql] var cache = Map.empty[String, PreparedStatement]
+  private var cache = Map.empty[String, PreparedStatement]
+
+  def withPreparedStatement[Return](sql: String, cache: Boolean)(f: PreparedStatement => Return): Return = {
+    val connection = connectionManager.getConnection(this)
+    def createPs() = {
+      val ps = connection.prepareStatement(sql)
+      register(ps)
+      ps
+    }
+    if (cache) {
+      val ps = synchronized {
+        this.cache.get(sql) match {
+          case Some(ps) => ps
+          case None =>
+            val ps = createPs()
+            this.cache += sql -> ps
+            ps
+        }
+      }
+      ps.synchronized {
+        f(ps)
+      }
+    } else {
+      f(createPs())
+    }
+  }
 
   def withPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
     if (ps == null) {

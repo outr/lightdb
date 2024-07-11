@@ -146,7 +146,7 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
       limit = Some(1),
       offset = 0
     )
-    val rs = b.execute(connectionManager.getConnection)
+    val rs = b.execute()
     try {
       if (rs.next()) {
         Some(getDoc(rs))
@@ -288,10 +288,10 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
       offset = query.offset
     )
     val connection = connectionManager.getConnection
-    val rs = b.execute(connection)
+    val rs = b.execute()
     transaction.register(rs)
     val total = if (query.countTotal) {
-      Some(b.queryTotal(connection))
+      Some(b.queryTotal())
     } else {
       None
     }
@@ -356,8 +356,7 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
   override def aggregate(query: AggregateQuery[Doc, Model])
                         (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
     val b = aggregate2SQLQuery(query)
-    val connection = connectionManager.getConnection
-    val rs = b.execute(connection)
+    val rs = b.execute()
     transaction.register(rs)
     def createStream[R](f: ResultSet => R): Iterator[R] = {
       val iterator = new Iterator[R] {
@@ -401,8 +400,7 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
   override def aggregateCount(query: AggregateQuery[Doc, Model])
                              (implicit transaction: Transaction[Doc]): Int = {
     val b = aggregate2SQLQuery(query)
-    val connection = connectionManager.getConnection
-    b.queryTotal(connection)
+    b.queryTotal()
   }
 
   protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
