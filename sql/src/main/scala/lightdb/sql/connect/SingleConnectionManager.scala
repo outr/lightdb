@@ -5,13 +5,7 @@ import lightdb.transaction.Transaction
 
 import java.sql.{Connection, DriverManager}
 
-case class SingleConnectionManager[Doc <: Document[Doc]](config: SQLConfig) extends ConnectionManager[Doc] {
-  private lazy val connection = {
-    val c = DriverManager.getConnection(config.jdbcUrl, config.username.orNull, config.password.orNull)
-    c.setAutoCommit(config.autoCommit)
-    c
-  }
-
+case class SingleConnectionManager[Doc <: Document[Doc]](connection: java.sql.Connection) extends ConnectionManager[Doc] {
   override def getConnection(implicit transaction: Transaction[Doc]): Connection = connection
 
   override def currentConnection(implicit transaction: Transaction[Doc]): Option[Connection] = Some(connection)
@@ -21,5 +15,16 @@ case class SingleConnectionManager[Doc <: Document[Doc]](config: SQLConfig) exte
   override def dispose(): Unit = {
     connection.commit()
     connection.close()
+  }
+}
+
+object SingleConnectionManager {
+  def apply[Doc <: Document[Doc]](config: SQLConfig): SingleConnectionManager[Doc] = {
+    val connection = {
+      val c = DriverManager.getConnection(config.jdbcUrl, config.username.orNull, config.password.orNull)
+      c.setAutoCommit(config.autoCommit)
+      c
+    }
+    SingleConnectionManager(connection)
   }
 }

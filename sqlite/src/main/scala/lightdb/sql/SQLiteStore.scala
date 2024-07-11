@@ -3,7 +3,7 @@ package lightdb.sql
 import fabric.{Json, num, obj}
 import fabric.define.DefType
 import fabric.rw._
-import lightdb.sql.connect.ConnectionManager
+import lightdb.sql.connect.{ConnectionManager, SingleConnectionManager}
 import lightdb.{Field, LightDB}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
@@ -17,20 +17,23 @@ import java.sql.Connection
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
 
-  private lazy val connection: Connection = {
-    val path = file match {
-      case Some(f) =>
-        val file = f.toFile
-        Option(file.getParentFile).foreach(_.mkdirs())
-        file.getCanonicalPath
-      case None => ":memory:"
-    }
+  override protected lazy val connectionManager: ConnectionManager[Doc] = {
+    val connection: Connection = {
+      val path = file match {
+        case Some(f) =>
+          val file = f.toFile
+          Option(file.getParentFile).foreach(_.mkdirs())
+          file.getCanonicalPath
+        case None => ":memory:"
+      }
 
-    val config = new SQLiteConfig
-    config.enableLoadExtension(true)
-    val c = config.createConnection(s"jdbc:sqlite:$path")
-    c.setAutoCommit(false)
-    c
+      val config = new SQLiteConfig
+      config.enableLoadExtension(true)
+      val c = config.createConnection(s"jdbc:sqlite:$path")
+      c.setAutoCommit(false)
+      c
+    }
+    SingleConnectionManager(connection)
   }
 
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
@@ -59,7 +62,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
         }
         set
       } finally {
-        rs.close
+        rs.close()
       }
     } finally {
       ps.close()
@@ -101,19 +104,6 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
   }
 
   override def size: Long = file.map(_.toFile.length()).getOrElse(0L)
-
-  override protected object connectionManager extends ConnectionManager[Doc] {
-    override def getConnection(implicit transaction: Transaction[Doc]): Connection = connection
-
-    override def currentConnection(implicit transaction: Transaction[Doc]): Option[Connection] = Some(connection)
-
-    override def releaseConnection(implicit transaction: Transaction[Doc]): Unit = {}
-
-    override def dispose(): Unit = {
-      connection.commit()
-      connection.close()
-    }
-  }
 }
 
 object SQLiteStore extends StoreManager {

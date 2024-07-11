@@ -48,10 +48,10 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
   }
 
   override protected def searchEachRecord(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    var counter = 0
     (0 until StreamIterations)
       .foreach { iteration =>
         (0 until RecordCount)
+//          .par
           .foreach { index =>
             val list = DB.people.query.filter(_.age === index).search.docs.iterator.toList
             val person = list.head
@@ -61,11 +61,10 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
             if (list.size > 1) {
               scribe.warn(s"More than one result for $index")
             }
-            counter += 1
             status.progress()
           }
       }
-    counter
+    status.currentProgress
   }
 
   override protected def searchAllRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
