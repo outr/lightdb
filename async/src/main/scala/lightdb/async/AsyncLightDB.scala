@@ -2,6 +2,7 @@ package lightdb.async
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.{KeyValue, LightDB}
 import lightdb.store.{Store, StoreManager}
@@ -73,7 +74,7 @@ trait AsyncLightDB { db =>
                                                    name: Option[String] = None,
                                                    store: Option[Store[Doc, Model]] = None,
                                                    maxInsertBatch: Int = 1_000_000,
-                                                   cacheQueries: Boolean = false): AsyncCollection[Doc, Model] =
+                                                   cacheQueries: Boolean = Collection.DefaultCacheQueries): AsyncCollection[Doc, Model] =
     AsyncCollection(underlying.collection[Doc, Model](model, name, store, maxInsertBatch, cacheQueries))
 
   // TODO: AsyncStored

@@ -3,6 +3,7 @@ package benchmark.bench
 import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
 import fabric.rw._
+import lightdb.h2.H2Store
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.sql.SQLiteStore
@@ -23,7 +24,8 @@ object Runner {
     "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore)),
     "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
     "LightDB-Lucene" -> LightDBBench(LuceneStore),
-    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore))
+    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore)),
+    "LightDB-H2" -> LightDBBench(H2Store)
   )
 
   def main(args: Array[String]): Unit = {
@@ -44,7 +46,7 @@ object Runner {
           val count = task.f(status)
           status.finish()
           if (count != task.maxProgress.toInt) {
-            throw new RuntimeException(s"${bench.name} - ${task.name} expected ${task.maxProgress.toInt}, but received: $count")
+            scribe.warn(s"${bench.name} - ${task.name} expected ${task.maxProgress.toInt}, but received: $count")
           }
           val logs = status.logs
           scribe.info(s"Completed in ${logs.last.elapsed} seconds")

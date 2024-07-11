@@ -12,7 +12,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                         model: Model,
                                                         store: Store[Doc, Model],
                                                         maxInsertBatch: Int = 1_000_000,
-                                                        cacheQueries: Boolean = false) extends Initializable { collection =>
+                                                        cacheQueries: Boolean = Collection.DefaultCacheQueries) extends Initializable { collection =>
   override protected def initialize(): Unit = {
     store.init(this)
 
@@ -158,4 +158,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   def dispose(): Unit = {
     store.dispose()
   }
+}
+
+object Collection {
+  var DefaultCacheQueries: Boolean = false
 }

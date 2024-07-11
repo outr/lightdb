@@ -33,7 +33,7 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
     val entries = fields.collect {
       case field if !field.rw.definition.className.contains("lightdb.spatial.GeoPoint") =>
         if (field == collection.model._id) {
-          "_id VARCHAR PRIMARY KEY"
+          "_id VARCHAR NOT NULL PRIMARY KEY"
         } else {
           val t = def2Type(field.name, field.rw.definition)
           s"${field.name} $t"
@@ -43,8 +43,9 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
   }
 
   private def def2Type(name: String, d: DefType): String = d match {
-    case DefType.Str | DefType.Json | DefType.Obj(_, _) => "VARCHAR"
-    case DefType.Int | DefType.Bool => "INTEGER"
+    case DefType.Str | DefType.Json | DefType.Obj(_, _) | DefType.Arr(_) | DefType.Poly(_) | DefType.Enum(_) =>
+      "VARCHAR"
+    case DefType.Int | DefType.Bool => "BIGINT"
     case DefType.Opt(d) => def2Type(name, d)
     case d => throw new UnsupportedOperationException(s"$name has an unsupported type: $d")
   }
@@ -84,6 +85,7 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
       case _: Field.Basic[Doc, _] => // Nothing to do
       case index: Field.Index[Doc, _] =>
         executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
+      case index: Field.Unique[Doc, _] if index.name == "_id" => // Ignore _id
       case index: Field.Unique[Doc, _] =>
         executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
     }
@@ -104,7 +106,7 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
     }
   }
 
-  override def createTransaction(): Transaction[Doc] = SQLTransaction[Doc](connectionManager)
+  override def createTransaction(): Transaction[Doc] = SQLTransaction[Doc](connectionManager, this)
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = transaction.close()
 
@@ -112,31 +114,22 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
 
   protected def upsertPrefix: String = "INSERT OR REPLACE"
 
-  private lazy val insertSQL: String = try {
+  private[sql] lazy val insertSQL: String = try {
     val values = fields.map(field2Value)
     s"$upsertPrefix INTO ${collection.name}(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
   } catch {
     case t: Throwable => throw new RuntimeException(s"Failure building SQL Insert on ${collection.name}", t)
   }
 
-  private def withPreparedStatement[Return](f: PreparedStatement => Return)
-                                           (implicit transaction: Transaction[Doc]): Return = transaction.synchronized {
-    if (transaction.ps == null) {
-      val connection = connectionManager.getConnection
-      transaction.ps = connection.prepareStatement(insertSQL)
-    }
-    f(transaction.ps)
-  }
-
-  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = withPreparedStatement { ps =>
+  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = transaction.withPreparedStatement { ps =>
     fields.zipWithIndex.foreach {
       case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
     }
     ps.addBatch()
-    transaction.batch += 1
-    if (transaction.batch >= collection.maxInsertBatch) {
+    transaction.batch.incrementAndGet()
+    if (transaction.batch.get() >= collection.maxInsertBatch) {
       ps.executeBatch()
-      transaction.batch = 0
+      transaction.batch.set(0)
     }
   }
 
@@ -246,6 +239,7 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
     case f: java.lang.Float => f.doubleValue()
     case d: java.lang.Double => d.doubleValue()
     case bi: java.math.BigInteger => BigDecimal(bi)
+    case bd: java.math.BigDecimal => BigDecimal(bd)
     case _ => throw new RuntimeException(s"Unsupported object: $obj (${obj.getClass.getName})")
   }
 

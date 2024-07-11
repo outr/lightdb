@@ -8,6 +8,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Field, Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
+import perfolation.double2Implicits
 
 import java.nio.file.Path
 
@@ -102,7 +103,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
             .toList
           list.map(m => m(_.age.min)).toSet should be(Set(2))
           list.map(m => m(_.age.max)).toSet should be(Set(102))
-          list.map(m => m(_.age.avg)).toSet should be(Set(41.80769230769231))
+          list.map(m => m(_.age.avg).f(f = 6)).toSet should be(Set("41.807692"))
           list.map(m => m(_.age.sum)).toSet should be(Set(1087))
         }
       } else {

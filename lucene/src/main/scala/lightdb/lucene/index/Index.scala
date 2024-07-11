@@ -31,12 +31,12 @@ case class Index(path: Option[Path]) {
 
   def releaseIndexSearch(indexSearcher: IndexSearcher): Unit = searcherManager.release(indexSearcher)
 
-  def commit(transaction: LuceneTransaction[_]): Unit = {
+  def commit(): Unit = {
     indexWriter.flush()
     indexWriter.commit()
   }
 
-  def rollback(transaction: LuceneTransaction[_]): Unit = {
+  def rollback(): Unit = {
     indexWriter.rollback()
   }
 }

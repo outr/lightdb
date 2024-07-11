@@ -3,10 +3,12 @@ package benchmark.bench
 import com.sun.management.OperatingSystemMXBean
 
 import java.lang.management.ManagementFactory
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 case class StatusCallback(every: Long = 30_000L) {
-  val progress = new AtomicReference[Double](0.0)
+  private val _progress = new AtomicLong(0L)
+
+  def progress(delta: Long = 1L): Unit = _progress.addAndGet(delta)
 
   def logs: List[StatusLog] = _logs.reverse
 
@@ -45,7 +47,7 @@ case class StatusCallback(every: Long = 30_000L) {
     val cpuLoad = os.getProcessCpuLoad
     val cpuTime = os.getProcessCpuTime
     val log = StatusLog(
-      progress = progress.get(),
+      progress = _progress.get(),
       timeStamp = now,
       elapsed = elapsed,
       heap = heapUsed,

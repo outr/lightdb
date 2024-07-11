@@ -2,10 +2,12 @@ package lightdb.store
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.doc.{DocumentModel, Document}
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.{Field, Id, Query, SearchResults}
+
+import java.io.File
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected var collection: Collection[Doc, Model] = _
@@ -48,5 +50,15 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def truncate()(implicit transaction: Transaction[Doc]): Int
 
+  def size: Long
+
   def dispose(): Unit
+}
+
+object Store {
+  def determineSize(file: File): Long = if (file.isDirectory) {
+    file.listFiles().foldLeft(0L)((sum, file) => sum + determineSize(file))
+  } else {
+    file.length()
+  }
 }

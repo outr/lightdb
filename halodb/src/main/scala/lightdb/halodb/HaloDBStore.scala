@@ -89,6 +89,8 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     size
   }
 
+  override def size: Long = Store.determineSize(directory.toFile)
+
   override def dispose(): Unit = {
     instance.pauseCompaction()
     instance.close()

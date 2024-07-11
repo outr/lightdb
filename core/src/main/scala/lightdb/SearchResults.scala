@@ -1,8 +1,9 @@
 package lightdb
 
+import lightdb.doc.Document
 import lightdb.transaction.Transaction
 
-case class SearchResults[Doc, V](offset: Int,
+case class SearchResults[Doc <: Document[Doc], V](offset: Int,
                                  limit: Option[Int],
                                  total: Option[Int],
                                  iteratorWithScore: Iterator[(V, Double)],

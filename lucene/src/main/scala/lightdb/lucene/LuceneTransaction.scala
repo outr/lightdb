@@ -1,10 +1,11 @@
 package lightdb.lucene
 
+import lightdb.doc.Document
 import lightdb.lucene.index.Index
 import lightdb.transaction.Transaction
 import org.apache.lucene.search.IndexSearcher
 
-class LuceneTransaction[Doc](index: Index) extends Transaction[Doc] {
+class LuceneTransaction[Doc <: Document[Doc]](index: Index) extends Transaction[Doc] {
   private var _indexSearcher: IndexSearcher = _
 
   def indexSearcher: IndexSearcher = {
@@ -14,9 +15,9 @@ class LuceneTransaction[Doc](index: Index) extends Transaction[Doc] {
     _indexSearcher
   }
 
-  override def commit(): Unit = index.commit(this)
+  override def commit(): Unit = index.commit()
 
-  override def rollback(): Unit = index.rollback(this)
+  override def rollback(): Unit = index.rollback()
 
   def close(): Unit = {
     commit()

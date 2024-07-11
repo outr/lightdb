@@ -18,7 +18,6 @@ import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint,
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.MatchAllDocsQuery
 
 import java.nio.file.Path
 import scala.language.implicitConversions
@@ -59,7 +58,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         case p: GeoPoint =>
           add(new LatLonPoint(field.name, p.latitude, p.longitude))
           add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
-        case ref => throw new RuntimeException(s"Unsupported object reference: $ref for JSON: $obj")
+        case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
       }
       case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
     }
@@ -273,6 +272,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     index.indexWriter.deleteAll()
     count
   }
+
+  override def size: Long = directory.map(p => Store.determineSize(p.toFile)).getOrElse(0L)
 
   override def dispose(): Unit = {
     index.indexWriter.flush()
