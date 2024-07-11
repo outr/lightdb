@@ -3,17 +3,17 @@ package lightdb.sql
 import lightdb.collection.Collection
 import lightdb.doc.Document
 
-import java.sql.{Connection, ResultSet}
+import java.sql.ResultSet
 
 case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
-                                transaction: SQLTransaction[Doc],
-                                fields: List[SQLPart] = Nil,
-                                filters: List[SQLPart] = Nil,
-                                group: List[SQLPart] = Nil,
-                                having: List[SQLPart] = Nil,
-                                sort: List[SQLPart] = Nil,
-                                limit: Option[Int] = None,
-                                offset: Int) {
+                                                 transaction: SQLTransaction[Doc],
+                                                 fields: List[SQLPart] = Nil,
+                                                 filters: List[SQLPart] = Nil,
+                                                 group: List[SQLPart] = Nil,
+                                                 having: List[SQLPart] = Nil,
+                                                 sort: List[SQLPart] = Nil,
+                                                 limit: Option[Int] = None,
+                                                 offset: Int) {
   lazy val sql: String = {
     val b = new StringBuilder
     b.append("SELECT\n")
@@ -61,13 +61,13 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
 
   lazy val args: List[SQLArg] = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
 
-  def queryTotal(connection: Connection): Int = {
+  def queryTotal(): Int = {
     val b = copy(
       sort = Nil,
       limit = None,
       offset = 0
     )
-    val rs = b.executeInternal(connection, "SELECT COUNT(*) FROM (", ") AS innerQuery")
+    val rs = b.executeInternal("SELECT COUNT(*) FROM (", ") AS innerQuery")
     try {
       rs.next()
       rs.getInt(1)
@@ -76,33 +76,16 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
     }
   }
 
-  def execute(connection: Connection): ResultSet = executeInternal(connection)
+  def execute(): ResultSet = executeInternal()
 
-  private def executeInternal(connection: Connection, pre: String = "", post: String = ""): ResultSet = {
+  private def executeInternal(pre: String = "", post: String = ""): ResultSet = {
     scribe.debug(s"Executing Query: $sql (${args.mkString(", ")})")
-    val ps = if (collection.cacheQueries) {
-      transaction.synchronized {
-        transaction.cache.get(sql) match {
-          case Some(ps) => ps
-          case None =>
-            val ps = connection.prepareStatement(sql)
-            transaction.register(ps)
-            transaction.cache += sql -> ps
-            ps
-        }
+    val combinedSql = s"$pre$sql$post"
+    transaction.withPreparedStatement(combinedSql, collection.cacheQueries) { ps =>
+      args.zipWithIndex.foreach {
+        case (value, index) => value.set(ps, index + 1)
       }
-    } else {
-      try {
-        val ps = connection.prepareStatement(s"$pre$sql$post")
-        transaction.register(ps)
-        ps
-      } catch {
-        case t: Throwable => throw new RuntimeException(s"Failed to execute query:\n$sql\nParams: ${args.mkString(", ")}", t)
-      }
+      ps.executeQuery()
     }
-    args.zipWithIndex.foreach {
-      case (value, index) => value.set(ps, index + 1)
-    }
-    ps.executeQuery()
   }
 }

@@ -52,7 +52,6 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     (0 until StreamIterations)
       .foreach { iteration =>
         (0 until RecordCount)
-          .par
           .foreach { index =>
             val list = DB.people.query.filter(_.age === index).search.docs.iterator.toList
             val person = list.head
