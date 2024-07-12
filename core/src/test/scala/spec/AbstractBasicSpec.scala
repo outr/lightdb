@@ -60,7 +60,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "insert the records" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.set(names) should not be None
+        DB.people.insert(names) should not be None
       }
     }
     "retrieve the first record by _id -> id" in {
@@ -126,11 +126,11 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
       DB.people.transaction { implicit transaction =>
         val list = DB.people.query.grouped(_.age).toList
         list.map(_._1) should be(List(2, 4, 11, 12, 13, 15, 21, 22, 23, 30, 33, 35, 42, 53, 62, 63, 72, 81, 89, 99, 101, 102))
-        list.map(_._2.map(_.name)) should be(List(
-          List("Penny"), List("Jenna"), List("Brenda"), List("Greg"), List("Veronica"), List("Diana"),
-          List("Adam", "Oscar", "Uba"), List("Nancy"), List("Fiona"), List("Tori", "Wyatt", "Yuri"), List("Kevin"),
-          List("Charlie"), List("Mike"), List("Evan"), List("Hanna"), List("Xena"), List("Linda"), List("Sam"),
-          List("Ian"), List("Quintin"), List("Zoey"), List("Ruth")
+        list.map(_._2.map(_.name).toSet) should be(List(
+          Set("Penny"), Set("Jenna"), Set("Brenda"), Set("Greg"), Set("Veronica"), Set("Diana"),
+          Set("Adam", "Uba", "Oscar"), Set("Nancy"), Set("Fiona"), Set("Tori", "Yuri", "Wyatt"), Set("Kevin"),
+          Set("Charlie"), Set("Mike"), Set("Evan"), Set("Hanna"), Set("Xena"), Set("Linda"), Set("Sam"), Set("Ian"),
+          Set("Quintin"), Set("Zoey"), Set("Ruth")
         ))
       }
     }

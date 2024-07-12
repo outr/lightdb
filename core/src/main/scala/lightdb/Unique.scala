@@ -1,4 +1,4 @@
-package lightdb.util
+package lightdb
 
 import java.util.concurrent.ThreadLocalRandom
 

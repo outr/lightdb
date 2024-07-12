@@ -19,9 +19,13 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
    */
   def t: AsyncTransactionConvenience[Doc, Model] = AsyncTransactionConvenience(this)
 
-  def set(doc: Doc)(implicit transaction: Transaction[Doc]): IO[Doc] = IO.blocking(underlying.set(doc))
+  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): IO[Doc] = IO.blocking(underlying.insert(doc))
 
-  def set(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): IO[Seq[Doc]] = IO.blocking(underlying.set(docs))
+  def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): IO[Seq[Doc]] = IO.blocking(underlying.insert(docs))
+
+  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): IO[Doc] = IO.blocking(underlying.upsert(doc))
+
+  def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): IO[Seq[Doc]] = IO.blocking(underlying.upsert(docs))
 
   def get[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
     IO.blocking(underlying.get(f))

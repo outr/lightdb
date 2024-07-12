@@ -14,13 +14,14 @@ import lightdb.spatial.DistanceAndDoc
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.util.ActionIterator
 import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
 trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[Doc, Model] {
-  protected def connectionManager: ConnectionManager[Doc]
+  protected def connectionManager: ConnectionManager
 
   override def init(collection: Collection[Doc, Model]): Unit = {
     super.init(collection)
@@ -106,30 +107,50 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
     }
   }
 
-  override def createTransaction(): Transaction[Doc] = SQLTransaction[Doc](connectionManager, this)
+  override def createTransaction(): Transaction[Doc] = SQLTransaction[Doc](connectionManager, this, collection.cacheQueries)
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = transaction.close()
 
   protected def field2Value(field: Field[Doc, _]): String = "?"
 
+  protected def insertPrefix: String = "INSERT"
+
   protected def upsertPrefix: String = "INSERT OR REPLACE"
 
-  private[sql] lazy val insertSQL: String = try {
+  protected def createInsertSQL(): String = {
     val values = fields.map(field2Value)
-    s"$upsertPrefix INTO ${collection.name}(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
-  } catch {
-    case t: Throwable => throw new RuntimeException(s"Failure building SQL Insert on ${collection.name}", t)
+    s"$insertPrefix INTO ${collection.name}(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
   }
 
-  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = transaction.withPreparedStatement { ps =>
+  protected def createUpsertSQL(): String = {
+    val values = fields.map(field2Value)
+    s"$upsertPrefix INTO ${collection.name}(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+  }
+
+  private[sql] lazy val insertSQL: String = createInsertSQL()
+  private[sql] lazy val upsertSQL: String = createUpsertSQL()
+
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = transaction.withInsertPreparedStatement { ps =>
     fields.zipWithIndex.foreach {
       case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
     }
     ps.addBatch()
-    transaction.batch.incrementAndGet()
-    if (transaction.batch.get() >= collection.maxInsertBatch) {
+    transaction.batchInsert.incrementAndGet()
+    if (transaction.batchInsert.get() >= collection.maxInsertBatch) {
       ps.executeBatch()
-      transaction.batch.set(0)
+      transaction.batchInsert.set(0)
+    }
+  }
+
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = transaction.withUpsertPreparedStatement { ps =>
+    fields.zipWithIndex.foreach {
+      case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
+    }
+    ps.addBatch()
+    transaction.batchUpsert.incrementAndGet()
+    if (transaction.batchUpsert.get() >= collection.maxInsertBatch) {
+      ps.executeBatch()
+      transaction.batchUpsert.set(0)
     }
   }
 
@@ -287,7 +308,6 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
       limit = query.limit,
       offset = query.offset
     )
-    val connection = connectionManager.getConnection
     val rs = b.execute()
     transaction.register(rs)
     val total = if (query.countTotal) {
@@ -296,11 +316,13 @@ trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[
       None
     }
     val iterator = rs2Iterator(rs, conversion)
+    val ps = rs.getStatement.asInstanceOf[PreparedStatement]
+    val iteratorWithScore = ActionIterator(iterator.map(v => v -> 0.0), onClose = () => transaction.returnPreparedStatement(b.sql, ps))
     SearchResults(
       offset = query.offset,
       limit = query.limit,
       total = total,
-      iteratorWithScore = iterator.map(v => v -> 0.0),
+      iteratorWithScore = iteratorWithScore,
       transaction = transaction
     )
   }

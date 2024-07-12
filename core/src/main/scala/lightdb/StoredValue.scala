@@ -38,7 +38,7 @@ case class StoredValue[T](key: String,
     value
   } else {
     collection.transaction { implicit transaction =>
-      collection.set(KeyValue(id, value.asJson))
+      collection.upsert(KeyValue(id, value.asJson))
       if (persistence != Persistence.Stored) {
         cached = Some(value)
       }

@@ -30,7 +30,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def releaseTransaction(transaction: Transaction[Doc]): Unit
 
-  def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
+  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
+
+  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
 
   def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc]
 

@@ -18,7 +18,11 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
 
-  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = synchronized {
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = synchronized {
+    map += id(doc) -> doc
+  }
+
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = synchronized {
     map += id(doc) -> doc
   }
 

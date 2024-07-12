@@ -48,12 +48,20 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
    * Convenience feature for simple one-off operations removing the need to manually create a transaction around it.
    */
   object t {
-    def set(doc: Doc): Doc = transaction { implicit transaction =>
-      collection.set(doc)
+    def insert(doc: Doc): Doc = transaction { implicit transaction =>
+      collection.insert(doc)
     }
 
-    def set(docs: Seq[Doc]): Seq[Doc] = transaction { implicit transaction =>
-      collection.set(docs)
+    def upsert(doc: Doc): Doc = transaction { implicit transaction =>
+      collection.upsert(doc)
+    }
+
+    def insert(docs: Seq[Doc]): Seq[Doc] = transaction { implicit transaction =>
+      collection.insert(docs)
+    }
+
+    def upsert(docs: Seq[Doc]): Seq[Doc] = transaction { implicit transaction =>
+      collection.upsert(docs)
     }
 
     def get[V](f: Model => (Field.Unique[Doc, V], V)): Option[Doc] = transaction { implicit transaction =>
@@ -94,12 +102,19 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
-  def set(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
-    store.set(doc)
+  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
+    store.insert(doc)
     doc
   }
 
-  def set(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(set)
+  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
+    store.upsert(doc)
+    doc
+  }
+
+  def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(insert)
+
+  def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(upsert)
 
   def get[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Option[Doc] = {
     val (field, value) = f(model)
@@ -127,7 +142,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     val idField = model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
     f(get(_ => idField -> id)) match {
       case Some(doc) =>
-        set(doc)
+        upsert(doc)
         Some(doc)
       case None if deleteOnNone =>
         delete(_ => idField -> id)

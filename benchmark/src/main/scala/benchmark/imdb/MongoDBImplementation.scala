@@ -5,7 +5,7 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.mongodb.client.MongoClients
 import com.mongodb.client.model.Indexes
-import lightdb.util.Unique
+import lightdb.Unique
 import org.bson.Document
 
 import java.{lang, util}

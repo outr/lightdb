@@ -47,9 +47,14 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     }
   }
 
-  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
-    storage.set(doc)(transaction.storage)
-    searching.set(doc)(transaction.searching)
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+    storage.insert(doc)(transaction.storage)
+    searching.insert(doc)(transaction.searching)
+  }
+
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+    storage.upsert(doc)(transaction.storage)
+    searching.upsert(doc)(transaction.searching)
   }
 
   override def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {

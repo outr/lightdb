@@ -2,10 +2,8 @@
 
 set -e
 
-#declare -a arr=("ldbHaloLucene" "ldbMapLucene" "ldbRocksLucene" "ldbAtomicLucene" "ldbMapLucene" "ldbHaloSQLite" "ldbHaloH2" "ldbHaloDuck")
-#declare -a arr=("ldbHaloLucene" "SQLite")
-#declare -a arr=("PostgreSQL")
-declare -a arr=("LightDB-SQLite")
+declare -a arr=("SQLite" "H2" "Derby" "LightDB-SQLite" "LightDB-Map-SQLite" "LightDB-HaloDB-SQLite" "LightDB-Lucene" "LightDB-HaloDB-Lucene" "LightDB-H2")
+#declare -a arr=("LightDB-PostgreSQL")
 
 for i in "${arr[@]}"
 do

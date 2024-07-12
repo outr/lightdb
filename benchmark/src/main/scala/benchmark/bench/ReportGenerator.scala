@@ -160,7 +160,7 @@ object ChartLabel {
 }
 
 case class ChartTicks(display: Boolean = true,
-                      beginAtZero: Boolean = true,
+                      beginAtZero: Boolean = false,
                       fontColor: Option[String] = None,
                       fontSize: Option[Int] = None,
                       fontStyle: Option[String] = None,

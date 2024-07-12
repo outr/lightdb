@@ -81,7 +81,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
   private def executeInternal(pre: String = "", post: String = ""): ResultSet = {
     scribe.debug(s"Executing Query: $sql (${args.mkString(", ")})")
     val combinedSql = s"$pre$sql$post"
-    transaction.withPreparedStatement(combinedSql, collection.cacheQueries) { ps =>
+    transaction.withPreparedStatement(combinedSql) { ps =>
       args.zipWithIndex.foreach {
         case (value, index) => value.set(ps, index + 1)
       }

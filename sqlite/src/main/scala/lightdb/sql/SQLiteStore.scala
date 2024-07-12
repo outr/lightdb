@@ -3,7 +3,7 @@ package lightdb.sql
 import fabric.{Json, num, obj}
 import fabric.define.DefType
 import fabric.rw._
-import lightdb.sql.connect.{ConnectionManager, SingleConnectionManager}
+import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.{Field, LightDB}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
@@ -17,7 +17,7 @@ import java.sql.Connection
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
 
-  override protected lazy val connectionManager: ConnectionManager[Doc] = {
+  override protected lazy val connectionManager: ConnectionManager = {
     val connection: Connection = {
       val path = file match {
         case Some(f) =>
