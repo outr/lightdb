@@ -32,7 +32,7 @@ object ReportGenerator {
     }.groupBy(_._2.name)
     reportsMap.foreach {
       case (name, nameAndReports) =>
-        totalTimeReport(name, nameAndReports)
+        totalTimeReport(name, nameAndReports.sortBy(_._1))
     }
   }
 
