@@ -68,11 +68,15 @@ val luceneVersion: String = "9.11.1"
 
 val hikariCPVersion: String = "5.1.0"
 
+val commonsDBCP2Version: String = "2.12.0"
+
 val sqliteVersion: String = "3.46.0.0"
 
 val duckdbVersion: String = "1.0.0"
 
 val h2Version: String = "2.2.224"
+
+val postgresqlVersion: String = "42.7.3"
 
 val catsVersion: String = "3.5.4"
 
@@ -126,6 +130,7 @@ lazy val sql = project.in(file("sql"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"com.zaxxer" % "HikariCP" % hikariCPVersion,
+			"org.apache.commons" % "commons-dbcp2" % commonsDBCP2Version,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
@@ -148,6 +153,17 @@ lazy val h2 = project.in(file("h2"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"com.h2database" % "h2" % h2Version,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val postgresql = project.in(file("postgresql"))
+	.dependsOn(sql, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-postgresql",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.postgresql" % "postgresql" % postgresqlVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
@@ -230,21 +246,10 @@ lazy val duckdb = project.in(file("index/duckdb"))
 			"org.duckdb" % "duckdb_jdbc" % duckdbVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
-	)
-
-lazy val h2 = project.in(file("index/h2"))
-	.dependsOn(sql, core.jvm % "test->test")
-	.settings(
-		name := s"$projectName-h2",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"com.h2database" % "h2" % h2Version,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		)
 	)*/
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, h2, lucene, halodb)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, h2, lucene, halodb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
@@ -269,6 +274,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"commons-io" % "commons-io" % "2.16.1",
 			"co.fs2" %% "fs2-io" % "3.9.4",
 			"com.outr" %% "scarango-driver" % "3.20.0",
+//			"com.outr" %% "lightdb-all" % "0.11.0",
 			"org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
 			"org.jooq" % "jooq" % "3.19.10",
 			"io.quickchart" % "QuickChart" % "1.2.0"

@@ -5,12 +5,20 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.{Field, Id}
 
 case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: AsyncCollection[Doc, Model]) {
-  def set(doc: Doc): IO[Doc] = collection.transaction { implicit transaction =>
-    collection.set(doc)
+  def insert(doc: Doc): IO[Doc] = collection.transaction { implicit transaction =>
+    collection.insert(doc)
   }
 
-  def set(docs: Seq[Doc]): IO[Seq[Doc]] = collection.transaction { implicit transaction =>
-    collection.set(docs)
+  def insert(docs: Seq[Doc]): IO[Seq[Doc]] = collection.transaction { implicit transaction =>
+    collection.insert(docs)
+  }
+
+  def upsert(doc: Doc): IO[Doc] = collection.transaction { implicit transaction =>
+    collection.upsert(doc)
+  }
+
+  def upsert(docs: Seq[Doc]): IO[Seq[Doc]] = collection.transaction { implicit transaction =>
+    collection.upsert(docs)
   }
 
   def get[V](f: Model => (Field.Unique[Doc, V], V)): IO[Option[Doc]] = collection.transaction { implicit transaction =>

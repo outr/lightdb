@@ -53,7 +53,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     }
     "store three people" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.set(List(p1, p2, p3)).length should be(3)
+        DB.people.insert(List(p1, p2, p3)).length should be(3)
       }
     }
     "verify exactly three people exist" in {

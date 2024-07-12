@@ -1,8 +1,7 @@
 package lightdb.doc
 
 import fabric.rw._
-import lightdb.util.Unique
-import lightdb.{Field, Id}
+import lightdb.{Field, Id, Unique}
 
 import scala.language.implicitConversions
 

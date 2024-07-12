@@ -43,7 +43,9 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
 
-  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
+
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val json = doc.json(collection.model.rw)
     instance.put(id(doc).bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
   }

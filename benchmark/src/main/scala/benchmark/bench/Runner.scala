@@ -1,12 +1,14 @@
 package benchmark.bench
 
-import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench, SQLiteBench}
+import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, MongoDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.h2.H2Store
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
+import lightdb.postgresql.PostgreSQLStoreManager
 import lightdb.sql.SQLiteStore
+import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
 import lightdb.store.MapStore
 import lightdb.store.split.SplitStoreManager
 import org.apache.commons.io.FileUtils
@@ -20,12 +22,20 @@ object Runner {
     "PostgreSQL" -> PostgreSQLBench,
     "H2" -> H2Bench,
     "Derby" -> DerbyBench,
+    "MongoDB" -> MongoDBBench,
+//    "LightDB011" -> LightDB011Bench
     "LightDB-SQLite" -> LightDBBench(SQLiteStore),
     "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore)),
     "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
     "LightDB-Lucene" -> LightDBBench(LuceneStore),
     "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore)),
-    "LightDB-H2" -> LightDBBench(H2Store)
+    "LightDB-H2" -> LightDBBench(H2Store),
+    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
+      jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
+      username = Some("postgres"),
+      password = Some("password"),
+      maximumPoolSize = Some(100)
+    ))))
   )
 
   def main(args: Array[String]): Unit = {

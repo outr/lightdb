@@ -35,7 +35,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = transaction.close()
 
-  override def set(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  // TODO: Can I improve performance here?
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
+
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val luceneFields = fields.flatMap { field =>
       createLuceneFields(field, doc)
     }

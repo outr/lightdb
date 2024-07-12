@@ -21,7 +21,7 @@ trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers {
       DB.init()
     }
     "insert a couple SpecialOne instances" in {
-      DB.specialOne.t.set(List(
+      DB.specialOne.t.insert(List(
         SpecialOne("First", WrappedString("Apple"), Person("Andrew", 1), _id = Id("first")),
         SpecialOne("Second", WrappedString("Banana"), Person("Bianca", 2), _id = Id("second"))
       ))

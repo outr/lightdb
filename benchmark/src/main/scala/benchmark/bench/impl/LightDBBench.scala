@@ -6,83 +6,49 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.util.Unique
 import lightdb.{Field, Id, LightDB}
 import fabric.rw._
 
 import java.nio.file.Path
 import java.sql.ResultSet
-import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
+import scala.language.implicitConversions
 
 case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
   override def name: String = s"LightDB ${storeManager.getClass.getSimpleName.replace("$", "")}"
 
   override def init(): Unit = DB.init()
 
-  override protected def insertRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    (0 until RecordCount)
-      .foldLeft(0)((total, index) => {
-        val person = Person(
-          name = Unique(),
-          age = index
-        )
-        DB.people.set(person)
-        status.progress()
-        total + 1
-      })
+  implicit def p2Person(p: P): Person = Person(p.name, p.age, Id(p.id))
+
+  def toP(person: Person): P = P(person.name, person.age, person._id.value)
+
+  override protected def insertRecords(iterator: Iterator[P]): Unit = DB.people.transaction { implicit transaction =>
+    iterator.foreach { p =>
+      val person: Person = p
+      DB.people.insert(person)
+    }
   }
 
-  override protected def streamRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    (0 until StreamIterations)
-      .foldLeft(0)((total, iteration) => {
-        var count = 0
-        DB.people.iterator.foreach { _ =>
-          count += 1
-        }
-        if (count != RecordCount) {
-          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
-        }
-        status.progress()
-        total + count
-      })
+  override protected def streamRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
+    f(DB.people.iterator.map(toP))
   }
 
-  override protected def searchEachRecord(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    (0 until StreamIterations)
-      .foreach { iteration =>
-        (0 until RecordCount)
-//          .par
-          .foreach { index =>
-            val list = DB.people.query.filter(_.age === index).search.docs.iterator.toList
-            val person = list.head
-            if (person.age != index) {
-              scribe.warn(s"${person.age} was not $index")
-            }
-            if (list.size > 1) {
-              scribe.warn(s"More than one result for $index")
-            }
-            status.progress()
-          }
+  override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = DB.people.transaction { implicit transaction =>
+    ageIterator.foreach { age =>
+      val list = DB.people.query.filter(_.age === age).search.docs.list
+      val person = list.head
+      if (person.age != age) {
+        scribe.warn(s"${person.age} was not $age")
       }
-    status.currentProgress
+      if (list.size > 1) {
+        scribe.warn(s"More than one result for $age")
+      }
+    }
   }
 
-  override protected def searchAllRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    var counter = 0
-    (0 until StreamIterations)
-      .par
-      .foreach { iteration =>
-        var count = 0
-        DB.people.query.search.docs.iterator.foreach { person =>
-          count += 1
-          counter += 1
-        }
-        if (count != RecordCount) {
-          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
-        }
-        status.progress()
-      }
-    counter
+  override protected def searchAllRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
+    val iterator = DB.people.query.search.docs.iterator.map(toP)
+    f(iterator)
   }
 
   override def size(): Long = DB.people.store.size

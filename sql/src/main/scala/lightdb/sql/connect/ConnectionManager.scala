@@ -5,12 +5,12 @@ import lightdb.transaction.Transaction
 
 import java.sql.Connection
 
-trait ConnectionManager[Doc <: Document[Doc]] {
-  def getConnection(implicit transaction: Transaction[Doc]): Connection
+trait ConnectionManager {
+  def getConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Connection
 
-  def currentConnection(implicit transaction: Transaction[Doc]): Option[Connection]
+  def currentConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Option[Connection]
 
-  def releaseConnection(implicit transaction: Transaction[Doc]): Unit
+  def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit
 
   def dispose(): Unit
 }
