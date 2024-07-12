@@ -1,7 +1,6 @@
 package lightdb.sql
 
-import fabric.{Json, num, obj}
-import fabric.define.DefType
+import fabric._
 import fabric.rw._
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.{Field, LightDB}

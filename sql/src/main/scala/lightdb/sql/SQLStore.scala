@@ -20,7 +20,7 @@ import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
-trait SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[Doc, Model] {
+abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[Doc, Model] {
   protected def connectionManager: ConnectionManager
 
   override def init(collection: Collection[Doc, Model]): Unit = {
