@@ -14,12 +14,15 @@ import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
-                                                   filter: Option[Filter[Doc]] = None,
-                                                   sort: List[Sort] = Nil,
-                                                   offset: Int = 0,
-                                                   limit: Option[Int] = None,
-                                                   countTotal: Boolean = false) { query =>
+                                                                    filter: Option[Filter[Doc]] = None,
+                                                                    sort: List[Sort] = Nil,
+                                                                    offset: Int = 0,
+                                                                    limit: Option[Int] = None,
+                                                                    countTotal: Boolean = false,
+                                                                    scoreDocs: Boolean = false) {
+  query =>
   def clearFilters: Query[Doc, Model] = copy(filter = None)
+
   def filter(f: Model => Filter[Doc]): Query[Doc, Model] = {
     val filter = f(collection.model)
     val combined = this.filter match {
@@ -28,12 +31,19 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     }
     copy(filter = Some(combined))
   }
+
   def clearSort: Query[Doc, Model] = copy(sort = Nil)
+
   def sort(sort: Sort*): Query[Doc, Model] = copy(sort = this.sort ::: sort.toList)
+
   def offset(offset: Int): Query[Doc, Model] = copy(offset = offset)
+
   def limit(limit: Int): Query[Doc, Model] = copy(limit = Some(limit))
+
   def clearLimit: Query[Doc, Model] = copy(limit = None)
+
   def countTotal(b: Boolean): Query[Doc, Model] = copy(countTotal = b)
+
   object search {
     def apply[V](conversion: Conversion[Doc, V])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
@@ -56,20 +66,26 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     }
 
     def docs(implicit transaction: Transaction[Doc]): SearchResults[Doc, Doc] = apply(Conversion.Doc())
+
     def value[F](f: Model => Field[Doc, F])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, F] =
       apply(Conversion.Value(f(collection.model)))
+
     def id(implicit transaction: Transaction[Doc]): SearchResults[Doc, Id[Doc]] =
       value(m => m._id)
+
     def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): SearchResults[Doc, Json] =
       apply(Conversion.Json(f(collection.model)))
+
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, T] =
       apply(Conversion.Converted(f))
+
     def materialized(f: Model => List[Field[Doc, _]])
                     (implicit transaction: Transaction[Doc]): SearchResults[Doc, MaterializedIndex[Doc, Model]] = {
       val fields = f(collection.model)
       apply(Conversion.Materialized(fields))
     }
+
     def distance(f: Model => Field[Doc, GeoPoint],
                  from: GeoPoint,
                  sort: Boolean = true,

@@ -10,10 +10,13 @@ import lightdb.upgrade.DatabaseUpgrade
 
 import java.nio.file.Path
 
-trait AsyncLightDB { db =>
+trait AsyncLightDB {
+  db =>
   object underlying extends LightDB {
     override def name: String = db.name
+
     override def directory: Option[Path] = db.directory
+
     override def storeManager: StoreManager = db.storeManager
 
     override protected def truncateOnInit: Boolean = db.truncateOnInit
@@ -33,8 +36,11 @@ trait AsyncLightDB { db =>
     override lazy val upgrades: List[DatabaseUpgrade] = db.upgrades.map { u =>
       new DatabaseUpgrade {
         override def label: String = u.label
+
         override def applyToNew: Boolean = u.applyToNew
+
         override def blockStartup: Boolean = u.blockStartup
+
         override def alwaysRun: Boolean = u.alwaysRun
 
         override def upgrade(ldb: LightDB): Unit = u.upgrade(db).unsafeRunSync()
@@ -71,11 +77,12 @@ trait AsyncLightDB { db =>
   protected def truncateOnInit: Boolean = false
 
   def collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                   name: Option[String] = None,
-                                                   store: Option[Store[Doc, Model]] = None,
-                                                   maxInsertBatch: Int = 1_000_000,
-                                                   cacheQueries: Boolean = Collection.DefaultCacheQueries): AsyncCollection[Doc, Model] =
-    AsyncCollection(underlying.collection[Doc, Model](model, name, store, maxInsertBatch, cacheQueries))
+                                                                    name: Option[String] = None,
+                                                                    store: Option[Store[Doc, Model]] = None,
+                                                                    storeManager: Option[StoreManager] = None,
+                                                                    maxInsertBatch: Int = 1_000_000,
+                                                                    cacheQueries: Boolean = Collection.DefaultCacheQueries): AsyncCollection[Doc, Model] =
+    AsyncCollection(underlying.collection[Doc, Model](model, name, store, storeManager, maxInsertBatch, cacheQueries))
 
   // TODO: AsyncStored
 
