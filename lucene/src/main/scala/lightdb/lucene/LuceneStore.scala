@@ -35,18 +35,22 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def releaseTransaction(transaction: Transaction[Doc]): Unit = transaction.close()
 
-  // TODO: Can I improve performance here?
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+    val luceneFields = fields.flatMap { field =>
+      createLuceneFields(field, doc)
+    }
+    addDoc(id(doc), luceneFields, upsert = false)
+  }
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val luceneFields = fields.flatMap { field =>
       createLuceneFields(field, doc)
     }
-    addDoc(id(doc), luceneFields)
+    addDoc(id(doc), luceneFields, upsert = true)
   }
 
   private def createLuceneFields(field: Field[Doc, _], doc: Doc): List[LuceneField] = {
-    def fs: LuceneField.Store = if (storeMode == StoreMode.All) LuceneField.Store.YES else LuceneField.Store.NO
+    def fs: LuceneField.Store = if (storeMode == StoreMode.All || field.name == "_id") LuceneField.Store.YES else LuceneField.Store.NO
     val json = field.getJson(doc)
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
@@ -79,11 +83,15 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     fields
   }
 
-  private def addDoc(id: Id[Doc], fields: List[LuceneField]): Unit = if (fields.tail.nonEmpty) {
+  private def addDoc(id: Id[Doc], fields: List[LuceneField], upsert: Boolean): Unit = if (fields.tail.nonEmpty) {
     val document = new LuceneDocument
     fields.foreach(document.add)
 
-    index.indexWriter.updateDocument(new Term("_id", id.value), document)
+    if (upsert) {
+      index.indexWriter.updateDocument(new Term("_id", id.value), document)
+    } else {
+      index.indexWriter.addDocument(document)
+    }
   }
 
   override def get[V](field: Field.Unique[Doc, V], value: V)

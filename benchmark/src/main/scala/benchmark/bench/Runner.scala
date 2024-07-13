@@ -9,7 +9,7 @@ import lightdb.lucene.LuceneStore
 import lightdb.postgresql.PostgreSQLStoreManager
 import lightdb.sql.SQLiteStore
 import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
-import lightdb.store.MapStore
+import lightdb.store.{MapStore, StoreMode}
 import lightdb.store.split.SplitStoreManager
 import org.apache.commons.io.FileUtils
 
@@ -28,7 +28,7 @@ object Runner {
     "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore)),
     "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
     "LightDB-Lucene" -> LightDBBench(LuceneStore),
-    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore)),
+    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore, searchingMode = StoreMode.Indexes)),
     "LightDB-H2" -> LightDBBench(H2Store),
     "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
       jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
