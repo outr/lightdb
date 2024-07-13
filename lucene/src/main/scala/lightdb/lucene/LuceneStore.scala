@@ -102,7 +102,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   override def delete[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
-    index.indexWriter.deleteDocuments(index.parser.parse(s"_id:${value.asInstanceOf[Id[Doc]].value}"))
+    val query = filter2Lucene(Some(field === value))
+    index.indexWriter.deleteDocuments(query)
     true
   }
 
@@ -164,7 +165,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     } else {
       idsAndScores.iterator.flatMap {
         case (id, score) => collection.get(id)(transaction).map(doc => doc -> score)
-      }
+      }.toList.iterator     // TODO: Does this improve performance?
     }
     def jsonIterator(fields: List[Field[Doc, _]]): Iterator[(Json, Double)] = {
       scoreDocs.iterator.map { scoreDoc =>
