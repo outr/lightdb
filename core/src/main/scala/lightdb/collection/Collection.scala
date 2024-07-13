@@ -41,7 +41,10 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
     def create(): Transaction[Doc] = store.createTransaction()
 
-    def release(transaction: Transaction[Doc]): Unit = store.releaseTransaction(transaction)
+    def release(transaction: Transaction[Doc]): Unit = {
+      store.releaseTransaction(transaction)
+      transaction.close()
+    }
   }
 
   /**

@@ -87,7 +87,8 @@ case class SQLTransaction[Doc <: Document[Doc]](connectionManager: ConnectionMan
     connection.rollback()
   }
 
-  def close(): Unit = {
+  override def close(): Unit = {
+    super.close()
     if (batchInsert.get() > 0) {
       psInsert.executeBatch()
     }

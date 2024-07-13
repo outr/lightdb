@@ -33,7 +33,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def createTransaction(): Transaction[Doc] = new LuceneTransaction[Doc](index)
 
-  override def releaseTransaction(transaction: Transaction[Doc]): Unit = transaction.close()
+  override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val luceneFields = fields.flatMap { field =>
