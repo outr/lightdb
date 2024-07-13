@@ -35,13 +35,17 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
 
   override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = DB.people.transaction { implicit transaction =>
     ageIterator.foreach { age =>
-      val list = DB.people.query.filter(_.age === age).search.docs.list
-      val person = list.head
-      if (person.age != age) {
-        scribe.warn(s"${person.age} was not $age")
-      }
-      if (list.size > 1) {
-        scribe.warn(s"More than one result for $age")
+      try {
+        val list = DB.people.query.filter(_.age === age).search.docs.list
+        val person = list.head
+        if (person.age != age) {
+          scribe.warn(s"${person.age} was not $age")
+        }
+        if (list.size > 1) {
+          scribe.warn(s"More than one result for $age")
+        }
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Error with $age", t)
       }
     }
   }
