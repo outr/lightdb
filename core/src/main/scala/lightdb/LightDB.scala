@@ -89,26 +89,35 @@ trait LightDB extends Initializable {
    * before the database is initialized, but collections that are added after init will automatically be initialized
    * during this method call.
    *
-   * @param model the model to use for this collection
-   * @param name the collection's name (defaults to None meaning it will be generated based on the model name)
-   * @param store specify the store. If this is not set, the database's storeManager will be used to create one
+   * Note: If both are specified, store takes priority over storeManager.
+   *
+   * @param model          the model to use for this collection
+   * @param name           the collection's name (defaults to None meaning it will be generated based on the model name)
+   * @param store          specify the store. If this is not set, the database's storeManager will be used to create one
+   * @param storeManager   specify the StoreManager. If this is not set, the database's storeManager will be used.
    * @param maxInsertBatch the maximum number of inserts to include in a batch. Defaults to 1 million.
-   * @param cacheQueries whether to cache queries in memory. This improves performance when running the same queries
-   *                     with different parameters fairly drastically, but consumes a lot of memory if many queries are
-   *                     executed in a single transaction.
+   * @param cacheQueries   whether to cache queries in memory. This improves performance when running the same queries
+   *                       with different parameters fairly drastically, but consumes a lot of memory if many queries are
+   *                       executed in a single transaction.
    */
   def collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                   name: Option[String] = None,
-                                                   store: Option[Store[Doc, Model]] = None,
-                                                   maxInsertBatch: Int = 1_000_000,
-                                                   cacheQueries: Boolean = Collection.DefaultCacheQueries): Collection[Doc, Model] = {
+                                                                    name: Option[String] = None,
+                                                                    store: Option[Store[Doc, Model]] = None,
+                                                                    storeManager: Option[StoreManager] = None,
+                                                                    maxInsertBatch: Int = 1_000_000,
+                                                                    cacheQueries: Boolean = Collection.DefaultCacheQueries): Collection[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val s = store.getOrElse(storeManager.create[Doc, Model](this, n, StoreMode.All))
+    val s = store match {
+      case Some(store) => store
+      case None =>
+        val sm = storeManager.getOrElse(this.storeManager)
+        sm.create[Doc, Model](this, n, StoreMode.All)
+    }
     val c = Collection[Doc, Model](n, model, s, maxInsertBatch, cacheQueries)
     synchronized {
       _collections = c :: _collections
     }
-    if (isInitialized) {    // Already initialized database, init collection immediately
+    if (isInitialized) { // Already initialized database, init collection immediately
       c.init()
     }
     c

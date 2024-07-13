@@ -123,9 +123,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     val indexSearcher = transaction.indexSearcher
     val limit = query.limit.map(l => math.min(l - query.offset, 100)).getOrElse(100)
     def search(total: Option[Int]): TopFieldDocs = {
-      val collectorManager = new TopFieldCollectorManager(s, total.getOrElse(query.offset + limit), null, Int.MaxValue, false)
-      val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
-      val totalHits = topFieldDocs.totalHits.value.toInt
+      val topFieldDocs = indexSearcher.search(q, total.getOrElse(query.offset + limit), s, query.scoreDocs)
+//      val collectorManager = new TopFieldCollectorManager(s, total.getOrElse(query.offset + limit), null, Int.MaxValue, false)
+//      val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
+      val totalHits = total.getOrElse(topFieldDocs.totalHits.value.toInt)
       if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty) {
         search(Some(totalHits))
       } else {
