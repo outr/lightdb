@@ -13,4 +13,10 @@ case class SplitTransaction[Doc <: Document[Doc]](storage: Transaction[Doc], sea
     storage.rollback()
     searching.rollback()
   }
+
+  override def close(): Unit = {
+    super.close()
+    storage.close()
+    searching.close()
+  }
 }

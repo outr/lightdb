@@ -19,7 +19,7 @@ class LuceneTransaction[Doc <: Document[Doc]](index: Index) extends Transaction[
 
   override def rollback(): Unit = index.rollback()
 
-  def close(): Unit = {
+  override def close(): Unit = {
     commit()
     if (_indexSearcher != null) index.releaseIndexSearch(_indexSearcher)
   }

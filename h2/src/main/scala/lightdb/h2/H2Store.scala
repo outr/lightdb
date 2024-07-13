@@ -10,6 +10,7 @@ import java.io.File
 import java.nio.file.Path
 import java.sql.Connection
 
+// TODO: Look into http://www.h2gis.org/docs/1.5.0/quickstart/ for spatial support
 class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   override protected lazy val connectionManager: ConnectionManager = SingleConnectionManager(SQLConfig(
     jdbcUrl = s"jdbc:h2:${file.map(_.toFile.getCanonicalPath).getOrElse(s"test:${Unique()}")};NON_KEYWORDS=VALUE,USER"

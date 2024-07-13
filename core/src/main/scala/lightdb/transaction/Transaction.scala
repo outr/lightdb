@@ -46,6 +46,10 @@ trait Transaction[Doc <: Document[Doc]] { transaction =>
   def commit(): Unit
 
   def rollback(): Unit
+
+  def close(): Unit = {
+    locks.foreach(unlock)
+  }
 }
 
 object Transaction {

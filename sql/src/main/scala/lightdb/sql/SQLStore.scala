@@ -109,7 +109,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
   override def createTransaction(): Transaction[Doc] = SQLTransaction[Doc](connectionManager, this, collection.cacheQueries)
 
-  override def releaseTransaction(transaction: Transaction[Doc]): Unit = transaction.close()
+  override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
 
   protected def field2Value(field: Field[Doc, _]): String = "?"
 

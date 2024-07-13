@@ -1,0 +1,274 @@
+[
+  {
+    "benchName": "LightDB SQLiteStore - Previous",
+    "name": "Insert Records",
+    "maxProgress": 1.0E+7,
+    "size": 1397116928,
+    "logs": [
+      {
+        "progress": 333,
+        "timeStamp": 1720813840615,
+        "elapsed": 0.0,
+        "heap": 51427760,
+        "nonHeap": 21621184,
+        "cpuLoad": 0.0,
+        "cpuTime": 1860000000
+      },
+      {
+        "progress": 5000000,
+        "timeStamp": 1720813870626,
+        "elapsed": 30.011,
+        "heap": 1222986896,
+        "nonHeap": 20577896,
+        "cpuLoad": 0.03466111584192765,
+        "cpuTime": 34830000000
+      },
+      {
+        "progress": 10000000,
+        "timeStamp": 1720813900626,
+        "elapsed": 60.011,
+        "heap": 1123415472,
+        "nonHeap": 20578424,
+        "cpuLoad": 0.03342586167013648,
+        "cpuTime": 66620000000
+      },
+      {
+        "progress": 10000000,
+        "timeStamp": 1720813906494,
+        "elapsed": 65.879,
+        "heap": 1240855984,
+        "nonHeap": 20578616,
+        "cpuLoad": 0.03110826530067766,
+        "cpuTime": 72450000000
+      }
+    ]
+  },
+  {
+    "benchName": "LightDB SQLiteStore - Previous",
+    "name": "Stream Records",
+    "maxProgress": 1.0E+7,
+    "size": 1397116928,
+    "logs": [
+      {
+        "progress": 0,
+        "timeStamp": 1720813906498,
+        "elapsed": 0.0,
+        "heap": 1240855984,
+        "nonHeap": 20619504,
+        "cpuLoad": 0.07142857142857142,
+        "cpuTime": 72460000000
+      },
+      {
+        "progress": 10000000,
+        "timeStamp": 1720813910255,
+        "elapsed": 3.757,
+        "heap": 1942263920,
+        "nonHeap": 22804864,
+        "cpuLoad": 0.03230114347717219,
+        "cpuTime": 76330000000
+      }
+    ]
+  },
+  {
+    "benchName": "LightDB SQLiteStore - Previous",
+    "name": "Stream Records Multi",
+    "maxProgress": 8.0E+7,
+    "size": 1397116928,
+    "logs": [
+      {
+        "progress": 0,
+        "timeStamp": 1720813910256,
+        "elapsed": 0.001,
+        "heap": 1942263920,
+        "nonHeap": 22827984,
+        "cpuLoad": 0.0,
+        "cpuTime": 76330000000
+      },
+      {
+        "progress": 66053319,
+        "timeStamp": 1720813940256,
+        "elapsed": 30.001,
+        "heap": 615857848,
+        "nonHeap": 22126584,
+        "cpuLoad": 0.031463562456895654,
+        "cpuTime": 106440000000
+      },
+      {
+        "progress": 80000000,
+        "timeStamp": 1720813946532,
+        "elapsed": 36.277,
+        "heap": 3635767048,
+        "nonHeap": 22127480,
+        "cpuLoad": 0.03139505864736711,
+        "cpuTime": 112730000000
+      }
+    ]
+  },
+  {
+    "benchName": "LightDB SQLiteStore - Previous",
+    "name": "Search Each Record",
+    "maxProgress": 1.0E+7,
+    "size": 1397116928,
+    "logs": [
+      {
+        "progress": 0,
+        "timeStamp": 1720813946537,
+        "elapsed": 0.0,
+        "heap": 3635767048,
+        "nonHeap": 22166744,
+        "cpuLoad": 0.0,
+        "cpuTime": 112730000000
+      },
+      {
+        "progress": 10000000,
+        "timeStamp": 1720813972112,
+        "elapsed": 25.575,
+        "heap": 3353704456,
+        "nonHeap": 24205808,
+        "cpuLoad": 0.03431942523530348,
+        "cpuTime": 140770000000
+      }
+    ]
+  },
+  {
+    "benchName": "LightDB SQLiteStore - Previous",
+    "name": "Search Each Record Multi",
+    "maxProgress": 8.0E+7,
+    "size": 1397116928,
+    "logs": [
+      {
+        "progress": 0,
+        "timeStamp": 1720813972115,
+        "elapsed": 0.0,
+        "heap": 3370481672,
+        "nonHeap": 24218160,
+        "cpuLoad": 0.09090909090909091,
+        "cpuTime": 140780000000
+      },
+      {
+        "progress": 11661185,
+        "timeStamp": 1720814002116,
+        "elapsed": 30.001,
+        "heap": 2994173320,
+        "nonHeap": 24421208,
+        "cpuLoad": 0.033140804027448484,
+        "cpuTime": 172510000000
+      },
+      {
+        "progress": 23911052,
+        "timeStamp": 1720814032117,
+        "elapsed": 60.002,
+        "heap": 447268792,
+        "nonHeap": 24505760,
+        "cpuLoad": 0.03307500547599429,
+        "cpuTime": 204220000000
+      },
+      {
+        "progress": 35745277,
+        "timeStamp": 1720814062117,
+        "elapsed": 90.002,
+        "heap": 1328507320,
+        "nonHeap": 24507040,
+        "cpuLoad": 0.03316792896317576,
+        "cpuTime": 235970000000
+      },
+      {
+        "progress": 47724759,
+        "timeStamp": 1720814092118,
+        "elapsed": 120.003,
+        "heap": 368606888,
+        "nonHeap": 24512608,
+        "cpuLoad": 0.03324082382154707,
+        "cpuTime": 267830000000
+      },
+      {
+        "progress": 59743999,
+        "timeStamp": 1720814122118,
+        "elapsed": 150.003,
+        "heap": 5553217496,
+        "nonHeap": 24512608,
+        "cpuLoad": 0.03302926763006384,
+        "cpuTime": 299450000000
+      },
+      {
+        "progress": 71888131,
+        "timeStamp": 1720814152119,
+        "elapsed": 180.004,
+        "heap": 3634477488,
+        "nonHeap": 24516064,
+        "cpuLoad": 0.032843705304477645,
+        "cpuTime": 330900000000
+      },
+      {
+        "progress": 80000000,
+        "timeStamp": 1720814172598,
+        "elapsed": 200.483,
+        "heap": 722560200,
+        "nonHeap": 24516064,
+        "cpuLoad": 0.03349706958025372,
+        "cpuTime": 352790000000
+      }
+    ]
+  },
+  {
+    "benchName": "LightDB SQLiteStore - Previous",
+    "name": "Search All Records",
+    "maxProgress": 1.0E+7,
+    "size": 1397116928,
+    "logs": [
+      {
+        "progress": 0,
+        "timeStamp": 1720814172602,
+        "elapsed": 0.0,
+        "heap": 739337416,
+        "nonHeap": 24518640,
+        "cpuLoad": 0.0,
+        "cpuTime": 352790000000
+      },
+      {
+        "progress": 10000000,
+        "timeStamp": 1720814177427,
+        "elapsed": 4.825,
+        "heap": 6024160456,
+        "nonHeap": 24548288,
+        "cpuLoad": 0.03128651174866935,
+        "cpuTime": 357610000000
+      }
+    ]
+  },
+  {
+    "benchName": "LightDB SQLiteStore - Previous",
+    "name": "Search All Records Multi",
+    "maxProgress": 1.0E+7,
+    "size": 1397116928,
+    "logs": [
+      {
+        "progress": 0,
+        "timeStamp": 1720814177428,
+        "elapsed": 0.0,
+        "heap": 6040937672,
+        "nonHeap": 24551240,
+        "cpuLoad": 0.3333333333333333,
+        "cpuTime": 357620000000
+      },
+      {
+        "progress": 62600278,
+        "timeStamp": 1720814207429,
+        "elapsed": 30.001,
+        "heap": 7243424616,
+        "nonHeap": 24580144,
+        "cpuLoad": 0.031347471860297724,
+        "cpuTime": 387670000000
+      },
+      {
+        "progress": 80000000,
+        "timeStamp": 1720814215875,
+        "elapsed": 38.447,
+        "heap": 481877480,
+        "nonHeap": 24581168,
+        "cpuLoad": 0.03145424836601307,
+        "cpuTime": 396140000000
+      }
+    ]
+  }
+]
