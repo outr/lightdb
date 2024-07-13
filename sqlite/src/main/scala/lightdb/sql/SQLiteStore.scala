@@ -38,9 +38,12 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
     val file = Files.createTempFile("mod_spatialite", ".so")
     val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
-    scribe.info(s"Copying to ${file.toFile.getCanonicalPath} loading: ${file.toAbsolutePath}")
     Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
-    executeUpdate(s"SELECT load_extension('${file.toAbsolutePath}');")
+    val path = file.toAbsolutePath.toString match {
+      case s => s.substring(0, s.length - 3)
+    }
+    scribe.info(s"Copying to ${file.toFile.getCanonicalPath} loading: $path")
+    executeUpdate(s"SELECT load_extension('$path');")
 
     super.initTransaction()
   }
