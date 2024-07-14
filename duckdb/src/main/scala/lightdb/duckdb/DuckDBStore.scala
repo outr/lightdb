@@ -21,7 +21,8 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
       case None => ""
     }
     SingleConnectionManager(SQLConfig(
-      jdbcUrl = s"jdbc:duckdb:$path"
+      jdbcUrl = s"jdbc:duckdb:$path",
+      autoCommit = true     // TODO: Figure out how to make DuckDB with autoCommit = false
     ))
   }
 

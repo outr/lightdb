@@ -13,7 +13,7 @@ case class SingleConnectionManager(connection: java.sql.Connection) extends Conn
   override def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit = {}
 
   override def dispose(): Unit = {
-    connection.commit()
+    if (!connection.getAutoCommit) connection.commit()
     connection.close()
   }
 }

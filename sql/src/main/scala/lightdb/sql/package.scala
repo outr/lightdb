@@ -1,11 +1,10 @@
 package lightdb
 
 import lightdb.doc.Document
-import lightdb.transaction.Transaction
-
-import scala.language.implicitConversions
+import lightdb.transaction.{Transaction, TransactionKey}
 
 package object sql {
-  implicit def transaction2Impl[Doc <: Document[Doc]](transaction: Transaction[Doc]): SQLTransaction[Doc] =
-    transaction.asInstanceOf[SQLTransaction[Doc]]
+  def StateKey[Doc <: Document[Doc]]: TransactionKey[SQLState[Doc]] = TransactionKey("sqlState")
+
+  def getState[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): SQLState[Doc] = transaction(StateKey[Doc])
 }

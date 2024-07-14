@@ -9,15 +9,15 @@ import lightdb.{Field, Id, LightDB, Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
-import lightdb.transaction.{SimpleTransaction, Transaction}
+import lightdb.transaction.Transaction
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
 
 class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Path,
-                                                    val storeMode: StoreMode,
-                                                    indexThreads: Int = Runtime.getRuntime.availableProcessors(),
-                                                    maxFileSize: Int = 1024 * 1024 * 1024) extends Store[Doc, Model] {
+                                                                     val storeMode: StoreMode,
+                                                                     indexThreads: Int = Runtime.getRuntime.availableProcessors(),
+                                                                     maxFileSize: Int = 1024 * 1024 * 1024) extends Store[Doc, Model] {
   private lazy val instance: HaloDB = {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
@@ -39,9 +39,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     instance
   }
 
-  override def createTransaction(): Transaction[Doc] = SimpleTransaction[Doc]()
-
-  override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
+  override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
 
@@ -101,7 +99,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
 object HaloDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
-                                                        name: String,
-                                                        storeMode: StoreMode): Store[Doc, Model] =
+                                                                         name: String,
+                                                                         storeMode: StoreMode): Store[Doc, Model] =
     new HaloDBStore[Doc, Model](db.directory.get.resolve(name), storeMode)
 }

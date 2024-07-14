@@ -3,10 +3,10 @@ package lightdb.sql
 import lightdb.collection.Collection
 import lightdb.doc.Document
 
-import java.sql.ResultSet
+import java.sql.{ResultSet, SQLException}
 
 case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
-                                                 transaction: SQLTransaction[Doc],
+                                                 state: SQLState[Doc],
                                                  fields: List[SQLPart] = Nil,
                                                  filters: List[SQLPart] = Nil,
                                                  group: List[SQLPart] = Nil,
@@ -81,11 +81,15 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
   private def executeInternal(pre: String = "", post: String = ""): ResultSet = {
     scribe.debug(s"Executing Query: $sql (${args.mkString(", ")})")
     val combinedSql = s"$pre$sql$post"
-    transaction.withPreparedStatement(combinedSql) { ps =>
-      args.zipWithIndex.foreach {
-        case (value, index) => value.set(ps, index + 1)
+    try {
+      state.withPreparedStatement(combinedSql) { ps =>
+        args.zipWithIndex.foreach {
+          case (value, index) => value.set(ps, index + 1)
+        }
+        ps.executeQuery()
       }
-      ps.executeQuery()
+    } catch {
+      case t: Throwable => throw new SQLException(s"Error executing query: $combinedSql", t)
     }
   }
 }

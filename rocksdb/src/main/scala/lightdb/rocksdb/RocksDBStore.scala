@@ -8,7 +8,7 @@ import lightdb.{Field, Id, Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
-import lightdb.transaction.{SimpleTransaction, Transaction}
+import lightdb.transaction.Transaction
 import org.rocksdb.{FlushOptions, RocksDB, RocksIterator}
 
 import java.nio.file.{Files, Path}
@@ -26,9 +26,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
     db
   }
 
-  override def createTransaction(): Transaction[Doc] = SimpleTransaction[Doc]()
-
-  override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
+  override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
 

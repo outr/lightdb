@@ -2,16 +2,17 @@ package lightdb.sql
 
 import lightdb.doc.Document
 import lightdb.sql.connect.ConnectionManager
-import lightdb.transaction.Transaction
+import lightdb.transaction.{Transaction, TransactionFeature, TransactionKey}
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.util.Try
 
-case class SQLTransaction[Doc <: Document[Doc]](connectionManager: ConnectionManager,
-                                                store: SQLStore[Doc, _],
-                                                caching: Boolean) extends Transaction[Doc] {
+case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
+                                          transaction: Transaction[Doc],
+                                          store: SQLStore[Doc, _],
+                                          caching: Boolean) extends TransactionFeature {
   private var psInsert: PreparedStatement = _
   private var psUpsert: PreparedStatement = _
   private[sql] var connection: Connection = _
@@ -23,12 +24,14 @@ case class SQLTransaction[Doc <: Document[Doc]](connectionManager: ConnectionMan
   private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
 
   def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = {
-    val connection = connectionManager.getConnection(this)
+    val connection = connectionManager.getConnection(transaction)
+
     def createPs(): PreparedStatement = {
       val ps = connection.prepareStatement(sql)
       register(ps)
       ps
     }
+
     if (caching) {
       val ps = synchronized {
         val q = Option(this.cache.get(sql)) match {
@@ -57,7 +60,7 @@ case class SQLTransaction[Doc <: Document[Doc]](connectionManager: ConnectionMan
 
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
     if (psInsert == null) {
-      val connection = connectionManager.getConnection(this)
+      val connection = connectionManager.getConnection(transaction)
       psInsert = connection.prepareStatement(store.insertSQL)
     }
     f(psInsert)
@@ -65,7 +68,7 @@ case class SQLTransaction[Doc <: Document[Doc]](connectionManager: ConnectionMan
 
   def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
     if (psUpsert == null) {
-      val connection = connectionManager.getConnection(this)
+      val connection = connectionManager.getConnection(transaction)
       psUpsert = connection.prepareStatement(store.upsertSQL)
     }
     f(psUpsert)
@@ -99,6 +102,6 @@ case class SQLTransaction[Doc <: Document[Doc]](connectionManager: ConnectionMan
     statements.foreach(s => Try(s.close()))
     if (psInsert != null) psInsert.close()
     if (psUpsert != null) psUpsert.close()
-    connectionManager.releaseConnection(this)
+    connectionManager.releaseConnection(transaction)
   }
 }

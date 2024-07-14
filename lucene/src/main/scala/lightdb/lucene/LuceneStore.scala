@@ -23,17 +23,16 @@ import java.nio.file.Path
 import scala.language.implicitConversions
 
 class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Option[Path], val storeMode: StoreMode) extends Store[Doc, Model] {
-  private implicit def transaction2Lucene(transaction: Transaction[Doc]): LuceneTransaction[Doc] = transaction.asInstanceOf[LuceneTransaction[Doc]]
-
   private lazy val index = Index(directory)
 
   override def init(collection: Collection[Doc, Model]): Unit = {
     super.init(collection)
   }
 
-  override def createTransaction(): Transaction[Doc] = new LuceneTransaction[Doc](index)
-
-  override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
+  override def prepareTransaction(transaction: Transaction[Doc]): Unit = transaction.put(
+    key = StateKey[Doc],
+    value = LuceneState[Doc](index)
+  )
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val luceneFields = fields.flatMap { field =>
@@ -108,7 +107,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   override def count(implicit transaction: Transaction[Doc]): Int =
-    transaction.indexSearcher.count(new MatchAllDocsQuery)
+    state.indexSearcher.count(new MatchAllDocsQuery)
 
   override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] =
     doSearch[Doc](Query[Doc, Model](collection), Conversion.Doc()).iterator
@@ -121,7 +120,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case _ => query.sort.map(sort2SortField)
     }
     val s = new LuceneSort(sortFields: _*)
-    val indexSearcher = transaction.indexSearcher
+    val indexSearcher = state.indexSearcher
     val limit = query.limit.map(l => math.min(l - query.offset, 100)).getOrElse(100)
     def search(total: Option[Int]): TopFieldDocs = {
       val topFieldDocs = indexSearcher.search(q, total.getOrElse(query.offset + limit), s, query.scoreDocs)
