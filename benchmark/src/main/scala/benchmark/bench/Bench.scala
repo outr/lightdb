@@ -1,7 +1,7 @@
 package benchmark.bench
 
 import benchmark.ActionIterator
-import lightdb.Unique
+import lightdb.{Id, Unique}
 
 import java.sql.ResultSet
 import scala.collection.parallel.CollectionConverters._
@@ -9,20 +9,22 @@ import scala.collection.parallel.CollectionConverters._
 trait Bench {
 //  val RecordCount: Int = 100_000
   val RecordCount: Int = 10_000_000
-  val StreamIterations: Int = 1
   val StreamAsyncIterations: Int = 8
+  val GetAsyncIterations: Int = 8
   val SearchEachAsyncIterations: Int = 8
   val SearchAllAsyncIterations: Int = 8
   val SearchIterations: Int = 1
 
   val tasks: List[Task] = List(
     Task("Insert Records", RecordCount, insertRecordsTask),
-    Task("Stream Records", StreamIterations * RecordCount, streamRecordsTask),
-    Task("Stream Records Multi", StreamIterations * RecordCount * StreamAsyncIterations, streamRecordsAsyncTask),
-    Task("Search Each Record", StreamIterations * RecordCount, searchEachRecordTask),
-    Task("Search Each Record Multi", StreamIterations * RecordCount * SearchEachAsyncIterations, searchEachRecordAsyncTask),
-    Task("Search All Records", StreamIterations * RecordCount, searchAllRecordsTask),
-    Task("Search All Records Multi", StreamIterations * RecordCount, searchAllRecordsAsyncTask)
+    Task("Stream Records", RecordCount, streamRecordsTask),
+    Task("Stream Records Multi", RecordCount * StreamAsyncIterations, streamRecordsAsyncTask),
+    Task("Get Each Record", RecordCount, getEachRecordTask),
+    Task("Get Each Record Multi", RecordCount * GetAsyncIterations, getEachRecordAsyncTask),
+    Task("Search Each Record", RecordCount, searchEachRecordTask),
+    Task("Search Each Record Multi", RecordCount * SearchEachAsyncIterations, searchEachRecordAsyncTask),
+    Task("Search All Records", RecordCount, searchAllRecordsTask),
+    Task("Search All Records Multi", RecordCount, searchAllRecordsAsyncTask)
   )
 
   def name: String
@@ -31,7 +33,7 @@ trait Bench {
 
   private def insertRecordsTask(status: StatusCallback): Int = {
     val iterator = ActionIterator(
-      (0 until RecordCount).iterator.map(index => P(Unique(), index)),
+      (0 until RecordCount).iterator.map(index => P(Unique(), index, s"id$index")),
       b => if (b) status.progress()
     )
     insertRecords(iterator)
@@ -51,6 +53,21 @@ trait Bench {
     (0 until StreamAsyncIterations)
       .par
       .foldLeft(0)((total, _) => total + streamRecordsTask(status))
+  }
+
+  private def getEachRecordTask(status: StatusCallback): Int = {
+    val iterator = ActionIterator(
+      (0 until RecordCount).iterator.map(index => s"id$index"),
+      b => if (b) status.progress()
+    )
+    getEachRecord(iterator)
+    status.currentProgress
+  }
+
+  private def getEachRecordAsyncTask(status: StatusCallback): Int = {
+    (0 until GetAsyncIterations)
+      .par
+      .foldLeft(0)((total, _) => total + getEachRecordTask(status))
   }
 
   private def searchEachRecordTask(status: StatusCallback): Int = {
@@ -87,6 +104,8 @@ trait Bench {
 
   protected def streamRecords(f: Iterator[P] => Unit): Unit
 
+  protected def getEachRecord(idIterator: Iterator[String]): Unit
+
   protected def searchEachRecord(ageIterator: Iterator[Int]): Unit
 
   protected def searchAllRecords(f: Iterator[P] => Unit): Unit
@@ -95,7 +114,7 @@ trait Bench {
 
   def dispose(): Unit
 
-  case class P(name: String, age: Int, id: String = Unique())
+  case class P(name: String, age: Int, id: String)
 
   def rsIterator(rs: ResultSet): Iterator[P] = new Iterator[P] {
     override def hasNext: Boolean = rs.next()

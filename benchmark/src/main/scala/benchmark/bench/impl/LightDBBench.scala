@@ -33,6 +33,19 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     f(DB.people.iterator.map(toP))
   }
 
+  override protected def getEachRecord(idIterator: Iterator[String]): Unit = DB.people.transaction { implicit transaction =>
+    idIterator.foreach { idString =>
+      val id = Person.id(idString)
+      DB.people.get(id) match {
+        case Some(person) =>
+          if (person._id.value != idString) {
+            scribe.warn(s"${person._id.value} was not $id")
+          }
+        case None => scribe.warn(s"$id was not found!")
+      }
+    }
+  }
+
   override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = DB.people.transaction { implicit transaction =>
     ageIterator.foreach { age =>
       try {
