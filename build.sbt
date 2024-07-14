@@ -54,7 +54,7 @@ val collectionCompatVersion: String = "2.12.0"
 
 val haloDBVersion: String = "0.5.6"
 
-val rocksDBVersion: String = "9.2.1"
+val rocksDBVersion: String = "9.4.0"
 
 val mapdbVersion: String = "3.1.0"
 
