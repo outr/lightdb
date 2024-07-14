@@ -45,6 +45,23 @@ object H2Bench extends Bench {
     s.close()
   }
 
+  override protected def getEachRecord(idIterator: Iterator[String]): Unit = {
+    val ps = connection.prepareStatement("SELECT * FROM people WHERE id = ?")
+    idIterator.foreach { id =>
+      ps.setString(1, id)
+      val rs = ps.executeQuery()
+      val list = rsIterator(rs).toList
+      val p = list.head
+      if (p.id != id) {
+        scribe.warn(s"${p.id} was not $id")
+      }
+      if (list.size > 1) {
+        scribe.warn(s"More than one result for $id")
+      }
+    }
+    ps.close()
+  }
+
   override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = {
     val ps = connection.prepareStatement("SELECT * FROM people WHERE age = ?")
     ageIterator.foreach { age =>
