@@ -54,7 +54,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     if (field == idField) {
       Option(instance.get(value.asInstanceOf[Id[Doc]].bytes)).map(bytes2Doc)
     } else {
-      throw new UnsupportedOperationException(s"MapStore can only get on _id, but ${field.name} was attempted")
+      throw new UnsupportedOperationException(s"HaloDBStore can only get on _id, but ${field.name} was attempted")
     }
   }
 

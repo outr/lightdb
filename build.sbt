@@ -85,7 +85,7 @@ val fs2Version: String = "3.10.2"
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, h2, lucene, halodb, async, all)
+	.aggregate(core.jvm, sql, sqlite, h2, lucene, halodb, rocksdb, async, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -192,6 +192,17 @@ lazy val halodb = project.in(file("halodb"))
 		)
 	)
 
+lazy val rocksdb = project.in(file("rocksdb"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-rocks",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val async = project.in(file("async"))
 	.dependsOn(core.jvm)
 	.settings(
@@ -204,16 +215,6 @@ lazy val async = project.in(file("async"))
 	)
 
 /*
-lazy val rocksdb = project.in(file("store/rocksdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
-	.settings(
-		name := s"$projectName-rocks",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		)
-	)
 
 lazy val mapdb = project.in(file("store/mapdb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
@@ -249,7 +250,7 @@ lazy val duckdb = project.in(file("index/duckdb"))
 	)*/
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, h2, lucene, halodb)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, h2, lucene, halodb, rocksdb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
