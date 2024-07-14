@@ -5,7 +5,7 @@ import lightdb.collection.Collection
 import lightdb.{Field, Id, LightDB, Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
-import lightdb.transaction.{SimpleTransaction, Transaction}
+import lightdb.transaction.Transaction
 
 class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode: StoreMode) extends Store[Doc, Model] {
   private var map = Map.empty[Id[Doc], Doc]
@@ -14,9 +14,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
     super.init(collection)
   }
 
-  override def createTransaction(): Transaction[Doc] = SimpleTransaction()
-
-  override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
+  override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = synchronized {
     map += id(doc) -> doc

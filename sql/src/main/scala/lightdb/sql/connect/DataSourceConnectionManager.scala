@@ -21,16 +21,17 @@ trait DataSourceConnectionManager extends ConnectionManager {
   }
 
   override def getConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Connection = {
+    val state = getState
     synchronized {
-      if (transaction.connection == null) {
-        transaction.connection = openConnection()
+      if (state.connection == null) {
+        state.connection = openConnection()
       }
     }
-    transaction.connection
+    state.connection
   }
 
   override def currentConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Option[Connection] =
-    Option(transaction.connection)
+    Option(getState.connection)
 
   override def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit =
     currentConnection.foreach(closeConnection)

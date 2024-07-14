@@ -2,10 +2,10 @@ package lightdb.lucene
 
 import lightdb.doc.Document
 import lightdb.lucene.index.Index
-import lightdb.transaction.Transaction
+import lightdb.transaction.{Transaction, TransactionFeature}
 import org.apache.lucene.search.IndexSearcher
 
-class LuceneTransaction[Doc <: Document[Doc]](index: Index) extends Transaction[Doc] {
+case class LuceneState[Doc <: Document[Doc]](index: Index) extends TransactionFeature {
   private var _indexSearcher: IndexSearcher = _
 
   def indexSearcher: IndexSearcher = {

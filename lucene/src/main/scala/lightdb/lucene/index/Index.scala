@@ -1,6 +1,5 @@
 package lightdb.lucene.index
 
-import lightdb.lucene.LuceneTransaction
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, memory}

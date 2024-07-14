@@ -26,9 +26,17 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
     this.collection = collection
   }
 
-  def createTransaction(): Transaction[Doc]
+  final def createTransaction(): Transaction[Doc] = {
+    val t = new Transaction[Doc]
+    prepareTransaction(t)
+    t
+  }
 
-  def releaseTransaction(transaction: Transaction[Doc]): Unit
+  def prepareTransaction(transaction: Transaction[Doc]): Unit
+
+  final def releaseTransaction(transaction: Transaction[Doc]): Unit = {
+    transaction.commit()
+  }
 
   def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
 

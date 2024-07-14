@@ -13,7 +13,7 @@ import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
 import lightdb.spatial.DistanceAndDoc
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
-import lightdb.transaction.Transaction
+import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.ActionIterator
 import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
 
@@ -107,9 +107,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
   }
 
-  override def createTransaction(): Transaction[Doc] = SQLTransaction[Doc](connectionManager, this, collection.cacheQueries)
-
-  override def releaseTransaction(transaction: Transaction[Doc]): Unit = {}
+  override def prepareTransaction(transaction: Transaction[Doc]): Unit = transaction.put(
+    key = StateKey[Doc],
+    value = SQLState(connectionManager, transaction, this, collection.cacheQueries)
+  )
 
   protected def field2Value(field: Field[Doc, _]): String = "?"
 
@@ -130,35 +131,42 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   private[sql] lazy val insertSQL: String = createInsertSQL()
   private[sql] lazy val upsertSQL: String = createUpsertSQL()
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = transaction.withInsertPreparedStatement { ps =>
-    fields.zipWithIndex.foreach {
-      case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
-    }
-    ps.addBatch()
-    transaction.batchInsert.incrementAndGet()
-    if (transaction.batchInsert.get() >= collection.maxInsertBatch) {
-      ps.executeBatch()
-      transaction.batchInsert.set(0)
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+    val state = getState
+    state.withInsertPreparedStatement { ps =>
+      fields.zipWithIndex.foreach {
+        case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
+      }
+      ps.addBatch()
+      state.batchInsert.incrementAndGet()
+      if (state.batchInsert.get() >= collection.maxInsertBatch) {
+        ps.executeBatch()
+        state.batchInsert.set(0)
+      }
     }
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = transaction.withUpsertPreparedStatement { ps =>
-    fields.zipWithIndex.foreach {
-      case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
-    }
-    ps.addBatch()
-    transaction.batchUpsert.incrementAndGet()
-    if (transaction.batchUpsert.get() >= collection.maxInsertBatch) {
-      ps.executeBatch()
-      transaction.batchUpsert.set(0)
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+    val state = getState
+    state.withUpsertPreparedStatement { ps =>
+      fields.zipWithIndex.foreach {
+        case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
+      }
+      ps.addBatch()
+      state.batchUpsert.incrementAndGet()
+      if (state.batchUpsert.get() >= collection.maxInsertBatch) {
+        ps.executeBatch()
+        state.batchUpsert.set(0)
+      }
     }
   }
 
   override def get[V](field: Field.Unique[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
+    val state = getState
     val b = new SQLQueryBuilder[Doc](
       collection = collection,
-      transaction = transaction,
+      state = state,
       fields = fields.map(f => SQLPart(f.name)),
       filters = List(filter2Part(field === value)),
       group = Nil,
@@ -202,11 +210,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   }
 
   override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = {
+    val state = getState
     val connection = connectionManager.getConnection
     val s = connection.createStatement()
-    transaction.register(s)
+    state.register(s)
     val rs = s.executeQuery(s"SELECT * FROM ${collection.name}")
-    transaction.register(rs)
+    state.register(rs)
     rs2Iterator(rs, Conversion.Doc())
   }
 
@@ -290,9 +299,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case Conversion.Json(fields) => fields.map(_.name)
       case d: Conversion.Distance[Doc] => fieldNamesForDistance(d)
     }
+    val state = getState
     val b = SQLQueryBuilder(
       collection = collection,
-      transaction = transaction,
+      state = state,
       fields = fieldNames.map(name => SQLPart(name)),
       filters = query.filter.map(filter2Part).toList,
       group = Nil,
@@ -309,7 +319,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       offset = query.offset
     )
     val rs = b.execute()
-    transaction.register(rs)
+    state.register(rs)
     val total = if (query.countTotal) {
       Some(b.queryTotal())
     } else {
@@ -317,7 +327,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
     val iterator = rs2Iterator(rs, conversion)
     val ps = rs.getStatement.asInstanceOf[PreparedStatement]
-    val iteratorWithScore = ActionIterator(iterator.map(v => v -> 0.0), onClose = () => transaction.returnPreparedStatement(b.sql, ps))
+    val iteratorWithScore = ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
     SearchResults(
       offset = query.offset,
       limit = query.limit,
@@ -364,7 +374,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
     SQLQueryBuilder(
       collection = collection,
-      transaction = transaction,
+      state = getState,
       fields = fields,
       filters = filters,
       group = group,
@@ -379,7 +389,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
                         (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
     val b = aggregate2SQLQuery(query)
     val rs = b.execute()
-    transaction.register(rs)
+    val state = getState
+    state.register(rs)
     def createStream[R](f: ResultSet => R): Iterator[R] = {
       val iterator = new Iterator[R] {
         private var checkedNext = false
@@ -485,7 +496,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   private def executeQuery(sql: String)(implicit transaction: Transaction[Doc]): ResultSet = {
     val connection = connectionManager.getConnection
     val s = connection.createStatement()
-    transaction.register(s)
+    val state = getState
+    state.register(s)
     s.executeQuery(sql)
   }
 
