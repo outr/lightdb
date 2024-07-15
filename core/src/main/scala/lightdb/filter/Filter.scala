@@ -1,13 +1,13 @@
 package lightdb.filter
 
 import fabric.Json
-import lightdb.document.Document
-import lightdb.index.Index
+import lightdb.Field
 import lightdb.spatial.GeoPoint
-import squants.space.Length
 
-sealed trait Filter[D <: Document[D]] {
-  def &&(that: Filter[D]): Filter[D] = (this, that) match {
+sealed trait Filter[Doc] {
+  def fields: List[Field[Doc, _]]
+
+  def &&(that: Filter[Doc]): Filter[Doc] = (this, that) match {
     case (Filter.Combined(f1), Filter.Combined(f2)) => Filter.Combined(f1 ::: f2)
     case (_, Filter.Combined(f)) => Filter.Combined(this :: f)
     case (Filter.Combined(f), _) => Filter.Combined(f ::: List(that))
@@ -16,24 +16,38 @@ sealed trait Filter[D <: Document[D]] {
 }
 
 object Filter {
-  def and[D <: Document[D]](filters: Filter[D]*): Filter[D] = filters.tail
+  def and[Doc](filters: Filter[Doc]*): Filter[Doc] = filters.tail
     .foldLeft(filters.head)((combined, filter) => combined && filter)
 
-  case class Equals[F, D <: Document[D]](index: Index[F, D], value: F) extends Filter[D] {
-    def getJson: Json = index.rw.read(value)
+  case class Equals[Doc, F](field: Field[Doc, F], value: F) extends Filter[Doc] {
+    def getJson: Json = field.rw.read(value)
+
+    override lazy val fields: List[Field[Doc, _]] = List(field)
   }
 
-  case class In[F, D <: Document[D]](index: Index[F, D], values: Seq[F]) extends Filter[D] {
-    def getJson: List[Json] = values.toList.map(index.rw.read)
+  case class In[Doc, F](field: Field[Doc, F], values: Seq[F]) extends Filter[Doc] {
+    def getJson: List[Json] = values.toList.map(field.rw.read)
+
+    override lazy val fields: List[Field[Doc, _]] = List(field)
   }
 
-  case class Combined[D <: Document[D]](filters: List[Filter[D]]) extends Filter[D]
+  case class Combined[Doc](filters: List[Filter[Doc]]) extends Filter[Doc] {
+    override lazy val fields: List[Field[Doc, _]] = filters.flatMap(_.fields)
+  }
 
-  case class RangeLong[D <: Document[D]](index: Index[Long, D], from: Option[Long], to: Option[Long]) extends Filter[D]
+  case class RangeLong[Doc](field: Field[Doc, Long], from: Option[Long], to: Option[Long]) extends Filter[Doc] {
+    override lazy val fields: List[Field[Doc, _]] = List(field)
+  }
 
-  case class RangeDouble[D <: Document[D]](index: Index[Double, D], from: Option[Double], to: Option[Double]) extends Filter[D]
+  case class RangeDouble[Doc](field: Field[Doc, Double], from: Option[Double], to: Option[Double]) extends Filter[Doc] {
+    override lazy val fields: List[Field[Doc, _]] = List(field)
+  }
 
-  case class Parsed[F, D <: Document[D]](index: Index[F, D], query: String, allowLeadingWildcard: Boolean) extends Filter[D]
+  case class Parsed[Doc, F](field: Field[Doc, F], query: String, allowLeadingWildcard: Boolean) extends Filter[Doc] {
+    override lazy val fields: List[Field[Doc, _]] = List(field)
+  }
 
-  case class Distance[D <: Document[D]](index: Index[GeoPoint, D], from: GeoPoint, radius: Length) extends Filter[D]
+  case class Distance[Doc](field: Field[Doc, GeoPoint], from: GeoPoint, radius: lightdb.distance.Distance) extends Filter[Doc] {
+    override lazy val fields: List[Field[Doc, _]] = List(field)
+  }
 }

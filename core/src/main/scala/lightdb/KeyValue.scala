@@ -2,10 +2,12 @@ package lightdb
 
 import fabric.Json
 import fabric.rw._
-import lightdb.document.{Document, DocumentModel}
+import lightdb.doc.{Document, DocumentModel, JsonConversion}
 
-case class KeyValue(_id: Id[KeyValue], value: Json) extends Document[KeyValue]
+case class KeyValue(_id: Id[KeyValue], json: Json) extends Document[KeyValue]
 
-object KeyValue extends DocumentModel[KeyValue] {
-  implicit val rw: RW[KeyValue] = RW.gen
+object KeyValue extends DocumentModel[KeyValue] with JsonConversion[KeyValue] {
+  override implicit val rw: RW[KeyValue] = RW.gen
+
+  val json: Field[KeyValue, Json] = field("json", _.json)
 }

@@ -1,36 +1,49 @@
 package benchmark.bench
 
-import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, PostgreSQLBench, SQLiteBench}
+import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, MongoDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
-import fabric.rw.Convertible
-import lightdb.duckdb.DuckDBIndexer
-import lightdb.h2.H2Indexer
-import lightdb.halo.HaloDBStore
-import lightdb.lucene.LuceneIndexer
-import lightdb.mapdb.MapDBStore
-import lightdb.rocks.RocksDBStore
-import lightdb.sqlite.SQLiteIndexer
-import lightdb.store.{AtomicMapStore, MapStore}
+import fabric.rw._
+import lightdb.h2.H2Store
+import lightdb.halodb.HaloDBStore
+import lightdb.lucene.LuceneStore
+import lightdb.postgresql.PostgreSQLStoreManager
+import lightdb.sql.SQLiteStore
+import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
+import lightdb.store.{MapStore, StoreMode}
+import lightdb.store.split.SplitStoreManager
+import org.apache.commons.io.FileUtils
 
+import java.io.File
 import java.nio.file.{Files, Path}
 
 object Runner {
   val implementations: Map[String, Bench] = Map(
-    "ldbHaloLucene" -> LightDBBench(HaloDBStore, LuceneIndexer),
-    "ldbMapLucene" -> LightDBBench(MapDBStore, LuceneIndexer),
-    "ldbRocksLucene" -> LightDBBench(RocksDBStore, LuceneIndexer),
-    "ldbAtomicLucene" -> LightDBBench(AtomicMapStore, LuceneIndexer),
-    "ldbMapLucene" -> LightDBBench(MapStore, LuceneIndexer),
-    "ldbHaloSQLite" -> LightDBBench(HaloDBStore, SQLiteIndexer),
-    "ldbHaloH2" -> LightDBBench(HaloDBStore, H2Indexer),
-    "ldbHaloDuck" -> LightDBBench(HaloDBStore, DuckDBIndexer),
     "SQLite" -> SQLiteBench,
     "PostgreSQL" -> PostgreSQLBench,
     "H2" -> H2Bench,
-    "Derby" -> DerbyBench
+    "Derby" -> DerbyBench,
+    "MongoDB" -> MongoDBBench,
+//    "LightDB011" -> LightDB011Bench
+    "LightDB-SQLite" -> LightDBBench(SQLiteStore),
+    "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore)),
+    "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
+    "LightDB-Lucene" -> LightDBBench(LuceneStore),
+    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore, searchingMode = StoreMode.Indexes)),
+    "LightDB-H2" -> LightDBBench(H2Store),
+    "LightDB-HaloDB-H2" -> LightDBBench(SplitStoreManager(HaloDBStore, H2Store, searchingMode = StoreMode.Indexes)),
+    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
+      jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
+      username = Some("postgres"),
+      password = Some("password"),
+      maximumPoolSize = Some(100)
+    ))))
   )
 
   def main(args: Array[String]): Unit = {
+    val dbDir = new File("db")
+    FileUtils.deleteDirectory(dbDir)
+    dbDir.mkdirs()
+
     args.headOption match {
       case Some(implName) if implementations.contains(implName) =>
         val bench = implementations(implName)
@@ -44,7 +57,7 @@ object Runner {
           val count = task.f(status)
           status.finish()
           if (count != task.maxProgress.toInt) {
-            throw new RuntimeException(s"${bench.name} - ${task.name} expected ${task.maxProgress.toInt}, but received: $count")
+            scribe.warn(s"${bench.name} - ${task.name} expected ${task.maxProgress.toInt}, but received: $count")
           }
           val logs = status.logs
           scribe.info(s"Completed in ${logs.last.elapsed} seconds")

@@ -1,7 +1,6 @@
 package lightdb.spatial
 
-import squants.space.Length
-import squants.space.LengthConversions.LengthConversions
+import lightdb.distance._
 
 import scala.math._
 
@@ -17,7 +16,7 @@ object DistanceCalculator {
     EarthRadiusMeters * c
   }
 
-  def apply(p1: GeoPoint, p2: GeoPoint): Length = haversineDistance(
+  def apply(p1: GeoPoint, p2: GeoPoint): Distance = haversineDistance(
     lat1 = p1.latitude,
     lon1 = p1.longitude,
     lat2 = p2.latitude,

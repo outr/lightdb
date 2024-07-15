@@ -1,44 +1,79 @@
 package lightdb.store
 
-import fabric.rw._
-import lightdb.Id
-import lightdb.document.{Document, SetType}
+import fabric.io.{JsonFormatter, JsonParser}
+import fabric.rw.{Asable, Convertible}
+import lightdb.aggregate.AggregateQuery
+import lightdb.collection.Collection
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
+import lightdb.{Field, Id, Query, SearchResults}
 
-import scala.annotation.tailrec
+import java.io.File
 
-trait Store[D <: Document[D]] {
-  implicit val rw: RW[D]
+abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
+  protected var collection: Collection[Doc, Model] = _
 
-  def internalCounter: Boolean
+  protected def id(doc: Doc): Id[Doc] = doc.asInstanceOf[Document[_]]._id.asInstanceOf[Id[Doc]]
+  protected lazy val idField: Field.Unique[Doc, Id[Doc]] = collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
 
-  def idIterator(implicit transaction: Transaction[D]): Iterator[Id[D]]
+  def storeMode: StoreMode
 
-  def iterator(implicit transaction: Transaction[D]): Iterator[D]
+  protected lazy val fields: List[Field[Doc, _]] = collection.model.fields match {
+    case fields if storeMode == StoreMode.Indexes => fields.filterNot(_.isInstanceOf[Field.Basic[_, _]])
+    case fields => fields
+  }
 
-  def contains(id: Id[D])(implicit transaction: Transaction[D]): Boolean = get(id).nonEmpty
+  protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(collection.model.rw))
+  protected def fromString(string: String): Doc = JsonParser(string).as[Doc](collection.model.rw)
 
-  def get(id: Id[D])(implicit transaction: Transaction[D]): Option[D]
+  def init(collection: Collection[Doc, Model]): Unit = {
+    this.collection = collection
+  }
 
-  def put(id: Id[D], doc: D)(implicit transaction: Transaction[D]): Option[SetType]
+  final def createTransaction(): Transaction[Doc] = {
+    val t = new Transaction[Doc]
+    prepareTransaction(t)
+    t
+  }
 
-  def delete(id: Id[D])(implicit transaction: Transaction[D]): Boolean
+  def prepareTransaction(transaction: Transaction[Doc]): Unit
 
-  def count(implicit transaction: Transaction[D]): Int
+  def releaseTransaction(transaction: Transaction[Doc]): Unit = {
+    transaction.commit()
+  }
 
-  def commit()(implicit transaction: Transaction[D]): Unit
+  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
 
-  def truncate()(implicit transaction: Transaction[D]): Unit = internalTruncate()
+  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
 
-  def transactionEnd()(implicit transaction: Transaction[D]): Unit = {}
+  def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc]
+
+  def delete[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean
+
+  def count(implicit transaction: Transaction[Doc]): Int
+
+  def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc]
+
+  def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, V]
+
+  def aggregate(query: AggregateQuery[Doc, Model])
+               (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]]
+
+  def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int
+
+  def truncate()(implicit transaction: Transaction[Doc]): Int
+
+  def size: Long
 
   def dispose(): Unit
+}
 
-  @tailrec
-  final def internalTruncate()(implicit transaction: Transaction[D]): Unit = {
-    idIterator.foreach(delete)
-    if (count > 0) {
-      internalTruncate()
-    }
+object Store {
+  def determineSize(file: File): Long = if (file.isDirectory) {
+    file.listFiles().foldLeft(0L)((sum, file) => sum + determineSize(file))
+  } else {
+    file.length()
   }
 }
