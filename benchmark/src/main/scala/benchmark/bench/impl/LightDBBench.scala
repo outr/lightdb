@@ -68,7 +68,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     f(iterator)
   }
 
-  override def size(): Long = DB.people.store.size
+  override def size(): Long = -1L
 
   override def dispose(): Unit = DB.people.dispose()
 

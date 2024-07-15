@@ -35,12 +35,6 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Pa
       ps.close()
     }
   }
-
-  override def size: Long = file.map { path =>
-    val baseFile = path.toFile
-    val file = new File(baseFile.getParentFile, s"${baseFile.getName}.mv.db")
-    file.length()
-  }.getOrElse(0L)
 }
 
 object H2Store extends StoreManager {

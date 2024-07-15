@@ -70,8 +70,6 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     searching.truncate()
   }
 
-  override def size: Long = storage.size + searching.size
-
   override def dispose(): Unit = {
     storage.dispose()
     searching.dispose()

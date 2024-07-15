@@ -65,8 +65,6 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
     size
   }
 
-  override def size: Long = 0L
-
   override def dispose(): Unit = synchronized {
     map = Map.empty
   }

@@ -75,7 +75,5 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMod
     size
   }
 
-  override def size: Long = -1L
-
   override def dispose(): Unit = pool.close()
 }

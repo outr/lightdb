@@ -73,8 +73,6 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: O
     size
   }
 
-  override def size: Long = -1L
-
   override def dispose(): Unit = {
     db.commit()
     db.close()
