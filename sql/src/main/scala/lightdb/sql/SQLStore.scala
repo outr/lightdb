@@ -21,6 +21,7 @@ import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
 abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[Doc, Model] {
+  protected def connectionShared: Boolean
   protected def connectionManager: ConnectionManager
 
   override def init(collection: Collection[Doc, Model]): Unit = {
@@ -221,6 +222,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     rs2Iterator(rs, Conversion.Doc())
   }
 
+  private def getColumnNames(rs: ResultSet): List[String] = {
+    val meta = rs.getMetaData
+    val count = meta.getColumnCount
+    (1 to count).toList.map(index => meta.getColumnName(index))
+  }
+
   private def getDoc(rs: ResultSet): Doc = collection.model match {
     case _ if storeMode == StoreMode.Indexes =>
       val id = Id[Doc](rs.getString("_id"))
@@ -228,7 +235,13 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     case c: SQLConversion[Doc] => c.convertFromSQL(rs)
     case c: JsonConversion[Doc] =>
       val values = fields.map { field =>
-        field.name -> toJson(rs.getObject(field.name), field.rw)
+        try {
+          field.name -> toJson(rs.getObject(field.name), field.rw)
+        } catch {
+          case t: Throwable =>
+            val columnNames = getColumnNames(rs).mkString(", ")
+            throw new RuntimeException(s"Unable to get ${collection.name}.${field.name} from [$columnNames]", t)
+        }
       }
       c.convertFromJson(obj(values: _*))
     case _ =>
@@ -517,5 +530,5 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
   }
 
-  override def dispose(): Unit = connectionManager.dispose()
+  override def dispose(): Unit = if (!connectionShared) connectionManager.dispose()
 }

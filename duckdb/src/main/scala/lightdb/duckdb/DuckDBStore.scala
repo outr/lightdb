@@ -2,7 +2,7 @@ package lightdb.duckdb
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.sql.SQLStore
+import lightdb.sql.{SQLDatabase, SQLStore}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
@@ -11,21 +11,9 @@ import org.duckdb.DuckDBConnection
 import java.nio.file.Path
 import java.sql.Connection
 
-class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
-  override protected lazy val connectionManager: ConnectionManager = {
-    val path = file match {
-      case Some(f) =>
-        val file = f.toFile
-        Option(file.getParentFile).foreach(_.mkdirs())
-        file.getCanonicalPath
-      case None => ""
-    }
-    SingleConnectionManager(SQLConfig(
-      jdbcUrl = s"jdbc:duckdb:$path",
-      autoCommit = true     // TODO: Figure out how to make DuckDB with autoCommit = false
-    ))
-  }
-
+class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
+                                                                     val connectionShared: Boolean,
+                                                                     val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   // TODO: Use DuckDB's Appender for better performance
   /*override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     fields.zipWithIndex.foreach {
@@ -55,6 +43,38 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
 }
 
 object DuckDBStore extends StoreManager {
-  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB, name: String, storeMode: StoreMode): Store[Doc, Model] =
-    new DuckDBStore(db.directory.map(_.resolve(s"$name.duckdb.db")), storeMode)
+  def singleConnectionManager(file: Option[Path]): ConnectionManager = {
+    val path = file match {
+      case Some(f) =>
+        val file = f.toFile
+        Option(file.getParentFile).foreach(_.mkdirs())
+        file.getCanonicalPath
+      case None => ""
+    }
+    SingleConnectionManager(SQLConfig(
+      jdbcUrl = s"jdbc:duckdb:$path",
+      autoCommit = true     // TODO: Figure out how to make DuckDB with autoCommit = false
+    ))
+  }
+
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], storeMode: StoreMode): DuckDBStore[Doc, Model] = {
+    new DuckDBStore[Doc, Model](
+      connectionManager = singleConnectionManager(file),
+      connectionShared = false,
+      storeMode = storeMode
+    )
+  }
+
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         name: String,
+                                                                         storeMode: StoreMode): Store[Doc, Model] = {
+    db.get(SQLDatabase.Key) match {
+      case Some(sqlDB) => new DuckDBStore[Doc, Model](
+        connectionManager = sqlDB.connectionManager,
+        connectionShared = true,
+        storeMode
+      )
+      case None => apply[Doc, Model](db.directory.map(_.resolve(s"$name.duckdb")), storeMode)
+    }
+  }
 }

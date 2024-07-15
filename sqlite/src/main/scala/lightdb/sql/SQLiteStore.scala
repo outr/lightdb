@@ -8,33 +8,16 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import org.sqlite.SQLiteConfig
+import org.sqlite.{SQLiteConfig, SQLiteOpenMode}
+import org.sqlite.SQLiteConfig.{JournalMode, LockingMode, SynchronousMode, TransactionMode}
 
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
+                                                                     val connectionShared: Boolean,
                                                                      val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
-
-  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
-    val file = Files.createTempFile("mod_spatialite", ".so")
-    val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
-    Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
-    val path = file.toAbsolutePath.toString match {
-      case s => s.substring(0, s.length - 3)
-    }
-    scribe.info(s"Copying to ${file.toFile.getCanonicalPath} loading: $path")
-    executeUpdate(s"SELECT load_extension('$path');")
-
-    super.initTransaction()
-  }
-
-  override protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
-    executeUpdate("SELECT InitSpatialMetaData()")
-
-    super.createTable()
-  }
 
   override protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement(s"SELECT name FROM sqlite_master WHERE type = 'table';")
@@ -102,24 +85,58 @@ object SQLiteStore extends StoreManager {
 
       val config = new SQLiteConfig
       config.enableLoadExtension(true)
-      val c = config.createConnection(s"jdbc:sqlite:$path?mode=rw&cache=shared&journal_mode=WAL")
-      c.setAutoCommit(false)
-      c
+//      config.setJournalMode(JournalMode.WAL)
+//      config.setSharedCache(true)
+//      config.setOpenMode(SQLiteOpenMode.READWRITE)
+//      config.setSynchronous(SynchronousMode.NORMAL)
+//      config.setLockingMode(LockingMode.NORMAL)
+      val uri = s"jdbc:sqlite:$path"
+      try {
+        val c = config.createConnection(uri)
+        c.setAutoCommit(false)
+
+        val file = Files.createTempFile("mod_spatialite", ".so")
+        val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
+        Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
+        val path = file.toAbsolutePath.toString match {
+          case s => s.substring(0, s.length - 3)
+        }
+        scribe.info(s"Copying to ${file.toFile.getCanonicalPath} loading: $path")
+        val s = c.createStatement()
+        s.executeUpdate(s"SELECT load_extension('$path');")
+        s.executeUpdate("SELECT InitSpatialMetaData()")
+        s.close()
+
+        c
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Error establishing SQLite connection to $uri", t)
+      }
     }
     SingleConnectionManager(connection)
   }
 
-  // TODO: Create an abstraction for getting multiple connections for a SQLStoreManager
-
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], storeMode: StoreMode): SQLiteStore[Doc, Model] = {
-    new SQLiteStore[Doc, Model](singleConnectionManager(file), storeMode)
+    new SQLiteStore[Doc, Model](
+      connectionManager = singleConnectionManager(file),
+      connectionShared = false,
+      storeMode = storeMode
+    )
   }
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          name: String,
-                                                                         storeMode: StoreMode): Store[Doc, Model] =
-    db match {
-      case sqlDB: SQLDatabase => new SQLiteStore[Doc, Model](sqlDB.connectionManager, storeMode)
-      case _ => apply[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite.db")), storeMode)
+                                                                         storeMode: StoreMode): Store[Doc, Model] = {
+    db.get(SQLDatabase.Key) match {
+      case Some(sqlDB) =>
+        scribe.info(s"Using SQLDatabase for $name")
+        new SQLiteStore[Doc, Model](
+        connectionManager = sqlDB.connectionManager,
+        connectionShared = true,
+        storeMode
+      )
+      case None =>
+        scribe.info(s"Creating new for $name")
+        apply[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite")), storeMode)
     }
+  }
 }

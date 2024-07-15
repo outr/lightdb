@@ -9,10 +9,12 @@ import lightdb.util.Initializable
 import lightdb.{Field, Id, Query}
 
 case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
-                                                        model: Model,
-                                                        store: Store[Doc, Model],
-                                                        maxInsertBatch: Int = 1_000_000,
-                                                        cacheQueries: Boolean = Collection.DefaultCacheQueries) extends Initializable { collection =>
+                                                                         model: Model,
+                                                                         loadStore: () => Store[Doc, Model],
+                                                                         maxInsertBatch: Int = 1_000_000,
+                                                                         cacheQueries: Boolean = Collection.DefaultCacheQueries) extends Initializable { collection =>
+  lazy val store: Store[Doc, Model] = loadStore()
+
   override protected def initialize(): Unit = {
     store.init(this)
 
