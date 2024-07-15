@@ -1,35 +1,33 @@
 package lightdb.transaction
 
 import lightdb.Id
-import lightdb.collection.Collection
-import lightdb.document.Document
-import lightdb.util.Unique
+import lightdb.doc.Document
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-case class Transaction[D <: Document[D]](collection: Collection[D, _]) { transaction =>
-  val id: String = Unique()
+final class Transaction[Doc <: Document[Doc]] { transaction =>
+  private var locks = Set.empty[Id[Doc]]
 
   private var map = Map.empty[TransactionKey[_], Any]
-  private var locks = Set.empty[Id[D]]
 
-  def lock(id: Id[D], delay: FiniteDuration = 100.millis): Unit = {
+  def lock(id: Id[Doc], delay: FiniteDuration = 100.millis): Unit = {
     Transaction.lock(id, this, delay)
     transaction.synchronized {
       locks += id
     }
   }
 
-  def unlock(id: Id[D]): Unit = {
+  def unlock(id: Id[Doc]): Unit = {
     Transaction.unlock(id, this)
     transaction.synchronized {
       locks -= id
     }
   }
 
-  def withLock[Return](id: Id[D], delay: FiniteDuration = 100.millis)(f: => Return): Return = {
+  def withLock[Return](id: Id[Doc], delay: FiniteDuration = 100.millis)
+                      (f: => Return): Return = {
     lock(id, delay)
     try {
       f
@@ -38,9 +36,10 @@ case class Transaction[D <: Document[D]](collection: Collection[D, _]) { transac
     }
   }
 
-  def mayLock[Return](id: Id[D],
+  def mayLock[Return](id: Id[Doc],
                       establishLock: Boolean = true,
-                      delay: FiniteDuration = 100.millis)(f: => Return): Return = if (establishLock) {
+                      delay: FiniteDuration = 100.millis)
+                     (f: => Return): Return = if (establishLock) {
     withLock(id, delay)(f)
   } else {
     f
@@ -67,20 +66,35 @@ case class Transaction[D <: Document[D]](collection: Collection[D, _]) { transac
     .getOrElse(throw new RuntimeException(s"Key not found: $key. Keys: ${map.keys.mkString(", ")}"))
 
   def commit(): Unit = {
-    collection.commit(this)
-    locks.toList.foreach(unlock)
+    map.values.foreach {
+      case f: TransactionFeature => f.commit()
+      case _ => // Ignore
+    }
   }
 
-  def rollback(): Unit = collection.rollback(this)
+  def rollback(): Unit = {
+    map.values.foreach {
+      case f: TransactionFeature => f.rollback()
+      case _ => // Ignore
+    }
+  }
+
+  def close(): Unit = {
+    map.values.foreach {
+      case f: TransactionFeature => f.close()
+      case _ => // Ignore
+    }
+    locks.foreach(unlock)
+  }
 }
 
 object Transaction {
   private lazy val locks = new ConcurrentHashMap[Id[_], Transaction[_]]
 
   @tailrec
-  private def lock[D <: Document[D]](id: Id[D],
-                                     transaction: Transaction[D],
-                                     delay: FiniteDuration): Unit = {
+  private def lock[Doc <: Document[Doc]](id: Id[Doc],
+                        transaction: Transaction[Doc],
+                        delay: FiniteDuration): Unit = {
     val existingTransaction = locks
       .compute(id, (_, currentTransaction) => {
         if (currentTransaction == null || currentTransaction == transaction) {
@@ -89,13 +103,13 @@ object Transaction {
           currentTransaction
         }
       })
-      if (existingTransaction != transaction) {
-        Thread.sleep(delay.toMillis)
-        lock[D](id, transaction, delay)
-      }
+    if (existingTransaction != transaction) {
+      Thread.sleep(delay.toMillis)
+      lock[Doc](id, transaction, delay)
+    }
   }
 
-  private def unlock[D <: Document[D]](id: Id[D], transaction: Transaction[D]): Unit = locks
+  private def unlock[Doc <: Document[Doc]](id: Id[Doc], transaction: Transaction[Doc]): Unit = locks
     .compute(id, (_, currentTransaction) => {
       if (currentTransaction == transaction) {
         null

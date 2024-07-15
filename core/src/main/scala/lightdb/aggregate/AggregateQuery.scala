@@ -1,15 +1,16 @@
 package lightdb.aggregate
 
-import lightdb.document.{Document, DocumentModel}
-import lightdb.index.{Index, Materialized, MaterializedAggregate}
-import lightdb.query.{Query, SortDirection}
+import lightdb.{Query, SortDirection}
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 
-case class AggregateQuery[D <: Document[D], M <: DocumentModel[D]](query: Query[D, M],
-                                            functions: List[AggregateFunction[_, _, D]],
-                                            filter: Option[AggregateFilter[D]] = None,
-                                            sort: List[(AggregateFunction[_, _, D], SortDirection)] = Nil) {
-  def filter(filter: AggregateFilter[D], and: Boolean = false): AggregateQuery[D, M] = {
+case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],
+                                                            functions: List[AggregateFunction[_, _, Doc]],
+                                                            filter: Option[AggregateFilter[Doc]] = None,
+                                                            sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
+  def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AggregateQuery[Doc, Model] = {
+    val filter = f(query.collection.model)
     if (and && this.filter.nonEmpty) {
       copy(filter = Some(this.filter.get && filter))
     } else {
@@ -17,22 +18,29 @@ case class AggregateQuery[D <: Document[D], M <: DocumentModel[D]](query: Query[
     }
   }
 
-  def filters(filters: AggregateFilter[D]*): AggregateQuery[D, M] = if (filters.nonEmpty) {
-    var filter = filters.head
-    filters.tail.foreach { f =>
-      filter = filter && f
+  def filters(f: Model => List[AggregateFilter[Doc]]): AggregateQuery[Doc, Model] = {
+    val filters = f(query.collection.model)
+    if (filters.nonEmpty) {
+      var filter = filters.head
+      filters.tail.foreach { f =>
+        filter = filter && f
+      }
+      this.filter(_ => filter)
+    } else {
+      this
     }
-    this.filter(filter)
-  } else {
-    this
   }
 
-  def sort(function: AggregateFunction[_, _, D],
-           direction: SortDirection = SortDirection.Ascending): AggregateQuery[D, M] = copy(
-    sort = sort ::: List((function, direction))
+  def sort(f: Model => AggregateFunction[_, _, Doc],
+           direction: SortDirection = SortDirection.Ascending): AggregateQuery[Doc, Model] = copy(
+    sort = sort ::: List((f(query.collection.model), direction))
   )
 
-  def iterator(implicit transaction: Transaction[D]): Iterator[MaterializedAggregate[D, M]] = query.indexer.aggregate(this)
+  def count(implicit transaction: Transaction[Doc]): Int =
+    query.collection.store.aggregateCount(this)
 
-  def toList(implicit transaction: Transaction[D]): List[MaterializedAggregate[D, M]] = iterator.toList
+  def iterator(implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
+    query.collection.store.aggregate(this)
+
+  def toList(implicit transaction: Transaction[Doc]): List[MaterializedAggregate[Doc, Model]] = iterator.toList
 }

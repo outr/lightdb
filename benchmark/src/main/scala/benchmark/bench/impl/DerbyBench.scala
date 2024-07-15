@@ -1,7 +1,8 @@
 package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
-import lightdb.util.Unique
+import benchmark.imdb.MariaDBImplementation.{TitleAkaPG, fromRS}
+import lightdb.Unique
 
 import java.io.File
 import java.sql.{Connection, DriverManager}
@@ -24,111 +25,64 @@ object DerbyBench extends Bench {
     executeUpdate("CREATE INDEX age_idx ON people(age)")
   }
 
-  override protected def insertRecords(status: StatusCallback): Int = {
+  override protected def insertRecords(iterator: Iterator[P]): Unit = {
     val ps = connection.prepareStatement("INSERT INTO people(id, name, age) VALUES (?, ?, ?)")
-    try {
-      (0 until RecordCount)
-        .foldLeft(0)((total, index) => {
-          val person = Person(
-            name = Unique(),
-            age = index
-          )
-          ps.setString(1, person.id)
-          ps.setString(2, person.name)
-          ps.setInt(3, person.age)
-          ps.addBatch()
-          status.progress.set(index + 1)
-          total + 1
-        })
-    } finally {
-      ps.executeBatch()
-      ps.close()
-      connection.commit()
+    iterator.foreach { p =>
+      ps.setString(1, p.id)
+      ps.setString(2, p.name)
+      ps.setInt(3, p.age)
+      ps.addBatch()
     }
+    ps.executeBatch()
+    ps.close()
+    connection.commit()
   }
 
-  private def countRecords(): Int = {
+  override protected def streamRecords(f: Iterator[P] => Unit): Unit = {
     val s = connection.createStatement()
-    try {
-      val rs = s.executeQuery("SELECT COUNT(*) FROM people")
-      try {
-        rs.next()
-        rs.getInt(1)
-      } finally {
-        rs.close()
+    val rs = s.executeQuery("SELECT * FROM people")
+    val iterator = rsIterator(rs)
+    f(iterator)
+    rs.close()
+    s.close()
+  }
+
+  override protected def getEachRecord(idIterator: Iterator[String]): Unit = {
+    val ps = connection.prepareStatement("SELECT * FROM people WHERE id = ?")
+    idIterator.foreach { id =>
+      ps.setString(1, id)
+      val rs = ps.executeQuery()
+      val list = rsIterator(rs).toList
+      val p = list.head
+      if (p.id != id) {
+        scribe.warn(s"${p.id} was not $id")
       }
-    } finally {
-      s.close()
+      if (list.size > 1) {
+        scribe.warn(s"More than one result for $id")
+      }
     }
+    ps.close()
   }
 
-  override protected def streamRecords(status: StatusCallback): Int = (0 until StreamIterations)
-    .foldLeft(0)((total, iteration) => {
-      val s = connection.createStatement()
-      val rs = s.executeQuery("SELECT * FROM people")
-      var count = 0
-      while (rs.next()) {
-        count += 1
+  override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = {
+    val ps = connection.prepareStatement("SELECT * FROM people WHERE age = ?")
+    ageIterator.foreach { age =>
+      ps.setInt(1, age)
+      val rs = ps.executeQuery()
+      val list = rsIterator(rs).toList
+      val p = list.head
+      if (p.age != age) {
+        scribe.warn(s"${p.age} was not $age")
       }
-      rs.close()
-      s.close()
-      if (count != RecordCount) {
-        scribe.warn(s"RecordCount was not $RecordCount, it was $count")
+      if (list.size > 1) {
+        scribe.warn(s"More than one result for $age")
       }
-      status.progress.set(iteration + 1)
-      total + count
-    })
-
-  override protected def searchEachRecord(status: StatusCallback): Int = {
-    var counter = 0
-    (0 until StreamIterations)
-      .foreach { iteration =>
-        val ps = connection.prepareStatement("SELECT * FROM people WHERE age = ?")
-        (0 until RecordCount)
-          .foreach { index =>
-            ps.setInt(1, index)
-            val rs = ps.executeQuery()
-            rs.next()
-            val person = Person(
-              name = rs.getString("name"),
-              age = rs.getInt("age"),
-              id = rs.getString("id")
-            )
-            if (person.age != index) {
-              scribe.warn(s"${person.age} was not $index")
-            }
-            if (rs.next()) {
-              scribe.warn(s"More than one result for $index")
-            }
-            rs.close()
-            counter += 1
-            status.progress.set((iteration + 1) * (index + 1))
-          }
-        ps.close()
-      }
-    counter
+    }
+    ps.close()
   }
 
-  override protected def searchAllRecords(status: StatusCallback): Int = {
-    var counter = 0
-    (0 until StreamIterations)
-      .par
-      .foreach { iteration =>
-        val s = connection.createStatement()
-        val rs = s.executeQuery("SELECT * FROM people")
-        var count = 0
-        while (rs.next()) {
-          count += 1
-          counter += 1
-        }
-        rs.close()
-        s.close()
-        if (count != RecordCount) {
-          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
-        }
-        status.progress.set(iteration + 1)
-      }
-    counter
+  override protected def searchAllRecords(f: Iterator[P] => Unit): Unit = {
+    streamRecords(f)
   }
 
   override def size(): Long = {

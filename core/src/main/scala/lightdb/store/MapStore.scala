@@ -1,47 +1,71 @@
 package lightdb.store
 
-import fabric.rw.RW
-import lightdb.document.{Document, SetType}
+import lightdb.aggregate.AggregateQuery
+import lightdb.collection.Collection
+import lightdb.{Field, Id, LightDB, Query, SearchResults}
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
-import lightdb.{Id, LightDB}
 
-/**
- * Simple in-memory Store backed by Map.
- *
- * Note: It is recommended to use AtomicMapStore on the JVM as a more efficient alternative to this.
- */
- class MapStore[D <: Document[D]](implicit val rw: RW[D]) extends Store[D] {
-  private var map = Map.empty[Id[D], D]
+class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode: StoreMode) extends Store[Doc, Model] {
+  private var map = Map.empty[Id[Doc], Doc]
 
-  override def internalCounter: Boolean = true
+  override def init(collection: Collection[Doc, Model]): Unit = {
+    super.init(collection)
+  }
 
-  override def idIterator(implicit transaction: Transaction[D]): Iterator[Id[D]] = map.keys.iterator
+  override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
-  override def iterator(implicit transaction: Transaction[D]): Iterator[D] = map.values.iterator
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = synchronized {
+    map += id(doc) -> doc
+  }
 
-  override def get(id: Id[D])(implicit transaction: Transaction[D]): Option[D] = map.get(id)
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = synchronized {
+    map += id(doc) -> doc
+  }
 
-  override def contains(id: Id[D])(implicit transaction: Transaction[D]): Boolean = map.contains(id)
-
-  override def put(id: Id[D], doc: D)(implicit transaction: Transaction[D]): Option[SetType] = synchronized {
-    val `type` = if (contains(id)) {
-      SetType.Replace
+  override def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
+    if (field == idField) {
+      map.get(value.asInstanceOf[Id[Doc]])
     } else {
-      SetType.Insert
+      throw new UnsupportedOperationException(s"MapStore can only get on _id, but ${field.name} was attempted")
     }
-    map += id -> doc
-    Some(`type`)
   }
 
-  override def delete(id: Id[D])(implicit transaction: Transaction[D]): Boolean = synchronized {
-    val exists = contains(id)
-    map -= id
-    exists
+  override def delete[V](field: Field.Unique[Doc, V],
+                         value: V)(implicit transaction: Transaction[Doc]): Boolean = synchronized {
+    if (field == idField) {
+      val id = value.asInstanceOf[Id[Doc]]
+      val contains = map.contains(id)
+      map -= id
+      contains
+    } else {
+      throw new UnsupportedOperationException(s"MapStore can only get on _id, but ${field.name} was attempted")
+    }
   }
 
-  override def count(implicit transaction: Transaction[D]): Int = map.size
+  override def count(implicit transaction: Transaction[Doc]): Int = {
+    map.size
+  }
 
-  override def commit()(implicit transaction: Transaction[D]): Unit = ()
+  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = map.valuesIterator
+
+  override def doSearch[V](query: Query[Doc, Model],
+                           conversion: Conversion[Doc, V])
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = throw new UnsupportedOperationException("MapStore does not support searching")
+
+  override def aggregate(query: AggregateQuery[Doc, Model])
+                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = throw new UnsupportedOperationException("MapStore does not support aggregation")
+
+  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int = throw new UnsupportedOperationException("MapStore does not support aggregation")
+
+  override def truncate()(implicit transaction: Transaction[Doc]): Int = synchronized {
+    val size = map.size
+    map = Map.empty
+    size
+  }
+
+  override def size: Long = 0L
 
   override def dispose(): Unit = synchronized {
     map = Map.empty
@@ -49,5 +73,7 @@ import lightdb.{Id, LightDB}
 }
 
 object MapStore extends StoreManager {
-  override protected def create[D <: Document[D]](db: LightDB, name: String)(implicit rw: RW[D]): Store[D] = new MapStore
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         name: String,
+                                                                         storeMode: StoreMode): Store[Doc, Model] = new MapStore[Doc, Model](storeMode)
 }

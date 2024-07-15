@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.12.0-SNAPSHOT"
+ThisBuild / version := "0.12.0-SNAPSHOT1"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -68,18 +68,24 @@ val luceneVersion: String = "9.11.1"
 
 val hikariCPVersion: String = "5.1.0"
 
+val commonsDBCP2Version: String = "2.12.0"
+
 val sqliteVersion: String = "3.46.0.0"
 
 val duckdbVersion: String = "1.0.0"
 
 val h2Version: String = "2.2.224"
 
-val squantsVersion: String = "1.8.3"
+val postgresqlVersion: String = "42.7.3"
+
+val catsVersion: String = "3.5.4"
+
+val fs2Version: String = "3.10.2"
 
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, halodb, rocksdb, mapdb, redis, lucene, sql, sqlite, duckdb, h2, all)
+	.aggregate(core.jvm, sql, sqlite, h2, duckdb, lucene, halodb, rocksdb, mapdb, redis, async, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -93,7 +99,6 @@ lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlat
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
-			"org.typelevel" %%% "squants" % squantsVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
@@ -118,51 +123,63 @@ lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlat
 		fork := true
 	)
 
-lazy val halodb = project.in(file("store/halodb"))
+lazy val sql = project.in(file("sql"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-halo",
+		name := s"$projectName-sql",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"com.github.yahoo" % "HaloDB" % haloDBVersion,
+			"com.zaxxer" % "HikariCP" % hikariCPVersion,
+			"org.apache.commons" % "commons-dbcp2" % commonsDBCP2Version,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
-lazy val rocksdb = project.in(file("store/rocksdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+lazy val sqlite = project.in(file("sqlite"))
+	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-rocks",
+		name := s"$projectName-sqlite",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
+			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
-lazy val mapdb = project.in(file("store/mapdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+lazy val h2 = project.in(file("h2"))
+	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-mapdb",
+		name := s"$projectName-h2",
+		fork := true,
 		libraryDependencies ++= Seq(
-			"org.mapdb" % "mapdb" % mapdbVersion,
+			"com.h2database" % "h2" % h2Version,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		),
-		fork := true
+		)
 	)
 
-lazy val redis = project.in(file("store/redis"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+lazy val postgresql = project.in(file("postgresql"))
+	.dependsOn(sql, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-redis",
+		name := s"$projectName-postgresql",
+		fork := true,
 		libraryDependencies ++= Seq(
-			"redis.clients" % "jedis" % jedisVersion,
+			"org.postgresql" % "postgresql" % postgresqlVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		),
-		fork := true
+		)
 	)
 
-lazy val lucene = project.in(file("index/lucene"))
+lazy val duckdb = project.in(file("duckdb"))
+	.dependsOn(sql, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-duckdb",
+		fork := true,
+		libraryDependencies ++= Seq(
+			"org.duckdb" % "duckdb_jdbc" % duckdbVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val lucene = project.in(file("lucene"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
 		name := s"$projectName-lucene",
@@ -175,52 +192,63 @@ lazy val lucene = project.in(file("index/lucene"))
 		)
 	)
 
-lazy val sql = project.in(file("index/sql"))
+lazy val halodb = project.in(file("halodb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-sql",
+		name := s"$projectName-halo",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"com.zaxxer" % "HikariCP" % hikariCPVersion,
+			"com.github.yahoo" % "HaloDB" % haloDBVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
-lazy val sqlite = project.in(file("index/sqlite"))
-	.dependsOn(sql, core.jvm % "test->test")
+lazy val rocksdb = project.in(file("rocksdb"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-sqlite",
+		name := s"$projectName-rocks",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
+			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
-lazy val duckdb = project.in(file("index/duckdb"))
-	.dependsOn(sql, core.jvm % "test->test")
+lazy val mapdb = project.in(file("mapdb"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-duckdb",
-		fork := true,
+		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
-			"org.duckdb" % "duckdb_jdbc" % duckdbVersion,
+			"org.mapdb" % "mapdb" % mapdbVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		)
+		),
+		fork := true
 	)
 
-lazy val h2 = project.in(file("index/h2"))
-	.dependsOn(sql, core.jvm % "test->test")
+lazy val redis = project.in(file("redis"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
-		name := s"$projectName-h2",
+		name := s"$projectName-redis",
+		libraryDependencies ++= Seq(
+			"redis.clients" % "jedis" % jedisVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		),
+		fork := true
+	)
+
+lazy val async = project.in(file("async"))
+	.dependsOn(core.jvm)
+	.settings(
+		name := s"$projectName-async",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"com.h2database" % "h2" % h2Version,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+			"org.typelevel" %% "cats-effect" % catsVersion,
+			"co.fs2" %% "fs2-core" % fs2Version
 		)
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", halodb, rocksdb, mapdb, redis, lucene, sqlite, duckdb, h2)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
@@ -240,11 +268,14 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.postgresql" % "postgresql" % "42.7.3",
 			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
+			"com.h2database" % "h2" % h2Version,
 			"org.apache.derby" % "derby" % "10.17.1.0",
 			"commons-io" % "commons-io" % "2.16.1",
 			"co.fs2" %% "fs2-io" % "3.9.4",
 			"com.outr" %% "scarango-driver" % "3.20.0",
+//			"com.outr" %% "lightdb-all" % "0.11.0",
 			"org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
+			"org.jooq" % "jooq" % "3.19.10",
 			"io.quickchart" % "QuickChart" % "1.2.0"
 		)
 	)

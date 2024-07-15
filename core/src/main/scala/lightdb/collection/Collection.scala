@@ -1,46 +1,36 @@
 package lightdb.collection
 
-import lightdb.{Id, LightDB}
-import lightdb.document.{Document, DocumentListener, DocumentModel, SetType}
+import fabric.define.DefType
+import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
+import lightdb.store.Store
 import lightdb.transaction.Transaction
 import lightdb.util.Initializable
-import fabric.Json
-import fabric.rw.{Convertible, RW}
-import lightdb.store.Store
+import lightdb.{Field, Id, Query}
 
-import scala.annotation.tailrec
-import scala.concurrent.duration.DurationInt
+case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                        model: Model,
+                                                        store: Store[Doc, Model],
+                                                        maxInsertBatch: Int = 1_000_000,
+                                                        cacheQueries: Boolean = Collection.DefaultCacheQueries) extends Initializable { collection =>
+  override protected def initialize(): Unit = {
+    store.init(this)
 
-class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
-                                                          val model: M,
-                                                          val db: LightDB)
-                                                         (implicit rw: RW[D]) extends Initializable { collection =>
-  private[lightdb] lazy val store: Store[D] = db.storeManager[D](db, name)
-
-  @tailrec
-  private def recurseOption(doc: D,
-                            invoke: (DocumentListener[D], D) => Option[D],
-                            listeners: List[DocumentListener[D]] = model.listener()): Option[D] = listeners.headOption match {
-    case None => Some(doc)
-    case Some(l) => invoke(l, doc) match {
-      case None => None
-      case Some(v) => recurseOption(v, invoke, listeners.tail)
+    model match {
+      case jc: JsonConversion[_] =>
+        val fieldNames = model.fields.map(_.name).toSet
+        val missing = jc.rw.definition.asInstanceOf[DefType.Obj].map.keys.filterNot { fieldName =>
+          fieldNames.contains(fieldName)
+        }.toList
+        if (missing.nonEmpty) {
+          throw ModelMissingFieldsException(name, missing)
+        }
+      case _ => // Can't do validation
     }
   }
 
-  override protected def initialize(): Unit = {
-    model.collection = this
-    model.listener().map(_.init(this)).foreach(_ => model._initialized.set(true))
-  }
-
   object transaction {
-    private var _active = Set.empty[Transaction[D]]
-    def active: Set[Transaction[D]] = _active
-
-    private def add(transaction: Transaction[D]): Unit = synchronized(_active += transaction)
-    private def remove(transaction: Transaction[D]): Unit = synchronized(_active -= transaction)
-
-    def apply[Return](f: Transaction[D] => Return): Return = {
+    def apply[Return](f: Transaction[Doc] => Return): Return = {
       val transaction = create()
       try {
         f(transaction)
@@ -49,105 +39,145 @@ class Collection[D <: Document[D], M <: DocumentModel[D]](val name: String,
       }
     }
 
-    def create(): Transaction[D] = {
-      val transaction = Transaction[D](collection)
-      model.listener().foreach(l => l.transactionStart(transaction))
-      add(transaction)
-      transaction
-    }
+    def create(): Transaction[Doc] = store.createTransaction()
 
-    def release(transaction: Transaction[D]): Unit = {
-      transaction.commit()
-      model.listener().foreach(l => l.transactionEnd(transaction))
-      store.transactionEnd()(transaction)
-      remove(transaction)
+    def release(transaction: Transaction[Doc]): Unit = {
+      store.releaseTransaction(transaction)
+      transaction.close()
     }
   }
 
-  def apply(id: Id[D])(implicit transaction: Transaction[D]): D = get(id)
-    .getOrElse(throw new RuntimeException(s"$id not found in $name"))
+  /**
+   * Convenience feature for simple one-off operations removing the need to manually create a transaction around it.
+   */
+  object t {
+    def insert(doc: Doc): Doc = transaction { implicit transaction =>
+      collection.insert(doc)
+    }
 
-  def get(id: Id[D])(implicit transaction: Transaction[D]): Option[D] = model.store.get(id)
+    def upsert(doc: Doc): Doc = transaction { implicit transaction =>
+      collection.upsert(doc)
+    }
 
-  final def set(doc: D)(implicit transaction: Transaction[D]): Option[D] = {
-    recurseOption(doc, (l, d) => l.preSet(d, transaction)) match {
-      case Some(d) =>
-        val typeOption = model.store.put(d._id, d)
-        typeOption match {
-          case Some(setType) =>
-            model.listener().foreach(l => l.postSet(d, setType, transaction))
-            Some(d)
-          case None => None
-        }
-      case None => None
+    def insert(docs: Seq[Doc]): Seq[Doc] = transaction { implicit transaction =>
+      collection.insert(docs)
+    }
+
+    def upsert(docs: Seq[Doc]): Seq[Doc] = transaction { implicit transaction =>
+      collection.upsert(docs)
+    }
+
+    def get[V](f: Model => (Field.Unique[Doc, V], V)): Option[Doc] = transaction { implicit transaction =>
+      collection.get(f)
+    }
+
+    def apply[V](f: Model => (Field.Unique[Doc, V], V)): Doc = transaction { implicit transaction =>
+      collection(f)
+    }
+
+    def get(id: Id[Doc]): Option[Doc] = transaction { implicit transaction =>
+      collection.get(id)
+    }
+
+    def apply(id: Id[Doc]): Doc = transaction { implicit transaction =>
+      collection(id)
+    }
+
+    def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
+              (f: Option[Doc] => Option[Doc]): Option[Doc] = transaction { implicit transaction =>
+      collection.modify(id, lock, deleteOnNone)(f)
+    }
+
+    def delete[V](f: Model => (Field.Unique[Doc, V], V)): Boolean = transaction { implicit transaction =>
+      collection.delete(f)
+    }
+
+    def delete(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): Boolean = transaction { implicit transaction =>
+      collection.delete(id)
+    }
+
+    def count: Int = transaction { implicit transaction =>
+      collection.count
+    }
+
+    def truncate(): Int = transaction { implicit transaction =>
+      collection.truncate()
     }
   }
 
-  def set(iterator: Iterator[D])(implicit transaction: Transaction[D]): Int = iterator.map(set).size
+  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
+    store.insert(doc)
+    doc
+  }
 
-  def set(docs: Seq[D])(implicit transaction: Transaction[D]): Int = set(docs.iterator)
+  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
+    store.upsert(doc)
+    doc
+  }
 
-  def modify(id: Id[D], lock: Boolean = true, deleteOnNone: Boolean = false)
-            (f: Option[D] => Option[D])
-            (implicit transaction: Transaction[D]): Option[D] = transaction.mayLock(id, lock) {
-    f(get(id)) match {
-      case Some(doc) => set(doc)
+  def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(insert)
+
+  def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(upsert)
+
+  def get[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Option[Doc] = {
+    val (field, value) = f(model)
+    store.get(field, value)
+  }
+
+  def apply[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Doc =
+    get[V](f).getOrElse {
+      val (field, value) = f(model)
+      throw DocNotFoundException(name, field.name, value)
+    }
+
+  def get(id: Id[Doc])(implicit transaction: Transaction[Doc]): Option[Doc] = {
+    store.get(model._id, id)
+  }
+
+  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Doc =
+    store.get(model._id, id).getOrElse {
+      throw DocNotFoundException(name, "_id", id)
+    }
+
+  def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
+            (f: Option[Doc] => Option[Doc])
+            (implicit transaction: Transaction[Doc]): Option[Doc] = transaction.mayLock(id, lock) {
+    val idField = model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
+    f(get(_ => idField -> id)) match {
+      case Some(doc) =>
+        upsert(doc)
+        Some(doc)
       case None if deleteOnNone =>
-        delete(id)
+        delete(_ => idField -> id)
         None
       case None => None
     }
   }
 
-  def iterator(implicit transaction: Transaction[D]): Iterator[D] = model.store.iterator
-
-  def count(implicit transaction: Transaction[D]): Int = model.store.count
-
-  def idIterator(implicit transaction: Transaction[D]): Iterator[Id[D]] = model.store.idIterator
-
-  def jsonIterator(implicit transaction: Transaction[D]): Iterator[Json] = iterator.map(_.json)
-
-  private[lightdb] def commit(transaction: Transaction[D]): Unit = model.listener()
-    .foreach(l => l.commit(transaction))
-
-  private[lightdb] def rollback(transaction: Transaction[D]): Unit = model.listener()
-    .foreach(l => l.rollback(transaction))
-
-  final def delete(doc: D)(implicit transaction: Transaction[D]): Option[D] = {
-    recurseOption(doc, (l, d) => l.preDelete(d, transaction)) match {
-      case Some(d) =>
-        model.store.delete(d._id)
-        model.listener().foreach(l => l.postDelete(d, transaction))
-        Some(d)
-      case None => None
-    }
+  def delete[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
+    val (field, value) = f(model)
+    store.delete(field, value)
   }
 
-  def delete(iterator: Iterator[D])(implicit transaction: Transaction[D]): Int = iterator.map(delete).size
-
-  def delete(docs: Seq[D])(implicit transaction: Transaction[D]): Int = delete(docs.iterator)
-
-  def delete(id: Id[D])(implicit transaction: Transaction[D]): Option[D] = get(id) match {
-      case Some(doc) => delete(doc)
-      case None => None
-    }
-
-  def truncate()(implicit transaction: Transaction[D]): Int = {
-    val count = model.store.count
-    model.store.truncate()
-    model.listener().foreach(l => l.truncate(transaction))
-    count
+  def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Boolean = {
+    store.delete(ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]], id)
   }
 
-  def update(): Unit = ()
+  def count(implicit transaction: Transaction[Doc]): Int = store.count
 
-  @tailrec
-  final def dispose(): Unit = if (this.transaction.active.isEmpty) {
-    model.listener().foreach(l => l.dispose())
+  def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = store.iterator
+
+  lazy val query: Query[Doc, Model] = Query(this)
+
+  // TODO: Delete Query
+
+  def truncate()(implicit transaction: Transaction[Doc]): Int = store.truncate()
+
+  def dispose(): Unit = {
     store.dispose()
-  } else {
-    scribe.warn(s"Waiting to dispose $name. ${this.transaction.active.size} transactions are still active...")
-    Thread.sleep(1.second.toMillis)
-    dispose()
   }
+}
+
+object Collection {
+  var DefaultCacheQueries: Boolean = false
 }

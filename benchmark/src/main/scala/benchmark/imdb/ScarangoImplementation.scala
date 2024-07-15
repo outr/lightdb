@@ -6,7 +6,7 @@ import com.outr.arango.collection.DocumentCollection
 import com.outr.arango.query._
 import com.outr.arango.query.dsl.ref2Wrapped
 import com.outr.arango.{Document, DocumentModel, Field, Graph, Id, Index}
-import fabric.rw.RW
+import fabric.rw._
 
 object ScarangoImplementation extends BenchmarkImplementation {
   override type TitleAka = TitleAkaADB

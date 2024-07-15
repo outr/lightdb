@@ -2,11 +2,10 @@ package lightdb.filter
 
 import fabric.rw.{Convertible, RW}
 import fabric.{NumDec, NumInt}
-import lightdb.document.Document
+import lightdb.distance.Distance
 import lightdb.spatial.GeoPoint
-import squants.space.Length
 
-trait FilterSupport[F, D <: Document[D], Filter] {
+trait FilterSupport[F, Doc, Filter] {
   implicit def rw: RW[F]
 
   protected def doublePrecision = 0.0001
@@ -57,15 +56,15 @@ trait FilterSupport[F, D <: Document[D], Filter] {
             matchStartsWith: Boolean = true,
             matchEndsWith: Boolean = false): Filter
 
-  def distance(from: GeoPoint, radius: Length)(implicit evidence: F =:= GeoPoint): Filter
+  def distance(from: GeoPoint, radius: Distance)(implicit evidence: F =:= GeoPoint): Filter
 }
 
 object FilterSupport {
-  def rangeLong[F, D <: Document[D], Filter](filter: FilterSupport[F, D, Filter],
+  def rangeLong[F, Doc, Filter](filter: FilterSupport[F, Doc, Filter],
                                              from: Option[Long],
                                              to: Option[Long]): Filter = filter.rangeLong(from, to)
 
-  def rangeDouble[F, D <: Document[D], Filter](filter: FilterSupport[F, D, Filter],
+  def rangeDouble[F, Doc, Filter](filter: FilterSupport[F, Doc, Filter],
                                              from: Option[Double],
                                              to: Option[Double]): Filter = filter.rangeDouble(from, to)
 }

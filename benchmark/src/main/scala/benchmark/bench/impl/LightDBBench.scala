@@ -1,116 +1,98 @@
 package benchmark.bench.impl
 
 import benchmark.bench.{Bench, StatusCallback}
-import fabric.rw.RW
-import lightdb.document.{Document, DocumentModel}
-import lightdb.index.{Indexed, IndexedCollection, IndexerManager}
+import lightdb.collection.Collection
+import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.util.Unique
-import lightdb.{Id, LightDB}
-import org.apache.commons.io.FileUtils
+import lightdb.{Field, Id, LightDB}
+import fabric.rw._
 
-import java.io.File
 import java.nio.file.Path
-import scala.collection.parallel.CollectionConverters._
+import java.sql.ResultSet
+import scala.language.implicitConversions
 
-case class LightDBBench(sm: StoreManager, im: IndexerManager) extends Bench {
-  override def name: String = s"LightDB - ${sm.getClass.getSimpleName.replace("$", "")} - ${im.getClass.getSimpleName.replace("$", "")}"
+case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
+  override def name: String = s"LightDB ${storeManager.getClass.getSimpleName.replace("$", "")}"
 
-  override def init(): Unit = {
-    val dbDir = new File("db")
-    FileUtils.deleteDirectory(dbDir)
-    dbDir.mkdirs()
+  override def init(): Unit = DB.init()
 
-    scribe.info("DB init...")
-    DB.init()
-    scribe.info("Initialized!")
-  }
+  implicit def p2Person(p: P): Person = Person(p.name, p.age, Id(p.id))
 
-  override protected def insertRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    (0 until RecordCount)
-      .foreach { index =>
-        DB.people.set(Person(
-          name = Unique(),
-          age = index
-        ))
-        status.progress.set(index + 1)
-      }
-    RecordCount
-  }
+  def toP(person: Person): P = P(person.name, person.age, person._id.value)
 
-  override protected def streamRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    (0 until StreamIterations)
-      .foreach { iteration =>
-        val count = DB.people.iterator.size
-        if (count != RecordCount) {
-          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
-        }
-        status.progress.set((iteration + 1) * count)
-      }
-    StreamIterations * RecordCount
-  }
-
-  override protected def searchEachRecord(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    (0 until StreamIterations)
-      .foreach { iteration =>
-        (0 until RecordCount)
-          .foreach { index =>
-            val list = DB.people.query.filter(_.age === index).search.docs.list
-            if (list.size != 1) {
-              scribe.warn(s"Unable to find age = $index")
-            }
-            if (list.head.age != index) {
-              scribe.warn(s"${list.head.age} was not $index")
-            }
-            status.progress.set((iteration + 1) * (index + 1))
-          }
-      }
-    StreamIterations * RecordCount
-  }
-
-  override protected def searchAllRecords(status: StatusCallback): Int = DB.people.transaction { implicit transaction =>
-    (0 until StreamIterations)
-      .par
-      .foreach { iteration =>
-        val count = DB.people.query.search.docs.iterator.foldLeft(0)((count, _) => count + 1)
-        if (count != RecordCount) {
-          scribe.warn(s"RecordCount was not $RecordCount, it was $count")
-        }
-        status.progress.set(iteration + 1)
-      }
-    StreamIterations * RecordCount
-  }
-
-  override def size(): Long = {
-    def recurse(file: File): Long = if (file.isDirectory) {
-      file.listFiles().map(recurse).sum
-    } else {
-      file.length()
+  override protected def insertRecords(iterator: Iterator[P]): Unit = DB.people.transaction { implicit transaction =>
+    iterator.foreach { p =>
+      val person: Person = p
+      DB.people.insert(person)
     }
-    recurse(new File("db"))
   }
 
-  override def dispose(): Unit = DB.dispose()
+  override protected def streamRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
+    f(DB.people.iterator.map(toP))
+  }
+
+  override protected def getEachRecord(idIterator: Iterator[String]): Unit = DB.people.transaction { implicit transaction =>
+    idIterator.foreach { idString =>
+      val id = Person.id(idString)
+      DB.people.get(id) match {
+        case Some(person) =>
+          if (person._id.value != idString) {
+            scribe.warn(s"${person._id.value} was not $id")
+          }
+        case None => scribe.warn(s"$id was not found!")
+      }
+    }
+  }
+
+  override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = DB.people.transaction { implicit transaction =>
+    ageIterator.foreach { age =>
+      try {
+        val list = DB.people.query.filter(_.age === age).search.docs.list
+        val person = list.head
+        if (person.age != age) {
+          scribe.warn(s"${person.age} was not $age")
+        }
+        if (list.size > 1) {
+          scribe.warn(s"More than one result for $age")
+        }
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Error with $age", t)
+      }
+    }
+  }
+
+  override protected def searchAllRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
+    val iterator = DB.people.query.search.docs.iterator.map(toP)
+    f(iterator)
+  }
+
+  override def size(): Long = DB.people.store.size
+
+  override def dispose(): Unit = DB.people.dispose()
 
   object DB extends LightDB {
-    override lazy val directory: Option[Path] = Some(Path.of(s"db/bench"))
+    override lazy val directory: Option[Path] = Some(Path.of(s"db/${storeManager.getClass.getSimpleName.replace("$", "")}"))
 
-    val people: IndexedCollection[Person, Person.type] = collection("people", Person, im.create[Person, Person.type]())
+    val people: Collection[Person, Person.type] = collection(Person, cacheQueries = true)
 
-    override def storeManager: StoreManager = sm
-
+    override def storeManager: StoreManager = bench.storeManager
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
 
-  case class Person(name: String,
-                    age: Int,
-                    _id: Id[Person] = Person.id()) extends Document[Person]
+  case class Person(name: String, age: Int, _id: Id[Person] = Person.id()) extends Document[Person]
 
-  object Person extends DocumentModel[Person] with Indexed[Person] {
-    implicit val rw: RW[Person] = RW.gen
+  object Person extends DocumentModel[Person] with SQLConversion[Person] with JsonConversion[Person] {
+    override implicit val rw: RW[Person] = RW.gen
 
-    val name: I[String] = index.one("name", _.name, store = true)
-    val age: I[Int] = index.one("age", _.age, store = true)
+    override def convertFromSQL(rs: ResultSet): Person = Person(
+      name = rs.getString("name"),
+      age = rs.getInt("age"),
+      _id = id(rs.getString("_id"))
+    )
+
+    val name: Field[Person, String] = field("name", _.name)
+    val age: Field.Index[Person, Int] = field.index("age", _.age)
   }
 }

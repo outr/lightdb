@@ -1,6 +1,5 @@
 package lightdb.spatial
 
-import lightdb.document.Document
-import squants.space.Length
+import lightdb.distance.Distance
 
-case class DistanceAndDoc[D <: Document[D]](doc: D, distance: Length)
+case class DistanceAndDoc[Doc](doc: Doc, distance: Distance)

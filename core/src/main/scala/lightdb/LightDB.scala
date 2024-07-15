@@ -2,39 +2,38 @@ package lightdb
 
 import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.document.{Document, DocumentModel}
-import lightdb.index.{IndexedCollection, Indexer}
-import lightdb.store.StoreManager
-import lightdb.util.Initializable
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
-import scribe.{Level, Logger}
+import lightdb.util.Initializable
 
 import java.nio.file.Path
-import java.util.{Timer, TimerTask}
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.annotation.tailrec
-import scala.concurrent.duration._
 
+/**
+ * The database to be implemented. Collections *may* be used without a LightDB instance, but with drastically diminished
+ * functionality. It is always ideal for collections to be associated with a database.
+ */
 trait LightDB extends Initializable {
+  /**
+   * Identifiable name for this database. Defaults to using the class name.
+   */
+  def name: String = getClass.getSimpleName.replace("$", "")
+
+  /**
+   * The base directory for this database. If None, the database is expected to operate entirely in memory.
+   */
   def directory: Option[Path]
 
+  /**
+   * Default StoreManager to use for collections that do not specify a Store.
+   */
   def storeManager: StoreManager
 
   /**
-   * How frequently to run background updates. Defaults to every 30 seconds.
+   * List of upgrades that should be applied at the start of this database.
    */
-  protected def updateFrequency: FiniteDuration = 30.seconds
-
-  /**
-   * If true, will automatically check the number of indexes vs the number of store entries and if there's a mismatch,
-   * the index will be truncated and rebuilt at startup. Defaults to true.
-   */
-  protected def verifyIndexIntegrityOnStartup: Boolean = true
-
-  /**
-   * Disables extraneous logging from underlying implementations. Defaults to true.
-   */
-  protected def disableExtraneousLogging: Boolean = true
+  def upgrades: List[DatabaseUpgrade]
 
   /**
    * Automatically truncates all collections in the database during initialization if this is set to true.
@@ -42,21 +41,29 @@ trait LightDB extends Initializable {
    */
   protected def truncateOnInit: Boolean = false
 
-  private val _disposed = new AtomicBoolean(false)
-  private var _collections = List.empty[Collection[_, _]]
-
-  val backingStore: Collection[KeyValue, KeyValue.type] = collection("_backingStore", KeyValue)
-
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
-  def upgrades: List[DatabaseUpgrade]
+  private var _collections = List.empty[Collection[_, _]]
+  private val _disposed = new AtomicBoolean(false)
 
-  protected[lightdb] def verifyInitialized(): Unit = if (!isInitialized) throw new RuntimeException(s"Database not initialized!")
+  /**
+   * All collections registered with this database
+   */
+  def collections: List[Collection[_, _]] = _collections
+
+  /**
+   * True if this database has been disposed.
+   */
+  def disposed: Boolean = _disposed.get()
+
+  /**
+   * Backing key/value store used for persistent internal settings, StoredValues, and general key/value storage.
+   */
+  val backingStore: Collection[KeyValue, KeyValue.type] = collection(KeyValue, name = Some("_backingStore"))
 
   override protected def initialize(): Unit = {
-    scribe.info(s"LightDB initializing...")
-    initLogging()
+    scribe.info(s"$name database initializing...")
     collections.foreach(_.init())
     // Truncate the database before we do anything if specified
     if (truncateOnInit) truncate()
@@ -73,67 +80,47 @@ trait LightDB extends Initializable {
       scribe.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
       doUpgrades(upgrades, stillBlocking = true)
     }
-    // Verify integrity
-    if (verifyIndexIntegrityOnStartup) {
-      collections.foreach {
-        case c: IndexedCollection[_, _] => c.indexer.maybeRebuild()
-        case _ => ()
-      }
-    }
     // Set initialized
     databaseInitialized.set(true)
-    // Start updater
-    timer.schedule(updateTask, updateFrequency.toMillis, updateFrequency.toMillis)
   }
 
-  private lazy val timer = new Timer
-
-  private lazy val updateTask = new TimerTask {
-    override def run(): Unit = update()
-  }
-
-  private def initLogging(): Unit = {
-    if (disableExtraneousLogging) {
-      Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
-      Logger("org.apache.lucene.store").withMinimumLevel(Level.Warn).replace()
+  /**
+   * Create a new Collection and associate it with this database. It is preferable that all collections be created
+   * before the database is initialized, but collections that are added after init will automatically be initialized
+   * during this method call.
+   *
+   * Note: If both are specified, store takes priority over storeManager.
+   *
+   * @param model          the model to use for this collection
+   * @param name           the collection's name (defaults to None meaning it will be generated based on the model name)
+   * @param store          specify the store. If this is not set, the database's storeManager will be used to create one
+   * @param storeManager   specify the StoreManager. If this is not set, the database's storeManager will be used.
+   * @param maxInsertBatch the maximum number of inserts to include in a batch. Defaults to 1 million.
+   * @param cacheQueries   whether to cache queries in memory. This improves performance when running the same queries
+   *                       with different parameters fairly drastically, but consumes a lot of memory if many queries are
+   *                       executed in a single transaction.
+   */
+  def collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                    name: Option[String] = None,
+                                                                    store: Option[Store[Doc, Model]] = None,
+                                                                    storeManager: Option[StoreManager] = None,
+                                                                    maxInsertBatch: Int = 1_000_000,
+                                                                    cacheQueries: Boolean = Collection.DefaultCacheQueries): Collection[Doc, Model] = {
+    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val s = store match {
+      case Some(store) => store
+      case None =>
+        val sm = storeManager.getOrElse(this.storeManager)
+        sm.create[Doc, Model](this, n, StoreMode.All)
     }
-  }
-
-  def collections: List[Collection[_, _]] = _collections
-
-  def collection[D <: Document[D], M <: DocumentModel[D]](name: String, model: M)
-                                                         (implicit rw: RW[D]): Collection[D, M] = synchronized {
-    val c = new Collection[D, M](name, model, this)
-    _collections = c :: _collections
+    val c = Collection[Doc, Model](n, model, s, maxInsertBatch, cacheQueries)
+    synchronized {
+      _collections = c :: _collections
+    }
+    if (isInitialized) { // Already initialized database, init collection immediately
+      c.init()
+    }
     c
-  }
-
-  def collection[D <: Document[D], M <: DocumentModel[D]](name: String,
-                                                          model: M,
-                                                          indexer: Indexer[D, M])
-                                                         (implicit rw: RW[D]): IndexedCollection[D, M] = synchronized {
-    val c = new IndexedCollection[D, M](name, model, indexer, this)
-    model.listener += indexer
-    _collections = c :: _collections
-    c
-  }
-
-  def disposed: Boolean = _disposed.get()
-
-  def truncate(): Unit = collections.foreach { c =>
-    val collection = c.asInstanceOf[Collection[KeyValue, KeyValue.type]]
-    collection.transaction { implicit transaction =>
-      collection.truncate()
-    }
-  }
-
-  def update(): Unit = collections.foreach(_.update())
-
-  def dispose(): Unit = if (_disposed.compareAndSet(false, true)) {
-    updateTask.cancel()
-    collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).foreach { collection =>
-      collection.dispose()
-    }
   }
 
   object stored {
@@ -159,6 +146,13 @@ trait LightDB extends Initializable {
     )
   }
 
+  def truncate(): Unit = collections.foreach { c =>
+    val collection = c.asInstanceOf[Collection[KeyValue, KeyValue.type]]
+    collection.transaction { implicit transaction =>
+      collection.truncate()(transaction)
+    }
+  }
+
   private def doUpgrades(upgrades: List[DatabaseUpgrade],
                          stillBlocking: Boolean): Unit = upgrades.headOption match {
     case Some(upgrade) =>
@@ -174,5 +168,11 @@ trait LightDB extends Initializable {
         doUpgrades(upgrades.tail, continueBlocking)
       }
     case None => scribe.info("Upgrades completed successfully")
+  }
+
+  def dispose(): Unit = if (_disposed.compareAndSet(false, true)) {
+    collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).foreach { collection =>
+      collection.dispose()
+    }
   }
 }
