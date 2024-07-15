@@ -52,8 +52,6 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
       ps.close()
     }
   }
-
-  override def size: Long = -1L
 }
 
 object DuckDBStore extends StoreManager {

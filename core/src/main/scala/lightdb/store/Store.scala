@@ -65,8 +65,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def truncate()(implicit transaction: Transaction[Doc]): Int
 
-  def size: Long
-
   def dispose(): Unit
 }
 

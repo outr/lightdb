@@ -39,7 +39,4 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val con
        |    INSERT (${fieldNames.mkString(", ")}) VALUES (${fieldNames.map(f => s"source.$f").mkString(", ")});
        |""".stripMargin
   }
-
-  // TODO: SELECT pg_size_pretty( pg_total_relation_size(‘tablename’) );
-  override def size: Long = -1L
 }

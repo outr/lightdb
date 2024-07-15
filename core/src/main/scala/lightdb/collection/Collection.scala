@@ -169,8 +169,6 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   lazy val query: Query[Doc, Model] = Query(this)
 
-  // TODO: Delete Query
-
   def truncate()(implicit transaction: Transaction[Doc]): Int = store.truncate()
 
   def dispose(): Unit = {

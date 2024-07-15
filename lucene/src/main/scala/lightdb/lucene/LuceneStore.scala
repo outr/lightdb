@@ -285,8 +285,6 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     count
   }
 
-  override def size: Long = directory.map(p => Store.determineSize(p.toFile)).getOrElse(0L)
-
   override def dispose(): Unit = {
     index.indexWriter.flush()
     index.indexWriter.commit()

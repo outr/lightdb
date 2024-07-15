@@ -13,27 +13,9 @@ import org.sqlite.SQLiteConfig
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 
-class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], val storeMode: StoreMode) extends SQLStore[Doc, Model] {
+class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
+                                                                     val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
-
-  override protected lazy val connectionManager: ConnectionManager = {
-    val connection: Connection = {
-      val path = file match {
-        case Some(f) =>
-          val file = f.toFile
-          Option(file.getParentFile).foreach(_.mkdirs())
-          file.getCanonicalPath
-        case None => ":memory:"
-      }
-
-      val config = new SQLiteConfig
-      config.enableLoadExtension(true)
-      val c = config.createConnection(s"jdbc:sqlite:$path")
-      c.setAutoCommit(false)
-      c
-    }
-    SingleConnectionManager(connection)
-  }
 
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
     val file = Files.createTempFile("mod_spatialite", ".so")
@@ -105,11 +87,39 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Optio
       super.addColumn(field)
     }
   }
-
-  override def size: Long = file.map(_.toFile.length()).getOrElse(0L)
 }
 
 object SQLiteStore extends StoreManager {
-  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB, name: String, storeMode: StoreMode): Store[Doc, Model] =
-    new SQLiteStore[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite.db")), storeMode)
+  def singleConnectionManager(file: Option[Path]): ConnectionManager = {
+    val connection: Connection = {
+      val path = file match {
+        case Some(f) =>
+          val file = f.toFile
+          Option(file.getParentFile).foreach(_.mkdirs())
+          file.getCanonicalPath
+        case None => ":memory:"
+      }
+
+      val config = new SQLiteConfig
+      config.enableLoadExtension(true)
+      val c = config.createConnection(s"jdbc:sqlite:$path?mode=rw&cache=shared&journal_mode=WAL")
+      c.setAutoCommit(false)
+      c
+    }
+    SingleConnectionManager(connection)
+  }
+
+  // TODO: Create an abstraction for getting multiple connections for a SQLStoreManager
+
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], storeMode: StoreMode): SQLiteStore[Doc, Model] = {
+    new SQLiteStore[Doc, Model](singleConnectionManager(file), storeMode)
+  }
+
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         name: String,
+                                                                         storeMode: StoreMode): Store[Doc, Model] =
+    db match {
+      case sqlDB: SQLDatabase => new SQLiteStore[Doc, Model](sqlDB.connectionManager, storeMode)
+      case _ => apply[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite.db")), storeMode)
+    }
 }

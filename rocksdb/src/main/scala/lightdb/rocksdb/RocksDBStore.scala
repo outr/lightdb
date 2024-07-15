@@ -77,8 +77,6 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
     .map(db.delete)
     .size
 
-  override def size: Long = -1L
-
   override def dispose(): Unit = {
     db.flush(new FlushOptions)
     db.close()
