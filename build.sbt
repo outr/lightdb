@@ -85,7 +85,7 @@ val fs2Version: String = "3.10.2"
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, h2, duckdb, lucene, halodb, rocksdb, async, all)
+	.aggregate(core.jvm, sql, sqlite, h2, duckdb, lucene, halodb, rocksdb, mapdb, async, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -214,6 +214,17 @@ lazy val rocksdb = project.in(file("rocksdb"))
 		)
 	)
 
+lazy val mapdb = project.in(file("mapdb"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-mapdb",
+		libraryDependencies ++= Seq(
+			"org.mapdb" % "mapdb" % mapdbVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		),
+		fork := true
+	)
+
 lazy val async = project.in(file("async"))
 	.dependsOn(core.jvm)
 	.settings(
@@ -226,17 +237,6 @@ lazy val async = project.in(file("async"))
 	)
 
 /*
-
-lazy val mapdb = project.in(file("store/mapdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
-	.settings(
-		name := s"$projectName-mapdb",
-		libraryDependencies ++= Seq(
-			"org.mapdb" % "mapdb" % mapdbVersion,
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-		),
-		fork := true
-	)
 
 lazy val redis = project.in(file("store/redis"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
@@ -252,7 +252,7 @@ lazy val redis = project.in(file("store/redis"))
 */
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
