@@ -2,9 +2,10 @@ package lightdb.async
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import fabric.rw.RW
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.{KeyValue, LightDB}
+import lightdb.{KeyValue, LightDB, Persistence, StoredValue}
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 
@@ -84,7 +85,27 @@ trait AsyncLightDB {
                                                                     cacheQueries: Boolean = Collection.DefaultCacheQueries): AsyncCollection[Doc, Model] =
     AsyncCollection(underlying.collection[Doc, Model](model, name, store, storeManager, maxInsertBatch, cacheQueries))
 
-  // TODO: AsyncStored
+  object stored {
+    def apply[T](key: String,
+                 default: => T,
+                 persistence: Persistence = Persistence.Stored,
+                 collection: AsyncCollection[KeyValue, KeyValue.type] = backingStore)
+                (implicit rw: RW[T]): AsyncStoredValue[T] = AsyncStoredValue(underlying.stored[T](
+      key = key,
+      default = default,
+      persistence = persistence,
+      collection = collection.underlying
+    ))
+
+    def opt[T](key: String,
+               persistence: Persistence = Persistence.Stored,
+               collection: AsyncCollection[KeyValue, KeyValue.type] = backingStore)
+              (implicit rw: RW[T]): AsyncStoredValue[Option[T]] = AsyncStoredValue(underlying.stored.opt[T](
+      key = key,
+      persistence = persistence,
+      collection = collection.underlying
+    ))
+  }
 
   final def init(): IO[Boolean] = IO.blocking(underlying.init()).flatMap {
     case true => initialize().map(_ => true)
