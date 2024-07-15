@@ -1,5 +1,7 @@
 package lightdb.store
 
+import fabric.io.{JsonFormatter, JsonParser}
+import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
@@ -22,6 +24,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
     case fields => fields
   }
 
+  protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(collection.model.rw))
+  protected def fromString(string: String): Doc = JsonParser(string).as[Doc](collection.model.rw)
+
   def init(collection: Collection[Doc, Model]): Unit = {
     this.collection = collection
   }
@@ -34,7 +39,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def prepareTransaction(transaction: Transaction[Doc]): Unit
 
-  final def releaseTransaction(transaction: Transaction[Doc]): Unit = {
+  def releaseTransaction(transaction: Transaction[Doc]): Unit = {
     transaction.commit()
   }
 

@@ -32,9 +32,6 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: O
 
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
-  private def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(collection.model.rw))
-  private def fromString(string: String): Doc = JsonParser(string).as[Doc](collection.model.rw)
-
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = map.put(doc._id.value, toString(doc))
