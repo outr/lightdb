@@ -5,14 +5,14 @@ import cats.effect.unsafe.implicits.global
 import fabric.rw.RW
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.{KeyValue, LightDB, Persistence, StoredValue}
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 
 import java.nio.file.Path
 
-trait AsyncLightDB {
-  db =>
+trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
   object underlying extends LightDB {
     override def name: String = db.name
 
@@ -48,6 +48,8 @@ trait AsyncLightDB {
       }
     }
   }
+
+  override def put[T](key: DBFeatureKey[T], value: T): Unit = underlying.put(key, value)
 
   def backingStore: AsyncCollection[KeyValue, KeyValue.type] = AsyncCollection(underlying.backingStore)
 

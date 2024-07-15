@@ -3,6 +3,7 @@ package spec
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.feature.DBFeatureKey
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Field, Id, LightDB, Sort, StoredValue}
@@ -47,7 +48,11 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     quintin, ruth, sam, tori, uba, veronica, wyatt, xena, yuri, zoey
   )
 
-  private lazy val specName: String = getClass.getSimpleName
+  private var features = Map.empty[DBFeatureKey[Any], Any]
+  protected def addFeature[T](key: DBFeatureKey[T], value: T): Unit =
+    features += key.asInstanceOf[DBFeatureKey[Any]] -> value
+
+  protected lazy val specName: String = getClass.getSimpleName
 
   specName should {
     "initialize the database" in {
@@ -182,6 +187,11 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   def storeManager: StoreManager
 
   object DB extends LightDB {
+    spec.features.foreach {
+      case (key, value) =>
+        put(key, value)
+    }
+
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)

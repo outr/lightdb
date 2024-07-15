@@ -3,9 +3,10 @@ package lightdb
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.util.Initializable
+import lightdb.util.{Disposable, Initializable}
 
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
@@ -14,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The database to be implemented. Collections *may* be used without a LightDB instance, but with drastically diminished
  * functionality. It is always ideal for collections to be associated with a database.
  */
-trait LightDB extends Initializable {
+trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
   /**
    * Identifiable name for this database. Defaults to using the class name.
    */
@@ -60,10 +61,11 @@ trait LightDB extends Initializable {
   /**
    * Backing key/value store used for persistent internal settings, StoredValues, and general key/value storage.
    */
-  val backingStore: Collection[KeyValue, KeyValue.type] = collection(KeyValue, name = Some("_backingStore"))
+  lazy val backingStore: Collection[KeyValue, KeyValue.type] = collection(KeyValue, name = Some("_backingStore"))
 
   override protected def initialize(): Unit = {
     scribe.info(s"$name database initializing...")
+    backingStore
     collections.foreach(_.init())
     // Truncate the database before we do anything if specified
     if (truncateOnInit) truncate()
@@ -107,7 +109,7 @@ trait LightDB extends Initializable {
                                                                     maxInsertBatch: Int = 1_000_000,
                                                                     cacheQueries: Boolean = Collection.DefaultCacheQueries): Collection[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val s = store match {
+    val s = () => store match {
       case Some(store) => store
       case None =>
         val sm = storeManager.getOrElse(this.storeManager)
@@ -173,6 +175,10 @@ trait LightDB extends Initializable {
   def dispose(): Unit = if (_disposed.compareAndSet(false, true)) {
     collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).foreach { collection =>
       collection.dispose()
+    }
+    features.foreach {
+      case d: Disposable => d.dispose()
+      case _ => // Ignore
     }
   }
 }
