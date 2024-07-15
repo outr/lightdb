@@ -21,9 +21,8 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
   private var statements = List.empty[Statement]
   private var resultSets = List.empty[ResultSet]
 
-  private lazy val cache = new ThreadLocal[Map[String, PreparedStatement]] {    // TODO: Use List[PreparedStatement]
-    override def initialValue(): Map[String, PreparedStatement] = Map.empty
-  }
+  private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
+
 
   def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = {
     val connection = connectionManager.getConnection(transaction)
@@ -35,14 +34,10 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     }
 
     if (caching) {
-      var map = cache.get()
-      val ps = map.get(sql) match {
+      val q = cache.computeIfAbsent(sql, _ => new ConcurrentLinkedQueue[PreparedStatement])
+      val ps = Option(q.poll()) match {
         case Some(ps) => ps
-        case None =>
-          val ps = createPs()
-          map += sql -> ps
-          cache.set(map)
-          ps
+        case None => createPs()
       }
 
       f(ps)
@@ -51,7 +46,9 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     }
   }
 
-  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = ()
+  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = if (caching) {
+    cache.get(sql).add(ps)
+  }
 
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
     if (psInsert == null) {

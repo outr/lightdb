@@ -3,7 +3,7 @@ package lightdb.sql
 import lightdb.collection.Collection
 import lightdb.doc.Document
 
-import java.sql.{ResultSet, SQLException}
+import java.sql.{PreparedStatement, ResultSet, SQLException}
 
 case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
                                                  state: SQLState[Doc],
@@ -67,18 +67,20 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
       limit = None,
       offset = 0
     )
-    val rs = b.executeInternal("SELECT COUNT(*) FROM (", ") AS innerQuery")
+    val results = b.executeInternal("SELECT COUNT(*) FROM (", ") AS innerQuery")
+    val rs = results.rs
     try {
       rs.next()
       rs.getInt(1)
     } finally {
       rs.close()
+      results.release(state)
     }
   }
 
-  def execute(): ResultSet = executeInternal()
+  def execute(): SQLResults = executeInternal()
 
-  private def executeInternal(pre: String = "", post: String = ""): ResultSet = {
+  private def executeInternal(pre: String = "", post: String = ""): SQLResults = {
     scribe.debug(s"Executing Query: $sql (${args.mkString(", ")})")
     val combinedSql = s"$pre$sql$post"
     try {
@@ -86,7 +88,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
         args.zipWithIndex.foreach {
           case (value, index) => value.set(ps, index + 1)
         }
-        ps.executeQuery()
+        SQLResults(ps.executeQuery(), combinedSql, ps)
       }
     } catch {
       case t: Throwable => throw new SQLException(s"Error executing query: $combinedSql", t)

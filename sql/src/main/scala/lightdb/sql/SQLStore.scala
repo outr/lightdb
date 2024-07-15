@@ -175,7 +175,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       limit = Some(1),
       offset = 0
     )
-    val rs = b.execute()
+    val results = b.execute()
+    val rs = results.rs
     try {
       if (rs.next()) {
         Some(getDoc(rs))
@@ -184,6 +185,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       }
     } finally {
       rs.close()
+      results.release(state)
     }
   }
 
@@ -318,7 +320,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       limit = query.limit,
       offset = query.offset
     )
-    val rs = b.execute()
+    val results = b.execute()
+    val rs = results.rs
     state.register(rs)
     val total = if (query.countTotal) {
       Some(b.queryTotal())
@@ -388,7 +391,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   override def aggregate(query: AggregateQuery[Doc, Model])
                         (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
     val b = aggregate2SQLQuery(query)
-    val rs = b.execute()
+    val results = b.execute()
+    val rs = results.rs
     val state = getState
     state.register(rs)
     def createStream[R](f: ResultSet => R): Iterator[R] = {
