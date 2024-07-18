@@ -22,18 +22,6 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
 
     override protected def truncateOnInit: Boolean = db.truncateOnInit
 
-    override protected def initialize(): Unit = {
-      super.initialize()
-
-      db.initialize().unsafeRunSync()
-    }
-
-    override def dispose(): Unit = {
-      super.dispose()
-
-      db.initialize().unsafeRunSync()
-    }
-
     override lazy val upgrades: List[DatabaseUpgrade] = db.upgrades.map { u =>
       new DatabaseUpgrade {
         override def label: String = u.label

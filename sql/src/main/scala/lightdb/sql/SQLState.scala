@@ -74,13 +74,9 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     resultSets = rs :: resultSets
   }
 
-  override def commit(): Unit = if (connection != null) {
-    connection.commit()
-  }
+  override def commit(): Unit = connectionManager.getConnection(transaction).commit()
 
-  override def rollback(): Unit = if (connection != null) {
-    connection.rollback()
-  }
+  override def rollback(): Unit = connectionManager.getConnection(transaction).rollback()
 
   override def close(): Unit = {
     super.close()
