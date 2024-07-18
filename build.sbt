@@ -84,6 +84,8 @@ val fs2Version: String = "3.10.2"
 
 val scalaTestVersion: String = "3.2.19"
 
+val catsEffectTestingVersion: String = "1.5.0"
+
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, sql, sqlite, h2, duckdb, lucene, halodb, rocksdb, mapdb, redis, async, all)
 	.settings(
@@ -248,12 +250,13 @@ lazy val async = project.in(file("async"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, async)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
 		)
 	)
 

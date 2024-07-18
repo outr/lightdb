@@ -94,7 +94,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       collection.delete(f)
     }
 
-    def delete(id: Id[Doc])(implicit ev: Model <:< DocumentModel[_]): Boolean = transaction { implicit transaction =>
+    def delete(id: Id[Doc]): Boolean = transaction { implicit transaction =>
       collection.delete(id)
     }
 

@@ -27,7 +27,12 @@ sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, 
   override protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter[Doc] =
     Filter.RangeDouble(this.asInstanceOf[Field[Doc, Double]], from, to)
 
-  override def IN(values: Seq[V]): Filter[Doc] = Filter.In(this, values)
+  override def IN(values: Seq[V]): Filter[Doc] = {
+    Field.MaxIn.foreach { max =>
+      if (values.size > max) throw new RuntimeException(s"Attempting to specify ${values.size} values for IN clause in $name, but maximum is ${Field.MaxIn}.")
+    }
+    Filter.In(this, values)
+  }
 
   override def parsed(query: String, allowLeadingWildcard: Boolean): Filter[Doc] =
     Filter.Parsed(this, query, allowLeadingWildcard)
@@ -53,6 +58,8 @@ sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, 
 }
 
 object Field {
+  var MaxIn: Option[Int] = Some(1_000)
+
   case class Basic[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
   case class Index[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW) {
     override def indexed: Boolean = true
