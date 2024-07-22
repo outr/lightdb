@@ -15,7 +15,7 @@ import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.ActionIterator
-import lightdb.{Field, Id, Indexed, Query, SearchResults, Sort, SortDirection, UniqueIndex}
+import lightdb.{Field, Id, Indexed, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
@@ -54,7 +54,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
   protected def addColumn(field: Field[Doc, _])(implicit transaction: Transaction[Doc]): Unit = {
     scribe.info(s"Adding column ${collection.name}.${field.name}")
-    executeUpdate(s"ALTER TABLE ${collection.name} ADD COLUMN ${field.name}")
+    executeUpdate(s"ALTER TABLE ${collection.name} ADD COLUMN ${field.name} ${def2Type(field.name, field.rw.definition)}")
   }
 
   protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
@@ -236,7 +236,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     case c: JsonConversion[Doc] =>
       val values = fields.map { field =>
         try {
-          field.name -> toJson(rs.getObject(field.name), field.rw)
+          val json = field match {
+            case _: Tokenized[_] => arr(rs.getString(field.name).split(" ").toList.map(str): _*)
+            case _ => toJson(rs.getObject(field.name), field.rw)
+          }
+          field.name -> json
         } catch {
           case t: Throwable =>
             val columnNames = getColumnNames(rs).mkString(", ")
@@ -292,7 +296,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     case null => Null
     case s: String if rw.definition == DefType.Str => str(s)
     case s: String if rw.definition == DefType.Json => JsonParser(s)
-    case s: String => JsonParser(s)
+    case s: String => try {
+      JsonParser(s)
+    } catch {
+      case t: Throwable => throw new RuntimeException(s"Unable to parse: [$s] as JSON for ${rw.definition}", t)
+    }
     case b: Boolean => bool(b)
     case i: Int => num(i)
     case l: Long => num(l)
@@ -474,7 +482,18 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case (Some(from), None) => SQLPart(s"${f.field.name} >= ?", List(SQLArg.DoubleArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
-    case f: Filter.Parsed[Doc, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
+    case f: Filter.Parsed[Doc, _] =>
+      val parts = f.query.split(" ").map { q =>
+        var s = q
+        if (!s.startsWith("%")) {
+          s = s"%$s"
+        }
+        if (!s.endsWith("%")) {
+          s = s"$s%"
+        }
+        s
+      }.toList
+      SQLPart(parts.map(_ => s"${f.field.name} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
     case f: Filter.Distance[Doc] => distanceFilter(f)
   }
 

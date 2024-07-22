@@ -5,7 +5,7 @@ import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.spatial.GeoPoint
-import lightdb.{Field, Id}
+import lightdb.{Field, Id, Tokenized}
 
 import java.sql.{PreparedStatement, Types}
 
@@ -17,6 +17,9 @@ object SQLArg {
   case class FieldArg[Doc, F](field: Field[Doc, F], value: F) extends SQLArg {
     override def set(ps: PreparedStatement, index: Int): Unit = value match {
       case null => ps.setNull(index, Types.NULL)
+      case _ if field.isInstanceOf[Tokenized[_]] =>
+        val list = value.asInstanceOf[List[String]]
+        ps.setString(index, list.flatMap(_.toLowerCase.split("\\s+")).filterNot(_.isEmpty).mkString(" "))
       case id: Id[_] => ps.setString(index, id.value)
       case s: String => ps.setString(index, s)
       case b: Boolean => ps.setBoolean(index, b)
@@ -39,6 +42,10 @@ object SQLArg {
 
   object FieldArg {
     def apply[Doc, F](doc: Doc, field: Field[Doc, F]): FieldArg[Doc, F] = apply(field, field.get(doc))
+  }
+
+  case class StringArg(s: String) extends SQLArg {
+    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, s)
   }
 
   case class LongArg(long: Long) extends SQLArg {

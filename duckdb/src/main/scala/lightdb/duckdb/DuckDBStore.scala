@@ -52,8 +52,7 @@ object DuckDBStore extends StoreManager {
       case None => ""
     }
     SingleConnectionManager(SQLConfig(
-      jdbcUrl = s"jdbc:duckdb:$path",
-      autoCommit = true     // TODO: Figure out how to make DuckDB with autoCommit = false
+      jdbcUrl = s"jdbc:duckdb:$path"
     ))
   }
 
