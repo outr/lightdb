@@ -15,7 +15,7 @@ import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.ActionIterator
-import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection}
+import lightdb.{Field, Id, Indexed, Query, SearchResults, Sort, SortDirection, UniqueIndex}
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
@@ -84,12 +84,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
     // Add indexes
     fields.foreach {
-      case _: Field.Basic[Doc, _] => // Nothing to do
-      case index: Field.Index[Doc, _] =>
-        executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
-      case index: Field.Unique[Doc, _] if index.name == "_id" => // Ignore _id
-      case index: Field.Unique[Doc, _] =>
+      case index: UniqueIndex[Doc, _] if index.name == "_id" => // Ignore _id
+      case index: UniqueIndex[Doc, _] =>
         executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
+      case index: Indexed[Doc, _] =>
+        executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON ${collection.name}(${index.name})")
+      case _: Field[Doc, _] => // Nothing to do
     }
   }
 
@@ -162,7 +162,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
   }
 
-  override def get[V](field: Field.Unique[Doc, V], value: V)
+  override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     val state = getState
     val b = new SQLQueryBuilder[Doc](
@@ -190,7 +190,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
   }
 
-  override def delete[V](field: Field.Unique[Doc, V], value: V)
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Boolean = {
     val connection = connectionManager.getConnection
     val ps = connection.prepareStatement(s"DELETE FROM ${collection.name} WHERE ${field.name} = ?")
@@ -231,7 +231,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   private def getDoc(rs: ResultSet): Doc = collection.model match {
     case _ if storeMode == StoreMode.Indexes =>
       val id = Id[Doc](rs.getString("_id"))
-      collection.t(_ => collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]] -> id)
+      collection.t(_ => collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]] -> id)
     case c: SQLConversion[Doc] => c.convertFromSQL(rs)
     case c: JsonConversion[Doc] =>
       val values = fields.map { field =>

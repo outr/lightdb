@@ -1,7 +1,7 @@
 package lightdb.async
 
 import cats.effect.IO
-import lightdb.{Field, Id}
+import lightdb.{Field, Id, UniqueIndex}
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction
@@ -27,10 +27,10 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
 
   def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): IO[Seq[Doc]] = IO.blocking(underlying.upsert(docs))
 
-  def get[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
+  def get[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
     IO.blocking(underlying.get(f))
 
-  def apply[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Doc] =
+  def apply[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Doc] =
     IO.blocking(underlying(f))
 
   def get(id: Id[Doc])(implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
@@ -44,7 +44,7 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
             (implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
     IO.blocking(underlying.modify(id, lock, deleteOnNone)(f))
 
-  def delete[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Boolean] =
+  def delete[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Boolean] =
     IO.blocking(underlying.delete(f))
 
   def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[Boolean] =

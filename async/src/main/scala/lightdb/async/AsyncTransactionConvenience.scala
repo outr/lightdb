@@ -2,7 +2,7 @@ package lightdb.async
 
 import cats.effect.IO
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.{Field, Id}
+import lightdb.{Field, Id, UniqueIndex}
 
 case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: AsyncCollection[Doc, Model]) {
   def insert(doc: Doc): IO[Doc] = collection.transaction { implicit transaction =>
@@ -21,11 +21,11 @@ case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentMo
     collection.upsert(docs)
   }
 
-  def get[V](f: Model => (Field.Unique[Doc, V], V)): IO[Option[Doc]] = collection.transaction { implicit transaction =>
+  def get[V](f: Model => (UniqueIndex[Doc, V], V)): IO[Option[Doc]] = collection.transaction { implicit transaction =>
     collection.get(f)
   }
 
-  def apply[V](f: Model => (Field.Unique[Doc, V], V)): IO[Doc] = collection.transaction { implicit transaction =>
+  def apply[V](f: Model => (UniqueIndex[Doc, V], V)): IO[Doc] = collection.transaction { implicit transaction =>
     collection(f)
   }
 
@@ -42,7 +42,7 @@ case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentMo
     collection.modify(id, lock, deleteOnNone)(f)
   }
 
-  def delete[V](f: Model => (Field.Unique[Doc, V], V)): IO[Boolean] = collection.transaction { implicit transaction =>
+  def delete[V](f: Model => (UniqueIndex[Doc, V], V)): IO[Boolean] = collection.transaction { implicit transaction =>
     collection.delete(f)
   }
 

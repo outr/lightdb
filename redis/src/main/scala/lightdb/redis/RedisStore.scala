@@ -2,7 +2,7 @@ package lightdb.redis
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, Query, SearchResults}
+import lightdb.{Field, Id, Query, SearchResults, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
@@ -40,7 +40,7 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMod
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit =
     getInstance.hset(collection.name, doc._id.value, toString(doc))
 
-  override def get[V](field: Field.Unique[Doc, V], value: V)
+  override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {
       Option(getInstance.hget(collection.name, value.asInstanceOf[Id[Doc]].value)).map(fromString)
@@ -49,7 +49,7 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMod
     }
   }
 
-  override def delete[V](field: Field.Unique[Doc, V], value: V)
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Boolean =
     getInstance.hdel(value.asInstanceOf[Id[Doc]].value) > 0L
 

@@ -7,7 +7,7 @@ import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
-import lightdb.{Field, Id, Query, SearchResults}
+import lightdb.{Field, Id, Indexed, Query, SearchResults, Unique, UniqueIndex}
 
 import java.io.File
 
@@ -15,12 +15,12 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected var collection: Collection[Doc, Model] = _
 
   protected def id(doc: Doc): Id[Doc] = doc.asInstanceOf[Document[_]]._id.asInstanceOf[Id[Doc]]
-  protected lazy val idField: Field.Unique[Doc, Id[Doc]] = collection.model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
+  protected lazy val idField: UniqueIndex[Doc, Id[Doc]] = collection.model._id
 
   def storeMode: StoreMode
 
   protected lazy val fields: List[Field[Doc, _]] = collection.model.fields match {
-    case fields if storeMode == StoreMode.Indexes => fields.filterNot(_.isInstanceOf[Field.Basic[_, _]])
+    case fields if storeMode == StoreMode.Indexes => fields.filter(_.isInstanceOf[Indexed[_, _]])
     case fields => fields
   }
 
@@ -47,9 +47,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
 
-  def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc]
+  def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc]
 
-  def delete[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean
+  def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean
 
   def count(implicit transaction: Transaction[Doc]): Int
 

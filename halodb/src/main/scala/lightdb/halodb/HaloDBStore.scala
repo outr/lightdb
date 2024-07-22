@@ -5,7 +5,7 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults}
+import lightdb.{Field, Id, LightDB, Query, SearchResults, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
@@ -48,7 +48,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     instance.put(id(doc).bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
   }
 
-  override def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
+  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {
       Option(instance.get(value.asInstanceOf[Id[Doc]].bytes)).map(bytes2Doc)
     } else {
@@ -62,7 +62,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     json.as[Doc](collection.model.rw)
   }
 
-  override def delete[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
     instance.delete(value.asInstanceOf[Id[Doc]].bytes)
     true
   }

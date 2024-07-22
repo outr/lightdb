@@ -2,7 +2,7 @@ package lightdb.store
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults}
+import lightdb.{Field, Id, LightDB, Query, SearchResults, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
@@ -24,7 +24,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
     map += id(doc) -> doc
   }
 
-  override def get[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
+  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {
       map.get(value.asInstanceOf[Id[Doc]])
     } else {
@@ -32,7 +32,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
     }
   }
 
-  override def delete[V](field: Field.Unique[Doc, V],
+  override def delete[V](field: UniqueIndex[Doc, V],
                          value: V)(implicit transaction: Transaction[Doc]): Boolean = synchronized {
     if (field == idField) {
       val id = value.asInstanceOf[Id[Doc]]

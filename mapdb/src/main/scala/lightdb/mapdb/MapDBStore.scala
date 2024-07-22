@@ -4,7 +4,7 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults}
+import lightdb.{Field, Id, LightDB, Query, SearchResults, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
@@ -36,7 +36,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: O
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = map.put(doc._id.value, toString(doc))
 
-  override def get[V](field: Field.Unique[Doc, V], value: V)
+  override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {
       Option(map.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
@@ -45,7 +45,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: O
     }
   }
 
-  override def delete[V](field: Field.Unique[Doc, V], value: V)
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Boolean =
     map.remove(value.asInstanceOf[Id[Doc]].value) != null
 
