@@ -17,7 +17,7 @@ sealed class Field[Doc, V](val name: String,
 
   def getJson(doc: Doc): Json = get(doc).json
 
-  def indexed: Boolean = false
+  lazy val indexed: Boolean = this.isInstanceOf[Indexed[_, _]]
 
   override def is(value: V): Filter[Doc] = Filter.Equals(this, value)
 
@@ -61,6 +61,8 @@ trait Indexed[Doc, V] extends Field[Doc, V]
 
 trait UniqueIndex[Doc, V] extends Indexed[Doc, V]
 
+trait Tokenized[Doc] extends Indexed[Doc, List[String]]
+
 object Field {
   var MaxIn: Option[Int] = Some(1_000)
 
@@ -75,6 +77,12 @@ object Field {
     get = get,
     getRW = () => getRW
   ) with Indexed[Doc, V]
+
+  def tokenized[Doc](name: String, get: Doc => List[String]): Tokenized[Doc] = new Field[Doc, List[String]](
+    name = name,
+    get = get,
+    getRW = () => implicitly[RW[List[String]]]
+  ) with Tokenized[Doc]
 
   def unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
     name = name,

@@ -6,7 +6,7 @@ import fabric.io.JsonFormatter
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, UniqueIndex}
+import lightdb.{Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.lucene.index.Index
@@ -53,33 +53,39 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     val json = field.getJson(doc)
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
-    json match {
-      case _ if field.rw.definition == DefType.Json => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
-      case Null => // Ignore null
-      case Str(s, _) => add(new StringField(field.name, s, fs))
-      case Bool(b, _) => add(new IntField(field.name, if (b) 1 else 0, fs))
-      case NumInt(l, _) => add(new LongField(field.name, l, fs))
-      case NumDec(bd, _) => add(new DoubleField(field.name, bd.toDouble, fs))
-      case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
-        case p: GeoPoint =>
-          add(new LatLonPoint(field.name, p.latitude, p.longitude))
-          add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
-        case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+    field match {
+      case t: Tokenized[Doc] => t.get(doc).map { s =>
+        new LuceneField(field.name, json.asString, if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED)
       }
-      case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+      case _ =>
+        json match {
+          case _ if field.rw.definition == DefType.Json => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+          case Null => // Ignore null
+          case Str(s, _) => add(new StringField(field.name, s, fs))
+          case Bool(b, _) => add(new IntField(field.name, if (b) 1 else 0, fs))
+          case NumInt(l, _) => add(new LongField(field.name, l, fs))
+          case NumDec(bd, _) => add(new DoubleField(field.name, bd.toDouble, fs))
+          case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
+            case p: GeoPoint =>
+              add(new LatLonPoint(field.name, p.latitude, p.longitude))
+              add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
+            case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+          }
+          case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+        }
+        val separate = field.rw.definition.className.collect {
+          case "lightdb.spatial.GeoPoint" => true
+        }.getOrElse(false)
+        val fieldSortName = if (separate) s"${field.name}Sort" else field.name
+        field.getJson(doc) match {
+          case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
+            case GeoPoint(latitude, longitude) => add(new LatLonDocValuesField(fieldSortName, latitude, longitude))
+            case _ => // Ignore
+          }
+          case _ => // Ignore
+        }
+        fields
     }
-    val separate = field.rw.definition.className.collect {
-      case "lightdb.spatial.GeoPoint" => true
-    }.getOrElse(false)
-    val fieldSortName = if (separate) s"${field.name}Sort" else field.name
-    field.getJson(doc) match {
-      case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
-        case GeoPoint(latitude, longitude) => add(new LatLonDocValuesField(fieldSortName, latitude, longitude))
-        case _ => // Ignore
-      }
-      case _ => // Ignore
-    }
-    fields
   }
 
   private def addDoc(id: Id[Doc], fields: List[LuceneField], upsert: Boolean): Unit = if (fields.tail.nonEmpty) {
@@ -237,11 +243,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   private def exactQuery(field: Field[Doc, _], json: Json): LuceneQuery = json match {
-    // TODO: Support Tokenized
-//    case Str(s, _) if field.tokenized =>
-//      val b = new BooleanQuery.Builder
-//      s.split("\\s+").foreach(s => b.add(new TermQuery(new Term(field.name, s)), BooleanClause.Occur.MUST))
-//      b.build()
+    case Str(s, _) if field.isInstanceOf[Tokenized[_]] =>
+      val b = new BooleanQuery.Builder
+      s.split("\\s+").foreach(s => b.add(new TermQuery(new Term(field.name, s)), BooleanClause.Occur.MUST))
+      b.build()
     case Str(s, _) => new TermQuery(new Term(field.name, s))
     case Bool(b, _) => IntPoint.newExactQuery(field.name, if (b) 1 else 0)
     case NumInt(l, _) => LongPoint.newExactQuery(field.name, l)

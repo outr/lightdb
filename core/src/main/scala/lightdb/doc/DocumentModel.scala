@@ -1,7 +1,7 @@
 package lightdb.doc
 
 import fabric.rw._
-import lightdb.{Field, Id, Indexed, Unique, UniqueIndex}
+import lightdb.{Field, Id, Indexed, Tokenized, Unique, UniqueIndex}
 
 import scala.language.implicitConversions
 
@@ -17,6 +17,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
   type F[V] = Field[Doc, V]
   type I[V] = Indexed[Doc, V]
   type U[V] = UniqueIndex[Doc, V]
+  type T = Tokenized[Doc]
 
   def map2Doc(map: Map[String, Any]): Doc
 
@@ -37,5 +38,8 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
     def unique[V: RW](name: String, get: Doc => V): UniqueIndex[Doc, V] =
       add[V, UniqueIndex[Doc, V]](Field.unique(name, get))
+
+    def tokenized(name: String, get: Doc => List[String]): Tokenized[Doc] =
+      add[List[String], Tokenized[Doc]](Field.tokenized(name, doc => get(doc)))
   }
 }

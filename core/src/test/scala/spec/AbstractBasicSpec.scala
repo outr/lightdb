@@ -184,6 +184,12 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         ))
       }
     }
+    "search using tokenized data and a parsed query" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query.filter(_.search.words("nica 13")).toList
+        people.map(_.name) should be(List("Veronica"))
+      }
+    }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
         db.people.truncate() should be(24)
@@ -225,6 +231,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
     val name: F[String] = field("name", _.name)
     val age: F[Int] = field.index("age", _.age)
+    val search: T = field.tokenized("search", doc => List(doc.name, doc.age.toString))
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
