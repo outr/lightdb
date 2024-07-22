@@ -6,7 +6,7 @@ import fabric.io.JsonFormatter
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults, Sort, SortDirection}
+import lightdb.{Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.lucene.index.Index
@@ -93,14 +93,14 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     }
   }
 
-  override def get[V](field: Field.Unique[Doc, V], value: V)
+  override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     val filter = Filter.Equals(field, value)
     val query = Query[Doc, Model](collection, filter = Some(filter), limit = Some(1))
     doSearch[Doc](query, Conversion.Doc()).list.headOption
   }
 
-  override def delete[V](field: Field.Unique[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
     val query = filter2Lucene(Some(field === value))
     index.indexWriter.deleteDocuments(query)
     true

@@ -6,7 +6,7 @@ import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.store.Store
 import lightdb.transaction.Transaction
 import lightdb.util.Initializable
-import lightdb.{Field, Id, Query}
+import lightdb.{Field, Id, Query, Unique, UniqueIndex}
 
 case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,
@@ -69,11 +69,11 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       collection.upsert(docs)
     }
 
-    def get[V](f: Model => (Field.Unique[Doc, V], V)): Option[Doc] = transaction { implicit transaction =>
+    def get[V](f: Model => (UniqueIndex[Doc, V], V)): Option[Doc] = transaction { implicit transaction =>
       collection.get(f)
     }
 
-    def apply[V](f: Model => (Field.Unique[Doc, V], V)): Doc = transaction { implicit transaction =>
+    def apply[V](f: Model => (UniqueIndex[Doc, V], V)): Doc = transaction { implicit transaction =>
       collection(f)
     }
 
@@ -90,7 +90,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       collection.modify(id, lock, deleteOnNone)(f)
     }
 
-    def delete[V](f: Model => (Field.Unique[Doc, V], V)): Boolean = transaction { implicit transaction =>
+    def delete[V](f: Model => (UniqueIndex[Doc, V], V)): Boolean = transaction { implicit transaction =>
       collection.delete(f)
     }
 
@@ -121,12 +121,12 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(upsert)
 
-  def get[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Option[Doc] = {
+  def get[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Option[Doc] = {
     val (field, value) = f(model)
     store.get(field, value)
   }
 
-  def apply[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Doc =
+  def apply[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Doc =
     get[V](f).getOrElse {
       val (field, value) = f(model)
       throw DocNotFoundException(name, field.name, value)
@@ -144,7 +144,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc])
             (implicit transaction: Transaction[Doc]): Option[Doc] = transaction.mayLock(id, lock) {
-    val idField = model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]]
+    val idField = model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]]
     f(get(_ => idField -> id)) match {
       case Some(doc) =>
         upsert(doc)
@@ -156,13 +156,13 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
-  def delete[V](f: Model => (Field.Unique[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
+  def delete[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
     val (field, value) = f(model)
     store.delete(field, value)
   }
 
   def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Boolean = {
-    store.delete(ev(model)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]], id)
+    store.delete(ev(model)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]], id)
   }
 
   def count(implicit transaction: Transaction[Doc]): Int = store.count

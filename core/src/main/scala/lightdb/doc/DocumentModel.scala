@@ -1,7 +1,7 @@
 package lightdb.doc
 
 import fabric.rw._
-import lightdb.{Field, Id, Unique}
+import lightdb.{Field, Id, Indexed, Unique, UniqueIndex}
 
 import scala.language.implicitConversions
 
@@ -10,13 +10,13 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   private var _fields = List.empty[Field[Doc, _]]
 
-  val _id: Field.Unique[Doc, Id[Doc]] = field.unique("_id", _._id)
+  val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", _._id)
 
   def id(value: String = Unique()): Id[Doc] = Id(value)
 
   type F[V] = Field[Doc, V]
-  type I[V] = Field.Index[Doc, V]
-  type U[V] = Field.Unique[Doc, V]
+  type I[V] = Indexed[Doc, V]
+  type U[V] = UniqueIndex[Doc, V]
 
   def map2Doc(map: Map[String, Any]): Doc
 
@@ -29,13 +29,13 @@ trait DocumentModel[Doc <: Document[Doc]] {
     }
 
     def apply[V: RW](name: String, get: Doc => V): Field[Doc, V] = {
-      add[V, Field[Doc, V]](Field.Basic(name, get))
+      add[V, Field[Doc, V]](Field(name, get))
     }
 
-    def index[V: RW](name: String, get: Doc => V): Field.Index[Doc, V] =
-      add[V, Field.Index[Doc, V]](Field.Index(name, get))
+    def index[V: RW](name: String, get: Doc => V): Indexed[Doc, V] =
+      add[V, Indexed[Doc, V]](Field.indexed(name, get))
 
-    def unique[V: RW](name: String, get: Doc => V): Field.Unique[Doc, V] =
-      add[V, Field.Unique[Doc, V]](Field.Unique(name, get))
+    def unique[V: RW](name: String, get: Doc => V): UniqueIndex[Doc, V] =
+      add[V, UniqueIndex[Doc, V]](Field.unique(name, get))
   }
 }

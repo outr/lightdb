@@ -3,7 +3,7 @@ package lightdb.async
 import cats.effect.IO
 import fabric.Json
 import lightdb.aggregate.AggregateFunction
-import lightdb.{Field, Id, Query, Sort, SortDirection}
+import lightdb.{Field, Id, Query, Sort, SortDirection, UniqueIndex}
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
@@ -55,7 +55,7 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, F]] =
       apply(Conversion.Value(f(collection.model)))
     def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[AsyncSearchResults[Doc, Id[Doc]]] =
-      value(m => ev(m)._id.asInstanceOf[Field.Unique[Doc, Id[Doc]]])
+      value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
     def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Json]] =
       apply(Conversion.Json(f(collection.model)))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, T]] =

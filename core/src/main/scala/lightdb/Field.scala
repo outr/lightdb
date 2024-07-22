@@ -10,10 +10,10 @@ import lightdb.filter.{Filter, FilterSupport}
 import lightdb.materialized.Materializable
 import lightdb.spatial.GeoPoint
 
-sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
-  implicit def rw: RW[V] = getRW
-
-  def get: Doc => V
+sealed class Field[Doc, V](val name: String,
+                           val get: Doc => V,
+                           val getRW: () => RW[V]) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
+  implicit def rw: RW[V] = getRW()
 
   def getJson(doc: Doc): Json = get(doc).json
 
@@ -57,16 +57,30 @@ sealed abstract class Field[Doc, V](getRW: RW[V]) extends FilterSupport[V, Doc, 
     Filter.Distance(this.asInstanceOf[Field[Doc, GeoPoint]], from, radius)
 }
 
+trait Indexed[Doc, V] extends Field[Doc, V]
+
+trait UniqueIndex[Doc, V] extends Indexed[Doc, V]
+
 object Field {
   var MaxIn: Option[Int] = Some(1_000)
 
-  case class Basic[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW)
-  case class Index[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW) {
-    override def indexed: Boolean = true
-  }
-  case class Unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]) extends Field[Doc, V](getRW) {
-    override def indexed: Boolean = true
-  }
+  def apply[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
+    name = name,
+    get = get,
+    getRW = () => getRW
+  )
+
+  def indexed[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
+    name = name,
+    get = get,
+    getRW = () => getRW
+  ) with Indexed[Doc, V]
+
+  def unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
+    name = name,
+    get = get,
+    getRW = () => getRW
+  ) with UniqueIndex[Doc, V]
 
   def string2Json(name: String, s: String, definition: DefType): Json = definition match {
     case _ if s == null => Null
