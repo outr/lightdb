@@ -12,12 +12,11 @@ import lightdb.spatial.GeoPoint
 
 sealed class Field[Doc, V](val name: String,
                            val get: Doc => V,
-                           val getRW: () => RW[V]) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
+                           val getRW: () => RW[V],
+                           val indexed: Boolean = false) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
   implicit def rw: RW[V] = getRW()
 
   def getJson(doc: Doc): Json = get(doc).json
-
-  lazy val indexed: Boolean = this.isInstanceOf[Indexed[_, _]]
 
   override def is(value: V): Filter[Doc] = Filter.Equals(this, value)
 
@@ -52,9 +51,10 @@ sealed class Field[Doc, V](val name: String,
     parsed(words, allowLeadingWildcard = matchEndsWith)
   }
 
-  override def distance(from: GeoPoint, radius: Distance)
-                       (implicit evidence: V =:= GeoPoint): Filter[Doc] =
-    Filter.Distance(this.asInstanceOf[Field[Doc, GeoPoint]], from, radius)
+  def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, doc => Option(get(doc)), () => implicitly[RW[Option[V]]], indexed)
+
+  override def distance(from: GeoPoint, radius: Distance): Filter[Doc] =
+    Filter.Distance(this.asInstanceOf[Field[Doc, Option[GeoPoint]]], from, radius)
 }
 
 trait Indexed[Doc, V] extends Field[Doc, V]
@@ -75,19 +75,22 @@ object Field {
   def indexed[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
-    getRW = () => getRW
+    getRW = () => getRW,
+    indexed = true
   ) with Indexed[Doc, V]
 
   def tokenized[Doc](name: String, get: Doc => List[String]): Tokenized[Doc] = new Field[Doc, List[String]](
     name = name,
     get = get,
-    getRW = () => implicitly[RW[List[String]]]
+    getRW = () => implicitly[RW[List[String]]],
+    indexed = true
   ) with Tokenized[Doc]
 
   def unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
-    getRW = () => getRW
+    getRW = () => getRW,
+    indexed = true
   ) with UniqueIndex[Doc, V]
 
   def string2Json(name: String, s: String, definition: DefType): Json = definition match {

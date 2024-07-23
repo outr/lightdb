@@ -47,7 +47,7 @@ object Filter {
     override lazy val fields: List[Field[Doc, _]] = List(field)
   }
 
-  case class Distance[Doc](field: Field[Doc, GeoPoint], from: GeoPoint, radius: lightdb.distance.Distance) extends Filter[Doc] {
+  case class Distance[Doc](field: Field[Doc, Option[GeoPoint]], from: GeoPoint, radius: lightdb.distance.Distance) extends Filter[Doc] {
     override lazy val fields: List[Field[Doc, _]] = List(field)
   }
 }

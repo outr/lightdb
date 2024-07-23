@@ -21,7 +21,7 @@ object Sort {
     def desc: ByField[Doc, F] = direction(SortDirection.Descending)
   }
 
-  case class ByDistance[Doc](field: Field[Doc, GeoPoint],
+  case class ByDistance[Doc](field: Field[Doc, Option[GeoPoint]],
                              from: GeoPoint,
                              direction: SortDirection = SortDirection.Ascending) extends Sort {
     def direction(direction: SortDirection): ByDistance[Doc] = copy(direction = direction)

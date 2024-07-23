@@ -41,6 +41,6 @@ case class AggregateFunction[T, V, Doc](name: String, field: Field[Doc, V], `typ
     parsed(words, allowLeadingWildcard = matchEndsWith)
   }
 
-  override def distance(from: GeoPoint, radius: Distance)(implicit evidence: V =:= GeoPoint): AggregateFilter[Doc] =
+  override def distance(from: GeoPoint, radius: Distance): AggregateFilter[Doc] =
     AggregateFilter.Distance(name, this.asInstanceOf[Field[Doc, GeoPoint]], from, radius)
 }

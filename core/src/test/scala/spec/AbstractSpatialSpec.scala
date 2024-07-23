@@ -64,12 +64,12 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     "sort by distance from Oklahoma City" in {
       DB.people.transaction { implicit transaction =>
         val list = DB.people.query.search.distance(
-          _.point,
+          _.point.opt,
           from = oklahomaCity,
           radius = Some(1320.miles)
         ).iterator.toList
         val people = list.map(_.doc)
-        val distances = list.map(_.distance.mi)
+        val distances = list.map(_.distance.get.mi)
         people.map(_.name) should be(List("Jane Doe", "John Doe"))
         distances should (be (List(28.493883134993137, 1318.8843733311087)) or be(List(28.555356212993576, 1316.1282972648974)))
       }
