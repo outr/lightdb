@@ -1,5 +1,7 @@
 package lightdb.distance
 
+import fabric.define.DefType
+import fabric.rw.{Convertible, RW}
 import perfolation.double2Implicits
 
 case class Distance(valueInMeters: Double) extends AnyVal {
@@ -32,4 +34,12 @@ case class Distance(valueInMeters: Double) extends AnyVal {
     s"${to(unit).f(f = minimumFractionDigits)} ${unit.abbreviation}"
 
   override def toString: String = format(DistanceUnit.Meters)
+}
+
+object Distance {
+  implicit val rw: RW[Distance] = RW.from[Distance](
+    r = _.toMeters.json,
+    w = j => j.asDouble.meters,
+    d = DefType.Dec
+  )
 }
