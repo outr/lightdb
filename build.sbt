@@ -87,7 +87,7 @@ val scalaTestVersion: String = "3.2.19"
 val catsEffectTestingVersion: String = "1.5.0"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, h2, duckdb, lucene, halodb, rocksdb, mapdb, redis, async, all)
+	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, async)
 	.settings(
 		name := projectName,
 		publish := {},
