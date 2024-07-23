@@ -54,9 +54,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
     field match {
-      case t: Tokenized[Doc] => t.get(doc).map { s =>
-        new LuceneField(field.name, json.asString, if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED)
-      }
+      case t: Tokenized[Doc] =>
+        List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
         json match {
           case _ if field.rw.definition == DefType.Json => add(new StringField(field.name, JsonFormatter.Compact(json), fs))

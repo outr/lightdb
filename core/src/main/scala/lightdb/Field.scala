@@ -61,7 +61,7 @@ trait Indexed[Doc, V] extends Field[Doc, V]
 
 trait UniqueIndex[Doc, V] extends Indexed[Doc, V]
 
-trait Tokenized[Doc] extends Indexed[Doc, List[String]]
+trait Tokenized[Doc] extends Indexed[Doc, String]
 
 object Field {
   var MaxIn: Option[Int] = Some(1_000)
@@ -79,10 +79,10 @@ object Field {
     indexed = true
   ) with Indexed[Doc, V]
 
-  def tokenized[Doc](name: String, get: Doc => List[String]): Tokenized[Doc] = new Field[Doc, List[String]](
+  def tokenized[Doc](name: String, get: Doc => String): Tokenized[Doc] = new Field[Doc, String](
     name = name,
     get = get,
-    getRW = () => implicitly[RW[List[String]]],
+    getRW = () => stringRW,
     indexed = true
   ) with Tokenized[Doc]
 

@@ -39,7 +39,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
     def unique[V: RW](name: String, get: Doc => V): UniqueIndex[Doc, V] =
       add[V, UniqueIndex[Doc, V]](Field.unique(name, get))
 
-    def tokenized(name: String, get: Doc => List[String]): Tokenized[Doc] =
-      add[List[String], Tokenized[Doc]](Field.tokenized(name, doc => get(doc)))
+    def tokenized(name: String, get: Doc => String): Tokenized[Doc] =
+      add[String, Tokenized[Doc]](Field.tokenized(name, doc => get(doc)))
   }
 }

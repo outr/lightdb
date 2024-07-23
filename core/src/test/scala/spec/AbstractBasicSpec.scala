@@ -236,7 +236,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
     val name: F[String] = field("name", _.name)
     val age: F[Int] = field.index("age", _.age)
-    val search: T = field.tokenized("search", doc => List(doc.name, doc.age.toString))
+    val search: T = field.tokenized("search", doc => s"${doc.name} ${doc.age}")
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
