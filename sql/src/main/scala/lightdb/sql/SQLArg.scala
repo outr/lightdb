@@ -18,8 +18,8 @@ object SQLArg {
     override def set(ps: PreparedStatement, index: Int): Unit = value match {
       case null => ps.setNull(index, Types.NULL)
       case _ if field.isInstanceOf[Tokenized[_]] =>
-        val list = value.asInstanceOf[List[String]]
-        ps.setString(index, list.flatMap(_.toLowerCase.split("\\s+")).filterNot(_.isEmpty).mkString(" "))
+        val s = value.toString
+        ps.setString(index, s.toLowerCase.split("\\s+").filterNot(_.isEmpty).mkString(" "))
       case id: Id[_] => ps.setString(index, id.value)
       case s: String => ps.setString(index, s)
       case b: Boolean => ps.setBoolean(index, b)
