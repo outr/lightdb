@@ -56,7 +56,7 @@ trait FilterSupport[F, Doc, Filter] {
             matchStartsWith: Boolean = true,
             matchEndsWith: Boolean = false): Filter
 
-  def distance(from: GeoPoint, radius: Distance)(implicit evidence: F =:= GeoPoint): Filter
+  def distance(from: GeoPoint, radius: Distance): Filter
 }
 
 object FilterSupport {

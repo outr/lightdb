@@ -3,10 +3,13 @@ package lightdb.async
 import cats.effect.IO
 import fabric.Json
 import lightdb.aggregate.AggregateFunction
-import lightdb.{Field, Id, Query, Sort, SortDirection, UniqueIndex}
+import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection, UniqueIndex}
 import lightdb.collection.Collection
+import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
+import lightdb.materialized.MaterializedIndex
+import lightdb.spatial.{DistanceAndDoc, GeoPoint}
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
@@ -60,6 +63,15 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
       apply(Conversion.Json(f(collection.model)))
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, T]] =
       apply(Conversion.Converted(f))
+    def materialized(f: Model => List[Field[Doc, _]])
+                    (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, MaterializedIndex[Doc, Model]]] =
+      apply(Conversion.Materialized(f(collection.model)))
+    def distance(f: Model => Field[Doc, Option[GeoPoint]],
+                 from: GeoPoint,
+                 sort: Boolean = true,
+                 radius: Option[Distance] = None)
+                (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, DistanceAndDoc[Doc]]] =
+      apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
 
   def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] = {

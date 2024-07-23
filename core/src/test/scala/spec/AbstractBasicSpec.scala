@@ -15,6 +15,7 @@ import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   protected def aggregationSupported: Boolean = true
+  protected def memoryOnly: Boolean = false
 
   private val adam = Person("Adam", 21, Person.id("adam"))
   private val brenda = Person("Brenda", 11, Person.id("brenda"))
@@ -172,9 +173,13 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
       db.startTime.get() should be > 0L
     }
     "dispose the database and prepare new instance" in {
-      db.dispose()
-      db = new DB
-      db.init()
+      if (memoryOnly) {
+        // Don't dispose
+      } else {
+        db.dispose()
+        db = new DB
+        db.init()
+      }
     }
     "query the database to verify records were persisted properly" in {
       db.people.transaction { implicit transaction =>

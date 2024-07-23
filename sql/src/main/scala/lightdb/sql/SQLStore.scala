@@ -272,9 +272,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
           jsonFromFields(fields).asInstanceOf[V]
         case Conversion.Distance(field, _, _, _) =>
           val fieldName = s"${field.name}Distance"
-          val distance = rs.getDouble(fieldName)
+          val distance = Option(rs.getObject(fieldName)).map(_.asInstanceOf[java.lang.Double].doubleValue()).map(Distance.apply)
           val doc = getDoc(rs)
-          DistanceAndDoc(doc, Distance(distance)).asInstanceOf[V]
+          DistanceAndDoc(doc, distance).asInstanceOf[V]
       }
     }
   }

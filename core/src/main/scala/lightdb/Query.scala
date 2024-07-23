@@ -86,7 +86,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
       apply(Conversion.Materialized(fields))
     }
 
-    def distance(f: Model => Field[Doc, GeoPoint],
+    def distance(f: Model => Field[Doc, Option[GeoPoint]],
                  from: GeoPoint,
                  sort: Boolean = true,
                  radius: Option[Distance] = None)
@@ -112,7 +112,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
   def count(implicit transaction: Transaction[Doc]): Int = copy(limit = Some(1), countTotal = true)
     .search.docs.total.get
 
-  protected def distanceSearch(field: Field[Doc, GeoPoint],
+  protected def distanceSearch(field: Field[Doc, Option[GeoPoint]],
                                from: GeoPoint,
                                sort: Boolean, radius: Option[Distance])
                               (implicit transaction: Transaction[Doc]): SearchResults[Doc, DistanceAndDoc[Doc]] = {

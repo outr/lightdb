@@ -197,7 +197,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case m: Conversion.Distance[Doc] => idsAndScores.iterator.map {
         case (id, score) =>
           val doc = collection(id)(transaction)
-          val distance = DistanceCalculator(m.from, m.field.get(doc))
+          val distance = m.field.get(doc).map(d => DistanceCalculator(m.from, d))
           DistanceAndDoc(doc, distance) -> score
       }
     }
@@ -269,11 +269,16 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         case DefType.Str => new SortField(field.name, sortType, dir == SortDirection.Descending)
         case d => throw new RuntimeException(s"Unsupported sort definition: $d")
       }
-    case Sort.ByDistance(field, from, direction) =>
-      val separate = field.rw.definition.className.collect {
+    case Sort.ByDistance(field, from, _) =>
+      /*val separate = field.rw.definition.className.collect {
         case "lightdb.spatial.GeoPoint" => true
       }.getOrElse(false)
-      val fieldSortName = if (separate) s"${field.name}Sort" else field.name
+      if (field.name == "point") {
+        scribe.info(s"Separate? $separate, ClassName: ${field.rw.definition.className}")
+      }
+      val fieldSortName = if (separate) s"${field.name}Sort" else field.name*/
+      // TODO: Are there any use-cases for ByDistance that wouldn't use GeoPoint?
+      val fieldSortName = s"${field.name}Sort"
       LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
   }
 
