@@ -37,6 +37,10 @@ case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentMo
     collection(id)
   }
 
+  def list: IO[List[Doc]] = collection.transaction { implicit transaction =>
+    collection.stream.compile.toList
+  }
+
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc]): IO[Option[Doc]] = collection.transaction { implicit transaction =>
     collection.modify(id, lock, deleteOnNone)(f)

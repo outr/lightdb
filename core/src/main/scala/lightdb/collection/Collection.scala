@@ -85,6 +85,10 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       collection(id)
     }
 
+    def list(): List[Doc] = transaction { implicit transaction =>
+      collection.list()
+    }
+
     def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
               (f: Option[Doc] => Option[Doc]): Option[Doc] = transaction { implicit transaction =>
       collection.modify(id, lock, deleteOnNone)(f)
@@ -140,6 +144,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     store.get(model._id, id).getOrElse {
       throw DocNotFoundException(name, "_id", id)
     }
+
+  def list()(implicit transaction: Transaction[Doc]): List[Doc] = iterator.toList
 
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc])
