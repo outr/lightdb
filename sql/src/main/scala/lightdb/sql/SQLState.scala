@@ -74,9 +74,13 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     resultSets = rs :: resultSets
   }
 
-  override def commit(): Unit = connectionManager.getConnection(transaction).commit()
+  override def commit(): Unit = Try(connectionManager.getConnection(transaction).commit()).failed.foreach { t =>
+    scribe.warn(s"Commit failed: ${t.getMessage}")
+  }
 
-  override def rollback(): Unit = connectionManager.getConnection(transaction).rollback()
+  override def rollback(): Unit = Try(connectionManager.getConnection(transaction).rollback()).failed.foreach { t =>
+    scribe.warn(s"Rollback failed: ${t.getMessage}")
+  }
 
   override def close(): Unit = {
     super.close()

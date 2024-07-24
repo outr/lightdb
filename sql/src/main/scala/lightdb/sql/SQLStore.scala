@@ -48,6 +48,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     case DefType.Str | DefType.Json | DefType.Obj(_, _) | DefType.Arr(_) | DefType.Poly(_) | DefType.Enum(_) =>
       "VARCHAR"
     case DefType.Int | DefType.Bool => "BIGINT"
+    case DefType.Dec => "DOUBLE"
     case DefType.Opt(d) => def2Type(name, d)
     case d => throw new UnsupportedOperationException(s"$name has an unsupported type: $d")
   }

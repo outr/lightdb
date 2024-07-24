@@ -55,6 +55,8 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
   def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] = fs2.Stream
     .fromBlockingIterator[IO](underlying.iterator, 512)
 
+  def list(implicit transaction: Transaction[Doc]): IO[List[Doc]] = stream.compile.toList
+
   def query: AsyncQuery[Doc, Model] = AsyncQuery(underlying)
 
   def truncate()(implicit transaction: Transaction[Doc]): IO[Int] = IO.blocking(underlying.truncate())
