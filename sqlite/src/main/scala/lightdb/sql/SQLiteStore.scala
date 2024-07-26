@@ -11,6 +11,7 @@ import lightdb.transaction.Transaction
 import org.sqlite.{SQLiteConfig, SQLiteOpenMode}
 import org.sqlite.SQLiteConfig.{JournalMode, LockingMode, SynchronousMode, TransactionMode}
 
+import java.io.File
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 
@@ -19,23 +20,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
                                                                      val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
 
-  override protected def tables(connection: Connection): Set[String] = {
-    val ps = connection.prepareStatement(s"SELECT name FROM sqlite_master WHERE type = 'table';")
-    try {
-      val rs = ps.executeQuery()
-      try {
-        var set = Set.empty[String]
-        while (rs.next()) {
-          set += rs.getString("name").toLowerCase
-        }
-        set
-      } finally {
-        rs.close()
-      }
-    } finally {
-      ps.close()
-    }
-  }
+  override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 
   override protected def toJson(value: Any, rw: RW[_]): Json = if (rw.definition.className.contains("lightdb.spatial.GeoPoint")) {
     value.toString match {
@@ -73,6 +58,15 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
 }
 
 object SQLiteStore extends StoreManager {
+  private lazy val spatialitePath: String = {
+    val file = Files.createTempFile("mod_spatialite", ".so")
+    val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
+    Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
+    file.toAbsolutePath.toString match {
+      case s => s.substring(0, s.length - 3)
+    }
+  }
+
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
     val connection: Connection = {
       val path = file match {
@@ -85,26 +79,15 @@ object SQLiteStore extends StoreManager {
 
       val config = new SQLiteConfig
       config.enableLoadExtension(true)
-//      config.setJournalMode(JournalMode.WAL)
-//      config.setSharedCache(true)
-//      config.setOpenMode(SQLiteOpenMode.READWRITE)
-//      config.setSynchronous(SynchronousMode.NORMAL)
-//      config.setLockingMode(LockingMode.NORMAL)
       val uri = s"jdbc:sqlite:$path"
       try {
         val c = config.createConnection(uri)
         c.setAutoCommit(false)
 
-        val file = Files.createTempFile("mod_spatialite", ".so")
-        val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
-        Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
-        val path = file.toAbsolutePath.toString match {
-          case s => s.substring(0, s.length - 3)
-        }
-        scribe.info(s"Copying to ${file.toFile.getCanonicalPath} loading: $path")
         val s = c.createStatement()
-        s.executeUpdate(s"SELECT load_extension('$path');")
-        s.executeUpdate("SELECT InitSpatialMetaData()")
+        s.executeUpdate(s"SELECT load_extension('$spatialitePath');")
+        val hasGeometryColumns = this.tables(c).contains("geometry_columns")
+        if (!hasGeometryColumns) s.executeUpdate("SELECT InitSpatialMetaData()")
         s.close()
 
         c
@@ -128,15 +111,30 @@ object SQLiteStore extends StoreManager {
                                                                          storeMode: StoreMode): Store[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) =>
-        scribe.info(s"Using SQLDatabase for $name")
         new SQLiteStore[Doc, Model](
         connectionManager = sqlDB.connectionManager,
         connectionShared = true,
         storeMode
       )
-      case None =>
-        scribe.info(s"Creating new for $name")
-        apply[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite")), storeMode)
+      case None => apply[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite")), storeMode)
+    }
+  }
+
+  private def tables(connection: Connection): Set[String] = {
+    val ps = connection.prepareStatement(s"SELECT name FROM sqlite_master WHERE type = 'table';")
+    try {
+      val rs = ps.executeQuery()
+      try {
+        var set = Set.empty[String]
+        while (rs.next()) {
+          set += rs.getString("name").toLowerCase
+        }
+        set
+      } finally {
+        rs.close()
+      }
+    } finally {
+      ps.close()
     }
   }
 }
