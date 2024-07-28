@@ -1,15 +1,17 @@
 package lightdb.util
 
-import lightdb.Id
+import lightdb.{Field, Id, Indexed}
 import lightdb.doc.Document
 
 import java.util.Comparator
 import java.util.concurrent.ConcurrentHashMap
 
-class InMemoryIndex[Doc <: Document[Doc], V <: Comparable[V]](comparator: Option[Comparator[V]]) {
+class InMemoryIndex[Doc <: Document[Doc], V](field: Indexed[Doc, V], comparator: Option[Comparator[V]]) {
   private val map = new ConcurrentHashMap[V, List[Id[Doc]]]
   private val currentValue = new ConcurrentHashMap[Id[Doc], V]
   private val sorted = new AtomicList[V](comparator)
+
+  def set(doc: Doc): Unit = set(doc._id, field.get(doc))
 
   def set(id: Id[Doc], value: V): Unit = {
     Option(currentValue.get(id)).foreach(previous => remove(id, previous))
@@ -25,6 +27,12 @@ class InMemoryIndex[Doc <: Document[Doc], V <: Comparable[V]](comparator: Option
     })
     currentValue.remove(id)
     sorted.remove(value)
+  }
+
+  def clear(): Unit = {
+    map.clear()
+    currentValue.clear()
+    sorted.clear()
   }
 
   def apply(value: V): List[Id[Doc]] = map.getOrDefault(value, Nil)
