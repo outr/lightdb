@@ -47,7 +47,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   private def def2Type(name: String, d: DefType): String = d match {
     case DefType.Str | DefType.Json | DefType.Obj(_, _) | DefType.Arr(_) | DefType.Poly(_) | DefType.Enum(_) =>
       "VARCHAR"
-    case DefType.Int | DefType.Bool => "BIGINT"
+    case DefType.Int => "BIGINT"
+    case DefType.Bool => "TINYINT"
     case DefType.Dec => "DOUBLE"
     case DefType.Opt(d) => def2Type(name, d)
     case d => throw new UnsupportedOperationException(s"$name has an unsupported type: $d")
@@ -296,6 +297,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   protected def toJson(value: Any, rw: RW[_]): Json = obj2Value(value) match {
     case null => Null
     case s: String if rw.definition == DefType.Str => str(s)
+    case s: String if rw.definition == DefType.Opt(DefType.Str) => str(s)
     case s: String if rw.definition == DefType.Json => JsonParser(s)
     case s: String => try {
       JsonParser(s)
