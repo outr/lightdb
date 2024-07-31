@@ -21,9 +21,12 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     model match {
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet
-        val missing = jc.rw.definition.asInstanceOf[DefType.Obj].map.keys.filterNot { fieldName =>
-          fieldNames.contains(fieldName)
-        }.toList
+        val missing = jc.rw.definition match {
+          case DefType.Obj(map, _) => map.keys.filterNot { fieldName =>
+            fieldNames.contains(fieldName)
+          }.toList
+          case _ => Nil
+        }
         if (missing.nonEmpty) {
           throw ModelMissingFieldsException(name, missing)
         }
