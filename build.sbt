@@ -58,7 +58,7 @@ val rocksDBVersion: String = "9.4.0"
 
 val mapdbVersion: String = "3.1.0"
 
-val jedisVersion: String = "5.1.3"
+val jedisVersion: String = "5.1.4"
 
 val fabricVersion: String = "1.15.3"
 
