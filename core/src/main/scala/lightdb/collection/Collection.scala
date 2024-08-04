@@ -44,9 +44,13 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       }
     }
 
-    def create(): Transaction[Doc] = store.createTransaction()
+    def create(): Transaction[Doc] = {
+      if (Collection.LogTransactions) scribe.info(s"Creating new Transaction for $name")
+      store.createTransaction()
+    }
 
     def release(transaction: Transaction[Doc]): Unit = {
+      if (Collection.LogTransactions) scribe.info(s"Releasing Transaction for $name")
       store.releaseTransaction(transaction)
       transaction.close()
     }
@@ -189,4 +193,5 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
 object Collection {
   var DefaultCacheQueries: Boolean = false
+  var LogTransactions: Boolean = false
 }

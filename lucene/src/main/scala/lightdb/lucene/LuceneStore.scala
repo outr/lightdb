@@ -133,7 +133,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 //      val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
       val totalHits = total.getOrElse(topFieldDocs.totalHits.value.toInt)
       if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty) {
-        search(Some(totalHits))
+        search(Some(query.limit.map(l => math.min(l, totalHits)).getOrElse(totalHits)))
       } else {
         topFieldDocs
       }
