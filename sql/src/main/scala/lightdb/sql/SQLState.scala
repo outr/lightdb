@@ -20,6 +20,7 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
   private[sql] val batchUpsert = new AtomicInteger(0)
   private var statements = List.empty[Statement]
   private var resultSets = List.empty[ResultSet]
+  private var dirty = false
 
   private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
 
@@ -55,6 +56,7 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
       val connection = connectionManager.getConnection(transaction)
       psInsert = connection.prepareStatement(store.insertSQL)
     }
+    dirty = true
     f(psInsert)
   }
 
@@ -63,6 +65,7 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
       val connection = connectionManager.getConnection(transaction)
       psUpsert = connection.prepareStatement(store.upsertSQL)
     }
+    dirty = true
     f(psUpsert)
   }
 
@@ -74,12 +77,19 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     resultSets = rs :: resultSets
   }
 
-  override def commit(): Unit = Try(connectionManager.getConnection(transaction).commit()).failed.foreach { t =>
-    scribe.warn(s"Commit failed: ${t.getMessage}")
+  override def commit(): Unit = if (dirty) {
+    // TODO: SingleConnection shares
+    dirty = false
+    Try(connectionManager.getConnection(transaction).commit()).failed.foreach { t =>
+      scribe.warn(s"Commit failed: ${t.getMessage}")
+    }
   }
 
-  override def rollback(): Unit = Try(connectionManager.getConnection(transaction).rollback()).failed.foreach { t =>
-    scribe.warn(s"Rollback failed: ${t.getMessage}")
+  override def rollback(): Unit = if (dirty) {
+    dirty = false
+    Try(connectionManager.getConnection(transaction).rollback()).failed.foreach { t =>
+      scribe.warn(s"Rollback failed: ${t.getMessage}")
+    }
   }
 
   override def close(): Unit = {
