@@ -81,7 +81,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
   def execute(): SQLResults = executeInternal()
 
   private def executeInternal(pre: String = "", post: String = ""): SQLResults = {
-    scribe.debug(s"Executing Query: $sql (${args.mkString(", ")})")
+    if (SQLQueryBuilder.LogQueries) scribe.info(s"Executing Query: $sql (${args.mkString(", ")})")
     val combinedSql = s"$pre$sql$post"
     try {
       state.withPreparedStatement(combinedSql) { ps =>
@@ -94,4 +94,8 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
       case t: Throwable => throw new SQLException(s"Error executing query: $combinedSql", t)
     }
   }
+}
+
+object SQLQueryBuilder {
+  var LogQueries: Boolean = false
 }
