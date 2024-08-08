@@ -55,6 +55,8 @@ sealed class Field[Doc, V](val name: String,
 
   override def distance(from: GeoPoint, radius: Distance): Filter[Doc] =
     Filter.Distance(this.asInstanceOf[Field[Doc, Option[GeoPoint]]], from, radius)
+
+  override def toString: String = s"Field(name = $name)"
 }
 
 trait Indexed[Doc, V] extends Field[Doc, V]
@@ -77,21 +79,27 @@ object Field {
     get = get,
     getRW = () => getRW,
     indexed = true
-  ) with Indexed[Doc, V]
+  ) with Indexed[Doc, V] {
+    override def toString: String = s"Indexed(name = ${this.name})"
+  }
 
   def tokenized[Doc](name: String, get: Doc => String): Tokenized[Doc] = new Field[Doc, String](
     name = name,
     get = get,
     getRW = () => stringRW,
     indexed = true
-  ) with Tokenized[Doc]
+  ) with Tokenized[Doc] {
+    override def toString: String = s"Tokenized(name = ${this.name})"
+  }
 
   def unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW,
     indexed = true
-  ) with UniqueIndex[Doc, V]
+  ) with UniqueIndex[Doc, V] {
+    override def toString: String = s"Unique(name = ${this.name})"
+  }
 
   def string2Json(name: String, s: String, definition: DefType): Json = definition match {
     case _ if s == null => Null

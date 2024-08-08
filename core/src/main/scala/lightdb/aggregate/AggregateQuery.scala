@@ -6,9 +6,9 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 
 case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],
-                                                            functions: List[AggregateFunction[_, _, Doc]],
-                                                            filter: Option[AggregateFilter[Doc]] = None,
-                                                            sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
+                                                                             functions: List[AggregateFunction[_, _, Doc]],
+                                                                             filter: Option[AggregateFilter[Doc]] = None,
+                                                                             sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
   def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AggregateQuery[Doc, Model] = {
     val filter = f(query.collection.model)
     if (and && this.filter.nonEmpty) {
