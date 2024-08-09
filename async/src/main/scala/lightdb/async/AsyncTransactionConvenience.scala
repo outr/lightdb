@@ -42,8 +42,12 @@ case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentMo
   }
 
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
-            (f: Option[Doc] => Option[Doc]): IO[Option[Doc]] = collection.transaction { implicit transaction =>
+            (f: Option[Doc] => IO[Option[Doc]]): IO[Option[Doc]] = collection.transaction { implicit transaction =>
     collection.modify(id, lock, deleteOnNone)(f)
+  }
+
+  def getOrCreate(id: Id[Doc], create: => IO[Doc], lock: Boolean = true): IO[Doc] = collection.transaction { implicit transaction =>
+    collection.getOrCreate(id, create, lock)
   }
 
   def delete[V](f: Model => (UniqueIndex[Doc, V], V)): IO[Boolean] = collection.transaction { implicit transaction =>

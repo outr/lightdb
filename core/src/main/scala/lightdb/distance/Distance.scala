@@ -1,8 +1,8 @@
 package lightdb.distance
 
 import fabric.define.DefType
-import fabric.rw.{Convertible, RW}
-import perfolation.double2Implicits
+import fabric.rw._
+import perfolation._
 
 case class Distance(valueInMeters: Double) extends AnyVal {
   def to(unit: DistanceUnit): Double = valueInMeters / unit.asMeters
