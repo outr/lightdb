@@ -157,17 +157,22 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc])
             (implicit transaction: Transaction[Doc]): Option[Doc] = transaction.mayLock(id, lock) {
-    val idField = model.asInstanceOf[DocumentModel[_]]._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]]
-    f(get(_ => idField -> id)) match {
+    f(get(_ => model._id -> id)) match {
       case Some(doc) =>
         upsert(doc)
         Some(doc)
       case None if deleteOnNone =>
-        delete(_ => idField -> id)
+        delete(_ => model._id -> id)
         None
       case None => None
     }
   }
+
+  def getOrCreate(id: Id[Doc], create: => Doc, lock: Boolean = true)
+                 (implicit transaction: Transaction[Doc]): Doc = modify(id, lock = lock) {
+    case Some(doc) => Some(doc)
+    case None => Some(create)
+  }.get
 
   def delete[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
     val (field, value) = f(model)

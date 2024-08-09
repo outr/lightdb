@@ -40,9 +40,26 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
     IO.blocking(underlying(id))
 
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
-            (f: Option[Doc] => Option[Doc])
-            (implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
-    IO.blocking(underlying.modify(id, lock, deleteOnNone)(f))
+            (f: Option[Doc] => IO[Option[Doc]])
+            (implicit transaction: Transaction[Doc]): IO[Option[Doc]] = {
+    if (lock) transaction.lock(id)
+    get(id)
+      .flatMap(f)
+      .flatMap {
+        case Some(doc) => upsert(doc).map(doc => Some(doc))
+        case None if deleteOnNone => delete(id).map(_ => None)
+        case None => IO.pure(None)
+      }
+      .guarantee(IO {
+        if (lock) transaction.unlock(id)
+      })
+  }
+
+  def getOrCreate(id: Id[Doc], create: => IO[Doc], lock: Boolean = true)
+                 (implicit transaction: Transaction[Doc]): IO[Doc] = modify(id, lock = lock) {
+    case Some(doc) => IO.pure(Some(doc))
+    case None => create.map(Some.apply)
+  }.map(_.get)
 
   def delete[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): IO[Boolean] =
     IO.blocking(underlying.delete(f))

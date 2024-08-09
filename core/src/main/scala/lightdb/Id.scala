@@ -2,7 +2,7 @@ package lightdb
 
 import fabric.rw._
 
-case class Id[Doc](value: String) extends AnyVal with Comparable[Id[Doc]] {
+case class Id[Doc](value: String) extends AnyVal {
   def bytes: Array[Byte] = {
     val b = toString.getBytes("UTF-8")
     assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length} ($value)")
@@ -10,8 +10,6 @@ case class Id[Doc](value: String) extends AnyVal with Comparable[Id[Doc]] {
   }
 
   override def toString: String = s"Id($value)"
-
-  override def compareTo(that: Id[Doc]): Int = this.value.compareTo(that.value)
 }
 
 object Id {
