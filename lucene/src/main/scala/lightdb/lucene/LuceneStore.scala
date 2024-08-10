@@ -51,7 +51,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   private def createLuceneFields(field: Field[Doc, _], doc: Doc): List[LuceneField] = {
-    def fs: LuceneField.Store = if (storeMode == StoreMode.All || field.name == "_id") LuceneField.Store.YES else LuceneField.Store.NO
+    def fs: LuceneField.Store = if (storeMode == StoreMode.All || field.indexed) LuceneField.Store.YES else LuceneField.Store.NO
     val json = field.getJson(doc)
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
