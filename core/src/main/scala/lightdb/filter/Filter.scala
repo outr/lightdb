@@ -50,4 +50,19 @@ object Filter {
   case class Distance[Doc](field: Field[Doc, Option[GeoPoint]], from: GeoPoint, radius: lightdb.distance.Distance) extends Filter[Doc] {
     override lazy val fields: List[Field[Doc, _]] = List(field)
   }
+
+  case class Builder[Doc](minShould: Int = 0, filters: List[FilterClause[Doc]] = Nil) extends Filter[Doc] {
+    def minShould(i: Int): Builder[Doc] = copy(minShould = i)
+
+    def withFilter(filter: Filter[Doc], condition: Condition, boost: Option[Double] = None): Builder[Doc] = copy(
+      filters = filters ::: List(FilterClause(filter, condition, boost))
+    )
+
+    def must(filter: Filter[Doc], boost: Option[Double] = None): Builder[Doc] = withFilter(filter, Condition.Must, boost)
+    def mustNot(filter: Filter[Doc], boost: Option[Double] = None): Builder[Doc] = withFilter(filter, Condition.MustNot, boost)
+    def filter(filter: Filter[Doc], boost: Option[Double] = None): Builder[Doc] = withFilter(filter, Condition.Filter, boost)
+    def should(filter: Filter[Doc], boost: Option[Double] = None): Builder[Doc] = withFilter(filter, Condition.Should, boost)
+
+    override def fields: List[Field[Doc, _]] = filters.flatMap(_.filter.fields)
+  }
 }

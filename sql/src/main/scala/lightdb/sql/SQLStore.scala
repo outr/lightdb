@@ -498,6 +498,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       }.toList
       SQLPart(parts.map(_ => s"${f.field.name} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
     case f: Filter.Distance[Doc] => distanceFilter(f)
+    case f: Filter.Builder[Doc] => throw new UnsupportedOperationException(s"Filter.Builder is not currently supported for SQL")
   }
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {

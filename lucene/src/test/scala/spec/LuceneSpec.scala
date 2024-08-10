@@ -3,7 +3,7 @@ import lightdb.lucene.LuceneStore
 import lightdb.store.StoreManager
 
 class LuceneSpec extends AbstractBasicSpec {
-  override protected def aggregationSupported: Boolean = false
+  override protected def filterBuilderSupported: Boolean = true
 
   override def storeManager: StoreManager = LuceneStore
 }
