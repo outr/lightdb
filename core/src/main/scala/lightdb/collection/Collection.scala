@@ -147,6 +147,10 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     store.get(model._id, id)
   }
 
+  def getAll(ids: Seq[Id[Doc]])(implicit transaction: Transaction[Doc]): Iterator[Doc] = ids
+    .iterator
+    .flatMap(get)
+
   def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Doc =
     store.get(model._id, id).getOrElse {
       throw DocNotFoundException(name, "_id", id)

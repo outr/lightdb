@@ -36,6 +36,9 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
   def get(id: Id[Doc])(implicit transaction: Transaction[Doc]): IO[Option[Doc]] =
     IO.blocking(underlying.get(id))
 
+  def getAll(ids: Seq[Id[Doc]])(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] =
+    fs2.Stream.fromBlockingIterator[IO](underlying.getAll(ids), 512)
+
   def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): IO[Doc] =
     IO.blocking(underlying(id))
 
