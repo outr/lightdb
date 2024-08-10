@@ -256,6 +256,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           }
           b.add(query, occur)
         }
+        if (minShould == 0 && !clauses.exists(_.condition == Condition.Must)) {
+          b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
+        }
         b.build()
     }
     case None => new MatchAllDocsQuery
