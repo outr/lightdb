@@ -202,12 +202,12 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         db.people.transaction { implicit transaction =>
           val results = db.people.query.scored.filter(p => Filter
             .Builder()
-            .should(p.search.words("nica 13"))
+            .should(p.search.words("nica 13"), boost = Some(2.0))
             .should(p.age <=> (10, 15))
           ).search.docs
           val people = results.list
           people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
-          results.scores should be(List(3.330336093902588, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+          results.scores should be(List(4.660672187805176, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
         }
       }
     }
