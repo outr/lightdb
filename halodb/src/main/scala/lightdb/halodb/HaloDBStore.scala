@@ -23,10 +23,10 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     opts.setBuildIndexThreads(indexThreads)
     opts.setMaxFileSize(maxFileSize)
     opts.setUseMemoryPool(true)
-    opts.setMemoryPoolChunkSize(10 * 1024 * 1024)
-    opts.setFlushDataSizeBytes(100 * 1024 * 1024)
+    opts.setMemoryPoolChunkSize(16 * 1024 * 1024)
+    opts.setFlushDataSizeBytes(128 * 1024 * 1024)
     opts.setCompactionThresholdPerFile(0.9)
-    opts.setCompactionJobRate(50 * 1024 * 1024)
+    opts.setCompactionJobRate(64 * 1024 * 1024)
     opts.setNumberOfRecords(100_000_000)
     opts.setCleanUpTombstonesDuringOpen(true)
 

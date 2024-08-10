@@ -167,7 +167,7 @@ abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Mat
     "modify a record" in {
       db.people.transaction { implicit transaction =>
         db.people.modify(adam._id) {
-          case Some(p) => Some(p.copy(name = "Allan"))
+          case Some(p) => IO(Some(p.copy(name = "Allan")))
           case None => fail("Adam was not found!")
         }
       }.map {

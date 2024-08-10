@@ -4,7 +4,8 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw.{Asable, Convertible}
-import lightdb.aggregate.AggregateQuery
+import lightdb.SortDirection.Ascending
+import lightdb.aggregate.{AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.{Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
@@ -14,6 +15,7 @@ import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
@@ -269,24 +271,16 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         case d => throw new RuntimeException(s"Unsupported sort definition: $d")
       }
     case Sort.ByDistance(field, from, _) =>
-      /*val separate = field.rw.definition.className.collect {
-        case "lightdb.spatial.GeoPoint" => true
-      }.getOrElse(false)
-      if (field.name == "point") {
-        scribe.info(s"Separate? $separate, ClassName: ${field.rw.definition.className}")
-      }
-      val fieldSortName = if (separate) s"${field.name}Sort" else field.name*/
-      // TODO: Are there any use-cases for ByDistance that wouldn't use GeoPoint?
       val fieldSortName = s"${field.name}Sort"
       LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
   }
 
   override def aggregate(query: AggregateQuery[Doc, Model])
                         (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
-    throw new UnsupportedOperationException("Lucene does not support aggregation")
+    Aggregator(query, collection)
 
   override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int =
-    throw new UnsupportedOperationException("Lucene does not support aggregation")
+    aggregate(query).length
 
   override def truncate()(implicit transaction: Transaction[Doc]): Int = {
     val count = this.count
