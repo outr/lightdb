@@ -59,13 +59,14 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case t: Tokenized[Doc] =>
         List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
-        json match {
+        def addJson(json: Json): Unit = json match {
           case _ if field.rw.definition == DefType.Json => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
           case Null => // Ignore null
           case Str(s, _) => add(new StringField(field.name, s, fs))
           case Bool(b, _) => add(new IntField(field.name, if (b) 1 else 0, fs))
           case NumInt(l, _) => add(new LongField(field.name, l, fs))
           case NumDec(bd, _) => add(new DoubleField(field.name, bd.toDouble, fs))
+          case Arr(v, _) => v.foreach(addJson)
           case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
             case p: GeoPoint =>
               add(new LatLonPoint(field.name, p.latitude, p.longitude))
@@ -74,6 +75,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           }
           case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
         }
+        addJson(json)
+
         val separate = field.rw.definition.className.collect {
           case "lightdb.spatial.GeoPoint" => true
         }.getOrElse(false)
