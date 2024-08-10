@@ -14,4 +14,6 @@ case class MaterializedIndex[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     val index = f(model)
     apply(index.name, index.rw)
   }
+
+  def value(f: Model => Field[Doc, _]): Json = json(f(model).name)
 }
