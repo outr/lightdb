@@ -4,6 +4,7 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.feature.DBFeatureKey
+import lightdb.filter.Filter
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Field, Id, LightDB, Sort, StoredValue}
@@ -15,6 +16,7 @@ import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   protected def aggregationSupported: Boolean = true
+  protected def filterBuilderSupported: Boolean = false
   protected def memoryOnly: Boolean = false
 
   private val adam = Person("Adam", 21, Person.id("adam"))
@@ -193,6 +195,20 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
       db.people.transaction { implicit transaction =>
         val people = db.people.query.filter(_.search.words("nica 13")).toList
         people.map(_.name) should be(List("Veronica"))
+      }
+    }
+    "search using Filter.Builder and scoring" in {
+      if (filterBuilderSupported) {
+        db.people.transaction { implicit transaction =>
+          val results = db.people.query.scored.filter(p => Filter
+            .Builder()
+            .should(p.search.words("nica 13"))
+            .should(p.age <=> (10, 15))
+          ).search.docs
+          val people = results.list
+          people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg"))
+          results.scores should be(List(2.330336093902588, 1.0, 1.0, 1.0))
+        }
       }
     }
     "truncate the collection" in {

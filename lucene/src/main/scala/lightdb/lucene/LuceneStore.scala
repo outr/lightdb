@@ -9,7 +9,7 @@ import lightdb.aggregate.{AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.{Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.filter.Filter
+import lightdb.filter.{Condition, Filter}
 import lightdb.lucene.index.Index
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
@@ -17,7 +17,7 @@ import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 
@@ -239,6 +239,24 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         parser.parse(query)
       case Filter.Distance(index, from, radius) =>
         LatLonPoint.newDistanceQuery(index.name, from.latitude, from.longitude, radius.toMeters)
+      case Filter.Builder(minShould, clauses) =>
+        val b = new BooleanQuery.Builder
+        b.setMinimumNumberShouldMatch(minShould)
+        clauses.foreach { c =>
+          val q = filter2Lucene(Some(c.filter))
+          val query = c.boost match {
+            case Some(boost) => new BoostQuery(q, boost.toFloat)
+            case None => q
+          }
+          val occur = c.condition match {
+            case Condition.Must => BooleanClause.Occur.MUST
+            case Condition.MustNot => BooleanClause.Occur.MUST_NOT
+            case Condition.Filter => BooleanClause.Occur.FILTER
+            case Condition.Should => BooleanClause.Occur.SHOULD
+          }
+          b.add(query, occur)
+        }
+        b.build()
     }
     case None => new MatchAllDocsQuery
   }
