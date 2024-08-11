@@ -17,7 +17,7 @@ import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 
@@ -276,6 +276,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     case Bool(b, _) => IntPoint.newExactQuery(field.name, if (b) 1 else 0)
     case NumInt(l, _) => LongPoint.newExactQuery(field.name, l)
     case NumDec(bd, _) => DoublePoint.newExactQuery(field.name, bd.toDouble)
+    case Null if field.rw.definition.isOpt => new FieldExistsQuery(field.name)
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")
   }
 

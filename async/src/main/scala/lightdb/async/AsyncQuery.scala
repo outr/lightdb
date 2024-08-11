@@ -48,7 +48,7 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
           offset = searchResults.offset,
           limit = searchResults.limit,
           total = searchResults.total,
-          stream = fs2.Stream.fromBlockingIterator[IO](searchResults.iterator, 512),
+          scoredStream = fs2.Stream.fromBlockingIterator[IO](searchResults.iteratorWithScore, 512),
           transaction = transaction
         )
       }
@@ -74,9 +74,11 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
       apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
 
-  def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] = {
+  def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] =
     fs2.Stream.force(search.docs.map(_.stream))
-  }
+
+  def scoredStream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, (Doc, Double)] =
+    fs2.Stream.force(search.docs.map(_.scoredStream))
 
   def toList(implicit transaction: Transaction[Doc]): IO[List[Doc]] = stream.compile.toList
 
