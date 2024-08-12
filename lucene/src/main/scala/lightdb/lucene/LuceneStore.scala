@@ -61,7 +61,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case _ =>
         def addJson(json: Json): Unit = json match {
           case _ if field.rw.definition == DefType.Json => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
-          case Null => // Ignore null
+          case Null => add(new StringField(field.name, Field.NullString, fs))
           case Str(s, _) => add(new StringField(field.name, s, fs))
           case Bool(b, _) => add(new IntField(field.name, if (b) 1 else 0, fs))
           case NumInt(l, _) => add(new LongField(field.name, l, fs))
@@ -144,10 +144,16 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       }
     }
     val topFieldDocs: TopFieldDocs = search(None)
-    val scoreDocs: List[ScoreDoc] = topFieldDocs
-      .scoreDocs
-      .toList
-      .drop(query.offset)
+    val scoreDocs: List[ScoreDoc] = {
+      val list = topFieldDocs
+        .scoreDocs
+        .toList
+        .drop(query.offset)
+      query.minDocScore match {
+        case Some(min) => list.filter(_.score.toDouble >= min)
+        case None => list
+      }
+    }
     val total: Int = topFieldDocs.totalHits.value.toInt
     val storedFields: StoredFields = indexSearcher.storedFields()
     val idsAndScores = scoreDocs.map(doc => Id[Doc](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
@@ -276,7 +282,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     case Bool(b, _) => IntPoint.newExactQuery(field.name, if (b) 1 else 0)
     case NumInt(l, _) => LongPoint.newExactQuery(field.name, l)
     case NumDec(bd, _) => DoublePoint.newExactQuery(field.name, bd.toDouble)
-    case Null if field.rw.definition.isOpt => new FieldExistsQuery(field.name)
+    case Null if field.rw.definition.isOpt => new TermQuery(new Term(field.name, Field.NullString))
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")
   }
 

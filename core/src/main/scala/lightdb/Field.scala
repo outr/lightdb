@@ -66,6 +66,8 @@ trait UniqueIndex[Doc, V] extends Indexed[Doc, V]
 trait Tokenized[Doc] extends Indexed[Doc, String]
 
 object Field {
+  val NullString: String = "||NULL||"
+
   var MaxIn: Option[Int] = Some(1_000)
 
   def apply[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
@@ -102,7 +104,7 @@ object Field {
   }
 
   def string2Json(name: String, s: String, definition: DefType): Json = definition match {
-    case _ if s == null => Null
+    case _ if s == null | s == NullString => Null
     case DefType.Str => str(s)
     case DefType.Int => num(s.toLong)
     case DefType.Dec => num(BigDecimal(s))

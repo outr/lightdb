@@ -28,63 +28,62 @@ object Aggregator {
         query.functions.foreach { f =>
           val current = map.get(f.name)
           val value = m.value(_ => f.field)
-          if (f.`type` != AggregateType.Group) {
-            val newValue: Json = f.`type` match {
-              case AggregateType.Max => value match {
-                case NumInt(l, _) => current match {
-                  case Some(c) => num(math.max(c.asLong, l))
-                  case None => num(l)
-                }
-                case NumDec(bd, _) => current match {
-                  case Some(c) => num(bd.max(c.asBigDecimal))
-                  case None => num(bd)
-                }
-                case _ => throw new UnsupportedOperationException(s"Unsupported type for Max: $value (${f.field.name})")
+          val newValue: Json = f.`type` match {
+            case AggregateType.Max => value match {
+              case NumInt(l, _) => current match {
+                case Some(c) => num(math.max(c.asLong, l))
+                case None => num(l)
               }
-              case AggregateType.Min => value match {
-                case NumInt(l, _) => current match {
-                  case Some(c) => num(math.min(c.asLong, l))
-                  case None => num(l)
-                }
-                case NumDec(bd, _) => current match {
-                  case Some(c) => num(bd.min(c.asBigDecimal))
-                  case None => num(bd)
-                }
-                case _ => throw new UnsupportedOperationException(s"Unsupported type for Min: $value (${f.field.name})")
+              case NumDec(bd, _) => current match {
+                case Some(c) => num(bd.max(c.asBigDecimal))
+                case None => num(bd)
               }
-              case AggregateType.Avg =>
-                val v = value.asBigDecimal
-                current match {
-                  case Some(c) => (v :: c.as[List[BigDecimal]]).json
-                  case None => List(v).json
-                }
-              case AggregateType.Sum => value match {
-                case NumInt(l, _) => current match {
-                  case Some(c) => num(c.asLong + l)
-                  case None => num(l)
-                }
-                case NumDec(bd, _) => current match {
-                  case Some(c) => num(bd + c.asBigDecimal)
-                  case None => num(bd)
-                }
-                case _ => throw new UnsupportedOperationException(s"Unsupported type for Sum: $value (${f.field.name})")
-              }
-              case AggregateType.Count => current match {
-                case Some(c) => num(c.asInt + 1)
-                case None => num(0)
-              }
-              case AggregateType.CountDistinct | AggregateType.ConcatDistinct => current match {
-                case Some(c) => (c.as[Set[Json]] + value).json
-                case None => Set(value).json
-              }
-              case AggregateType.Concat => current match {
-                case Some(c) => (value :: c.as[List[Json]]).json
-                case None => List(value).json
-              }
-              case _ => throw new UnsupportedOperationException(s"Unsupported type for ${f.`type`}: $value (${f.field.name})")
+              case _ => throw new UnsupportedOperationException(s"Unsupported type for Max: $value (${f.field.name})")
             }
-            map += f.name -> newValue
+            case AggregateType.Min => value match {
+              case NumInt(l, _) => current match {
+                case Some(c) => num(math.min(c.asLong, l))
+                case None => num(l)
+              }
+              case NumDec(bd, _) => current match {
+                case Some(c) => num(bd.min(c.asBigDecimal))
+                case None => num(bd)
+              }
+              case _ => throw new UnsupportedOperationException(s"Unsupported type for Min: $value (${f.field.name})")
+            }
+            case AggregateType.Avg =>
+              val v = value.asBigDecimal
+              current match {
+                case Some(c) => (v :: c.as[List[BigDecimal]]).json
+                case None => List(v).json
+              }
+            case AggregateType.Sum => value match {
+              case NumInt(l, _) => current match {
+                case Some(c) => num(c.asLong + l)
+                case None => num(l)
+              }
+              case NumDec(bd, _) => current match {
+                case Some(c) => num(bd + c.asBigDecimal)
+                case None => num(bd)
+              }
+              case _ => throw new UnsupportedOperationException(s"Unsupported type for Sum: $value (${f.field.name})")
+            }
+            case AggregateType.Count => current match {
+              case Some(c) => num(c.asInt + 1)
+              case None => num(0)
+            }
+            case AggregateType.CountDistinct | AggregateType.ConcatDistinct => current match {
+              case Some(c) => (c.as[Set[Json]] + value).json
+              case None => Set(value).json
+            }
+            case AggregateType.Group => value
+            case AggregateType.Concat => current match {
+              case Some(c) => (value :: c.as[List[Json]]).json
+              case None => List(value).json
+            }
+            case _ => throw new UnsupportedOperationException(s"Unsupported type for ${f.`type`}: $value (${f.field.name})")
           }
+          map += f.name -> newValue
         }
         groups += group -> map
       }
