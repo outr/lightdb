@@ -19,8 +19,14 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                                                                     offset: Int = 0,
                                                                     limit: Option[Int] = None,
                                                                     countTotal: Boolean = false,
-                                                                    scoreDocs: Boolean = false) { query =>
+                                                                    scoreDocs: Boolean = false,
+                                                                    minDocScore: Option[Double] = None) { query =>
   def scored: Query[Doc, Model] = copy(scoreDocs = true)
+
+  def minDocScore(min: Double): Query[Doc, Model] = copy(
+    scoreDocs = true,
+    minDocScore = Some(min)
+  )
 
   def clearFilters: Query[Doc, Model] = copy(filter = None)
 

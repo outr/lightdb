@@ -15,14 +15,24 @@ import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
 case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
-                                                        filter: Option[Filter[Doc]] = None,
-                                                        sort: List[Sort] = Nil,
-                                                        offset: Int = 0,
-                                                        limit: Option[Int] = None,
-                                                        countTotal: Boolean = false) { query =>
-  private[async] def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal)
+                                                                         filter: Option[Filter[Doc]] = None,
+                                                                         sort: List[Sort] = Nil,
+                                                                         offset: Int = 0,
+                                                                         limit: Option[Int] = None,
+                                                                         countTotal: Boolean = false,
+                                                                         scoreDocs: Boolean = false,
+                                                                         minDocScore: Option[Double] = None) { query =>
+  private[async] def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal, scoreDocs, minDocScore)
+
+  def scored: AsyncQuery[Doc, Model] = copy(scoreDocs = true)
+
+  def minDocScore(min: Double): AsyncQuery[Doc, Model] = copy(
+    scoreDocs = true,
+    minDocScore = Some(min)
+  )
 
   def clearFilters: AsyncQuery[Doc, Model] = copy(filter = None)
+
   def filter(f: Model => Filter[Doc]): AsyncQuery[Doc, Model] = {
     val filter = f(collection.model)
     val combined = this.filter match {
@@ -31,12 +41,89 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
     }
     copy(filter = Some(combined))
   }
+
   def clearSort: AsyncQuery[Doc, Model] = copy(sort = Nil)
+
   def sort(sort: Sort*): AsyncQuery[Doc, Model] = copy(sort = this.sort ::: sort.toList)
+
   def offset(offset: Int): AsyncQuery[Doc, Model] = copy(offset = offset)
+
   def limit(limit: Int): AsyncQuery[Doc, Model] = copy(limit = Some(limit))
+
   def clearLimit: AsyncQuery[Doc, Model] = copy(limit = None)
+
   def countTotal(b: Boolean): AsyncQuery[Doc, Model] = copy(countTotal = b)
+
+  object stream {
+    object scored {
+      def apply[V](conversion: Conversion[Doc, V])
+                  (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (V, Double)] = {
+        val io = search(conversion)
+          .map(_.scoredStream)
+        fs2.Stream.force(io)
+      }
+
+      def docs(implicit transaction: Transaction[Doc]): fs2.Stream[IO, (Doc, Double)] = apply(Conversion.Doc())
+
+      def value[F](f: Model => Field[Doc, F])
+                  (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (F, Double)] =
+        apply(Conversion.Value(f(collection.model)))
+
+      def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): fs2.Stream[IO, (Id[Doc], Double)] =
+        value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
+
+      def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): fs2.Stream[IO, (Json, Double)] =
+        apply(Conversion.Json(f(collection.model)))
+
+      def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): fs2.Stream[IO, (T, Double)] =
+        apply(Conversion.Converted(f))
+
+      def materialized(f: Model => List[Field[Doc, _]])
+                      (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (MaterializedIndex[Doc, Model], Double)] =
+        apply(Conversion.Materialized[Doc, Model](f(collection.model)))
+
+      def distance(f: Model => Field[Doc, Option[GeoPoint]],
+                   from: GeoPoint,
+                   sort: Boolean = true,
+                   radius: Option[Distance] = None)
+                  (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (DistanceAndDoc[Doc], Double)] =
+        apply(Conversion.Distance(f(collection.model), from, sort, radius))
+    }
+
+    def apply[V](conversion: Conversion[Doc, V])
+                (implicit transaction: Transaction[Doc]): fs2.Stream[IO, V] = {
+      val io = search(conversion)
+        .map(_.stream)
+      fs2.Stream.force(io)
+    }
+
+    def docs(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] = apply(Conversion.Doc())
+
+    def value[F](f: Model => Field[Doc, F])
+                (implicit transaction: Transaction[Doc]): fs2.Stream[IO, F] =
+      apply(Conversion.Value(f(collection.model)))
+
+    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): fs2.Stream[IO, Id[Doc]] =
+      value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
+
+    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Json] =
+      apply(Conversion.Json(f(collection.model)))
+
+    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): fs2.Stream[IO, T] =
+      apply(Conversion.Converted(f))
+
+    def materialized(f: Model => List[Field[Doc, _]])
+                    (implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedIndex[Doc, Model]] =
+      apply(Conversion.Materialized[Doc, Model](f(collection.model)))
+
+    def distance(f: Model => Field[Doc, Option[GeoPoint]],
+                 from: GeoPoint,
+                 sort: Boolean = true,
+                 radius: Option[Distance] = None)
+                (implicit transaction: Transaction[Doc]): fs2.Stream[IO, DistanceAndDoc[Doc]] =
+      apply(Conversion.Distance(f(collection.model), from, sort, radius))
+  }
+
   object search {
     def apply[V](conversion: Conversion[Doc, V])
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, V]] =
@@ -54,18 +141,24 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
       }
 
     def docs(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Doc]] = apply(Conversion.Doc())
+
     def value[F](f: Model => Field[Doc, F])
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, F]] =
       apply(Conversion.Value(f(collection.model)))
+
     def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[AsyncSearchResults[Doc, Id[Doc]]] =
       value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
+
     def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Json]] =
       apply(Conversion.Json(f(collection.model)))
+
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, T]] =
       apply(Conversion.Converted(f))
+
     def materialized(f: Model => List[Field[Doc, _]])
                     (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, MaterializedIndex[Doc, Model]]] =
       apply(Conversion.Materialized(f(collection.model)))
+
     def distance(f: Model => Field[Doc, Option[GeoPoint]],
                  from: GeoPoint,
                  sort: Boolean = true,
@@ -74,17 +167,11 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
       apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
 
-  def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, Doc] =
-    fs2.Stream.force(search.docs.map(_.stream))
+  def toList(implicit transaction: Transaction[Doc]): IO[List[Doc]] = stream.docs.compile.toList
 
-  def scoredStream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, (Doc, Double)] =
-    fs2.Stream.force(search.docs.map(_.scoredStream))
+  def first(implicit transaction: Transaction[Doc]): IO[Option[Doc]] = stream.docs.take(1).compile.last
 
-  def toList(implicit transaction: Transaction[Doc]): IO[List[Doc]] = stream.compile.toList
-
-  def first(implicit transaction: Transaction[Doc]): IO[Option[Doc]] = stream.take(1).compile.last
-
-  def one(implicit transaction: Transaction[Doc]): IO[Doc] = stream.take(1).compile.lastOrError
+  def one(implicit transaction: Transaction[Doc]): IO[Doc] = stream.docs.take(1).compile.lastOrError
 
   def count(implicit transaction: Transaction[Doc]): IO[Int] = copy(limit = Some(1), countTotal = true)
     .search.docs.map(_.total.get)
