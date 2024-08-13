@@ -74,7 +74,7 @@ val sqliteVersion: String = "3.46.0.1"
 
 val duckdbVersion: String = "1.0.0"
 
-val h2Version: String = "2.3.230"
+val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
