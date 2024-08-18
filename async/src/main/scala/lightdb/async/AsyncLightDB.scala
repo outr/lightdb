@@ -75,6 +75,14 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
                                                                     cacheQueries: Boolean = Collection.DefaultCacheQueries): AsyncCollection[Doc, Model] =
     AsyncCollection(underlying.collection[Doc, Model](model, name, store, storeManager, maxInsertBatch, cacheQueries))
 
+  def reIndex(): IO[Int] = fs2.Stream(underlying.collections: _*)
+    .covary[IO]
+    .parEvalMap(32)(c => AsyncCollection[KeyValue, KeyValue.type](c.asInstanceOf[Collection[KeyValue, KeyValue.type]]).reIndex())
+    .filter(identity)
+    .compile
+    .count
+    .map(_.toInt)
+
   object stored {
     def apply[T](key: String,
                  default: => T,

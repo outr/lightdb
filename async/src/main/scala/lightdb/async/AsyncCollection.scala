@@ -81,5 +81,7 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
 
   def truncate()(implicit transaction: Transaction[Doc]): IO[Int] = IO.blocking(underlying.truncate())
 
+  def reIndex(): IO[Boolean] = IO.blocking(underlying.reIndex())
+
   def dispose(): IO[Unit] = IO.blocking(underlying.dispose())
 }

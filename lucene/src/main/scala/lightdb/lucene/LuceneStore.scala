@@ -16,10 +16,11 @@ import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
-import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, SortedNumericDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
+import org.apache.lucene.util.BytesRef
 
 import java.nio.file.Path
 import scala.language.implicitConversions
@@ -77,11 +78,13 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         }
         addJson(json)
 
-        val separate = field.rw.definition.className.collect {
-          case "lightdb.spatial.GeoPoint" => true
-        }.getOrElse(false)
-        val fieldSortName = if (separate) s"${field.name}Sort" else field.name
+        val fieldSortName = s"${field.name}Sort"
         field.getJson(doc) match {
+          case Str(s, _) =>
+            val bytes = new BytesRef(s)
+            val sorted = new SortedDocValuesField(fieldSortName, bytes)
+            add(sorted)
+          case NumInt(l, _) => add(new NumericDocValuesField(fieldSortName, l))
           case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
             case GeoPoint(latitude, longitude) => add(new LatLonDocValuesField(fieldSortName, latitude, longitude))
             case _ => // Ignore
@@ -131,13 +134,14 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     }
     val s = new LuceneSort(sortFields: _*)
     val indexSearcher = state.indexSearcher
-    val limit = query.limit.map(l => math.min(l - query.offset, 100)).getOrElse(100)
+    val limit = query.limit.map(l => math.min(l, 100)).getOrElse(100) + query.offset
+    if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     def search(total: Option[Int]): TopFieldDocs = {
-      val topFieldDocs = indexSearcher.search(q, total.getOrElse(query.offset + limit), s, query.scoreDocs)
+      val topFieldDocs = indexSearcher.search(q, total.getOrElse(limit), s, query.scoreDocs)
 //      val collectorManager = new TopFieldCollectorManager(s, total.getOrElse(query.offset + limit), null, Int.MaxValue, false)
 //      val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
       val totalHits = total.getOrElse(topFieldDocs.totalHits.value.toInt)
-      if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty) {
+      if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty && query.limit.forall(l => l + query.offset > limit)) {
         search(Some(query.limit.map(l => math.min(l, totalHits)).getOrElse(totalHits)))
       } else {
         topFieldDocs
@@ -231,14 +235,6 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           b.add(q, BooleanClause.Occur.SHOULD)
         }
         b.build()
-      case Filter.Combined(filters) =>
-        val queries = filters.map(f => filter2Lucene(Some(f)))
-        val b = new BooleanQuery.Builder
-        b.setMinimumNumberShouldMatch(1)
-        queries.foreach { q =>
-          b.add(q, BooleanClause.Occur.SHOULD)
-        }
-        b.build()
       case Filter.RangeLong(index, from, to) => LongField.newRangeQuery(index.name, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
       case Filter.RangeDouble(index, from, to) => DoubleField.newRangeQuery(index.name, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
       case Filter.Parsed(index, query, allowLeadingWildcard) =>
@@ -282,28 +278,43 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     case Bool(b, _) => IntPoint.newExactQuery(field.name, if (b) 1 else 0)
     case NumInt(l, _) => LongPoint.newExactQuery(field.name, l)
     case NumDec(bd, _) => DoublePoint.newExactQuery(field.name, bd.toDouble)
+    case Arr(v, _) =>
+      val b = new BooleanQuery.Builder
+      v.foreach { json =>
+        val q = exactQuery(field, json)
+        b.add(q, BooleanClause.Occur.MUST)
+      }
+      b.build()
     case Null if field.rw.definition.isOpt => new TermQuery(new Term(field.name, Field.NullString))
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")
   }
 
-  private def sort2SortField(sort: Sort): SortField = sort match {
-    case Sort.BestMatch => SortField.FIELD_SCORE
-    case Sort.IndexOrder => SortField.FIELD_DOC
-    case Sort.ByField(field, dir) =>
-      val sortType = field.rw.definition match {
-        case DefType.Str => SortField.Type.STRING
-        case DefType.Dec => SortField.Type.DOUBLE
-        case DefType.Int => SortField.Type.LONG
-        case _ => throw new RuntimeException(s"Unsupported sort type for ${field.rw.definition}")
-      }
-      field.rw.definition match {
-        case DefType.Int => new SortedNumericSortField(field.name, sortType, dir == SortDirection.Descending)
-        case DefType.Str => new SortField(field.name, sortType, dir == SortDirection.Descending)
-        case d => throw new RuntimeException(s"Unsupported sort definition: $d")
-      }
-    case Sort.ByDistance(field, from, _) =>
-      val fieldSortName = s"${field.name}Sort"
-      LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
+  private def sort2SortField(sort: Sort): SortField = {
+
+    sort match {
+      case Sort.BestMatch => SortField.FIELD_SCORE
+      case Sort.IndexOrder => SortField.FIELD_DOC
+      case Sort.ByField(field, dir) =>
+        val fieldSortName = s"${field.name}Sort"
+        def st(d: DefType): SortField.Type = d match {
+          case DefType.Str => SortField.Type.STRING
+          case DefType.Dec => SortField.Type.DOUBLE
+          case DefType.Int => SortField.Type.LONG
+          case DefType.Opt(t) => st(t)
+          case _ => throw new RuntimeException(s"Unsupported sort type for ${field.rw.definition}")
+        }
+        val sortType = st(field.rw.definition)
+        def sf(d: DefType): SortField = d match {
+          case DefType.Int => new SortedNumericSortField(fieldSortName, sortType, dir == SortDirection.Descending)
+          case DefType.Str => new SortField(fieldSortName, sortType, dir == SortDirection.Descending)
+          case DefType.Opt(t) => sf(t)
+          case d => throw new RuntimeException(s"Unsupported sort definition: $d")
+        }
+        sf(field.rw.definition)
+      case Sort.ByDistance(field, from, _) =>
+        val fieldSortName = s"${field.name}Sort"
+        LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
+    }
   }
 
   override def aggregate(query: AggregateQuery[Doc, Model])

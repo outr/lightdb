@@ -70,6 +70,14 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     searching.truncate()
   }
 
+  override def reIndex(): Boolean = collection.transaction { implicit transaction =>
+    searching.truncate()
+    storage.iterator.foreach { doc =>
+      searching.insert(doc)
+    }
+    true
+  }
+
   override def dispose(): Unit = {
     storage.dispose()
     searching.dispose()

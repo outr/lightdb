@@ -470,9 +470,6 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   private def filter2Part(f: Filter[Doc]): SQLPart = f match {
     case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
     case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
-    case f: Filter.Combined[Doc] =>
-      val parts = f.filters.map(f => filter2Part(f))
-      SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
     case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
       case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
       case (None, Some(to)) => SQLPart(s"${f.field.name} <= ?", List(SQLArg.LongArg(to)))
