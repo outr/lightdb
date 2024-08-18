@@ -4,7 +4,7 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.feature.DBFeatureKey
-import lightdb.filter.Filter
+import lightdb.filter._
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Field, Id, LightDB, Sort, StoredValue}
@@ -19,32 +19,32 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   protected def filterBuilderSupported: Boolean = false
   protected def memoryOnly: Boolean = false
 
-  private val adam = Person("Adam", 21, None, Person.id("adam"))
-  private val brenda = Person("Brenda", 11, None, Person.id("brenda"))
-  private val charlie = Person("Charlie", 35, None, Person.id("charlie"))
-  private val diana = Person("Diana", 15, None, Person.id("diana"))
-  private val evan = Person("Evan", 53, Some("Dallas"), Person.id("evan"))
-  private val fiona = Person("Fiona", 23, None, Person.id("fiona"))
-  private val greg = Person("Greg", 12, None, Person.id("greg"))
-  private val hanna = Person("Hanna", 62, None, Person.id("hanna"))
-  private val ian = Person("Ian", 89, None, Person.id("ian"))
-  private val jenna = Person("Jenna", 4, None, Person.id("jenna"))
-  private val kevin = Person("Kevin", 33, None, Person.id("kevin"))
-  private val linda = Person("Linda", 72, None, Person.id("linda"))
-  private val mike = Person("Mike", 42, None, Person.id("mike"))
-  private val nancy = Person("Nancy", 22, None, Person.id("nancy"))
-  private val oscar = Person("Oscar", 21, None, Person.id("oscar"))
-  private val penny = Person("Penny", 2, None, Person.id("penny"))
-  private val quintin = Person("Quintin", 99, None, Person.id("quintin"))
-  private val ruth = Person("Ruth", 102, None, Person.id("ruth"))
-  private val sam = Person("Sam", 81, None, Person.id("sam"))
-  private val tori = Person("Tori", 30, None, Person.id("tori"))
-  private val uba = Person("Uba", 21, None, Person.id("uba"))
-  private val veronica = Person("Veronica", 13, None, Person.id("veronica"))
-  private val wyatt = Person("Wyatt", 30, None, Person.id("wyatt"))
-  private val xena = Person("Xena", 63, None, Person.id("xena"))
-  private val yuri = Person("Yuri", 30, None, Person.id("yuri"))
-  private val zoey = Person("Zoey", 101, None, Person.id("zoey"))
+  private val adam = Person("Adam", 21, _id = Person.id("adam"))
+  private val brenda = Person("Brenda", 11, _id = Person.id("brenda"))
+  private val charlie = Person("Charlie", 35, _id = Person.id("charlie"))
+  private val diana = Person("Diana", 15, _id = Person.id("diana"))
+  private val evan = Person("Evan", 53, Some("Dallas"), _id = Person.id("evan"))
+  private val fiona = Person("Fiona", 23, _id = Person.id("fiona"))
+  private val greg = Person("Greg", 12, _id = Person.id("greg"))
+  private val hanna = Person("Hanna", 62, _id = Person.id("hanna"))
+  private val ian = Person("Ian", 89, _id = Person.id("ian"))
+  private val jenna = Person("Jenna", 4, _id = Person.id("jenna"))
+  private val kevin = Person("Kevin", 33, _id = Person.id("kevin"))
+  private val linda = Person("Linda", 72, _id = Person.id("linda"))
+  private val mike = Person("Mike", 42, _id = Person.id("mike"))
+  private val nancy = Person("Nancy", 22, _id = Person.id("nancy"))
+  private val oscar = Person("Oscar", 21, nicknames = Set("Grouchy"), _id = Person.id("oscar"))
+  private val penny = Person("Penny", 2, _id = Person.id("penny"))
+  private val quintin = Person("Quintin", 99, _id = Person.id("quintin"))
+  private val ruth = Person("Ruth", 102, _id = Person.id("ruth"))
+  private val sam = Person("Sam", 81, _id = Person.id("sam"))
+  private val tori = Person("Tori", 30, nicknames = Set("Nica"), _id = Person.id("tori"))
+  private val uba = Person("Uba", 21, _id = Person.id("uba"))
+  private val veronica = Person("Veronica", 13, nicknames = Set("Vera", "Nica"), _id = Person.id("veronica"))
+  private val wyatt = Person("Wyatt", 30, _id = Person.id("wyatt"))
+  private val xena = Person("Xena", 63, _id = Person.id("xena"))
+  private val yuri = Person("Yuri", 30, _id = Person.id("yuri"))
+  private val zoey = Person("Zoey", 101, _id = Person.id("zoey"))
 
   private val names = List(
     adam, brenda, charlie, diana, evan, fiona, greg, hanna, ian, jenna, kevin, linda, mike, nancy, oscar, penny,
@@ -225,9 +225,97 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         people.map(_.name) should be(List("Evan"))
       }
     }
+    "modify a record within a transaction and see it post-commit" in {
+      db.people.transaction { implicit transaction =>
+        val original = db.people.query.filter(_.name === "Ruth").toList.head
+        db.people.upsert(original.copy(
+          name = "Not Ruth"
+        ))
+        transaction.commit()
+        val people = db.people.query.filter(_.name === "Not Ruth").toList
+        people.map(_.name) should be(List("Not Ruth"))
+      }
+    }
+    "query with single-value nicknames" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query.filter(_.nicknames is "Grouchy").toList
+        people.map(_.name) should be(List("Oscar"))
+      }
+    }
+    "query with multi-value nicknames" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query
+          .filter(_.nicknames is "Nica")
+          .filter(_.nicknames is "Vera")
+          .toList
+        people.map(_.name) should be(List("Veronica"))
+      }
+    }
+    "query with single-value, multiple nicknames" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query
+          .filter(_.nicknames is "Nica")
+          .toList
+        people.map(_.name).toSet should be(Set("Veronica", "Tori"))
+      }
+    }
+    "sort by name and page through results" in {
+      db.people.transaction { implicit transaction =>
+        val q = db.people.query.sort(Sort.ByField(Person.name)).limit(10)
+        q.offset(0).search.docs.list.map(_.name) should be(List("Allan", "Brenda", "Charlie", "Diana", "Evan", "Fiona", "Greg", "Hanna", "Ian", "Jenna"))
+        q.offset(10).search.docs.list.map(_.name) should be(List("Kevin", "Mike", "Nancy", "Not Ruth", "Oscar", "Penny", "Quintin", "Sam", "Tori", "Uba"))
+        q.offset(20).search.docs.list.map(_.name) should be(List("Veronica", "Wyatt", "Xena", "Zoey"))
+      }
+    }
+    "insert a lot more names" in {
+      db.people.transaction { implicit transaction =>
+        val p = (1 to 100_000).toList.map { index =>
+          Person(
+            name = s"Unique Snowflake $index",
+            age = if (index > 10_000) 0 else index,
+            city = Some("Robotland"),
+            nicknames = Set("robot", s"sf$index")
+          )
+        }
+        db.people.insert(p)
+      }
+    }
+    "verify the correct number of people exist in the database" in {
+      db.people.transaction { implicit transaction =>
+        db.people.count should be(100_024)
+      }
+    }
+    "verify the correct count in query total" in {
+      db.people.transaction { implicit transaction =>
+        val results = db.people.query
+          .filter(_.nicknames === "robot")
+          .sort(Sort.ByField(Person.age).descending)
+          .limit(100)
+          .countTotal(true)
+          .search
+          .docs
+        results.list.length should be(100)
+        results.total should be(Some(100_000))
+        results.remaining should be(Some(100_000))
+      }
+    }
+    "verify the correct count in query total with offset" in {
+      db.people.transaction { implicit transaction =>
+        val results = db.people.query
+          .filter(_.nicknames === "robot")
+          .limit(100)
+          .offset(100)
+          .countTotal(true)
+          .search
+          .docs
+        results.list.length should be(100)
+        results.total should be(Some(100_000))
+        results.remaining should be(Some(99_900))
+      }
+    }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
-        db.people.truncate() should be(24)
+        db.people.truncate() should be(100_024)
       }
     }
     "verify the collection is empty" in {
@@ -261,15 +349,17 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
   case class Person(name: String,
                     age: Int,
-                    city: Option[String],
+                    city: Option[String] = None,
+                    nicknames: Set[String] = Set.empty,
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val name: F[String] = field("name", _.name)
+    val name: I[String] = field.index("name", _.name)
     val age: I[Int] = field.index("age", _.age)
     val city: I[Option[String]] = field.index("city", _.city)
+    val nicknames: I[Set[String]] = field.index("nicknames", _.nicknames)
     val search: T = field.tokenized("search", doc => s"${doc.name} ${doc.age}")
   }
 

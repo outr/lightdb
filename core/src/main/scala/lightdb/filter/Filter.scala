@@ -8,10 +8,19 @@ sealed trait Filter[Doc] {
   def fields: List[Field[Doc, _]]
 
   def &&(that: Filter[Doc]): Filter[Doc] = (this, that) match {
-    case (Filter.Combined(f1), Filter.Combined(f2)) => Filter.Combined(f1 ::: f2)
-    case (_, Filter.Combined(f)) => Filter.Combined(this :: f)
-    case (Filter.Combined(f), _) => Filter.Combined(f ::: List(that))
-    case _ => Filter.Combined(List(this, that))
+    case (b1: Filter.Builder[Doc], b2: Filter.Builder[Doc]) if b1.minShould == b2.minShould =>
+      Filter.Builder[Doc](minShould = b1.minShould, filters = b1.filters ::: b2.filters)
+    case (_, b: Filter.Builder[Doc]) => b.must(this)
+    case (b: Filter.Builder[Doc], _) => b.must(that)
+    case _ => Filter.Builder[Doc]().must(this).must(that)
+  }
+
+  def ||(that: Filter[Doc]): Filter[Doc] = (this, that) match {
+    case (b1: Filter.Builder[Doc], b2: Filter.Builder[Doc]) if b1.minShould == b2.minShould =>
+      Filter.Builder[Doc](minShould = b1.minShould, filters = b1.filters ::: b2.filters)
+    case (_, b: Filter.Builder[Doc]) => b.should(this)
+    case (b: Filter.Builder[Doc], _) => b.should(that)
+    case _ => Filter.Builder[Doc]().should(this).should(that)
   }
 }
 
@@ -29,10 +38,6 @@ object Filter {
     def getJson: List[Json] = values.toList.map(field.rw.read)
 
     override lazy val fields: List[Field[Doc, _]] = List(field)
-  }
-
-  case class Combined[Doc](filters: List[Filter[Doc]]) extends Filter[Doc] {
-    override lazy val fields: List[Field[Doc, _]] = filters.flatMap(_.fields)
   }
 
   case class RangeLong[Doc](field: Field[Doc, Long], from: Option[Long], to: Option[Long]) extends Filter[Doc] {

@@ -34,6 +34,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
+  def reIndex(): Boolean = store.reIndex()
+
   object transaction {
     def apply[Return](f: Transaction[Doc] => Return): Return = {
       val transaction = create()

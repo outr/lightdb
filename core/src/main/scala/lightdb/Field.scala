@@ -1,6 +1,6 @@
 package lightdb
 
-import fabric.{Json, Null, bool, num, str}
+import fabric.{Json, Null, arr, bool, num, str}
 import fabric.define.DefType
 import fabric.io.JsonParser
 import fabric.rw._
@@ -114,6 +114,7 @@ object Field {
     })
     case DefType.Opt(d) => string2Json(name, s, d)
     case DefType.Enum(_) => str(s)
+    case DefType.Arr(d) => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
     case _ => try {
       JsonParser(s)
     } catch {
