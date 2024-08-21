@@ -4,6 +4,7 @@ import lightdb.lucene.LuceneStore
 import lightdb.store.{StoreManager, StoreMode}
 import lightdb.store.split.SplitStoreManager
 
+@EmbeddedTest
 class HaloDBAndLuceneSpec extends AbstractBasicSpec {
   override protected def filterBuilderSupported: Boolean = true
 
