@@ -16,6 +16,11 @@ sealed class Field[Doc, V](val name: String,
                            val indexed: Boolean = false) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
   implicit def rw: RW[V] = getRW()
 
+  def isArr: Boolean = rw.definition match {
+    case DefType.Arr(_) => true
+    case _ => false
+  }
+
   def getJson(doc: Doc): Json = get(doc).json
 
   override def is(value: V): Filter[Doc] = Filter.Equals(this, value)
