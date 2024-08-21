@@ -238,15 +238,15 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "query with single-value nicknames" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.nicknames is "Grouchy").toList
+        val people = db.people.query.filter(_.nicknames has "Grouchy").toList
         people.map(_.name) should be(List("Oscar"))
       }
     }
     "query with multi-value nicknames" in {
       db.people.transaction { implicit transaction =>
         val people = db.people.query
-          .filter(_.nicknames is "Nica")
-          .filter(_.nicknames is "Vera")
+          .filter(_.nicknames has "Nica")
+          .filter(_.nicknames has "Vera")
           .toList
         people.map(_.name) should be(List("Veronica"))
       }
@@ -254,7 +254,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     "query with single-value, multiple nicknames" in {
       db.people.transaction { implicit transaction =>
         val people = db.people.query
-          .filter(_.nicknames is "Nica")
+          .filter(_.nicknames has "Nica")
           .toList
         people.map(_.name).toSet should be(Set("Veronica", "Tori"))
       }
@@ -288,7 +288,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     "verify the correct count in query total" in {
       db.people.transaction { implicit transaction =>
         val results = db.people.query
-          .filter(_.nicknames === "robot")
+          .filter(_.nicknames has "robot")
           .sort(Sort.ByField(Person.age).descending)
           .limit(100)
           .countTotal(true)
@@ -302,7 +302,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     "verify the correct count in query total with offset" in {
       db.people.transaction { implicit transaction =>
         val results = db.people.query
-          .filter(_.nicknames === "robot")
+          .filter(_.nicknames has "robot")
           .limit(100)
           .offset(100)
           .countTotal(true)
