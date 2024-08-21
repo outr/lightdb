@@ -18,7 +18,6 @@ jobs:
         uses: coursier/cache-action@v6
       - name: Build and test
         run: |
-#          sbt -v -Dfile.encoding=UTF-8 +test
           sbt -v -Dfile.encoding=UTF-8 +compile
           rm -rf "$HOME/.ivy2/local" || true
           find $HOME/Library/Caches/Coursier/v1        -name "ivydata-*.properties" -delete || true
