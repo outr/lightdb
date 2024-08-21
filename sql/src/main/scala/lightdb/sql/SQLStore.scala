@@ -2,13 +2,13 @@ package lightdb.sql
 
 import fabric._
 import fabric.define.DefType
-import fabric.io.JsonParser
+import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.filter.Filter
+import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
 import lightdb.spatial.DistanceAndDoc
 import lightdb.sql.connect.ConnectionManager
@@ -468,6 +468,14 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     throw new UnsupportedOperationException("Distance filtering not supported in SQL!")
 
   private def filter2Part(f: Filter[Doc]): SQLPart = f match {
+    case f: Filter.Equals[Doc, _] if f.field.isArr =>
+      val values = f.getJson.asVector
+      val parts = values.map { json =>
+        val jsonString = JsonFormatter.Compact(json)
+        SQLPart(s"${f.field.name} LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
+      }
+      SQLPart.merge(parts: _*)
+    case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.field.name} IS NULL")
     case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
     case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
     case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
@@ -495,7 +503,23 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       }.toList
       SQLPart(parts.map(_ => s"${f.field.name} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
     case f: Filter.Distance[Doc] => distanceFilter(f)
-    case f: Filter.Builder[Doc] => throw new UnsupportedOperationException(s"Filter.Builder is not currently supported for SQL")
+    case f: Filter.Builder[Doc] =>
+      val parts = f.filters.map { fc =>
+        if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
+        fc.condition match {
+          case Condition.Must => filter2Part(fc.filter)
+          case Condition.MustNot =>
+            val p = filter2Part(fc.filter)
+            if (p.sql.endsWith("IS NULL")) {
+              p.copy(sql = p.sql.replace("IS NULL", "IS NOT NULL"))
+            } else {
+              p.copy(sql = p.sql.replace(" = ", " != "))
+            }
+          case Condition.Filter => throw new UnsupportedOperationException("Filter condition not supported in SQL")
+          case Condition.Should => throw new UnsupportedOperationException("Should condition not supported in SQL")
+        }
+      }
+      SQLPart.merge(parts: _*)
   }
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {

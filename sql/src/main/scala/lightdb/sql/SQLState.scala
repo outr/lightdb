@@ -79,6 +79,12 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
 
   override def commit(): Unit = if (dirty) {
     // TODO: SingleConnection shares
+    if (batchInsert.get() > 0) {
+      psInsert.executeBatch()
+    }
+    if (batchUpsert.get() > 0) {
+      psUpsert.executeBatch()
+    }
     dirty = false
     Try(connectionManager.getConnection(transaction).commit()).failed.foreach { t =>
       scribe.warn(s"Commit failed: ${t.getMessage}")
