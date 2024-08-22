@@ -7,8 +7,8 @@ import java.sql.ResultSet
 import scala.collection.parallel.CollectionConverters._
 
 trait Bench {
-  val RecordCount: Int = 500_000
-//  val RecordCount: Int = 10_000_000
+//  val RecordCount: Int = 500_000
+  val RecordCount: Int = 10_000_000
   val StreamAsyncIterations: Int = 8
   val GetAsyncIterations: Int = 8
   val SearchEachAsyncIterations: Int = 8
