@@ -1,5 +1,8 @@
 .idea/
 .bsp/
+.bloop/
+.vscode/
+.metals/
 target/
 testdb/
 airports/

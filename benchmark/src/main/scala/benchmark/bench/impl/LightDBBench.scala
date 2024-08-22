@@ -92,7 +92,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
       _id = id(rs.getString("_id"))
     )
 
-    val name: Field[Person, String] = field("name", _.name)
-    val age: Field.Index[Person, Int] = field.index("age", _.age)
+    val name: F[String] = field("name", _.name)
+    val age: I[Int] = field.index("age", _.age)
   }
 }

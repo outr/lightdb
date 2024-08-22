@@ -31,12 +31,12 @@ object Runner {
     "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore, searchingMode = StoreMode.Indexes)),
     "LightDB-H2" -> LightDBBench(H2Store),
     "LightDB-HaloDB-H2" -> LightDBBench(SplitStoreManager(HaloDBStore, H2Store, searchingMode = StoreMode.Indexes)),
-    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
-      jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
-      username = Some("postgres"),
-      password = Some("password"),
-      maximumPoolSize = Some(100)
-    ))))
+//    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
+//      jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
+//      username = Some("postgres"),
+//      password = Some("password"),
+//      maximumPoolSize = Some(100)
+//    ))))
   )
 
   def main(args: Array[String]): Unit = {
