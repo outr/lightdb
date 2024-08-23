@@ -25,6 +25,8 @@ sealed class Field[Doc, V](val name: String,
 
   override def is(value: V): Filter[Doc] = Filter.Equals(this, value)
 
+  override def !==(value: V): Filter[Doc] = Filter.NotEquals(this, value)
+
   override protected def rangeLong(from: Option[Long], to: Option[Long]): Filter[Doc] =
     Filter.RangeLong(this.asInstanceOf[Field[Doc, Long]], from, to)
 

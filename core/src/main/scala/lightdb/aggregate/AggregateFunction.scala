@@ -15,6 +15,8 @@ case class AggregateFunction[T, V, Doc](name: String, field: Field[Doc, V], `typ
 
   override def is(value: V): AggregateFilter[Doc] = AggregateFilter.Equals(name, field, value)
 
+  override def !==(value: V): AggregateFilter[Doc] = AggregateFilter.NotEquals(name, field, value)
+
   override protected def rangeLong(from: Option[Long], to: Option[Long]): AggregateFilter[Doc] =
     AggregateFilter.RangeLong(name, field.asInstanceOf[Field[Doc, Long]], from, to)
 

@@ -21,6 +21,10 @@ object AggregateFilter {
     def getJson: Json = field.rw.read(value)
   }
 
+  case class NotEquals[Doc, F](name: String, field: Field[Doc, F], value: F) extends AggregateFilter[Doc] {
+    def getJson: Json = field.rw.read(value)
+  }
+
   case class In[Doc, F](name: String, field: Field[Doc, F], values: Seq[F]) extends AggregateFilter[Doc] {
     def getJson: List[Json] = values.toList.map(field.rw.read)
   }

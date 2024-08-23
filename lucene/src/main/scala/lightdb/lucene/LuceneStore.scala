@@ -227,6 +227,11 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   private def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = filter match {
     case Some(f) => f match {
       case f: Filter.Equals[Doc, _] => exactQuery(f.field, f.getJson)
+      case f: Filter.NotEquals[Doc, _] =>
+        val b = new BooleanQuery.Builder
+        b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
+        b.add(exactQuery(f.field, f.getJson), BooleanClause.Occur.MUST_NOT)
+        b.build()
       case f: Filter.In[Doc, _] =>
         val queries = f.getJson.map(json => exactQuery(f.field, json))
         val b = new BooleanQuery.Builder

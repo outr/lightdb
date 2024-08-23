@@ -126,6 +126,12 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
       }
     }
+    "search excluding age 30" in {
+      db.people.transaction { implicit transaction =>
+        val names = db.people.query.filter(_.age !== 30).toList.map(_.name).toSet
+        names should be(Set("Linda", "Ruth", "Nancy", "Jenna", "Hanna", "Diana", "Ian", "Zoey", "Quintin", "Uba", "Oscar", "Kevin", "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Adam", "Xena", "Fiona", "Greg", "Veronica"))
+      }
+    }
     "sort by age" in {
       db.people.transaction { implicit transaction =>
         val people = db.people.query.sort(Sort.ByField(Person.age).descending).search.docs.list

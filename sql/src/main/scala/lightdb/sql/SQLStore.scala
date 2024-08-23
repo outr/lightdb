@@ -4,7 +4,7 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
-import lightdb.aggregate.{AggregateFilter, AggregateQuery, AggregateType}
+import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
@@ -398,6 +398,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case Sort.ByField(field, direction) =>
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
         SQLPart(s"${field.name} $dir", Nil)
+      case (AggregateFunction(name, _, _), direction: SortDirection) =>
+        val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+        SQLPart(s"$name $dir", Nil)
     }
     SQLQueryBuilder(
       collection = collection,
@@ -477,6 +480,15 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       SQLPart.merge(parts: _*)
     case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.field.name} IS NULL")
     case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
+    case f: Filter.NotEquals[Doc, _] if f.field.isArr =>
+      val values = f.getJson.asVector
+      val parts = values.map { json =>
+        val jsonString = JsonFormatter.Compact(json)
+        SQLPart(s"${f.field.name} NOT LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
+      }
+      SQLPart.merge(parts: _*)
+    case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.field.name} IS NOT NULL")
+    case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.field.name} != ?", List(SQLArg.FieldArg(f.field, f.value)))
     case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
     case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
       case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
@@ -524,6 +536,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {
     case f: AggregateFilter.Equals[Doc, _] => SQLPart(s"${f.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
+    case f: AggregateFilter.NotEquals[Doc, _] => SQLPart(s"${f.name} != ?", List(SQLArg.FieldArg(f.field, f.value)))
     case f: AggregateFilter.In[Doc, _] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
     case f: AggregateFilter.Combined[Doc] =>
       val parts = f.filters.map(f => af2Part(f))
