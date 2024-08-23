@@ -270,7 +270,7 @@ lazy val benchmark = project.in(file("benchmark"))
 		fork := true,
 		libraryDependencies ++= Seq(
 			"org.mongodb" % "mongodb-driver-sync" % "5.0.1",
-			"org.postgresql" % "postgresql" % "42.7.3",
+			"org.postgresql" % "postgresql" % "42.7.4",
 			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"com.h2database" % "h2" % h2Version,
