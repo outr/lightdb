@@ -13,6 +13,8 @@ trait FilterSupport[F, Doc, Filter] {
   def ===(value: F): Filter = is(value)
   def is(value: F): Filter
 
+  def !==(value: F): Filter
+
   def >(value: F)(implicit num: Numeric[F]): Filter = range(Some(value), None, includeFrom = false)
   def >=(value: F)(implicit num: Numeric[F]): Filter = range(Some(value), None)
   def <(value: F)(implicit num: Numeric[F]): Filter = range(None, Some(value), includeTo = false)

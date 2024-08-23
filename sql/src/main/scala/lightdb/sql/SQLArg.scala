@@ -30,6 +30,7 @@ object SQLArg {
         case l: Long => ps.setLong(index, l)
         case f: Float => ps.setFloat(index, f)
         case d: Double => ps.setDouble(index, d)
+        case bd: BigDecimal => ps.setDouble(index, bd.toDouble)
         case json: Json => ps.setString(index, JsonFormatter.Compact(json))
         case point: GeoPoint => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
         case _ =>
@@ -44,6 +45,8 @@ object SQLArg {
     }
 
     override def set(ps: PreparedStatement, index: Int): Unit = setInternal(ps, index, value)
+
+    override def toString: String = s"FieldArg(field = ${field.name}, value = $value (${value.getClass.getName}))"
   }
 
   object FieldArg {

@@ -34,6 +34,12 @@ object Filter {
     override lazy val fields: List[Field[Doc, _]] = List(field)
   }
 
+  case class NotEquals[Doc, F](field: Field[Doc, F], value: F) extends Filter[Doc] {
+    def getJson: Json = field.rw.read(value)
+
+    override lazy val fields: List[Field[Doc, _]] = List(field)
+  }
+
   case class In[Doc, F](field: Field[Doc, F], values: Seq[F]) extends Filter[Doc] {
     def getJson: List[Json] = values.toList.map(field.rw.read)
 
