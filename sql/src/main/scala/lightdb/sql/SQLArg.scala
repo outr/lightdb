@@ -34,7 +34,11 @@ object SQLArg {
         case json: Json => ps.setString(index, JsonFormatter.Compact(json))
         case point: GeoPoint => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
         case _ =>
-          val json = value.asInstanceOf[F].json(field.rw)
+          val json = if (field.rw.definition.isOpt) {
+            Some(value).asInstanceOf[F].json(field.rw)
+          } else {
+            value.asInstanceOf[F].json(field.rw)
+          }
           val string = if (field.rw.definition == DefType.Str) {
             json.asString
           } else {
