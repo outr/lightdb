@@ -23,7 +23,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   private val brenda = Person("Brenda", 11, _id = Person.id("brenda"))
   private val charlie = Person("Charlie", 35, _id = Person.id("charlie"))
   private val diana = Person("Diana", 15, _id = Person.id("diana"))
-  private val evan = Person("Evan", 53, Some("Dallas"), _id = Person.id("evan"))
+  private val evan = Person("Evan", 53, Some(City("Dallas")), _id = Person.id("evan"))
   private val fiona = Person("Fiona", 23, _id = Person.id("fiona"))
   private val greg = Person("Greg", 12, _id = Person.id("greg"))
   private val hanna = Person("Hanna", 62, _id = Person.id("hanna"))
@@ -231,6 +231,12 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         people.map(_.name) should be(List("Evan"))
       }
     }
+    "update the city for a user" in {
+      db.people.transaction { implicit transaction =>
+        val p = db.people(zoey._id)
+        db.people.upsert(p.copy(city = Some(City("Los Angeles"))))
+      }
+    }
     "modify a record within a transaction and see it post-commit" in {
       db.people.transaction { implicit transaction =>
         val original = db.people.query.filter(_.name === "Ruth").toList.head
@@ -279,7 +285,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
           Person(
             name = s"Unique Snowflake $index",
             age = if (index > 10_000) 0 else index,
-            city = Some("Robotland"),
+            city = Some(City("Robotland")),
             nicknames = Set("robot", s"sf$index")
           )
         }
@@ -355,7 +361,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
   case class Person(name: String,
                     age: Int,
-                    city: Option[String] = None,
+                    city: Option[City] = None,
                     nicknames: Set[String] = Set.empty,
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
@@ -364,9 +370,15 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
     val name: I[String] = field.index("name", _.name)
     val age: I[Int] = field.index("age", _.age)
-    val city: I[Option[String]] = field.index("city", _.city)
+    val city: I[Option[City]] = field.index("city", _.city)
     val nicknames: I[Set[String]] = field.index("nicknames", _.nicknames)
     val search: T = field.tokenized("search", doc => s"${doc.name} ${doc.age}")
+  }
+
+  case class City(name: String)
+
+  object City {
+    implicit val rw: RW[City] = RW.gen
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
