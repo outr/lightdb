@@ -296,13 +296,16 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
   protected def toJson(value: Any, rw: RW[_]): Json = obj2Value(value) match {
     case null => Null
-    case s: String if rw.definition == DefType.Str => str(s)
-    case s: String if rw.definition == DefType.Opt(DefType.Str) => str(s)
-    case s: String if rw.definition == DefType.Json => JsonParser(s)
-    case s: String => try {
-      JsonParser(s)
-    } catch {
-      case t: Throwable => throw new RuntimeException(s"Unable to parse: [$s] as JSON for ${rw.definition}", t)
+    case s: String => rw.definition match {
+      case DefType.Str => str(s)
+      case DefType.Opt(DefType.Str) => str(s)
+      case DefType.Json => JsonParser(s)
+      case DefType.Obj(_, _) | DefType.Arr(_) | DefType.Opt(DefType.Obj(_, _)) => try {
+        JsonParser(s)
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Unable to parse: [$s] as JSON for ${rw.definition}", t)
+      }
+      case d => throw new UnsupportedOperationException(s"Unsupported definition: $d for $s")
     }
     case b: Boolean => bool(b)
     case i: Int => num(i)
@@ -313,23 +316,28 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
-  protected def fieldNamesForDistance(conversion: Conversion.Distance[Doc]): List[String] =
+  protected def extraFieldsForDistance(conversion: Conversion.Distance[Doc]): List[SQLPart] =
     throw new UnsupportedOperationException("Distance conversions not supported")
+
+  protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart(field.name)
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
                           (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
-    val fieldNames = conversion match {
-      case Conversion.Value(field) => List(field.name)
-      case Conversion.Doc() | Conversion.Converted(_) => fields.map(_.name)
-      case Conversion.Materialized(fields) => fields.map(_.name)
-      case Conversion.Json(fields) => fields.map(_.name)
-      case d: Conversion.Distance[Doc] => fieldNamesForDistance(d)
+    var extraFields = List.empty[SQLPart]
+    val fields = conversion match {
+      case Conversion.Value(field) => List(field)
+      case Conversion.Doc() | Conversion.Converted(_) => this.fields
+      case Conversion.Materialized(fields) => fields
+      case Conversion.Json(fields) => fields
+      case d: Conversion.Distance[Doc] =>
+        extraFields = extraFields ::: extraFieldsForDistance(d)
+        this.fields
     }
     val state = getState
     val b = SQLQueryBuilder(
       collection = collection,
       state = state,
-      fields = fieldNames.map(name => SQLPart(name)),
+      fields = fields.map(f => fieldPart(f)) ::: extraFields,
       filters = query.filter.map(filter2Part).toList,
       group = Nil,
       having = Nil,

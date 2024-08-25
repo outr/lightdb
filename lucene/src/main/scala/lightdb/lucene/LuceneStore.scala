@@ -60,23 +60,31 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case t: Tokenized[Doc] =>
         List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
-        def addJson(json: Json): Unit = json match {
-          case _ if field.rw.definition == DefType.Json => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
-          case Null => add(new StringField(field.name, Field.NullString, fs))
-          case Str(s, _) => add(new StringField(field.name, s, fs))
-          case Bool(b, _) => add(new IntField(field.name, if (b) 1 else 0, fs))
-          case NumInt(l, _) => add(new LongField(field.name, l, fs))
-          case NumDec(bd, _) => add(new DoubleField(field.name, bd.toDouble, fs))
-          case Arr(v, _) => v.foreach(addJson)
-          case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
-            case p: GeoPoint =>
+        def addJson(json: Json, d: DefType): Unit = d match {
+          case DefType.Opt(DefType.Obj(_, Some("lightdb.spatial.GeoPoint"))) => json match {
+            case Null => // Don't set anything
+            case _ =>
+              val p = json.as[GeoPoint]
               add(new LatLonPoint(field.name, p.latitude, p.longitude))
               add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
-            case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
           }
-          case _ => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+          case DefType.Obj(_, Some("lightdb.spatial.GeoPoint")) =>
+            val p = json.as[GeoPoint]
+            add(new LatLonPoint(field.name, p.latitude, p.longitude))
+            add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
+          case DefType.Str => json match {
+            case Null => add(new StringField(field.name, Field.NullString, fs))
+            case _ => add(new StringField(field.name, json.asString, fs))
+          }
+          case DefType.Json | DefType.Obj(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+          case DefType.Opt(d) => addJson(json, d)
+          case DefType.Arr(d) => json.asVector.foreach(json => addJson(json, d))
+          case DefType.Bool => add(new IntField(field.name, if (json.asBoolean) 1 else 0, fs))
+          case DefType.Int => add(new LongField(field.name, json.asLong, fs))
+          case DefType.Dec => add(new DoubleField(field.name, json.asDouble, fs))
+          case _ => throw new UnsupportedOperationException(s"Unsupported definition (${field.name}): $d for $json")
         }
-        addJson(json)
+        addJson(json, field.rw.definition)
 
         val fieldSortName = s"${field.name}Sort"
         field.getJson(doc) match {
@@ -290,7 +298,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         b.add(q, BooleanClause.Occur.MUST)
       }
       b.build()
-    case Null if field.rw.definition.isOpt => new TermQuery(new Term(field.name, Field.NullString))
+    case Null => field.rw.definition match {
+      case DefType.Opt(DefType.Str) => new TermQuery(new Term(field.name, Field.NullString))
+      case _ => new TermQuery(new Term(field.name, "null"))
+    }
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")
   }
 

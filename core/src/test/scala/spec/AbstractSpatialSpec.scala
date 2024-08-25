@@ -32,18 +32,21 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     name = "John Doe",
     age = 21,
     point = newYorkCity,
+    altPoint = None,
     _id = id1
   )
   private val p2 = Person(
     name = "Jane Doe",
     age = 19,
     point = noble,
+    altPoint = Some(oklahomaCity),
     _id = id2
   )
   private val p3 = Person(
     name = "Bob Dole",
     age = 123,
     point = yonkers,
+    altPoint = Some(chicago),
     _id = id3
   )
 
@@ -74,6 +77,19 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
         distances should (be (List(28.493883134993137, 1318.8843733311087)) or be(List(28.555356212993576, 1316.1282972648974)))
       }
     }
+    "sort by distance from Noble using altPoint" in {
+      DB.people.transaction { implicit transaction =>
+        val list = DB.people.query.search.distance(
+          _.altPoint,
+          from = noble,
+          radius = Some(10_000.miles)
+        ).iterator.toList
+        val people = list.map(_.doc)
+        val distances = list.map(_.distance.get.mi)
+        people.map(_.name) should be(List("Jane Doe", "Bob Dole"))
+        distances should (be (List(28.555356212993576, 695.6409470300348)) or be(List(28.493883134993137, 696.0668702783311)))
+      }
+    }
     "truncate the database" in {
       DB.truncate()
     }
@@ -97,6 +113,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   case class Person(name: String,
                     age: Int,
                     point: GeoPoint,
+                    altPoint: Option[GeoPoint],
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
@@ -105,5 +122,6 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     val name: F[String] = field("name", _.name)
     val age: F[Int] = field("age", _.age)
     val point: I[GeoPoint] = field.index("point", _.point)
+    val altPoint: I[Option[GeoPoint]] = field.index("altPoint", _.altPoint)
   }
 }
