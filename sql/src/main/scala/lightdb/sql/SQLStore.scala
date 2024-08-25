@@ -300,12 +300,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case DefType.Str => str(s)
       case DefType.Opt(DefType.Str) => str(s)
       case DefType.Json => JsonParser(s)
-      case DefType.Obj(_, _) | DefType.Arr(_) | DefType.Opt(DefType.Obj(_, _)) => try {
+      case _ => try {
         JsonParser(s)
       } catch {
         case t: Throwable => throw new RuntimeException(s"Unable to parse: [$s] as JSON for ${rw.definition}", t)
       }
-      case d => throw new UnsupportedOperationException(s"Unsupported definition: $d for $s")
     }
     case b: Boolean => bool(b)
     case i: Int => num(i)
