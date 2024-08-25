@@ -1,6 +1,7 @@
 package lightdb.sql
 
 import fabric._
+import fabric.define.DefType
 import fabric.rw._
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.{Field, LightDB}
@@ -19,30 +20,57 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
                                                                      val connectionShared: Boolean,
                                                                      val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
+  private val OptPointRegex = """\[POINT\((.+) (.+)\)\]""".r
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 
-  override protected def toJson(value: Any, rw: RW[_]): Json = if (rw.definition.className.contains("lightdb.spatial.GeoPoint")) {
-    value.toString match {
-      case PointRegex(longitude, latitude) => obj(
-        "latitude" -> num(latitude.toDouble),
-        "longitude" -> num(longitude.toDouble)
-      )
+  override protected def toJson(value: Any, rw: RW[_]): Json = {
+    val className = rw.definition match {
+      case DefType.Opt(d) => d.className
+      case d => d.className
     }
-  } else {
-    super.toJson(value, rw)
+    if (value != null && className.contains("lightdb.spatial.GeoPoint")) {
+      value.toString match {
+        case PointRegex(longitude, latitude) => obj(
+          "latitude" -> num(latitude.toDouble),
+          "longitude" -> num(longitude.toDouble)
+        )
+        case OptPointRegex(longitude, latitude) => obj(
+          "latitude" -> num(latitude.toDouble),
+          "longitude" -> num(longitude.toDouble)
+        )
+      }
+    } else {
+      super.toJson(value, rw)
+    }
   }
 
-  override protected def field2Value(field: Field[Doc, _]): String = if (field.rw.definition.className.contains("lightdb.spatial.GeoPoint")) {
-    "GeomFromText(?, 4326)"
-  } else {
-    super.field2Value(field)
+  override protected def field2Value(field: Field[Doc, _]): String = {
+    val className = field.rw.definition match {
+      case DefType.Opt(d) => d.className
+      case d => d.className
+    }
+    if (className.contains("lightdb.spatial.GeoPoint")) {
+      "GeomFromText(?, 4326)"
+    } else {
+      super.field2Value(field)
+    }
   }
 
-  override protected def fieldNamesForDistance(d: Conversion.Distance[Doc]): List[String] = {
-    s"AsText(${d.field.name}) AS ${d.field.name}" ::
-    s"ST_Distance(GeomFromText('POINT(${d.from.longitude} ${d.from.latitude})', 4326), ${d.field.name}, true) AS ${d.field.name}Distance" ::
-    collection.model.fields.filterNot(_ eq d.field).map(_.name)
+  override protected def fieldPart[V](field: Field[Doc, V]): SQLPart = {
+    val className = field.rw.definition match {
+      case DefType.Opt(d) => d.className
+      case d => d.className
+    }
+    if (className.contains("lightdb.spatial.GeoPoint")) {
+      SQLPart(s"AsText(${field.name}) AS ${field.name}")
+    } else {
+      super.fieldPart(field)
+    }
+  }
+
+  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc]): List[SQLPart] = {
+    List(SQLPart(s"ST_Distance(GeomFromText('POINT(${d.from.longitude} ${d.from.latitude})', 4326), ${d.field.name}, true) AS ${d.field.name}Distance"))
   }
 
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
