@@ -65,6 +65,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def truncate()(implicit transaction: Transaction[Doc]): Int
 
+  def verify(): Boolean = false
+
   def reIndex(): Boolean = false
 
   def dispose(): Unit
