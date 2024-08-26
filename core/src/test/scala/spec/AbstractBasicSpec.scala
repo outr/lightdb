@@ -1,6 +1,7 @@
 package spec
 
 import fabric.rw._
+import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.feature.DBFeatureKey
@@ -12,6 +13,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import perfolation.double2Implicits
 
+import java.io.File
 import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
@@ -279,6 +281,9 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         q.offset(20).search.docs.list.map(_.name) should be(List("Veronica", "Wyatt", "Xena", "Zoey"))
       }
     }
+    "do a database backup" in {
+      DatabaseBackup.archive(db, new File(s"backups/$specName.zip")) should be(27)
+    }
     "insert a lot more names" in {
       db.people.transaction { implicit transaction =>
         val p = (1 to 100_000).toList.map { index =>
@@ -333,6 +338,19 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     "verify the collection is empty" in {
       db.people.transaction { implicit transaction =>
         db.people.count should be(0)
+      }
+    }
+    "restore from database backup" in {
+      DatabaseRestore.archive(db, new File(s"backups/$specName.zip")) should be(27)
+    }
+    "verify the correct number of records exist" in {
+      db.people.transaction { implicit transaction =>
+        db.people.count should be(24)
+      }
+    }
+    "truncate the collection again" in {
+      db.people.transaction { implicit transaction =>
+        db.people.truncate() should be(24)
       }
     }
     "dispose the database" in {

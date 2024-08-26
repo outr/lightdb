@@ -1,6 +1,8 @@
 package lightdb.collection
 
+import fabric.Json
 import fabric.define.DefType
+import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.store.Store
@@ -92,6 +94,20 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
     def apply(id: Id[Doc]): Doc = transaction { implicit transaction =>
       collection(id)
+    }
+
+    object json {
+      def insert(iterator: Iterator[Json]): Int = transaction { implicit transaction =>
+        iterator
+          .map(_.as[Doc](model.rw))
+          .map(doc => collection.insert(doc))
+          .length
+      }
+
+      def iterator[Return](f: Iterator[Json] => Return): Return = transaction { implicit transaction =>
+        val iterator = collection.iterator.map(doc => doc.json(model.rw))
+        f(iterator)
+      }
     }
 
     def list(): List[Doc] = transaction { implicit transaction =>
