@@ -34,7 +34,12 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
         }
       case _ => // Can't do validation
     }
+
+    // Verify the data is in-sync
+    verify()
   }
+
+  def verify(): Boolean = store.verify()
 
   def reIndex(): Boolean = store.reIndex()
 

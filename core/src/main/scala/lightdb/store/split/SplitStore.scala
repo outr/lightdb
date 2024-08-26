@@ -70,12 +70,29 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     searching.truncate()
   }
 
+  override def verify(): Boolean = collection.transaction { implicit transaction =>
+    val storageCount = storage.count
+    val searchCount = searching.count
+    if (storageCount != searchCount) {
+      scribe.warn(s"${collection.name} out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
+      reIndexInternal()
+      scribe.info(s"${collection.name} re-indexed successfully!")
+      true
+    } else {
+      false
+    }
+  }
+
   override def reIndex(): Boolean = collection.transaction { implicit transaction =>
+    reIndexInternal()
+    true
+  }
+
+  private def reIndexInternal()(implicit transaction: Transaction[Doc]): Unit = {
     searching.truncate()
     storage.iterator.foreach { doc =>
       searching.insert(doc)
     }
-    true
   }
 
   override def dispose(): Unit = {

@@ -19,6 +19,7 @@ object DatabaseBackup {
   def archive(db: LightDB,
               archive: File = new File("backup.zip")): Int = {
     archive.getParentFile.mkdirs()
+    if (archive.exists()) archive.delete()
     val out = new ZipOutputStream(new FileOutputStream(archive))
     try {
       process(db) {
