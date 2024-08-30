@@ -401,13 +401,14 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     val filters = query.query.filter.map(filter2Part).toList
     val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct.map(s => SQLPart(s, Nil))
     val having = query.filter.map(af2Part).toList
-    val sort = (query.sort ::: query.query.sort).collect {
+    val sort = (query.sort ::: query.query.sort).map {
       case Sort.ByField(field, direction) =>
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
         SQLPart(s"${field.name} $dir", Nil)
       case (AggregateFunction(name, _, _), direction: SortDirection) =>
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
         SQLPart(s"$name $dir", Nil)
+      case t => throw new UnsupportedOperationException(s"Unsupported sort: $t")
     }
     SQLQueryBuilder(
       collection = collection,
