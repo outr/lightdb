@@ -3,6 +3,7 @@ package lightdb.sql
 import fabric._
 import fabric.define.DefType
 import fabric.rw._
+import lightdb.collection.Collection
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.{Field, LightDB}
 import lightdb.doc.{Document, DocumentModel}
@@ -21,6 +22,19 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
                                                                      val storeMode: StoreMode) extends SQLStore[Doc, Model] {
   private val PointRegex = """POINT\((.+) (.+)\)""".r
   private val OptPointRegex = """\[POINT\((.+) (.+)\)\]""".r
+
+  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
+    if (hasSpatial) {
+      scribe.info(s"${collection.name} has spatial features. Enabling...")
+      val c = connectionManager.getConnection
+      val s = c.createStatement()
+      s.executeUpdate(s"SELECT load_extension('${SQLiteStore.spatialitePath}');")
+      val hasGeometryColumns = this.tables(c).contains("geometry_columns")
+      if (!hasGeometryColumns) s.executeUpdate("SELECT InitSpatialMetaData()")
+      s.close()
+    }
+    super.initTransaction()
+  }
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 
@@ -69,6 +83,14 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
     }
   }
 
+  private lazy val hasSpatial: Boolean = fields.exists { field =>
+    val className = field.rw.definition match {
+      case DefType.Opt(d) => d.className
+      case d => d.className
+    }
+    className.contains("lightdb.spatial.GeoPoint")
+  }
+
   override protected def extraFieldsForDistance(d: Conversion.Distance[Doc]): List[SQLPart] = {
     List(SQLPart(s"ST_Distance(GeomFromText('POINT(${d.from.longitude} ${d.from.latitude})', 4326), ${d.field.name}, true) AS ${d.field.name}Distance"))
   }
@@ -111,13 +133,6 @@ object SQLiteStore extends StoreManager {
       try {
         val c = config.createConnection(uri)
         c.setAutoCommit(false)
-
-        val s = c.createStatement()
-        s.executeUpdate(s"SELECT load_extension('$spatialitePath');")
-        val hasGeometryColumns = this.tables(c).contains("geometry_columns")
-        if (!hasGeometryColumns) s.executeUpdate("SELECT InitSpatialMetaData()")
-        s.close()
-
         c
       } catch {
         case t: Throwable => throw new RuntimeException(s"Error establishing SQLite connection to $uri", t)

@@ -12,7 +12,7 @@ sealed trait Filter[Doc] {
       Filter.Builder[Doc](minShould = b1.minShould, filters = b1.filters ::: b2.filters)
     case (_, b: Filter.Builder[Doc]) => b.must(this)
     case (b: Filter.Builder[Doc], _) => b.must(that)
-    case _ => Filter.Builder[Doc]().must(this).must(that)
+    case _ => Filter.Builder[Doc](minShould = 1).must(this).must(that)
   }
 
   def ||(that: Filter[Doc]): Filter[Doc] = (this, that) match {
@@ -20,7 +20,7 @@ sealed trait Filter[Doc] {
       Filter.Builder[Doc](minShould = b1.minShould, filters = b1.filters ::: b2.filters)
     case (_, b: Filter.Builder[Doc]) => b.should(this)
     case (b: Filter.Builder[Doc], _) => b.should(that)
-    case _ => Filter.Builder[Doc]().should(this).should(that)
+    case _ => Filter.Builder[Doc](minShould = 1).should(this).should(that)
   }
 }
 

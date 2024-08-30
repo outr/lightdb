@@ -523,7 +523,18 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       SQLPart(parts.map(_ => s"${f.field.name} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
     case f: Filter.Distance[Doc] => distanceFilter(f)
     case f: Filter.Builder[Doc] =>
-      val parts = f.filters.map { fc =>
+      val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
+      if (f.minShould != 1 && shoulds.nonEmpty) {
+        throw new UnsupportedOperationException("Should filtering only works in SQL for exactly one condition")
+      }
+      val shouldParts = shoulds.map(fc => filter2Part(fc.filter)) match {
+        case Nil => Nil
+        case list => List(SQLPart(
+          sql = list.map(_.sql).mkString("(", " OR ", ")"),
+          args = list.flatMap(_.args)
+        ))
+      }
+      val parts = others.map { fc =>
         if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
         fc.condition match {
           case Condition.Must => filter2Part(fc.filter)
@@ -534,11 +545,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
             } else {
               p.copy(sql = p.sql.replace(" = ", " != "))
             }
-          case Condition.Filter => throw new UnsupportedOperationException("Filter condition not supported in SQL")
-          case Condition.Should => throw new UnsupportedOperationException("Should condition not supported in SQL")
+          case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")
         }
       }
-      SQLPart.merge(parts: _*)
+      SQLPart.merge(parts ::: shouldParts: _*)
   }
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {

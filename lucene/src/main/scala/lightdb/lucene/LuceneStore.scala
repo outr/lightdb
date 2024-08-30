@@ -259,7 +259,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         LatLonPoint.newDistanceQuery(index.name, from.latitude, from.longitude, radius.toMeters)
       case Filter.Builder(minShould, clauses) =>
         val b = new BooleanQuery.Builder
-        b.setMinimumNumberShouldMatch(minShould)
+        val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
+        b.setMinimumNumberShouldMatch(if (hasShould) minShould else 0)
         clauses.foreach { c =>
           val q = filter2Lucene(Some(c.filter))
           val query = c.boost match {
@@ -306,7 +307,6 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   private def sort2SortField(sort: Sort): SortField = {
-
     sort match {
       case Sort.BestMatch => SortField.FIELD_SCORE
       case Sort.IndexOrder => SortField.FIELD_DOC
