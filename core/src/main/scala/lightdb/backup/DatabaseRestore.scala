@@ -3,6 +3,7 @@ package lightdb.backup
 import fabric.io.JsonParser
 import lightdb.LightDB
 import lightdb.collection.Collection
+import lightdb.doc.{Document, DocumentModel}
 
 import java.io.File
 import java.util.zip.ZipFile
@@ -37,6 +38,25 @@ object DatabaseRestore {
       } else {
         None
       }
+    }
+  }
+
+  def restore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
+                                                                 file: File,
+                                                                 truncate: Boolean = true): Int = {
+    if (file.exists()) {
+      if (truncate) collection.t.truncate()
+      val source = Source.fromFile(file)
+      try {
+        val iterator = source
+          .getLines()
+          .map(s => JsonParser(s))
+        collection.t.json.insert(iterator)
+      } finally {
+        source.close()
+      }
+    } else {
+      throw new RuntimeException(s"${file.getAbsolutePath} doesn't exist")
     }
   }
 

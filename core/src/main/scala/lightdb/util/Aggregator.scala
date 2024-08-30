@@ -1,7 +1,7 @@
 package lightdb.util
 
 import fabric.rw._
-import fabric.{Json, Num, NumDec, NumInt, Obj, Str, num}
+import fabric.{Json, Null, Num, NumDec, NumInt, Obj, Str, num}
 import lightdb.Field
 import lightdb.SortDirection.Ascending
 import lightdb.aggregate.{AggregateQuery, AggregateType}
@@ -38,6 +38,7 @@ object Aggregator {
                 case Some(c) => num(bd.max(c.asBigDecimal))
                 case None => num(bd)
               }
+              case Null => current.getOrElse(Null)
               case _ => throw new UnsupportedOperationException(s"Unsupported type for Max: $value (${f.field.name})")
             }
             case AggregateType.Min => value match {
@@ -49,6 +50,7 @@ object Aggregator {
                 case Some(c) => num(bd.min(c.asBigDecimal))
                 case None => num(bd)
               }
+              case Null => current.getOrElse(Null)
               case _ => throw new UnsupportedOperationException(s"Unsupported type for Min: $value (${f.field.name})")
             }
             case AggregateType.Avg =>
@@ -66,6 +68,7 @@ object Aggregator {
                 case Some(c) => num(bd + c.asBigDecimal)
                 case None => num(bd)
               }
+              case Null => current.getOrElse(Null)
               case _ => throw new UnsupportedOperationException(s"Unsupported type for Sum: $value (${f.field.name})")
             }
             case AggregateType.Count => current match {
@@ -83,7 +86,9 @@ object Aggregator {
             }
             case _ => throw new UnsupportedOperationException(s"Unsupported type for ${f.`type`}: $value (${f.field.name})")
           }
-          map += f.name -> newValue
+          if (newValue != Null) {
+            map += f.name -> newValue
+          }
         }
         groups += group -> map
       }

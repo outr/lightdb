@@ -10,6 +10,9 @@ import lightdb.transaction.Transaction
 import lightdb.util.Initializable
 import lightdb.{Field, Id, Query, Unique, UniqueIndex}
 
+import java.util.concurrent.ConcurrentHashMap
+import scala.jdk.CollectionConverters.IteratorHasAsScala
+
 case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,
                                                                          loadStore: () => Store[Doc, Model],
@@ -44,6 +47,10 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   def reIndex(): Boolean = store.reIndex()
 
   object transaction {
+    private val set = ConcurrentHashMap.newKeySet[Transaction[Doc]]
+
+    def active: Int = set.size()
+
     def apply[Return](f: Transaction[Doc] => Return): Return = {
       val transaction = create()
       try {
@@ -55,13 +62,24 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
     def create(): Transaction[Doc] = {
       if (Collection.LogTransactions) scribe.info(s"Creating new Transaction for $name")
-      store.createTransaction()
+      val transaction = store.createTransaction()
+      set.add(transaction)
+      transaction
     }
 
     def release(transaction: Transaction[Doc]): Unit = {
       if (Collection.LogTransactions) scribe.info(s"Releasing Transaction for $name")
       store.releaseTransaction(transaction)
       transaction.close()
+      set.remove(transaction)
+    }
+
+    def releaseAll(): Int = {
+      val list = set.iterator().asScala.toList
+      list.foreach { transaction =>
+        release(transaction)
+      }
+      list.size
     }
   }
 
@@ -218,7 +236,12 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def truncate()(implicit transaction: Transaction[Doc]): Int = store.truncate()
 
-  def dispose(): Unit = {
+  def dispose(): Unit = try {
+    val transactions = transaction.releaseAll()
+    if (transactions > 0) {
+      scribe.warn(s"Released $transactions active transactions")
+    }
+  } finally {
     store.dispose()
   }
 }

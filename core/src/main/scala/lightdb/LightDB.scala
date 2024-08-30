@@ -88,6 +88,10 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
       scribe.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
       doUpgrades(upgrades, stillBlocking = true)
     }
+    // Setup shutdown hook
+    Runtime.getRuntime.addShutdownHook(new Thread(() => {
+      dispose()
+    }))
     // Set initialized
     databaseInitialized.set(true)
   }
@@ -166,12 +170,11 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
     case Some(upgrade) =>
       val continueBlocking = upgrades.exists(_.blockStartup)
       upgrade.upgrade(this)
-      val applied = appliedUpgrades.get()
-      appliedUpgrades.set(applied + upgrade.label)
+      appliedUpgrades.modify { set =>
+        set + upgrade.label
+      }
       if (stillBlocking && !continueBlocking) {
-        scribe.Platform.executionContext.execute(new Runnable {
-          override def run(): Unit = doUpgrades(upgrades.tail, continueBlocking)
-        })
+        scribe.Platform.executionContext.execute(() => doUpgrades(upgrades.tail, continueBlocking))
       } else {
         doUpgrades(upgrades.tail, continueBlocking)
       }

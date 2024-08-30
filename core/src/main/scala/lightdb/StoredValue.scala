@@ -6,7 +6,7 @@ import lightdb.collection.Collection
 case class StoredValue[T](key: String,
                           collection: Collection[KeyValue, KeyValue.type],
                           default: () => T,
-                          persistence: Persistence)(implicit rw: RW[T]) {
+                          persistence: Persistence)(implicit rw: RW[T]) { stored =>
   private lazy val id = Id[KeyValue](key)
 
   private var cached: Option[T] = None
@@ -44,6 +44,12 @@ case class StoredValue[T](key: String,
       }
       value
     }
+  }
+
+  def modify(f: T => T): T = synchronized {
+    val current = get()
+    val modified = f(current)
+    set(modified)
   }
 
   def clear(): Unit = collection.transaction { implicit transaction =>
