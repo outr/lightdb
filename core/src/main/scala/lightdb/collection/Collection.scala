@@ -7,8 +7,9 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.store.Store
 import lightdb.transaction.Transaction
+import lightdb.trigger.CollectionTriggers
 import lightdb.util.Initializable
-import lightdb.{Field, Id, Query, Unique, UniqueIndex}
+import lightdb.{Id, Query, UniqueIndex}
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -18,6 +19,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                                          loadStore: () => Store[Doc, Model],
                                                                          maxInsertBatch: Int = 1_000_000,
                                                                          cacheQueries: Boolean = Collection.DefaultCacheQueries) extends Initializable { collection =>
+  object trigger extends CollectionTriggers[Doc]
+
   lazy val store: Store[Doc, Model] = loadStore()
 
   override protected def initialize(): Unit = {
@@ -161,11 +164,13 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
     store.insert(doc)
+    trigger.insert(doc)
     doc
   }
 
   def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
     store.upsert(doc)
+    trigger.upsert(doc)
     doc
   }
 
@@ -221,11 +226,17 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def delete[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
     val (field, value) = f(model)
-    store.delete(field, value)
+    try {
+      store.delete(field, value)
+    } finally {
+      trigger.delete(field, value)
+    }
   }
 
-  def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Boolean = {
+  def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Boolean = try {
     store.delete(ev(model)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]], id)
+  } finally {
+    trigger.delete(ev(model)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]], id)
   }
 
   def count(implicit transaction: Transaction[Doc]): Int = store.count
@@ -234,7 +245,11 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   lazy val query: Query[Doc, Model] = Query(this)
 
-  def truncate()(implicit transaction: Transaction[Doc]): Int = store.truncate()
+  def truncate()(implicit transaction: Transaction[Doc]): Int = try {
+    store.truncate()
+  } finally {
+    trigger.truncate()
+  }
 
   def dispose(): Unit = try {
     val transactions = transaction.releaseAll()
@@ -242,6 +257,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       scribe.warn(s"Released $transactions active transactions")
     }
   } finally {
+    trigger.dispose()
     store.dispose()
   }
 }
