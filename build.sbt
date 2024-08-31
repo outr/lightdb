@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.12.2-SNAPSHOT1"
+ThisBuild / version := "0.13.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -53,6 +53,8 @@ ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF
 ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.12.0"
+
+val reactifyVersion: String = "4.1.2"
 
 val haloDBVersion: String = "0.5.6"
 
