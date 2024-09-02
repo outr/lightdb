@@ -2,8 +2,9 @@ package lightdb.aggregate
 
 import fabric.rw._
 import lightdb.Field
+import lightdb.doc.Document
 
-trait AggregateSupport[Doc, V] {
+trait AggregateSupport[Doc <: Document[Doc], V] {
   this: Field[Doc, V] =>
 
   lazy val max: AggregateFunction[V, V, Doc] = AggregateFunction(s"${name}Max", this, AggregateType.Max)

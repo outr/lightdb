@@ -1,5 +1,6 @@
 package lightdb
 
+import lightdb.doc.Document
 import lightdb.spatial.GeoPoint
 
 trait Sort
@@ -9,7 +10,7 @@ object Sort {
 
   case object IndexOrder extends Sort
 
-  case class ByField[Doc, F](field: Field[Doc, F], direction: SortDirection = SortDirection.Ascending) extends Sort {
+  case class ByField[Doc <: Document[Doc], F](field: Field[Doc, F], direction: SortDirection = SortDirection.Ascending) extends Sort {
     def direction(direction: SortDirection): ByField[Doc, F] = copy(direction = direction)
 
     def ascending: ByField[Doc, F] = direction(SortDirection.Ascending)
@@ -21,7 +22,7 @@ object Sort {
     def desc: ByField[Doc, F] = direction(SortDirection.Descending)
   }
 
-  case class ByDistance[Doc](field: Field[Doc, Option[GeoPoint]],
+  case class ByDistance[Doc <: Document[Doc]](field: Field[Doc, Option[GeoPoint]],
                              from: GeoPoint,
                              direction: SortDirection = SortDirection.Ascending) extends Sort {
     def direction(direction: SortDirection): ByDistance[Doc] = copy(direction = direction)

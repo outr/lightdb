@@ -4,6 +4,7 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
+import lightdb.doc.Document
 import lightdb.spatial.GeoPoint
 import lightdb.{Field, Id, Tokenized}
 
@@ -14,7 +15,7 @@ trait SQLArg {
 }
 
 object SQLArg {
-  case class FieldArg[Doc, F](field: Field[Doc, F], value: F) extends SQLArg {
+  case class FieldArg[Doc <: Document[Doc], F](field: Field[Doc, F], value: F) extends SQLArg {
     private def setInternal(ps: PreparedStatement, index: Int, value: Any): Unit = {
       scribe.trace(s"SQLArg: $index / $value (${if (value != null) value.getClass.getName else "null"})")
       value match {
@@ -54,7 +55,7 @@ object SQLArg {
   }
 
   object FieldArg {
-    def apply[Doc, F](doc: Doc, field: Field[Doc, F]): FieldArg[Doc, F] = apply(field, field.get(doc))
+    def apply[Doc <: Document[Doc], F](doc: Doc, field: Field[Doc, F]): FieldArg[Doc, F] = apply(field, field.get(doc))
   }
 
   case class StringArg(s: String) extends SQLArg {

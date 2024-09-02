@@ -1,6 +1,7 @@
 package lightdb.doc
 
 import fabric.rw._
+import lightdb.filter.FilterBuilder
 import lightdb.{Field, Id, Indexed, Tokenized, Unique, UniqueIndex}
 
 import scala.language.implicitConversions
@@ -22,6 +23,8 @@ trait DocumentModel[Doc <: Document[Doc]] {
   def map2Doc(map: Map[String, Any]): Doc
 
   def fields: List[Field[Doc, _]] = _fields
+
+  lazy val builder: FilterBuilder[Doc, this.type] = new FilterBuilder(this, 1, Nil)
 
   object field {
     private def add[V, F <: Field[Doc, V]](field: F): F = synchronized {

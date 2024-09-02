@@ -6,14 +6,15 @@ import fabric.io.JsonParser
 import fabric.rw._
 import lightdb.aggregate.AggregateSupport
 import lightdb.distance.Distance
+import lightdb.doc.Document
 import lightdb.filter.{Filter, FilterSupport}
 import lightdb.materialized.Materializable
 import lightdb.spatial.GeoPoint
 
-sealed class Field[Doc, V](val name: String,
-                           val get: Doc => V,
-                           val getRW: () => RW[V],
-                           val indexed: Boolean = false) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
+sealed class Field[Doc <: Document[Doc], V](val name: String,
+                                            val get: Doc => V,
+                                            val getRW: () => RW[V],
+                                            val indexed: Boolean = false) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
   implicit def rw: RW[V] = getRW()
 
   def isArr: Boolean = rw.definition match {
@@ -66,24 +67,24 @@ sealed class Field[Doc, V](val name: String,
   override def toString: String = s"Field(name = $name)"
 }
 
-trait Indexed[Doc, V] extends Field[Doc, V]
+trait Indexed[Doc <: Document[Doc], V] extends Field[Doc, V]
 
-trait UniqueIndex[Doc, V] extends Indexed[Doc, V]
+trait UniqueIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V]
 
-trait Tokenized[Doc] extends Indexed[Doc, String]
+trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String]
 
 object Field {
   val NullString: String = "||NULL||"
 
   var MaxIn: Option[Int] = Some(1_000)
 
-  def apply[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
+  def apply[Doc <: Document[Doc], V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW
   )
 
-  def indexed[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
+  def indexed[Doc <: Document[Doc], V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW,
@@ -92,7 +93,7 @@ object Field {
     override def toString: String = s"Indexed(name = ${this.name})"
   }
 
-  def tokenized[Doc](name: String, get: Doc => String): Tokenized[Doc] = new Field[Doc, String](
+  def tokenized[Doc <: Document[Doc]](name: String, get: Doc => String): Tokenized[Doc] = new Field[Doc, String](
     name = name,
     get = get,
     getRW = () => stringRW,
@@ -101,7 +102,7 @@ object Field {
     override def toString: String = s"Tokenized(name = ${this.name})"
   }
 
-  def unique[Doc, V](name: String, get: Doc => V)(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
+  def unique[Doc <: Document[Doc], V](name: String, get: Doc => V)(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW,
