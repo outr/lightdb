@@ -40,6 +40,9 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMod
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit =
     getInstance.hset(collection.name, doc._id.value, toString(doc))
 
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean =
+    getInstance.hexists(collection.name, id.value)
+
   override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {

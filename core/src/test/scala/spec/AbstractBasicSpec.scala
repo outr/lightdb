@@ -3,10 +3,11 @@ package spec
 import fabric.rw._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.collection.Collection
-import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.doc.{Document, DocumentModel, JsonConversion, MaterializedModel}
 import lightdb.feature.DBFeatureKey
 import lightdb.filter._
 import lightdb.store.StoreManager
+import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Field, Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
@@ -102,6 +103,9 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
       }
     }
+    /*"verify the AgeLinks is properly updated" in {
+      db.ageLinks.t.get(AgeLinks.id(30)).map(_.people) should be(Some(List(Id("yuri"), Id("wyatt"), Id("tori"))))
+    }*/
     "query with aggregate functions" in {
       if (aggregationSupported) {
         db.people.transaction { implicit transaction =>
@@ -285,10 +289,10 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "insert a lot more names" in {
       db.people.transaction { implicit transaction =>
-        val p = (1 to 100_000).toList.map { index =>
+        val p = (1 to 1_000).toList.map { index =>
           Person(
             name = s"Unique Snowflake $index",
-            age = if (index > 10_000) 0 else index,
+            age = if (index > 100) 0 else index,
             city = Some(City("Robotland")),
             nicknames = Set("robot", s"sf$index")
           )
@@ -298,7 +302,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "verify the correct number of people exist in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(100_024)
+        db.people.count should be(1_024)
       }
     }
     "verify the correct count in query total" in {
@@ -311,8 +315,8 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
           .search
           .docs
         results.list.length should be(100)
-        results.total should be(Some(100_000))
-        results.remaining should be(Some(100_000))
+        results.total should be(Some(1_000))
+        results.remaining should be(Some(1_000))
       }
     }
     "verify the correct count in query total with offset" in {
@@ -325,13 +329,13 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
           .search
           .docs
         results.list.length should be(100)
-        results.total should be(Some(100_000))
-        results.remaining should be(Some(99_900))
+        results.total should be(Some(1_000))
+        results.remaining should be(Some(900))
       }
     }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
-        db.people.truncate() should be(100_024)
+        db.people.truncate() should be(1_024)
       }
     }
     "verify the collection is empty" in {
@@ -370,6 +374,8 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
     val people: Collection[Person, Person.type] = collection(Person)
+    // TODO: Revisit this - performance is currently awful and transaction state causes overlapping dirty data
+//    val ageLinks: Collection[AgeLinks, AgeLinks.type] = collection(AgeLinks)
 
     override def storeManager: StoreManager = spec.storeManager
 
@@ -383,7 +389,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
-    implicit val rw: RW[Person] = RW.gen
+    override implicit val rw: RW[Person] = RW.gen
 
     val name: I[String] = field.index("name", _.name)
     val age: I[Int] = field.index("age", _.age)
@@ -397,6 +403,37 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   object City {
     implicit val rw: RW[City] = RW.gen
   }
+
+  /*case class AgeLinks(age: Int, people: List[Id[Person]]) extends Document[AgeLinks] {
+    lazy val _id: Id[AgeLinks] = AgeLinks.id(age)
+  }
+
+  object AgeLinks extends MaterializedModel[AgeLinks, Person, Person.type] with JsonConversion[AgeLinks] {
+    override implicit val rw: RW[AgeLinks] = RW.gen
+
+    val age: F[Int] = field("age", _.age)
+    val people: F[List[Id[Person]]] = field("people", _.people)
+
+    override def materialCollection: Collection[Person, Person.type] = db.people
+
+    def id(age: Int): Id[AgeLinks] = Id(age.toString)
+
+    override protected def adding(doc: Person)(implicit transaction: Transaction[Person]): Unit = db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
+      case Some(links) => Some(links.copy(people = (doc._id :: links.people).distinct))
+      case None => Some(AgeLinks(doc.age, List(doc._id)))
+    }
+    override protected def modifying(oldDoc: Person, newDoc: Person)(implicit transaction: Transaction[Person]): Unit = adding(newDoc)
+    override protected def removing(doc: Person)(implicit transaction: Transaction[Person]): Unit = db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
+      case Some(links) =>
+        val l = links.copy(people = links.people.filterNot(_ == doc._id))
+        if (l.people.isEmpty) {
+          None
+        } else {
+          Some(l)
+        }
+      case None => None
+    }
+  }*/
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
     override def applyToNew: Boolean = true

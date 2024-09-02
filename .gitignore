@@ -12,3 +12,6 @@ benchmark/data/
 backup.zip
 db/
 backups/
+metals.sbt
+derby.log
+*report-*.json

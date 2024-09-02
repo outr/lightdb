@@ -110,6 +110,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     }
   }
 
+  def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = search.docs.iterator
+
   def toList(implicit transaction: Transaction[Doc]): List[Doc] = search.docs.list
 
   def first(implicit transaction: Transaction[Doc]): Option[Doc] = search.docs.iterator.nextOption()

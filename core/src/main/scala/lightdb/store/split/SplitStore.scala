@@ -6,7 +6,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
-import lightdb.{Field, Query, SearchResults, UniqueIndex}
+import lightdb.{Field, Id, Query, SearchResults, UniqueIndex}
 
 import scala.language.implicitConversions
 
@@ -33,6 +33,8 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     storage.upsert(doc)
     searching.upsert(doc)
   }
+
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = storage.exists(id)
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
     storage.get(field, value)

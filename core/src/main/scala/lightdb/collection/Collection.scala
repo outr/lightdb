@@ -41,6 +41,9 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       case _ => // Can't do validation
     }
 
+    // Give the Model a chance to initialize
+    model.init(this)
+
     // Verify the data is in-sync
     verify()
   }
@@ -163,20 +166,22 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
-    store.insert(doc)
     trigger.insert(doc)
+    store.insert(doc)
     doc
   }
 
   def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Doc = {
-    store.upsert(doc)
     trigger.upsert(doc)
+    store.upsert(doc)
     doc
   }
 
   def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(insert)
 
   def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Seq[Doc] = docs.map(upsert)
+
+  def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = store.exists(id)
 
   def get[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Option[Doc] = {
     val (field, value) = f(model)
@@ -226,17 +231,13 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def delete[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Boolean = {
     val (field, value) = f(model)
-    try {
-      store.delete(field, value)
-    } finally {
-      trigger.delete(field, value)
-    }
+    trigger.delete(field, value)
+    store.delete(field, value)
   }
 
-  def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Boolean = try {
-    store.delete(ev(model)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]], id)
-  } finally {
+  def delete(id: Id[Doc])(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): Boolean = {
     trigger.delete(ev(model)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]], id)
+    store.delete(ev(model)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]], id)
   }
 
   def count(implicit transaction: Transaction[Doc]): Int = store.count
@@ -245,10 +246,9 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   lazy val query: Query[Doc, Model] = Query(this)
 
-  def truncate()(implicit transaction: Transaction[Doc]): Int = try {
-    store.truncate()
-  } finally {
+  def truncate()(implicit transaction: Transaction[Doc]): Int = {
     trigger.truncate()
+    store.truncate()
   }
 
   def dispose(): Unit = try {
