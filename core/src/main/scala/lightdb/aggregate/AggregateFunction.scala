@@ -3,11 +3,12 @@ package lightdb.aggregate
 import fabric.rw._
 import lightdb.distance.Distance
 import lightdb.Field
+import lightdb.doc.Document
 import lightdb.filter.FilterSupport
 import lightdb.materialized.Materializable
 import lightdb.spatial.GeoPoint
 
-case class AggregateFunction[T, V, Doc](name: String, field: Field[Doc, V], `type`: AggregateType)
+case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Field[Doc, V], `type`: AggregateType)
                                        (implicit val tRW: RW[T]) extends FilterSupport[V, Doc, AggregateFilter[Doc]] with Materializable[Doc, V] {
   def rename(name: String): AggregateFunction[T, V, Doc] = copy(name = name)
 

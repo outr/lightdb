@@ -208,10 +208,11 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     "search using Filter.Builder and scoring" in {
       if (filterBuilderSupported) {
         db.people.transaction { implicit transaction =>
-          val results = db.people.query.scored.filter(p => Filter
-            .Builder()
-            .should(p.search.words("nica 13"), boost = Some(2.0))
-            .should(p.age <=> (10, 15))
+          val results = db.people.query.scored.filter(_
+            .builder
+            .minShould(0)
+            .should(_.search.words("nica 13"), boost = Some(2.0))
+            .should(_.age <=> (10, 15))
           ).search.docs
           val people = results.list
           people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
@@ -227,9 +228,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "search where city is set" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(p => Filter.Builder()
-          .mustNot(p.city === None)
-        ).toList
+        val people = db.people.query.filter(_.builder.mustNot(_.city === None)).toList
         people.map(_.name) should be(List("Evan"))
       }
     }

@@ -523,7 +523,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       }.toList
       SQLPart(parts.map(_ => s"${f.field.name} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
     case f: Filter.Distance[Doc] => distanceFilter(f)
-    case f: Filter.Builder[Doc] =>
+    case f: Filter.Multi[Doc] =>
       val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
       if (f.minShould != 1 && shoulds.nonEmpty) {
         throw new UnsupportedOperationException("Should filtering only works in SQL for exactly one condition")

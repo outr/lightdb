@@ -257,10 +257,11 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         parser.parse(query)
       case Filter.Distance(index, from, radius) =>
         LatLonPoint.newDistanceQuery(index.name, from.latitude, from.longitude, radius.toMeters)
-      case Filter.Builder(minShould, clauses) =>
+      case Filter.Multi(minShould, clauses) =>
         val b = new BooleanQuery.Builder
         val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
-        b.setMinimumNumberShouldMatch(if (hasShould) minShould else 0)
+        val minShouldMatch = if (hasShould) minShould else 0
+        b.setMinimumNumberShouldMatch(minShouldMatch)
         clauses.foreach { c =>
           val q = filter2Lucene(Some(c.filter))
           val query = c.boost match {
@@ -275,7 +276,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           }
           b.add(query, occur)
         }
-        if (minShould == 0 && !clauses.exists(_.condition == Condition.Must)) {
+        if (minShouldMatch == 0 && !clauses.exists(_.condition == Condition.Must)) {
           b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
         }
         b.build()
