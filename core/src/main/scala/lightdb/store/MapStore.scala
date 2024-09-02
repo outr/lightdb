@@ -24,6 +24,8 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
     map += id(doc) -> doc
   }
 
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = map.contains(id)
+
   override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {
       map.get(value.asInstanceOf[Id[Doc]])

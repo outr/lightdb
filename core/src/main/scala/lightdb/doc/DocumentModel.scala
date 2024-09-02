@@ -1,6 +1,7 @@
 package lightdb.doc
 
 import fabric.rw._
+import lightdb.collection.Collection
 import lightdb.filter.FilterBuilder
 import lightdb.{Field, Id, Indexed, Tokenized, Unique, UniqueIndex}
 
@@ -14,6 +15,8 @@ trait DocumentModel[Doc <: Document[Doc]] {
   val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", _._id)
 
   def id(value: String = Unique()): Id[Doc] = Id(value)
+
+  def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Unit = {}
 
   type F[V] = Field[Doc, V]
   type I[V] = Indexed[Doc, V]

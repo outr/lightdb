@@ -48,6 +48,8 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     instance.put(id(doc).bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
   }
 
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = get(idField, id).nonEmpty
+
   override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {
       Option(instance.get(value.asInstanceOf[Id[Doc]].bytes)).map(bytes2Doc)

@@ -35,6 +35,8 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
     db.put(doc._id.bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
   }
 
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = db.keyExists(id.bytes)
+
   override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {

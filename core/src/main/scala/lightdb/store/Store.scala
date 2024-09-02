@@ -47,6 +47,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit
 
+  def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean
+
   def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc]
 
   def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean
