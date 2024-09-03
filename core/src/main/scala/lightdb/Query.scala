@@ -56,7 +56,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
       val storeMode = collection.store.storeMode
       if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode == StoreMode.All)) {
-        val notIndexed = filter.toList.flatMap(_.fields).filter(!_.indexed)
+        val notIndexed = filter.toList.flatMap(_.fields(collection.model)).filter(!_.indexed)
         storeMode match {
           case StoreMode.Indexes => if (notIndexed.nonEmpty) {
             throw NonIndexedFieldException(query, notIndexed)

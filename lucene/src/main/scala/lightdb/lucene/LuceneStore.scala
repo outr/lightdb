@@ -236,29 +236,29 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   private def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = filter match {
     case Some(f) => f match {
-      case f: Filter.Equals[Doc, _] => exactQuery(f.field, f.getJson)
+      case f: Filter.Equals[Doc, _] => exactQuery(f.field(collection.model), f.getJson(collection.model))
       case f: Filter.NotEquals[Doc, _] =>
         val b = new BooleanQuery.Builder
         b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
-        b.add(exactQuery(f.field, f.getJson), BooleanClause.Occur.MUST_NOT)
+        b.add(exactQuery(f.field(collection.model), f.getJson(collection.model)), BooleanClause.Occur.MUST_NOT)
         b.build()
       case f: Filter.In[Doc, _] =>
-        val queries = f.getJson.map(json => exactQuery(f.field, json))
+        val queries = f.getJson(collection.model).map(json => exactQuery(f.field(collection.model), json))
         val b = new BooleanQuery.Builder
         b.setMinimumNumberShouldMatch(1)
         queries.foreach { q =>
           b.add(q, BooleanClause.Occur.SHOULD)
         }
         b.build()
-      case Filter.RangeLong(index, from, to) => LongField.newRangeQuery(index.name, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
-      case Filter.RangeDouble(index, from, to) => DoubleField.newRangeQuery(index.name, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
-      case Filter.Parsed(index, query, allowLeadingWildcard) =>
-        val parser = new QueryParser(index.name, this.index.analyzer)
+      case Filter.RangeLong(fieldName, from, to) => LongField.newRangeQuery(fieldName, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
+      case Filter.RangeDouble(fieldName, from, to) => DoubleField.newRangeQuery(fieldName, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
+      case Filter.Parsed(fieldName, query, allowLeadingWildcard) =>
+        val parser = new QueryParser(fieldName, this.index.analyzer)
         parser.setAllowLeadingWildcard(allowLeadingWildcard)
         parser.setSplitOnWhitespace(true)
         parser.parse(query)
-      case Filter.Distance(index, from, radius) =>
-        LatLonPoint.newDistanceQuery(index.name, from.latitude, from.longitude, radius.toMeters)
+      case Filter.Distance(fieldName, from, radius) =>
+        LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters)
       case Filter.Multi(minShould, clauses) =>
         val b = new BooleanQuery.Builder
         val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)

@@ -96,7 +96,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
   }
 
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
-    SQLPart(s"ST_Distance(${f.field.name}, GeomFromText(?, 4326), true) <= ?", List(SQLArg.GeoPointArg(f.from), SQLArg.DoubleArg(f.radius.m)))
+    SQLPart(s"ST_Distance(${f.fieldName}, GeomFromText(?, 4326), true) <= ?", List(SQLArg.GeoPointArg(f.from), SQLArg.DoubleArg(f.radius.m)))
 
   override protected def addColumn(field: Field[Doc, _])(implicit transaction: Transaction[Doc]): Unit = {
     if (field.rw.definition.className.contains("lightdb.spatial.GeoPoint")) {

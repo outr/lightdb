@@ -481,35 +481,35 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     throw new UnsupportedOperationException("Distance filtering not supported in SQL!")
 
   private def filter2Part(f: Filter[Doc]): SQLPart = f match {
-    case f: Filter.Equals[Doc, _] if f.field.isArr =>
-      val values = f.getJson.asVector
+    case f: Filter.Equals[Doc, _] if f.field(collection.model).isArr =>
+      val values = f.getJson(collection.model).asVector
       val parts = values.map { json =>
         val jsonString = JsonFormatter.Compact(json)
-        SQLPart(s"${f.field.name} LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
+        SQLPart(s"${f.fieldName} LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
       }
       SQLPart.merge(parts: _*)
-    case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.field.name} IS NULL")
-    case f: Filter.Equals[Doc, _] => SQLPart(s"${f.field.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
-    case f: Filter.NotEquals[Doc, _] if f.field.isArr =>
-      val values = f.getJson.asVector
+    case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
+    case f: Filter.Equals[Doc, _] => SQLPart(s"${f.fieldName} = ?", List(SQLArg.FieldArg(f.field(collection.model), f.value)))
+    case f: Filter.NotEquals[Doc, _] if f.field(collection.model).isArr =>
+      val values = f.getJson(collection.model).asVector
       val parts = values.map { json =>
         val jsonString = JsonFormatter.Compact(json)
-        SQLPart(s"${f.field.name} NOT LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
+        SQLPart(s"${f.fieldName} NOT LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
       }
       SQLPart.merge(parts: _*)
-    case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.field.name} IS NOT NULL")
-    case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.field.name} != ?", List(SQLArg.FieldArg(f.field, f.value)))
-    case f: Filter.In[Doc, _] => SQLPart(s"${f.field.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
+    case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
+    case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.fieldName} != ?", List(SQLArg.FieldArg(f.field(collection.model), f.value)))
+    case f: Filter.In[Doc, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field(collection.model), v)))
     case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
-      case (None, Some(to)) => SQLPart(s"${f.field.name} <= ?", List(SQLArg.LongArg(to)))
-      case (Some(from), None) => SQLPart(s"${f.field.name} >= ?", List(SQLArg.LongArg(from)))
+      case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
+      case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.LongArg(to)))
+      case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.LongArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: Filter.RangeDouble[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.field.name} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
-      case (None, Some(to)) => SQLPart(s"${f.field.name} <= ?", List(SQLArg.DoubleArg(to)))
-      case (Some(from), None) => SQLPart(s"${f.field.name} >= ?", List(SQLArg.DoubleArg(from)))
+      case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
+      case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.DoubleArg(to)))
+      case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.DoubleArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: Filter.Parsed[Doc, _] =>
@@ -523,7 +523,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
         }
         s
       }.toList
-      SQLPart(parts.map(_ => s"${f.field.name} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
+      SQLPart(parts.map(_ => s"${f.fieldName} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
     case f: Filter.Distance[Doc] => distanceFilter(f)
     case f: Filter.Multi[Doc] =>
       val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
