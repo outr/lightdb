@@ -2,7 +2,7 @@ package lightdb.filter
 
 import fabric.Json
 import lightdb.Field
-import lightdb.doc.{Document, DocumentModel}
+import lightdb.doc.Document
 import lightdb.spatial.GeoPoint
 
 sealed trait Filter[Doc <: Document[Doc]] {
@@ -46,6 +46,7 @@ object Filter {
   case class Distance[Doc <: Document[Doc]](field: Field[Doc, Option[GeoPoint]], from: GeoPoint, radius: lightdb.distance.Distance) extends Filter[Doc] {
     override lazy val fields: List[Field[Doc, _]] = List(field)
   }
+
   case class Multi[Doc <: Document[Doc]](minShould: Int, filters: List[FilterClause[Doc]] = Nil) extends Filter[Doc] {
     def conditional(filter: Filter[Doc], condition: Condition, boost: Option[Double] = None): Multi[Doc] =
       copy(filters = filters ::: List(FilterClause(filter, condition, boost)))
