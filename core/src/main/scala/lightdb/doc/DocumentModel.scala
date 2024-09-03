@@ -27,6 +27,11 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   def fields: List[Field[Doc, _]] = _fields
 
+  def fieldByName[F](name: String): Field[Doc, F] = _fields
+    .find(_.name == name)
+    .getOrElse(throw new NullPointerException(s"$name field not found"))
+    .asInstanceOf[Field[Doc, F]]
+
   lazy val builder: FilterBuilder[Doc, this.type] = new FilterBuilder(this, 1, Nil)
 
   object field {

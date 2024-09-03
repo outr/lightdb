@@ -24,25 +24,25 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   def getJson(doc: Doc): Json = get(doc).json
 
-  override def is(value: V): Filter[Doc] = Filter.Equals(this, value)
+  override def is(value: V): Filter[Doc] = Filter.Equals(name, value)
 
-  override def !==(value: V): Filter[Doc] = Filter.NotEquals(this, value)
+  override def !==(value: V): Filter[Doc] = Filter.NotEquals(name, value)
 
   override protected def rangeLong(from: Option[Long], to: Option[Long]): Filter[Doc] =
-    Filter.RangeLong(this.asInstanceOf[Field[Doc, Long]], from, to)
+    Filter.RangeLong(name, from, to)
 
   override protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter[Doc] =
-    Filter.RangeDouble(this.asInstanceOf[Field[Doc, Double]], from, to)
+    Filter.RangeDouble(name, from, to)
 
   override def IN(values: Seq[V]): Filter[Doc] = {
     Field.MaxIn.foreach { max =>
       if (values.size > max) throw new RuntimeException(s"Attempting to specify ${values.size} values for IN clause in $name, but maximum is ${Field.MaxIn}.")
     }
-    Filter.In(this, values)
+    Filter.In(name, values)
   }
 
   override def parsed(query: String, allowLeadingWildcard: Boolean): Filter[Doc] =
-    Filter.Parsed(this, query, allowLeadingWildcard)
+    Filter.Parsed(name, query, allowLeadingWildcard)
 
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): Filter[Doc] = {
     val words = s.split("\\s+").map { w =>
@@ -62,7 +62,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, doc => Option(get(doc)), () => implicitly[RW[Option[V]]], indexed)
 
   override def distance(from: GeoPoint, radius: Distance): Filter[Doc] =
-    Filter.Distance(this.asInstanceOf[Field[Doc, Option[GeoPoint]]], from, radius)
+    Filter.Distance(name, from, radius)
 
   override def toString: String = s"Field(name = $name)"
 }
