@@ -28,6 +28,8 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   override def !==(value: V): Filter[Doc] = Filter.NotEquals(name, value)
 
+  override def regex(expression: String): Filter[Doc] = Filter.Regex(name, expression)
+
   override protected def rangeLong(from: Option[Long], to: Option[Long]): Filter[Doc] =
     Filter.RangeLong(name, from, to)
 

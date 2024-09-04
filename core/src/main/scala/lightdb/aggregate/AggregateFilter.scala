@@ -1,6 +1,6 @@
 package lightdb.aggregate
 
-import fabric.Json
+import fabric.{Json, Str}
 import lightdb.Field
 import lightdb.doc.Document
 import lightdb.spatial.GeoPoint
@@ -24,6 +24,10 @@ object AggregateFilter {
 
   case class NotEquals[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], value: F) extends AggregateFilter[Doc] {
     def getJson: Json = field.rw.read(value)
+  }
+
+  case class Regex[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], expression: String) extends AggregateFilter[Doc] {
+    def getJson: Json = Str(expression)
   }
 
   case class In[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], values: Seq[F]) extends AggregateFilter[Doc] {

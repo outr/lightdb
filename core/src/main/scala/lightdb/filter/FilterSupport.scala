@@ -20,6 +20,9 @@ trait FilterSupport[F, Doc, Filter] {
   def <(value: F)(implicit num: Numeric[F]): Filter = range(None, Some(value), includeTo = false)
   def <=(value: F)(implicit num: Numeric[F]): Filter = range(None, Some(value))
 
+  def ~*(expression: String): Filter = regex(expression)
+  def regex(expression: String): Filter
+
   def BETWEEN(tuple: (F, F))(implicit num: Numeric[F]): Filter = range(Some(tuple._1), Some(tuple._2))
   def <=>(tuple: (F, F))(implicit num: Numeric[F]): Filter = range(Some(tuple._1), Some(tuple._2))
 
