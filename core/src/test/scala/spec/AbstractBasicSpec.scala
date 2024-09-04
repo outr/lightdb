@@ -268,6 +268,20 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         people.map(_.name) should be(List("Veronica"))
       }
     }
+    "query name with regex match" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query.filter(_.name ~* "Han.+").toList
+        people.map(_.name) should be(List("Hanna"))
+      }
+    }
+    "query nicknames with regex match" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query
+          .filter(_.nicknames ~* ".+chy")
+          .toList
+        people.map(_.name) should be(List("Oscar"))
+      }
+    }
     "query with single-value, multiple nicknames" in {
       db.people.transaction { implicit transaction =>
         val people = db.people.query

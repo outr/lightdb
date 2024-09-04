@@ -18,6 +18,8 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
 
   override def !==(value: V): AggregateFilter[Doc] = AggregateFilter.NotEquals(name, field, value)
 
+  override def regex(expression: String): AggregateFilter[Doc] = AggregateFilter.Regex(name, field, expression)
+
   override protected def rangeLong(from: Option[Long], to: Option[Long]): AggregateFilter[Doc] =
     AggregateFilter.RangeLong(name, field.asInstanceOf[Field[Doc, Long]], from, to)
 

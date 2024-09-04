@@ -16,6 +16,7 @@ import org.sqlite.SQLiteConfig.{JournalMode, LockingMode, SynchronousMode, Trans
 import java.io.File
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
+import java.util.regex.Pattern
 
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
                                                                      val connectionShared: Boolean,
@@ -24,15 +25,23 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
   private val OptPointRegex = """\[POINT\((.+) (.+)\)\]""".r
 
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
+    val c = connectionManager.getConnection
     if (hasSpatial) {
       scribe.info(s"${collection.name} has spatial features. Enabling...")
-      val c = connectionManager.getConnection
       val s = c.createStatement()
       s.executeUpdate(s"SELECT load_extension('${SQLiteStore.spatialitePath}');")
       val hasGeometryColumns = this.tables(c).contains("geometry_columns")
       if (!hasGeometryColumns) s.executeUpdate("SELECT InitSpatialMetaData()")
       s.close()
     }
+    org.sqlite.Function.create(c, "REGEXP", new org.sqlite.Function() {
+      override def xFunc(): Unit = {
+        val expression = value_text(0)
+        val value = Option(value_text(1)).getOrElse("")
+        val pattern = Pattern.compile(expression)
+        result(if (pattern.matcher(value).find()) 1 else 0)
+      }
+    })
     super.initTransaction()
   }
 

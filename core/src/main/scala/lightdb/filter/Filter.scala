@@ -1,6 +1,6 @@
 package lightdb.filter
 
-import fabric.Json
+import fabric.{Json, Str}
 import lightdb.Field
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.spatial.GeoPoint
@@ -34,6 +34,16 @@ object Filter {
   }
   object NotEquals {
     def apply[Doc <: Document[Doc], F](field: Field[Doc, F], value: F): NotEquals[Doc, F] = NotEquals(field.name, value)
+  }
+
+  case class Regex[Doc <: Document[Doc], F](fieldName: String, expression: String) extends Filter[Doc] {
+    def getJson(model: DocumentModel[Doc]): Json = Str(expression)
+    def field(model: DocumentModel[Doc]): Field[Doc, F] = model.fieldByName(fieldName)
+
+    override lazy val fieldNames: List[String] = List(fieldName)
+  }
+  object Regex {
+    def apply[Doc <: Document[Doc], F](field: Field[Doc, F], expression: String): Regex[Doc, F] = Regex(field.name, expression)
   }
 
   case class In[Doc <: Document[Doc], F](fieldName: String, values: Seq[F]) extends Filter[Doc] {
