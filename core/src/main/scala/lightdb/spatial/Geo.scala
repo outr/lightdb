@@ -1,6 +1,6 @@
 package lightdb.spatial
 
-import fabric.rw.RW
+import fabric.rw._
 
 sealed trait Geo
 

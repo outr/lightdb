@@ -6,7 +6,7 @@ import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
-import lightdb.filter.Filter
+import lightdb.filter._
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Conversion, StoreMode}
