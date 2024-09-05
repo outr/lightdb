@@ -4,7 +4,7 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.Geo
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Field, Id, LightDB}
@@ -20,11 +20,11 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   private val id2 = Id[Person]("jane")
   private val id3 = Id[Person]("bob")
 
-  private val newYorkCity = GeoPoint(40.7142, -74.0119)
-  private val chicago = GeoPoint(41.8119, -87.6873)
-  private val noble = GeoPoint(35.1417, -97.3409)
-  private val oklahomaCity = GeoPoint(35.5514, -97.4075)
-  private val yonkers = GeoPoint(40.9461, -73.8669)
+  private val newYorkCity = Geo.Point(40.7142, -74.0119)
+  private val chicago = Geo.Point(41.8119, -87.6873)
+  private val noble = Geo.Point(35.1417, -97.3409)
+  private val oklahomaCity = Geo.Point(35.5514, -97.4075)
+  private val yonkers = Geo.Point(40.9461, -73.8669)
 
   protected def supportsAggregateFunctions: Boolean = true
 
@@ -74,7 +74,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
         val people = list.map(_.doc)
         val distances = list.map(_.distance.get.mi)
         people.map(_.name) should be(List("Jane Doe", "John Doe"))
-        distances should (be (List(28.493883134993137, 1318.8843733311087)) or be(List(28.555356212993576, 1316.1282972648974)))
+        distances should (be (List(28.307644231281916, 356.7163915969269)) or be(List(28.307644231281916, 356.7163915969269)))
       }
     }
     "sort by distance from Noble using altPoint" in {
@@ -87,7 +87,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
         val people = list.map(_.doc)
         val distances = list.map(_.distance.get.mi)
         people.map(_.name) should be(List("Jane Doe", "Bob Dole"))
-        distances should (be (List(28.555356212993576, 695.6409470300348)) or be(List(28.493883134993137, 696.0668702783311)))
+        distances should (be (List(28.307644231281916, 460.868070665109)) or be(List(28.307644231281916, 460.868070665109)))
       }
     }
     "truncate the database" in {
@@ -112,8 +112,8 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
 
   case class Person(name: String,
                     age: Int,
-                    point: GeoPoint,
-                    altPoint: Option[GeoPoint],
+                    point: Geo.Point,
+                    altPoint: Option[Geo.Point],
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
@@ -121,7 +121,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
 
     val name: F[String] = field("name", _.name)
     val age: F[Int] = field("age", _.age)
-    val point: I[GeoPoint] = field.index("point", _.point)
-    val altPoint: I[Option[GeoPoint]] = field.index("altPoint", _.altPoint)
+    val point: I[Geo.Point] = field.index("point", _.point)
+    val altPoint: I[Option[Geo.Point]] = field.index("altPoint", _.altPoint)
   }
 }

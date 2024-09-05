@@ -9,7 +9,7 @@ import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.materialized.MaterializedIndex
-import lightdb.spatial.{DistanceAndDoc, GeoPoint}
+import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
@@ -82,8 +82,8 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                       (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (MaterializedIndex[Doc, Model], Double)] =
         apply(Conversion.Materialized[Doc, Model](f(collection.model)))
 
-      def distance(f: Model => Field[Doc, Option[GeoPoint]],
-                   from: GeoPoint,
+      def distance(f: Model => Field[Doc, Option[Geo.Point]],
+                   from: Geo.Point,
                    sort: Boolean = true,
                    radius: Option[Distance] = None)
                   (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (DistanceAndDoc[Doc], Double)] =
@@ -116,8 +116,8 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                     (implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedIndex[Doc, Model]] =
       apply(Conversion.Materialized[Doc, Model](f(collection.model)))
 
-    def distance(f: Model => Field[Doc, Option[GeoPoint]],
-                 from: GeoPoint,
+    def distance(f: Model => Field[Doc, Option[Geo.Point]],
+                 from: Geo.Point,
                  sort: Boolean = true,
                  radius: Option[Distance] = None)
                 (implicit transaction: Transaction[Doc]): fs2.Stream[IO, DistanceAndDoc[Doc]] =
@@ -159,8 +159,8 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                     (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, MaterializedIndex[Doc, Model]]] =
       apply(Conversion.Materialized(f(collection.model)))
 
-    def distance(f: Model => Field[Doc, Option[GeoPoint]],
-                 from: GeoPoint,
+    def distance(f: Model => Field[Doc, Option[Geo.Point]],
+                 from: Geo.Point,
                  sort: Boolean = true,
                  radius: Option[Distance] = None)
                 (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, DistanceAndDoc[Doc]]] =

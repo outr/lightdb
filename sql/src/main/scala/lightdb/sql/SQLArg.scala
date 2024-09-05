@@ -5,7 +5,7 @@ import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.doc.Document
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.Geo
 import lightdb.{Field, Id, Tokenized}
 
 import java.sql.{JDBCType, PreparedStatement, SQLType, Types}
@@ -33,7 +33,7 @@ object SQLArg {
         case d: Double => ps.setDouble(index, d)
         case bd: BigDecimal => ps.setDouble(index, bd.toDouble)
         case json: Json => ps.setString(index, JsonFormatter.Compact(json))
-        case point: GeoPoint => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
+        case point: Geo.Point => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
         case _ =>
           val json = if (field.rw.definition.isOpt) {
             Some(value).asInstanceOf[F].json(field.rw)
@@ -74,7 +74,7 @@ object SQLArg {
     override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, JsonFormatter.Compact(json))
   }
 
-  case class GeoPointArg(point: GeoPoint) extends SQLArg {
+  case class GeoPointArg(point: Geo.Point) extends SQLArg {
     override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
   }
 }

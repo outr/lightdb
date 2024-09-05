@@ -6,7 +6,7 @@ import lightdb.Field
 import lightdb.doc.Document
 import lightdb.filter.FilterSupport
 import lightdb.materialized.Materializable
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.Geo
 
 case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Field[Doc, V], `type`: AggregateType)
                                        (implicit val tRW: RW[T]) extends FilterSupport[V, Doc, AggregateFilter[Doc]] with Materializable[Doc, V] {
@@ -46,6 +46,6 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
     parsed(words, allowLeadingWildcard = matchEndsWith)
   }
 
-  override def distance(from: GeoPoint, radius: Distance): AggregateFilter[Doc] =
-    AggregateFilter.Distance(name, this.asInstanceOf[Field[Doc, GeoPoint]], from, radius)
+  override def distance(from: Geo.Point, radius: Distance): AggregateFilter[Doc] =
+    AggregateFilter.Distance(name, this.asInstanceOf[Field[Doc, Geo.Point]], from, radius)
 }

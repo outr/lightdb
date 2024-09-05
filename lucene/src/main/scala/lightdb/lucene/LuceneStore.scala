@@ -12,7 +12,7 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.{Condition, Filter}
 import lightdb.lucene.index.Index
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
-import lightdb.spatial.{DistanceAndDoc, DistanceCalculator, GeoPoint}
+import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
@@ -61,15 +61,15 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
         def addJson(json: Json, d: DefType): Unit = d match {
-          case DefType.Opt(DefType.Obj(_, Some("lightdb.spatial.GeoPoint"))) => json match {
+          case DefType.Opt(DefType.Obj(_, Some("lightdb.spatial.Geo.Point"))) => json match {
             case Null => // Don't set anything
             case _ =>
-              val p = json.as[GeoPoint]
+              val p = json.as[Geo.Point]
               add(new LatLonPoint(field.name, p.latitude, p.longitude))
               add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
           }
-          case DefType.Obj(_, Some("lightdb.spatial.GeoPoint")) =>
-            val p = json.as[GeoPoint]
+          case DefType.Obj(_, Some("lightdb.spatial.Geo.Point")) =>
+            val p = json.as[Geo.Point]
             add(new LatLonPoint(field.name, p.latitude, p.longitude))
             add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
           case DefType.Str => json match {
@@ -94,7 +94,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
             add(sorted)
           case NumInt(l, _) => add(new NumericDocValuesField(fieldSortName, l))
           case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
-            case GeoPoint(latitude, longitude) => add(new LatLonDocValuesField(fieldSortName, latitude, longitude))
+            case Geo.Point(latitude, longitude) => add(new LatLonDocValuesField(fieldSortName, latitude, longitude))
             case _ => // Ignore
           }
           case _ => // Ignore
@@ -221,7 +221,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case m: Conversion.Distance[Doc] => idsAndScores.iterator.map {
         case (id, score) =>
           val doc = collection(id)(transaction)
-          val distance = m.field.get(doc).map(d => DistanceCalculator(m.from, d))
+          val distance = m.field.get(doc).map(d => Spatial.distance(m.from, d))
           DistanceAndDoc(doc, distance) -> score
       }
     }

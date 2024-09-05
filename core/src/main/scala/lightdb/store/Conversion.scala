@@ -3,7 +3,7 @@ package lightdb.store
 import lightdb.Field
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedIndex
-import lightdb.spatial.{DistanceAndDoc, GeoPoint}
+import lightdb.spatial.{DistanceAndDoc, Geo}
 
 sealed trait Conversion[Doc, V]
 
@@ -18,8 +18,8 @@ object Conversion {
 
   case class Converted[Doc <: Document[Doc], T](f: Doc => T) extends Conversion[Doc, T]
 
-  case class Distance[Doc <: Document[Doc]](field: Field[Doc, Option[GeoPoint]],
-                           from: GeoPoint,
+  case class Distance[Doc <: Document[Doc]](field: Field[Doc, Option[Geo.Point]],
+                           from: Geo.Point,
                            sort: Boolean,
                            radius: Option[lightdb.distance.Distance]) extends Conversion[Doc, DistanceAndDoc[Doc]]
 }
