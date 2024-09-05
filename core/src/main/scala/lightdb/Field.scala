@@ -9,7 +9,7 @@ import lightdb.distance.Distance
 import lightdb.doc.Document
 import lightdb.filter.{Filter, FilterSupport}
 import lightdb.materialized.Materializable
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.Geo
 
 sealed class Field[Doc <: Document[Doc], V](val name: String,
                                             val get: Doc => V,
@@ -63,7 +63,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, doc => Option(get(doc)), () => implicitly[RW[Option[V]]], indexed)
 
-  override def distance(from: GeoPoint, radius: Distance): Filter[Doc] =
+  override def distance(from: Geo.Point, radius: Distance): Filter[Doc] =
     Filter.Distance(name, from, radius)
 
   override def toString: String = s"Field(name = $name)"

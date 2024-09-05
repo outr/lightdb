@@ -55,6 +55,8 @@ val collectionCompatVersion: String = "2.12.0"
 
 val reactifyVersion: String = "4.1.2"
 
+val spatial4JVersion: String = "0.8"
+
 val haloDBVersion: String = "0.5.6"
 
 val rocksDBVersion: String = "9.5.2"
@@ -105,6 +107,7 @@ lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlat
 			"com.outr" %%% "scribe" % scribeVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
+			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
 		libraryDependencies ++= (

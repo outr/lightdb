@@ -1,7 +1,7 @@
 package lightdb
 
 import lightdb.doc.Document
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.Geo
 
 trait Sort
 
@@ -22,8 +22,8 @@ object Sort {
     def desc: ByField[Doc, F] = direction(SortDirection.Descending)
   }
 
-  case class ByDistance[Doc <: Document[Doc]](field: Field[Doc, Option[GeoPoint]],
-                             from: GeoPoint,
+  case class ByDistance[Doc <: Document[Doc]](field: Field[Doc, Option[Geo.Point]],
+                             from: Geo.Point,
                              direction: SortDirection = SortDirection.Ascending) extends Sort {
     def direction(direction: SortDirection): ByDistance[Doc] = copy(direction = direction)
 

@@ -3,7 +3,7 @@ package lightdb.filter
 import fabric.rw.{Convertible, RW}
 import fabric.{NumDec, NumInt}
 import lightdb.distance.Distance
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.Geo
 
 trait FilterSupport[F, Doc, Filter] {
   implicit def rw: RW[F]
@@ -61,7 +61,7 @@ trait FilterSupport[F, Doc, Filter] {
             matchStartsWith: Boolean = true,
             matchEndsWith: Boolean = false): Filter
 
-  def distance(from: GeoPoint, radius: Distance): Filter
+  def distance(from: Geo.Point, radius: Distance): Filter
 }
 
 object FilterSupport {

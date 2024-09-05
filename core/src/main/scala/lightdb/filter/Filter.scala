@@ -3,7 +3,7 @@ package lightdb.filter
 import fabric.{Json, Str}
 import lightdb.Field
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.spatial.GeoPoint
+import lightdb.spatial.Geo
 
 sealed trait Filter[Doc <: Document[Doc]] {
   def fieldNames: List[String]
@@ -71,8 +71,8 @@ object Filter {
     override lazy val fieldNames: List[String] = List(fieldName)
   }
 
-  case class Distance[Doc <: Document[Doc]](fieldName: String, from: GeoPoint, radius: lightdb.distance.Distance) extends Filter[Doc] {
-    def field(model: DocumentModel[Doc]): Field[Doc, GeoPoint] = model.fieldByName(fieldName)
+  case class Distance[Doc <: Document[Doc]](fieldName: String, from: Geo.Point, radius: lightdb.distance.Distance) extends Filter[Doc] {
+    def field(model: DocumentModel[Doc]): Field[Doc, Geo.Point] = model.fieldByName(fieldName)
     override lazy val fieldNames: List[String] = List(fieldName)
   }
 

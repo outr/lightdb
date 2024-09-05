@@ -8,7 +8,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.filter.Filter
 import lightdb.materialized.MaterializedIndex
-import lightdb.spatial.{DistanceAndDoc, GeoPoint}
+import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Conversion, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
@@ -93,8 +93,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
       apply(Conversion.Materialized(fields))
     }
 
-    def distance(f: Model => Field[Doc, Option[GeoPoint]],
-                 from: GeoPoint,
+    def distance(f: Model => Field[Doc, Option[Geo.Point]],
+                 from: Geo.Point,
                  sort: Boolean = true,
                  radius: Option[Distance] = None)
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, DistanceAndDoc[Doc]] = {
@@ -121,8 +121,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
   def count(implicit transaction: Transaction[Doc]): Int = copy(limit = Some(1), countTotal = true)
     .search.docs.total.get
 
-  protected def distanceSearch(field: Field[Doc, Option[GeoPoint]],
-                               from: GeoPoint,
+  protected def distanceSearch(field: Field[Doc, Option[Geo.Point]],
+                               from: Geo.Point,
                                sort: Boolean, radius: Option[Distance])
                               (implicit transaction: Transaction[Doc]): SearchResults[Doc, DistanceAndDoc[Doc]] = {
     search(Conversion.Distance(field, from, sort, radius))
