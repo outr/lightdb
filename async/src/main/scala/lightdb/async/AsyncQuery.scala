@@ -7,7 +7,7 @@ import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection, UniqueInde
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.filter.Filter
+import lightdb.filter._
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.Conversion
