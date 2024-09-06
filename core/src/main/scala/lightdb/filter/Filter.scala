@@ -72,7 +72,7 @@ object Filter {
   }
 
   case class Distance[Doc <: Document[Doc]](fieldName: String, from: Geo.Point, radius: lightdb.distance.Distance) extends Filter[Doc] {
-    def field(model: DocumentModel[Doc]): Field[Doc, Geo.Point] = model.fieldByName(fieldName)
+    def field(model: DocumentModel[Doc]): Field[Doc, Geo] = model.fieldByName(fieldName)
     override lazy val fieldNames: List[String] = List(fieldName)
   }
 

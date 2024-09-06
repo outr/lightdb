@@ -26,27 +26,39 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   private val oklahomaCity = Geo.Point(35.5514, -97.4075)
   private val yonkers = Geo.Point(40.9461, -73.8669)
 
+  private val moorePolygon = Geo.Polygon.lonLat(
+    -97.51995284659067, 35.31659661477283,
+    -97.50983688600051, 35.29708140953622,
+    -97.42966767585344, 35.29494585205129,
+    -97.41303352647198, 35.31020363480967,
+    -97.41331385837709, 35.34926895467585,
+    -97.42803670547956, 35.36508604748108,
+    -97.50690451974124, 35.36587866914906,
+    -97.51755160616675, 35.35131024794894,
+    -97.51995284659067, 35.31659661477283
+  )
+
   protected def supportsAggregateFunctions: Boolean = true
 
   private val p1 = Person(
     name = "John Doe",
     age = 21,
     point = newYorkCity,
-    altPoint = None,
+    geo = None,
     _id = id1
   )
   private val p2 = Person(
     name = "Jane Doe",
     age = 19,
     point = noble,
-    altPoint = Some(oklahomaCity),
+    geo = Some(moorePolygon),
     _id = id2
   )
   private val p3 = Person(
     name = "Bob Dole",
     age = 123,
     point = yonkers,
-    altPoint = Some(chicago),
+    geo = Some(chicago),
     _id = id3
   )
 
@@ -80,14 +92,14 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     "sort by distance from Noble using altPoint" in {
       DB.people.transaction { implicit transaction =>
         val list = DB.people.query.search.distance(
-          _.altPoint,
+          _.geo,
           from = noble,
           radius = Some(10_000.miles)
         ).iterator.toList
         val people = list.map(_.doc)
         val distances = list.map(_.distance.get.mi)
         people.map(_.name) should be(List("Jane Doe", "Bob Dole"))
-        distances should (be (List(28.307644231281916, 460.868070665109)) or be(List(28.307644231281916, 460.868070665109)))
+        distances should (be (List(15.489309276333513, 460.868070665109)) or be(List(28.307644231281916, 460.868070665109)))
       }
     }
     "truncate the database" in {
@@ -113,7 +125,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   case class Person(name: String,
                     age: Int,
                     point: Geo.Point,
-                    altPoint: Option[Geo.Point],
+                    geo: Option[Geo],
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
@@ -122,6 +134,6 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     val name: F[String] = field("name", _.name)
     val age: F[Int] = field("age", _.age)
     val point: I[Geo.Point] = field.index("point", _.point)
-    val altPoint: I[Option[Geo.Point]] = field.index("altPoint", _.altPoint)
+    val geo: I[Option[Geo]] = field.index("geo", _.geo)
   }
 }

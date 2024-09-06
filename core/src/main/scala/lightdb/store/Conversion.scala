@@ -18,7 +18,7 @@ object Conversion {
 
   case class Converted[Doc <: Document[Doc], T](f: Doc => T) extends Conversion[Doc, T]
 
-  case class Distance[Doc <: Document[Doc]](field: Field[Doc, Option[Geo.Point]],
+  case class Distance[Doc <: Document[Doc], G <: Geo](field: Field[Doc, Option[G]],
                            from: Geo.Point,
                            sort: Boolean,
                            radius: Option[lightdb.distance.Distance]) extends Conversion[Doc, DistanceAndDoc[Doc]]

@@ -45,7 +45,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   }
 
   private def def2Type(name: String, d: DefType): String = d match {
-    case DefType.Str | DefType.Json | DefType.Obj(_, _) | DefType.Arr(_) | DefType.Poly(_) | DefType.Enum(_) =>
+    case DefType.Str | DefType.Json | DefType.Obj(_, _) | DefType.Arr(_) | DefType.Poly(_, _) | DefType.Enum(_, _) =>
       "VARCHAR"
     case DefType.Int => "BIGINT"
     case DefType.Bool => "TINYINT"
@@ -317,7 +317,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
-  protected def extraFieldsForDistance(conversion: Conversion.Distance[Doc]): List[SQLPart] =
+  protected def extraFieldsForDistance(conversion: Conversion.Distance[Doc, _]): List[SQLPart] =
     throw new UnsupportedOperationException("Distance conversions not supported")
 
   protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart(field.name)
@@ -330,7 +330,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case Conversion.Doc() | Conversion.Converted(_) => this.fields
       case Conversion.Materialized(fields) => fields
       case Conversion.Json(fields) => fields
-      case d: Conversion.Distance[Doc] =>
+      case d: Conversion.Distance[Doc, _] =>
         extraFields = extraFields ::: extraFieldsForDistance(d)
         this.fields
     }

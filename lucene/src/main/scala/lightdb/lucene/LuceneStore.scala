@@ -16,7 +16,8 @@ import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
-import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, SortedNumericDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, SortedNumericDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.geo.{Line, Polygon}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
@@ -51,6 +52,40 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     addDoc(id(doc), luceneFields, upsert = true)
   }
 
+  private def createGeoFields(className: String,
+                              field: Field[Doc, _],
+                              json: Json,
+                              add: LuceneField => Unit): Unit = {
+    className match {
+      case "lightdb.spatial.Geo.Point" =>
+        val p = json.as[Geo.Point]
+        add(new LatLonPoint(field.name, p.latitude, p.longitude))
+      case _ =>
+        // Treat everything else like a LatLonShape (LatLonShape.createIndexableFields("", p.latitude, p.longitude))
+        def indexPoint(p: Geo.Point): Unit = LatLonShape.createIndexableFields(field.name, p.latitude, p.longitude)
+        def indexLine(l: Geo.Line): Unit = {
+          val line = new Line(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray)
+          LatLonShape.createIndexableFields(field.name, line)
+        }
+        def indexPolygon(p: Geo.Polygon): Unit = {
+          def convert(p: Geo.Polygon): Polygon =
+            new Polygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray)
+          convert(p)
+        }
+        val geo = json.as[Geo]
+        geo match {
+          case p: Geo.Point => indexPoint(p)
+          case Geo.MultiPoint(points) => points.foreach(indexPoint)
+          case l: Geo.Line => indexLine(l)
+          case Geo.MultiLine(lines) => lines.foreach(indexLine)
+          case p: Geo.Polygon => indexPolygon(p)
+          case Geo.MultiPolygon(polygons) => polygons.foreach(indexPolygon)
+        }
+        add(new LatLonPoint(field.name, geo.center.latitude, geo.center.longitude))
+    }
+    add(new StoredField(field.name, JsonFormatter.Compact(json)))
+  }
+
   private def createLuceneFields(field: Field[Doc, _], doc: Doc): List[LuceneField] = {
     def fs: LuceneField.Store = if (storeMode == StoreMode.All || field.indexed) LuceneField.Store.YES else LuceneField.Store.NO
     val json = field.getJson(doc)
@@ -60,29 +95,31 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case t: Tokenized[Doc] =>
         List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
-        def addJson(json: Json, d: DefType): Unit = d match {
-          case DefType.Opt(DefType.Obj(_, Some("lightdb.spatial.Geo.Point"))) => json match {
-            case Null => // Don't set anything
-            case _ =>
-              val p = json.as[Geo.Point]
-              add(new LatLonPoint(field.name, p.latitude, p.longitude))
-              add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
+        def addJson(json: Json, d: DefType): Unit = {
+          val className = d match {
+            case DefType.Opt(DefType.Obj(_, Some(cn))) => cn
+            case DefType.Obj(_, Some(cn)) => cn
+            case DefType.Opt(DefType.Poly(_, Some(cn))) => cn
+            case DefType.Poly(_, Some(cn)) => cn
+            case _ => ""
           }
-          case DefType.Obj(_, Some("lightdb.spatial.Geo.Point")) =>
-            val p = json.as[Geo.Point]
-            add(new LatLonPoint(field.name, p.latitude, p.longitude))
-            add(new StoredField(field.name, JsonFormatter.Compact(p.json)))
-          case DefType.Str => json match {
-            case Null => add(new StringField(field.name, Field.NullString, fs))
-            case _ => add(new StringField(field.name, json.asString, fs))
+          if (className.startsWith("lightdb.spatial.Geo")) {
+            if (json != Null) createGeoFields(className, field, json, add)
+          } else {
+            d match {
+              case DefType.Str => json match {
+                case Null => add(new StringField(field.name, Field.NullString, fs))
+                case _ => add(new StringField(field.name, json.asString, fs))
+              }
+              case DefType.Json | DefType.Obj(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+              case DefType.Opt(d) => addJson(json, d)
+              case DefType.Arr(d) => json.asVector.foreach(json => addJson(json, d))
+              case DefType.Bool => add(new IntField(field.name, if (json.asBoolean) 1 else 0, fs))
+              case DefType.Int => add(new LongField(field.name, json.asLong, fs))
+              case DefType.Dec => add(new DoubleField(field.name, json.asDouble, fs))
+              case _ => throw new UnsupportedOperationException(s"Unsupported definition (field: ${field.name}, className: $className): $d for $json")
+            }
           }
-          case DefType.Json | DefType.Obj(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
-          case DefType.Opt(d) => addJson(json, d)
-          case DefType.Arr(d) => json.asVector.foreach(json => addJson(json, d))
-          case DefType.Bool => add(new IntField(field.name, if (json.asBoolean) 1 else 0, fs))
-          case DefType.Int => add(new LongField(field.name, json.asLong, fs))
-          case DefType.Dec => add(new DoubleField(field.name, json.asDouble, fs))
-          case _ => throw new UnsupportedOperationException(s"Unsupported definition (${field.name}): $d for $json")
         }
         addJson(json, field.rw.definition)
 
@@ -148,8 +185,6 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     def search(total: Option[Int]): TopFieldDocs = {
       val topFieldDocs = indexSearcher.search(q, total.getOrElse(limit), s, query.scoreDocs)
-//      val collectorManager = new TopFieldCollectorManager(s, total.getOrElse(query.offset + limit), null, Int.MaxValue, false)
-//      val topFieldDocs: TopFieldDocs = indexSearcher.search(q, collectorManager)
       val totalHits = total.getOrElse(topFieldDocs.totalHits.value.toInt)
       if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty && query.limit.forall(l => l + query.offset > limit)) {
         search(Some(query.limit.map(l => math.min(l, totalHits)).getOrElse(totalHits)))
@@ -218,10 +253,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         case (json, score) => MaterializedIndex[Doc, Model](json, collection.model).asInstanceOf[V] -> score
       }
       case Conversion.Json(fields) => jsonIterator(fields).asInstanceOf[Iterator[(V, Double)]]
-      case m: Conversion.Distance[Doc] => idsAndScores.iterator.map {
+      case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
         case (id, score) =>
           val doc = collection(id)(transaction)
-          val distance = m.field.get(doc).map(d => Spatial.distance(m.from, d))
+          val distance = field.get(doc).map(d => Spatial.distance(from, d))
           DistanceAndDoc(doc, distance) -> score
       }
     }
@@ -259,7 +294,17 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         parser.setSplitOnWhitespace(true)
         parser.parse(query)
       case Filter.Distance(fieldName, from, radius) =>
-        LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters)
+        val field = collection.model.fieldByName[Geo](fieldName)
+        val className = field.rw.definition match {
+          case DefType.Opt(DefType.Obj(_, Some(cn))) => cn
+          case DefType.Obj(_, Some(cn)) => cn
+          case _ => ""
+        }
+//        if (className == "lightdb.spatial.Geo.Point") {
+          LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters)
+//        } else {
+//          LatLonShape.newDistanceQuery(fieldName, )
+//        }
       case Filter.Multi(minShould, clauses) =>
         val b = new BooleanQuery.Builder
         val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
