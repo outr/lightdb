@@ -61,7 +61,6 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         val p = json.as[Geo.Point]
         add(new LatLonPoint(field.name, p.latitude, p.longitude))
       case _ =>
-        // Treat everything else like a LatLonShape (LatLonShape.createIndexableFields("", p.latitude, p.longitude))
         def indexPoint(p: Geo.Point): Unit = LatLonShape.createIndexableFields(field.name, p.latitude, p.longitude)
         def indexLine(l: Geo.Line): Unit = {
           val line = new Line(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray)
@@ -70,7 +69,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         def indexPolygon(p: Geo.Polygon): Unit = {
           def convert(p: Geo.Polygon): Polygon =
             new Polygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray)
-          convert(p)
+          val polygon = convert(p)
+          LatLonShape.createIndexableFields(field.name, polygon)
         }
         val geo = json.as[Geo]
         geo match {
