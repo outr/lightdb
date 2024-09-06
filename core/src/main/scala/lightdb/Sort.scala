@@ -22,17 +22,17 @@ object Sort {
     def desc: ByField[Doc, F] = direction(SortDirection.Descending)
   }
 
-  case class ByDistance[Doc <: Document[Doc]](field: Field[Doc, Option[Geo.Point]],
+  case class ByDistance[Doc <: Document[Doc], G <: Geo](field: Field[Doc, Option[G]],
                              from: Geo.Point,
                              direction: SortDirection = SortDirection.Ascending) extends Sort {
-    def direction(direction: SortDirection): ByDistance[Doc] = copy(direction = direction)
+    def direction(direction: SortDirection): ByDistance[Doc, G] = copy(direction = direction)
 
-    def ascending: ByDistance[Doc] = direction(SortDirection.Ascending)
+    def ascending: ByDistance[Doc, G] = direction(SortDirection.Ascending)
 
-    def asc: ByDistance[Doc] = direction(SortDirection.Ascending)
+    def asc: ByDistance[Doc, G] = direction(SortDirection.Ascending)
 
-    def descending: ByDistance[Doc] = direction(SortDirection.Descending)
+    def descending: ByDistance[Doc, G] = direction(SortDirection.Descending)
 
-    def desc: ByDistance[Doc] = direction(SortDirection.Descending)
+    def desc: ByDistance[Doc, G] = direction(SortDirection.Descending)
   }
 }

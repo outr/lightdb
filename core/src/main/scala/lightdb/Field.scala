@@ -123,7 +123,7 @@ object Field {
       case _ => false
     })
     case DefType.Opt(d) => string2Json(name, s, d)
-    case DefType.Enum(_) => str(s)
+    case DefType.Enum(_, _) => str(s)
     case DefType.Arr(d) => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
     case _ => try {
       JsonParser(s)

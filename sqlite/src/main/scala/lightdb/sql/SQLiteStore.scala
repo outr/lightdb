@@ -100,7 +100,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
     className.contains("lightdb.spatial.GeoPoint")
   }
 
-  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc]): List[SQLPart] = {
+  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = {
     List(SQLPart(s"ST_Distance(GeomFromText('POINT(${d.from.longitude} ${d.from.latitude})', 4326), ${d.field.name}, true) AS ${d.field.name}Distance"))
   }
 
