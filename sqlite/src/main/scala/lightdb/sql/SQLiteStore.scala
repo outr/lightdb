@@ -2,12 +2,14 @@ package lightdb.sql
 
 import fabric._
 import fabric.define.DefType
+import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.{Field, LightDB}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
+import lightdb.spatial.{Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.sqlite.{SQLiteConfig, SQLiteOpenMode}
@@ -21,18 +23,29 @@ import java.util.regex.Pattern
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
                                                                      val connectionShared: Boolean,
                                                                      val storeMode: StoreMode) extends SQLStore[Doc, Model] {
-  private val PointRegex = """POINT\((.+) (.+)\)""".r
-  private val OptPointRegex = """\[POINT\((.+) (.+)\)\]""".r
-
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
     val c = connectionManager.getConnection
     if (hasSpatial) {
       scribe.info(s"${collection.name} has spatial features. Enabling...")
-      val s = c.createStatement()
-      s.executeUpdate(s"SELECT load_extension('${SQLiteStore.spatialitePath}');")
-      val hasGeometryColumns = this.tables(c).contains("geometry_columns")
-      if (!hasGeometryColumns) s.executeUpdate("SELECT InitSpatialMetaData()")
-      s.close()
+      org.sqlite.Function.create(c, "DISTANCE", new org.sqlite.Function() {
+        override def xFunc(): Unit = {
+          def s(index: Int): Option[Geo] = Option(value_text(index))
+            .map(s => JsonParser(s).as[Geo])
+          val shape1 = s(0)
+          val shape2 = s(1)
+          val distance = (shape1, shape2) match {
+            case (Some(s1), Some(s2)) =>
+              Some(Spatial.distance(s1, s2))
+            case _ => None
+          }
+          distance match {
+            case Some(d) =>
+              val meters = d.valueInMeters
+              result(meters)
+            case None => result()
+          }
+        }
+      })
     }
     org.sqlite.Function.create(c, "REGEXP", new org.sqlite.Function() {
       override def xFunc(): Unit = {
@@ -47,77 +60,15 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 
-  override protected def toJson(value: Any, rw: RW[_]): Json = {
-    val className = rw.definition match {
-      case DefType.Opt(d) => d.className
-      case d => d.className
-    }
-    if (value != null && className.contains("lightdb.spatial.GeoPoint")) {
-      value.toString match {
-        case PointRegex(longitude, latitude) => obj(
-          "latitude" -> num(latitude.toDouble),
-          "longitude" -> num(longitude.toDouble)
-        )
-        case OptPointRegex(longitude, latitude) => obj(
-          "latitude" -> num(latitude.toDouble),
-          "longitude" -> num(longitude.toDouble)
-        )
-      }
-    } else {
-      super.toJson(value, rw)
-    }
-  }
-
-  override protected def field2Value(field: Field[Doc, _]): String = {
-    val className = field.rw.definition match {
-      case DefType.Opt(d) => d.className
-      case d => d.className
-    }
-    if (className.contains("lightdb.spatial.GeoPoint")) {
-      "GeomFromText(?, 4326)"
-    } else {
-      super.field2Value(field)
-    }
-  }
-
-  override protected def fieldPart[V](field: Field[Doc, V]): SQLPart = {
-    val className = field.rw.definition match {
-      case DefType.Opt(d) => d.className
-      case d => d.className
-    }
-    if (className.contains("lightdb.spatial.GeoPoint")) {
-      SQLPart(s"AsText(${field.name}) AS ${field.name}")
-    } else {
-      super.fieldPart(field)
-    }
-  }
-
-  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = {
-    List(SQLPart(s"ST_Distance(GeomFromText('POINT(${d.from.longitude} ${d.from.latitude})', 4326), ${d.field.name}, true) AS ${d.field.name}Distance"))
-  }
+  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] =
+    List(SQLPart(s"DISTANCE(${d.field.name}, ?) AS ${d.field.name}Distance", List(SQLArg.JsonArg(d.from.json))))
 
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
-    SQLPart(s"ST_Distance(${f.fieldName}, GeomFromText(?, 4326), true) <= ?", List(SQLArg.GeoPointArg(f.from), SQLArg.DoubleArg(f.radius.m)))
-
-  override protected def addColumn(field: Field[Doc, _])(implicit transaction: Transaction[Doc]): Unit = {
-    if (field.rw.definition.className.contains("lightdb.spatial.GeoPoint")) {
-      executeUpdate(s"SELECT AddGeometryColumn('${collection.name}', '${field.name}', 4326, 'POINT', 'XY');")
-    } else {
-      super.addColumn(field)
-    }
-  }
+    SQLPart(s"${f.fieldName}Distance <= ?", List(SQLArg.DoubleArg(f.radius.valueInMeters)))
+//    SQLPart(s"${f.fieldName} DISTANCE ? <= ?", List(SQLArg.JsonArg(f.from.json), SQLArg.DoubleArg(f.radius.m)))
 }
 
 object SQLiteStore extends StoreManager {
-  private lazy val spatialitePath: String = {
-    val file = Files.createTempFile("mod_spatialite", ".so")
-    val input = getClass.getClassLoader.getResourceAsStream("mod_spatialite.so")
-    Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
-    file.toAbsolutePath.toString match {
-      case s => s.substring(0, s.length - 3)
-    }
-  }
-
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
     val connection: Connection = {
       val path = file match {

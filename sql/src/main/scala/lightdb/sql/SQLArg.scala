@@ -33,7 +33,7 @@ object SQLArg {
         case d: Double => ps.setDouble(index, d)
         case bd: BigDecimal => ps.setDouble(index, bd.toDouble)
         case json: Json => ps.setString(index, JsonFormatter.Compact(json))
-        case point: Geo.Point => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
+//        case point: Geo.Point => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
         case _ =>
           val json = if (field.rw.definition.isOpt) {
             Some(value).asInstanceOf[F].json(field.rw)

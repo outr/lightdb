@@ -85,11 +85,15 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
         ).iterator.toList
         val people = list.map(_.doc)
         val distances = list.map(_.distance.get.mi)
-        people.map(_.name) should be(List("Jane Doe", "John Doe"))
-        distances should (be (List(28.307644231281916, 356.7163915969269)) or be(List(28.307644231281916, 356.7163915969269)))
+        people.zip(distances).map {
+          case (p, d) => p.name -> d
+        } should be(List(
+          "Jane Doe" -> 28.55539552714398,
+          "John Doe" -> 1316.1301092705082
+        ))
       }
     }
-    "sort by distance from Noble using altPoint" in {
+    "sort by distance from Noble using geo" in {
       DB.people.transaction { implicit transaction =>
         val list = DB.people.query.search.distance(
           _.geo,
@@ -98,8 +102,12 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
         ).iterator.toList
         val people = list.map(_.doc)
         val distances = list.map(_.distance.get.mi)
-        people.map(_.name) should be(List("Jane Doe", "Bob Dole"))
-        distances should (be (List(15.489309276333513, 460.868070665109)) or be(List(28.307644231281916, 460.868070665109)))
+        people.zip(distances).map {
+          case (p, d) => p.name -> d
+        } should be(List(
+          "Jane Doe" -> 16.01508397712445,
+          "Bob Dole" -> 695.6419047674393
+        ))
       }
     }
     "truncate the database" in {

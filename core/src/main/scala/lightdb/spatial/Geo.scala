@@ -1,5 +1,6 @@
 package lightdb.spatial
 
+import fabric._
 import fabric.rw._
 
 sealed trait Geo {
@@ -7,7 +8,9 @@ sealed trait Geo {
 }
 
 object Geo {
-  implicit val pRW: RW[Point] = RW.gen
+  implicit val pRW: RW[Point] = RW.gen[Point]
+    .withPreWrite(_.merge(obj("type" -> "Point")))
+    .withPostRead((_, json) => json.merge(obj("type" -> "Point")))
   private implicit val mpRW: RW[MultiPoint] = RW.gen
   private implicit val lsRW: RW[Line] = RW.gen
   private implicit val mlsRW: RW[MultiLine] = RW.gen
