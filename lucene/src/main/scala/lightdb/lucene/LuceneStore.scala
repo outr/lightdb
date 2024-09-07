@@ -122,10 +122,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
             val sorted = new SortedDocValuesField(fieldSortName, bytes)
             add(sorted)
           case NumInt(l, _) => add(new NumericDocValuesField(fieldSortName, l))
-          case obj: Obj if obj.reference.nonEmpty => obj.reference.get match {
-            case Geo.Point(latitude, longitude) => add(new LatLonDocValuesField(fieldSortName, latitude, longitude))
-            case _ => // Ignore
-          }
+          case j if field.isSpatial && j != Null =>
+            val g = j.as[Geo]
+            add(new LatLonDocValuesField(fieldSortName, g.center.latitude, g.center.longitude))
           case _ => // Ignore
         }
         fields
