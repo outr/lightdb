@@ -52,12 +52,11 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     addDoc(id(doc), luceneFields, upsert = true)
   }
 
-  private def createGeoFields(className: String,
-                              field: Field[Doc, _],
+  private def createGeoFields(field: Field[Doc, _],
                               json: Json,
                               add: LuceneField => Unit): Unit = {
-    className match {
-      case "lightdb.spatial.Geo.Point" =>
+    field.className match {
+      case Some("lightdb.spatial.Geo.Point") =>
         val p = json.as[Geo.Point]
         add(new LatLonPoint(field.name, p.latitude, p.longitude))
       case _ =>
@@ -96,15 +95,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
         def addJson(json: Json, d: DefType): Unit = {
-          val className = d match {
-            case DefType.Opt(DefType.Obj(_, Some(cn))) => cn
-            case DefType.Obj(_, Some(cn)) => cn
-            case DefType.Opt(DefType.Poly(_, Some(cn))) => cn
-            case DefType.Poly(_, Some(cn)) => cn
-            case _ => ""
-          }
-          if (className.startsWith("lightdb.spatial.Geo")) {
-            if (json != Null) createGeoFields(className, field, json, add)
+          if (field.isSpatial) {
+            if (json != Null) createGeoFields(field, json, add)
           } else {
             d match {
               case DefType.Str => json match {
@@ -117,7 +109,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
               case DefType.Bool => add(new IntField(field.name, if (json.asBoolean) 1 else 0, fs))
               case DefType.Int => add(new LongField(field.name, json.asLong, fs))
               case DefType.Dec => add(new DoubleField(field.name, json.asDouble, fs))
-              case _ => throw new UnsupportedOperationException(s"Unsupported definition (field: ${field.name}, className: $className): $d for $json")
+              case _ => throw new UnsupportedOperationException(s"Unsupported definition (field: ${field.name}, className: ${field.className}): $d for $json")
             }
           }
         }
@@ -294,17 +286,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         parser.setSplitOnWhitespace(true)
         parser.parse(query)
       case Filter.Distance(fieldName, from, radius) =>
-        val field = collection.model.fieldByName[Geo](fieldName)
-        val className = field.rw.definition match {
-          case DefType.Opt(DefType.Obj(_, Some(cn))) => cn
-          case DefType.Obj(_, Some(cn)) => cn
-          case _ => ""
-        }
-//        if (className == "lightdb.spatial.Geo.Point") {
-          LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters)
-//        } else {
-//          LatLonShape.newDistanceQuery(fieldName, )
-//        }
+        LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters)
       case Filter.Multi(minShould, clauses) =>
         val b = new BooleanQuery.Builder
         val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)

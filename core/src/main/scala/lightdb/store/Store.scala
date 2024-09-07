@@ -27,6 +27,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(collection.model.rw))
   protected def fromString(string: String): Doc = JsonParser(string).as[Doc](collection.model.rw)
 
+  lazy val hasSpatial: Boolean = fields.exists(_.isSpatial)
+
   def init(collection: Collection[Doc, Model]): Unit = {
     this.collection = collection
   }
