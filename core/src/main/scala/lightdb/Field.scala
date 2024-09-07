@@ -22,6 +22,16 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
     case _ => false
   }
 
+  lazy val className: Option[String] = rw.definition match {
+    case DefType.Opt(DefType.Obj(_, Some(cn))) => Some(cn)
+    case DefType.Obj(_, Some(cn)) => Some(cn)
+    case DefType.Opt(DefType.Poly(_, Some(cn))) => Some(cn)
+    case DefType.Poly(_, Some(cn)) => Some(cn)
+    case _ => None
+  }
+
+  lazy val isSpatial: Boolean = className.exists(_.startsWith("lightdb.spatial.Geo"))
+
   def getJson(doc: Doc): Json = get(doc).json
 
   override def is(value: V): Filter[Doc] = Filter.Equals(name, value)
