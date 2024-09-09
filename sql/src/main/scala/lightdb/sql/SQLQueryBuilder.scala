@@ -91,7 +91,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
         SQLResults(ps.executeQuery(), combinedSql, ps)
       }
     } catch {
-      case t: Throwable => throw new SQLException(s"Error executing query: $combinedSql", t)
+      case t: Throwable => throw new SQLException(s"Error executing query: $combinedSql (params: ${args.mkString(" | ")})", t)
     }
   }
 }

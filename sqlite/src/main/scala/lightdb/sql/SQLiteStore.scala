@@ -5,14 +5,15 @@ import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import lightdb.collection.Collection
+import lightdb.distance.Distance
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.{Field, LightDB}
+import lightdb.{Field, LightDB, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import org.sqlite.{SQLiteConfig, SQLiteOpenMode}
+import org.sqlite.{Collation, SQLiteConfig, SQLiteOpenMode}
 import org.sqlite.SQLiteConfig.{JournalMode, LockingMode, SynchronousMode, TransactionMode}
 
 import java.io.File
@@ -29,21 +30,45 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
       scribe.info(s"${collection.name} has spatial features. Enabling...")
       org.sqlite.Function.create(c, "DISTANCE", new org.sqlite.Function() {
         override def xFunc(): Unit = {
-          def s(index: Int): Option[Geo] = Option(value_text(index))
-            .map(s => JsonParser(s).as[Geo])
-          val shape1 = s(0)
-          val shape2 = s(1)
-          val distance = (shape1, shape2) match {
-            case (Some(s1), Some(s2)) =>
-              Some(Spatial.distance(s1, s2))
-            case _ => None
+          def s(index: Int): List[Geo] = Option(value_text(index))
+            .map(s => JsonParser(s))
+            .map {
+              case Arr(vector, _) => vector.toList.map(_.as[Geo])
+              case json => List(json.as[Geo])
+            }
+            .getOrElse(Nil)
+          val shapes1 = s(0)
+          val shapes2 = s(1)
+          val distances = shapes1.flatMap { geo1 =>
+            shapes2.map { geo2 =>
+              Spatial.distance(geo1, geo2)
+            }
           }
-          distance match {
-            case Some(d) =>
-              val meters = d.valueInMeters
-              result(meters)
-            case None => result()
-          }
+          result(JsonFormatter.Compact(distances.json))
+        }
+      })
+      org.sqlite.Function.create(c, "DISTANCE_LESS_THAN", new org.sqlite.Function() {
+        override def xFunc(): Unit = {
+          val distances = Option(value_text(0))
+            .map(s => JsonParser(s).as[List[Distance]])
+            .getOrElse(Nil)
+          val value = value_text(1).toDouble
+          val b = distances.exists(d => d.valueInMeters <= value)
+          result(if (b) 1 else 0)
+        }
+      })
+      org.sqlite.Collation.create(c, "DISTANCE_SORT_ASCENDING", new Collation() {
+        override def xCompare(str1: String, str2: String): Int = {
+          val min1 = JsonParser(str1).as[List[Double]].min
+          val min2 = JsonParser(str2).as[List[Double]].min
+          min1.compareTo(min2)
+        }
+      })
+      org.sqlite.Collation.create(c, "DISTANCE_SORT_DESCENDING", new Collation() {
+        override def xCompare(str1: String, str2: String): Int = {
+          val min1 = JsonParser(str1).as[List[Double]].min
+          val min2 = JsonParser(str2).as[List[Double]].min
+          min2.compareTo(min1)
         }
       })
     }
@@ -64,8 +89,12 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
     List(SQLPart(s"DISTANCE(${d.field.name}, ?) AS ${d.field.name}Distance", List(SQLArg.JsonArg(d.from.json))))
 
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
-    SQLPart(s"${f.fieldName}Distance <= ?", List(SQLArg.DoubleArg(f.radius.valueInMeters)))
-//    SQLPart(s"${f.fieldName} DISTANCE ? <= ?", List(SQLArg.JsonArg(f.from.json), SQLArg.DoubleArg(f.radius.m)))
+    SQLPart(s"DISTANCE_LESS_THAN(${f.fieldName}Distance, ?)", List(SQLArg.DoubleArg(f.radius.valueInMeters)))
+
+  override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = direction match {
+    case SortDirection.Ascending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_ASCENDING")
+    case SortDirection.Descending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_DESCENDING")
+  }
 }
 
 object SQLiteStore extends StoreManager {

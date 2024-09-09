@@ -10,7 +10,7 @@ import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
-import lightdb.spatial.DistanceAndDoc
+import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
@@ -276,9 +276,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
           jsonFromFields(fields).asInstanceOf[V]
         case Conversion.Distance(field, _, _, _) =>
           val fieldName = s"${field.name}Distance"
-          val distance = Option(rs.getObject(fieldName)).map(_.toString.toDouble).map(Distance.apply)
+          val distances = JsonParser(rs.getString(fieldName)).as[List[Double]].map(d => Distance(d)).toList
           val doc = getDoc(rs)
-          DistanceAndDoc(doc, distance).asInstanceOf[V]
+          DistanceAndDoc(doc, distances).asInstanceOf[V]
       }
     }
   }
@@ -346,9 +346,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
         case Sort.ByField(index, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
           SQLPart(s"${index.name} $dir")
-        case Sort.ByDistance(field, _, direction) =>
-          val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-          SQLPart(s"${field.name}Distance $dir")
+        case Sort.ByDistance(field, _, direction) => sortByDistance(field, direction)
       },
       limit = query.limit,
       offset = query.offset
@@ -371,6 +369,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       iteratorWithScore = iteratorWithScore,
       transaction = transaction
     )
+  }
+
+  protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
+    val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+    SQLPart(s"${field.name}Distance $dir")
   }
 
   private def aggregate2SQLQuery(query: AggregateQuery[Doc, Model])
