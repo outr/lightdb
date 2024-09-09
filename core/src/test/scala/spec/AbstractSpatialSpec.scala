@@ -44,21 +44,21 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     name = "John Doe",
     age = 21,
     point = newYorkCity,
-    geo = None,
+    geo = Nil,
     _id = id1
   )
   private val p2 = Person(
     name = "Jane Doe",
     age = 19,
     point = noble,
-    geo = Some(moorePolygon),
+    geo = List(moorePolygon),
     _id = id2
   )
   private val p3 = Person(
     name = "Bob Dole",
     age = 123,
     point = yonkers,
-    geo = Some(chicago),
+    geo = List(chicago, yonkers),
     _id = id3
   )
 
@@ -79,17 +79,17 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     "sort by distance from Oklahoma City" in {
       DB.people.transaction { implicit transaction =>
         val list = DB.people.query.search.distance(
-          _.point.opt,
+          _.point.list,
           from = oklahomaCity,
           radius = Some(1320.miles)
         ).iterator.toList
         val people = list.map(_.doc)
-        val distances = list.map(_.distance.get.mi)
+        val distances = list.map(_.distance.map(_.mi.toInt))
         people.zip(distances).map {
           case (p, d) => p.name -> d
         } should be(List(
-          "Jane Doe" -> 28.55539552714398,
-          "John Doe" -> 1316.1301092705082
+          "Jane Doe" -> List(28),
+          "John Doe" -> List(1316)
         ))
       }
     }
@@ -101,12 +101,12 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
           radius = Some(10_000.miles)
         ).iterator.toList
         val people = list.map(_.doc)
-        val distances = list.map(_.distance.get.mi)
+        val distances = list.map(_.distance.map(_.mi))
         people.zip(distances).map {
           case (p, d) => p.name -> d
         } should be(List(
-          "Jane Doe" -> 16.01508397712445,
-          "Bob Dole" -> 695.6419047674393
+          "Jane Doe" -> List(16.01508397712445),
+          "Bob Dole" -> List(695.6419047674393, 1334.038796028706)
         ))
       }
     }
@@ -133,7 +133,7 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   case class Person(name: String,
                     age: Int,
                     point: Geo.Point,
-                    geo: Option[Geo],
+                    geo: List[Geo],
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
@@ -142,6 +142,6 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
     val name: F[String] = field("name", _.name)
     val age: F[Int] = field("age", _.age)
     val point: I[Geo.Point] = field.index("point", _.point)
-    val geo: I[Option[Geo]] = field.index("geo", _.geo)
+    val geo: I[List[Geo]] = field.index("geo", _.geo)
   }
 }

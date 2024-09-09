@@ -39,17 +39,11 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   )
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
-    val luceneFields = fields.flatMap { field =>
-      createLuceneFields(field, doc)
-    }
-    addDoc(id(doc), luceneFields, upsert = false)
+    addDoc(doc, upsert = false)
   }
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
-    val luceneFields = fields.flatMap { field =>
-      createLuceneFields(field, doc)
-    }
-    addDoc(id(doc), luceneFields, upsert = true)
+    addDoc(doc, upsert = true)
   }
 
   private def createGeoFields(field: Field[Doc, _],
@@ -71,16 +65,24 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           val polygon = convert(p)
           LatLonShape.createIndexableFields(field.name, polygon)
         }
-        val geo = json.as[Geo]
-        geo match {
-          case p: Geo.Point => indexPoint(p)
-          case Geo.MultiPoint(points) => points.foreach(indexPoint)
-          case l: Geo.Line => indexLine(l)
-          case Geo.MultiLine(lines) => lines.foreach(indexLine)
-          case p: Geo.Polygon => indexPolygon(p)
-          case Geo.MultiPolygon(polygons) => polygons.foreach(indexPolygon)
+        val list = json match {
+          case Arr(value, _) => value.toList.map(_.as[Geo])
+          case _ => List(json.as[Geo])
         }
-        add(new LatLonPoint(field.name, geo.center.latitude, geo.center.longitude))
+        list.foreach { geo =>
+          geo match {
+            case p: Geo.Point => indexPoint(p)
+            case Geo.MultiPoint(points) => points.foreach(indexPoint)
+            case l: Geo.Line => indexLine(l)
+            case Geo.MultiLine(lines) => lines.foreach(indexLine)
+            case p: Geo.Polygon => indexPolygon(p)
+            case Geo.MultiPolygon(polygons) => polygons.foreach(indexPolygon)
+          }
+          add(new LatLonPoint(field.name, geo.center.latitude, geo.center.longitude))
+        }
+        if (list.isEmpty) {
+          add(new LatLonPoint(field.name, 0.0, 0.0))
+        }
     }
     add(new StoredField(field.name, JsonFormatter.Compact(json)))
   }
@@ -123,17 +125,26 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
             add(sorted)
           case NumInt(l, _) => add(new NumericDocValuesField(fieldSortName, l))
           case j if field.isSpatial && j != Null =>
-            val g = j.as[Geo]
-            add(new LatLonDocValuesField(fieldSortName, g.center.latitude, g.center.longitude))
+            val list = j match {
+              case Arr(values, _) => values.toList.map(_.as[Geo])
+              case _ => List(j.as[Geo])
+            }
+            list.foreach { g =>
+              add(new LatLonDocValuesField(fieldSortName, g.center.latitude, g.center.longitude))
+            }
           case _ => // Ignore
         }
         fields
     }
   }
 
-  private def addDoc(id: Id[Doc], fields: List[LuceneField], upsert: Boolean): Unit = if (fields.tail.nonEmpty) {
+  private def addDoc(doc: Doc, upsert: Boolean): Unit = if (fields.tail.nonEmpty) {
+    val id = this.id(doc)
+    val luceneFields = fields.flatMap { field =>
+      createLuceneFields(field, doc)
+    }
     val document = new LuceneDocument
-    fields.foreach(document.add)
+    luceneFields.foreach(document.add)
 
     if (upsert) {
       index.indexWriter.updateDocument(new Term("_id", id.value), document)
@@ -285,7 +296,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         parser.setSplitOnWhitespace(true)
         parser.parse(query)
       case Filter.Distance(fieldName, from, radius) =>
-        LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters)
+        val b = new BooleanQuery.Builder
+        b.add(LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
+        b.add(LatLonPoint.newBoxQuery(fieldName, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
+        b.build()
       case Filter.Multi(minShould, clauses) =>
         val b = new BooleanQuery.Builder
         val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)

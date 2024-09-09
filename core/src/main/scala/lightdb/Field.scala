@@ -22,12 +22,15 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
     case _ => false
   }
 
-  lazy val className: Option[String] = rw.definition match {
-    case DefType.Opt(DefType.Obj(_, Some(cn))) => Some(cn)
-    case DefType.Obj(_, Some(cn)) => Some(cn)
-    case DefType.Opt(DefType.Poly(_, Some(cn))) => Some(cn)
-    case DefType.Poly(_, Some(cn)) => Some(cn)
-    case _ => None
+  lazy val className: Option[String] = {
+    def lookup(d: DefType): Option[String] = d match {
+      case DefType.Opt(d) => lookup(d)
+      case DefType.Arr(d) => lookup(d)
+      case DefType.Poly(_, cn) => cn
+      case DefType.Obj(_, cn) => cn
+      case _ => None
+    }
+    lookup(rw.definition)
   }
 
   lazy val isSpatial: Boolean = className.exists(_.startsWith("lightdb.spatial.Geo"))
@@ -72,6 +75,8 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   }
 
   def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, doc => Option(get(doc)), () => implicitly[RW[Option[V]]], indexed)
+
+  def list: Field[Doc, List[V]] = new Field[Doc, List[V]](name, doc => List(get(doc)), () => implicitly[RW[List[V]]], indexed)
 
   override def distance(from: Geo.Point, radius: Distance): Filter[Doc] =
     Filter.Distance(name, from, radius)
@@ -134,7 +139,7 @@ object Field {
     })
     case DefType.Opt(d) => string2Json(name, s, d)
     case DefType.Enum(_, _) => str(s)
-    case DefType.Arr(d) => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
+    case DefType.Arr(d) if !s.startsWith("[") => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
     case _ => try {
       JsonParser(s)
     } catch {

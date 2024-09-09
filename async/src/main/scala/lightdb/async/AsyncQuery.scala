@@ -21,7 +21,8 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                                                                          limit: Option[Int] = None,
                                                                          countTotal: Boolean = false,
                                                                          scoreDocs: Boolean = false,
-                                                                         minDocScore: Option[Double] = None) { query =>
+                                                                         minDocScore: Option[Double] = None) {
+  query =>
   private[async] def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal, scoreDocs, minDocScore)
 
   def scored: AsyncQuery[Doc, Model] = copy(scoreDocs = true)
@@ -82,11 +83,11 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                       (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (MaterializedIndex[Doc, Model], Double)] =
         apply(Conversion.Materialized[Doc, Model](f(collection.model)))
 
-      def distance(f: Model => Field[Doc, Option[Geo.Point]],
-                   from: Geo.Point,
-                   sort: Boolean = true,
-                   radius: Option[Distance] = None)
-                  (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (DistanceAndDoc[Doc], Double)] =
+      def distance[G <: Geo](f: Model => Field[Doc, List[G]],
+                             from: Geo.Point,
+                             sort: Boolean = true,
+                             radius: Option[Distance] = None)
+                            (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (DistanceAndDoc[Doc], Double)] =
         apply(Conversion.Distance(f(collection.model), from, sort, radius))
     }
 
@@ -116,11 +117,11 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                     (implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedIndex[Doc, Model]] =
       apply(Conversion.Materialized[Doc, Model](f(collection.model)))
 
-    def distance(f: Model => Field[Doc, Option[Geo.Point]],
-                 from: Geo.Point,
-                 sort: Boolean = true,
-                 radius: Option[Distance] = None)
-                (implicit transaction: Transaction[Doc]): fs2.Stream[IO, DistanceAndDoc[Doc]] =
+    def distance[G <: Geo](f: Model => Field[Doc, List[G]],
+                           from: Geo.Point,
+                           sort: Boolean = true,
+                           radius: Option[Distance] = None)
+                          (implicit transaction: Transaction[Doc]): fs2.Stream[IO, DistanceAndDoc[Doc]] =
       apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
 
@@ -159,11 +160,11 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                     (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, MaterializedIndex[Doc, Model]]] =
       apply(Conversion.Materialized(f(collection.model)))
 
-    def distance(f: Model => Field[Doc, Option[Geo.Point]],
-                 from: Geo.Point,
-                 sort: Boolean = true,
-                 radius: Option[Distance] = None)
-                (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, DistanceAndDoc[Doc]]] =
+    def distance[G <: Geo](f: Model => Field[Doc, List[G]],
+                           from: Geo.Point,
+                           sort: Boolean = true,
+                           radius: Option[Distance] = None)
+                          (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, DistanceAndDoc[Doc]]] =
       apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
 
