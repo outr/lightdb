@@ -59,7 +59,7 @@ val spatial4JVersion: String = "0.8"
 
 val haloDBVersion: String = "0.5.6"
 
-val rocksDBVersion: String = "9.5.2"
+val rocksDBVersion: String = "9.6.1"
 
 val mapdbVersion: String = "3.1.0"
 
