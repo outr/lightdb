@@ -241,6 +241,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       val values = fields.map { field =>
         try {
           val json = field match {
+            case _: Tokenized[_] =>
+              val list = Option(rs.getString(field.name)) match {
+                case Some(s) => s.split(" ").toList.map(str)
+                case None => Nil
+              }
+              arr(list: _*)
             case _: Tokenized[_] => arr(rs.getString(field.name).split(" ").toList.map(str): _*)
             case _ => toJson(rs.getObject(field.name), field.rw)
           }
@@ -547,11 +553,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
           case Condition.Must => filter2Part(fc.filter)
           case Condition.MustNot =>
             val p = filter2Part(fc.filter)
-            if (p.sql.endsWith("IS NULL")) {
-              p.copy(sql = p.sql.replace("IS NULL", "IS NOT NULL"))
-            } else {
-              p.copy(sql = p.sql.replace(" = ", " != "))
-            }
+            p.copy(s"NOT(${p.sql})")
           case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")
         }
       }
@@ -587,6 +589,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     val s = connection.createStatement()
     try {
       s.executeUpdate(sql)
+    } catch {
+      case t: Throwable => throw new RuntimeException(s"Failed to execute update: $sql", t)
     } finally {
       s.close()
     }

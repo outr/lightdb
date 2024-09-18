@@ -196,6 +196,8 @@ lazy val lucene = project.in(file("lucene"))
 			"org.apache.lucene" % "lucene-core" % luceneVersion,
 			"org.apache.lucene" % "lucene-memory" % luceneVersion,
 			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
+			"org.apache.lucene" % "lucene-facet" % luceneVersion,
+			"org.apache.lucene" % "lucene-highlighter" % luceneVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)

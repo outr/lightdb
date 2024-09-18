@@ -33,6 +33,10 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
           case DefType.Obj(map, _) => map.keys.filterNot { fieldName =>
             fieldNames.contains(fieldName)
           }.toList
+          case DefType.Poly(values, _) =>
+            values.values.flatMap(_.asInstanceOf[DefType.Obj].map.keys).filterNot { fieldName =>
+              fieldNames.contains(fieldName)
+            }.toList.distinct
           case _ => Nil
         }
         if (missing.nonEmpty) {
