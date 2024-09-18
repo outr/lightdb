@@ -162,6 +162,17 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         db.people.delete(_._id -> yuri._id) should be(true)
       }
     }
+    "query with multiple nots" in {
+      db.people.transaction { implicit transaction =>
+        val query = db.people.query.filter { ref =>
+          ref.builder
+            .mustNot(_.age < 30)
+            .mustNot(_.age > 35)
+        }
+        val list = query.toList
+        list.map(_.name).toSet should be(Set("Charlie", "Kevin", "Tori", "Wyatt"))
+      }
+    }
     "verify the records were deleted" in {
       db.people.transaction { implicit transaction =>
         db.people.count should be(24)
