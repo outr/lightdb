@@ -11,7 +11,7 @@ import lightdb._
 import lightdb.field.Field._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
-import lightdb.field.Field
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.lucene.index.Index
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
@@ -110,13 +110,13 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     add(new StoredField(field.name, JsonFormatter.Compact(json)))
   }
 
-  private def createLuceneFields(field: Field[Doc, _], doc: Doc): List[LuceneField] = {
+  private def createLuceneFields(field: Field[Doc, _], doc: Doc, state: IndexingState): List[LuceneField] = {
     def fs: LuceneField.Store = if (storeMode == StoreMode.All || field.indexed) LuceneField.Store.YES else LuceneField.Store.NO
-    val json = field.getJson(doc)
+    val json = field.getJson(doc, state)
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
     field match {
-      case ff: FacetField[Doc] => ff.get(doc, ff).flatMap { value =>
+      case ff: FacetField[Doc] => ff.get(doc, ff, state).flatMap { value =>
         if (value.path.nonEmpty || ff.hierarchical) {
           val path = if (ff.hierarchical) value.path ::: List("$ROOT$") else value.path
           Some(new LuceneFacetField(field.name, path: _*))
@@ -125,7 +125,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         }
       }
       case t: Tokenized[Doc] =>
-        List(new LuceneField(field.name, t.get(doc, t), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
+        List(new LuceneField(field.name, t.get(doc, t, state), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
         def addJson(json: Json, d: DefType): Unit = {
           if (field.isSpatial) {
@@ -149,7 +149,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         addJson(json, field.rw.definition)
 
         val fieldSortName = s"${field.name}Sort"
-        field.getJson(doc) match {
+        field.getJson(doc, state) match {
           case Str(s, _) =>
             val bytes = new BytesRef(s)
             val sorted = new SortedDocValuesField(fieldSortName, bytes)
@@ -171,8 +171,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   private def addDoc(doc: Doc, upsert: Boolean): Unit = if (fields.tail.nonEmpty) {
     val id = this.id(doc)
+    val state = new IndexingState
     val luceneFields = fields.flatMap { field =>
-      createLuceneFields(field, doc)
+      createLuceneFields(field, doc, state)
     }
     val document = new LuceneDocument
     luceneFields.foreach(document.add)
@@ -319,8 +320,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case Conversion.Json(fields) => jsonIterator(fields).asInstanceOf[Iterator[(V, Double)]]
       case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
         case (id, score) =>
+          val state = new IndexingState
           val doc = collection(id)(transaction)
-          val distance = field.get(doc, field).map(d => Spatial.distance(from, d))
+          val distance = field.get(doc, field, state).map(d => Spatial.distance(from, d))
           DistanceAndDoc(doc, distance) -> score
       }
     }

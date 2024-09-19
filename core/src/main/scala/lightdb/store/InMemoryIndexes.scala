@@ -4,6 +4,7 @@ import lightdb._
 import lightdb.field.Field._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.IndexingState
 import lightdb.transaction.Transaction
 import lightdb.util.InMemoryIndex
 
@@ -18,20 +19,23 @@ trait InMemoryIndexes[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends
 
     // Populate indexes
     collection.transaction { implicit transaction =>
+      val state = new IndexingState
       collection.iterator.foreach { doc =>
-        indexes.foreach(_.set(doc))
+        indexes.foreach(_.set(doc, state))
       }
     }
   }
 
   abstract override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     super.insert(doc)
-    indexes.foreach(_.set(doc))
+    val state = new IndexingState
+    indexes.foreach(_.set(doc, state))
   }
 
   abstract override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     super.upsert(doc)
-    indexes.foreach(_.set(doc))
+    val state = new IndexingState
+    indexes.foreach(_.set(doc, state))
   }
 
   abstract override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
