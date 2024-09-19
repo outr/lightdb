@@ -5,11 +5,12 @@ import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion, MaterializedModel}
 import lightdb.feature.DBFeatureKey
+import lightdb.field.Field
 import lightdb.filter._
 import lightdb.store.StoreManager
 import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Field, Id, LightDB, Sort, StoredValue}
+import lightdb.{Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import perfolation.double2Implicits
@@ -416,11 +417,11 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: I[String] = field.index("name", _.name)
-    val age: I[Int] = field.index("age", _.age)
-    val city: I[Option[City]] = field.index("city", _.city)
-    val nicknames: I[Set[String]] = field.index("nicknames", _.nicknames)
-    val search: T = field.tokenized("search", doc => s"${doc.name} ${doc.age}")
+    val name: I[String] = field.index("name", (p: Person) => p.name)
+    val age: I[Int] = field.index("age", (p: Person) => p.age)
+    val city: I[Option[City]] = field.index("city", (p: Person) => p.city)
+    val nicknames: I[Set[String]] = field.index("nicknames", (p: Person) => p.nicknames)
+    val search: T = field.tokenized("search", (doc: Person) => s"${doc.name} ${doc.age}")
   }
 
   case class City(name: String)

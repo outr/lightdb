@@ -1,7 +1,7 @@
 package lightdb.store
 
-import lightdb.Field
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, Geo}
 

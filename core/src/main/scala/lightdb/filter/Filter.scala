@@ -1,8 +1,8 @@
 package lightdb.filter
 
 import fabric.{Json, Str}
-import lightdb.Field
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.spatial.Geo
 
 sealed trait Filter[Doc <: Document[Doc]] {

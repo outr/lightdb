@@ -16,7 +16,8 @@ import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.ActionIterator
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field
+import lightdb.field.Field._
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions

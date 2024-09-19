@@ -1,9 +1,9 @@
-package lightdb
+package lightdb.field
 
-import fabric.{Json, Null, arr, bool, num, str}
 import fabric.define.DefType
 import fabric.io.JsonParser
 import fabric.rw._
+import fabric.{Json, Null, arr, bool, num, str}
 import lightdb.aggregate.AggregateSupport
 import lightdb.distance.Distance
 import lightdb.doc.Document
@@ -14,7 +14,7 @@ import lightdb.materialized.Materializable
 import lightdb.spatial.Geo
 
 sealed class Field[Doc <: Document[Doc], V](val name: String,
-                                            val get: Doc => V,
+                                            val get: FieldGetter[Doc, V],
                                             val getRW: () => RW[V],
                                             val indexed: Boolean = false) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
   implicit def rw: RW[V] = getRW()
@@ -37,7 +37,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   lazy val isSpatial: Boolean = className.exists(_.startsWith("lightdb.spatial.Geo"))
 
-  def getJson(doc: Doc): Json = get(doc).json
+  def getJson(doc: Doc): Json = get(doc, this).json
 
   override def is(value: V): Filter[Doc] = Filter.Equals(name, value)
 
@@ -76,9 +76,9 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
     parsed(words, allowLeadingWildcard = matchEndsWith)
   }
 
-  def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, doc => Option(get(doc)), () => implicitly[RW[Option[V]]], indexed)
+  def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, (doc: Doc) => Option(get(doc, this)), () => implicitly[RW[Option[V]]], indexed)
 
-  def list: Field[Doc, List[V]] = new Field[Doc, List[V]](name, doc => List(get(doc)), () => implicitly[RW[List[V]]], indexed)
+  def list: Field[Doc, List[V]] = new Field[Doc, List[V]](name, (doc: Doc) => List(get(doc, this)), () => implicitly[RW[List[V]]], indexed)
 
   override def distance(from: Geo.Point, radius: Distance): Filter[Doc] =
     Filter.Distance(name, from, radius)
@@ -91,13 +91,13 @@ object Field {
 
   var MaxIn: Option[Int] = Some(1_000)
 
-  def apply[Doc <: Document[Doc], V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
+  def apply[Doc <: Document[Doc], V](name: String, get: FieldGetter[Doc, V])(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW
   )
 
-  def indexed[Doc <: Document[Doc], V](name: String, get: Doc => V)(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
+  def indexed[Doc <: Document[Doc], V](name: String, get: FieldGetter[Doc, V])(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW,
@@ -106,7 +106,7 @@ object Field {
     override def toString: String = s"Indexed(name = ${this.name})"
   }
 
-  def tokenized[Doc <: Document[Doc]](name: String, get: Doc => String): Tokenized[Doc] = new Field[Doc, String](
+  def tokenized[Doc <: Document[Doc]](name: String, get: FieldGetter[Doc, String]): Tokenized[Doc] = new Field[Doc, String](
     name = name,
     get = get,
     getRW = () => stringRW,
@@ -115,7 +115,7 @@ object Field {
     override def toString: String = s"Tokenized(name = ${this.name})"
   }
 
-  def unique[Doc <: Document[Doc], V](name: String, get: Doc => V)(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
+  def unique[Doc <: Document[Doc], V](name: String, get: FieldGetter[Doc, V])(implicit getRW: => RW[V]): UniqueIndex[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW,
@@ -125,7 +125,7 @@ object Field {
   }
 
   def facet[Doc <: Document[Doc]](name: String,
-                                  get: Doc => List[FacetValue],
+                                  get: FieldGetter[Doc, List[FacetValue]],
                                   hierarchical: Boolean,
                                   multiValued: Boolean,
                                   requireDimCount: Boolean): FacetField[Doc] = new FacetField[Doc](
@@ -164,7 +164,7 @@ object Field {
   trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String]
 
   class FacetField[Doc <: Document[Doc]](name: String,
-                                         get: Doc => List[FacetValue],
+                                         get: FieldGetter[Doc, List[FacetValue]],
                                          val hierarchical: Boolean,
                                          val multiValued: Boolean,
                                          val requireDimCount: Boolean) extends Field[Doc, List[FacetValue]](name, get, getRW = () => implicitly[RW[List[FacetValue]]], indexed = true) with Indexed[Doc, List[FacetValue]] {

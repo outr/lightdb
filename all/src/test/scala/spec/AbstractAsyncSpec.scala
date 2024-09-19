@@ -237,8 +237,8 @@ abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Mat
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
     implicit val rw: RW[Person] = RW.gen
 
-    val name: F[String] = field("name", _.name)
-    val age: F[Int] = field.index("age", _.age)
+    val name: F[String] = field("name", (p: Person) => p.name)
+    val age: F[Int] = field.index("age", (p: Person) => p.age)
   }
 
   object InitialSetupUpgrade extends AsyncDatabaseUpgrade {

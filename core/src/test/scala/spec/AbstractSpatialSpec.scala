@@ -4,10 +4,11 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.field.Field
 import lightdb.spatial.Geo
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Field, Id, LightDB}
+import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -139,9 +140,9 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
-    val name: F[String] = field("name", _.name)
-    val age: F[Int] = field("age", _.age)
-    val point: I[Geo.Point] = field.index("point", _.point)
-    val geo: I[List[Geo]] = field.index("geo", _.geo)
+    val name: F[String] = field("name", (p: Person) => p.name)
+    val age: F[Int] = field("age", (p: Person) => p.age)
+    val point: I[Geo.Point] = field.index("point", (p: Person) => p.point)
+    val geo: I[List[Geo]] = field.index("geo", (p: Person) => p.geo)
   }
 }

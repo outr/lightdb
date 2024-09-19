@@ -1,7 +1,7 @@
 package lightdb.util
 
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field._
 import lightdb.doc.Document
 
 import java.util.Comparator
@@ -12,7 +12,7 @@ class InMemoryIndex[Doc <: Document[Doc], V](field: Indexed[Doc, V], comparator:
   private val currentValue = new ConcurrentHashMap[Id[Doc], V]
   private val sorted = new AtomicList[V](comparator)
 
-  def set(doc: Doc): Unit = set(doc._id, field.get(doc))
+  def set(doc: Doc): Unit = set(doc._id, field.get(doc, field))
 
   def set(id: Id[Doc], value: V): Unit = {
     Option(currentValue.get(id)).foreach(previous => remove(id, previous))

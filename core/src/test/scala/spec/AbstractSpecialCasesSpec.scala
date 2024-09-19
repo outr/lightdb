@@ -12,8 +12,7 @@ import org.scalatest.wordspec.AnyWordSpec
 
 import java.nio.file.Path
 
-trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers {
-  spec =>
+trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
 
   specName should {
@@ -76,9 +75,9 @@ trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers {
   object SpecialOne extends RecordDocumentModel[SpecialOne] with JsonConversion[SpecialOne] {
     override implicit val rw: RW[SpecialOne] = RW.gen
 
-    val name: F[String] = field("name", _.name)
-    val wrappedString: F[WrappedString] = field("wrappedString", _.wrappedString)
-    val person: F[Person] = field("person", _.person)
+    val name: F[String] = field("name", (d: SpecialOne) => d.name)
+    val wrappedString: F[WrappedString] = field("wrappedString", (d: SpecialOne) => d.wrappedString)
+    val person: F[Person] = field("person", (d: SpecialOne) => d.person)
   }
 
   case class WrappedString(v: String) {

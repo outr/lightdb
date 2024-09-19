@@ -1,13 +1,14 @@
 package lightdb
 
 import fabric.Json
-import lightdb.Field._
+import lightdb.field.Field._
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.FacetQuery
+import lightdb.field.Field
 import lightdb.filter._
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, Geo}
@@ -152,7 +153,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
       .search
       .docs
       .iterator
-    GroupedIterator[Doc, F](iterator, doc => field.get(doc))
+    GroupedIterator[Doc, F](iterator, doc => field.get(doc, field))
   }
 }
 

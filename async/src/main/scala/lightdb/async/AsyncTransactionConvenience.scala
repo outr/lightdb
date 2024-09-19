@@ -3,7 +3,7 @@ package lightdb.async
 import cats.effect.IO
 import lightdb.doc.{Document, DocumentModel}
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field._
 
 case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: AsyncCollection[Doc, Model]) {
   def insert(doc: Doc): IO[Doc] = collection.transaction { implicit transaction =>

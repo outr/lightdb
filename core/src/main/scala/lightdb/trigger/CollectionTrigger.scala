@@ -1,7 +1,7 @@
 package lightdb.trigger
 
-import lightdb.Field
 import lightdb.doc.Document
+import lightdb.field.Field
 import lightdb.transaction.Transaction
 
 trait CollectionTrigger[Doc <: Document[Doc]] {

@@ -4,10 +4,11 @@ import cats.effect.IO
 import fabric.Json
 import lightdb.aggregate.AggregateFunction
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field._
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.filter._
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, Geo}
@@ -190,7 +191,7 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
       .search
       .docs
       .iterator).map { iterator =>
-      val grouped = GroupedIterator[Doc, F](iterator, doc => field.get(doc))
+      val grouped = GroupedIterator[Doc, F](iterator, doc => field.get(doc, field))
       fs2.Stream.fromBlockingIterator[IO](grouped, 512)
     }
     fs2.Stream.force(io)

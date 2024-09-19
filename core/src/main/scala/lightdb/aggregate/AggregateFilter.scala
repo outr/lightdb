@@ -1,8 +1,8 @@
 package lightdb.aggregate
 
 import fabric.{Json, Str}
-import lightdb.Field
 import lightdb.doc.Document
+import lightdb.field.Field
 import lightdb.spatial.Geo
 
 sealed trait AggregateFilter[Doc <: Document[Doc]] {

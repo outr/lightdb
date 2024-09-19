@@ -1,8 +1,8 @@
 package lightdb.aggregate
 
 import fabric.rw._
-import lightdb.Field
 import lightdb.doc.Document
+import lightdb.field.Field
 
 trait AggregateSupport[Doc <: Document[Doc], V] {
   this: Field[Doc, V] =>

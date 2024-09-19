@@ -7,7 +7,8 @@ import fabric.rw._
 import lightdb.doc.Document
 import lightdb.spatial.Geo
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field
+import lightdb.field.Field._
 
 import java.sql.{JDBCType, PreparedStatement, SQLType, Types}
 
@@ -56,7 +57,7 @@ object SQLArg {
   }
 
   object FieldArg {
-    def apply[Doc <: Document[Doc], F](doc: Doc, field: Field[Doc, F]): FieldArg[Doc, F] = apply(field, field.get(doc))
+    def apply[Doc <: Document[Doc], F](doc: Doc, field: Field[Doc, F]): FieldArg[Doc, F] = apply(field, field.get(doc, field))
   }
 
   case class StringArg(s: String) extends SQLArg {

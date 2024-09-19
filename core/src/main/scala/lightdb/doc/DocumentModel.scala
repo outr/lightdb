@@ -5,7 +5,8 @@ import lightdb.collection.Collection
 import lightdb.facet.FacetValue
 import lightdb.filter.FilterBuilder
 import lightdb._
-import lightdb.Field._
+import lightdb.field.{Field, FieldGetter}
+import lightdb.field.Field._
 
 import scala.language.implicitConversions
 
@@ -14,7 +15,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   private var _fields = List.empty[Field[Doc, _]]
 
-  val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", _._id)
+  val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", (doc: Doc) => doc._id)
 
   def id(value: String = Unique()): Id[Doc] = Id(value)
 
@@ -43,18 +44,18 @@ trait DocumentModel[Doc <: Document[Doc]] {
       field
     }
 
-    def apply[V: RW](name: String, get: Doc => V): Field[Doc, V] = {
+    def apply[V: RW](name: String, get: FieldGetter[Doc, V]): Field[Doc, V] = {
       add[V, Field[Doc, V]](Field(name, get))
     }
 
-    def index[V: RW](name: String, get: Doc => V): Indexed[Doc, V] =
+    def index[V: RW](name: String, get: FieldGetter[Doc, V]): Indexed[Doc, V] =
       add[V, Indexed[Doc, V]](Field.indexed(name, get))
 
-    def unique[V: RW](name: String, get: Doc => V): UniqueIndex[Doc, V] =
+    def unique[V: RW](name: String, get: FieldGetter[Doc, V]): UniqueIndex[Doc, V] =
       add[V, UniqueIndex[Doc, V]](Field.unique(name, get))
 
-    def tokenized(name: String, get: Doc => String): Tokenized[Doc] =
-      add[String, Tokenized[Doc]](Field.tokenized(name, doc => get(doc)))
+    def tokenized(name: String, get: FieldGetter[Doc, String]): Tokenized[Doc] =
+      add[String, Tokenized[Doc]](Field.tokenized(name, get))
 
     def facet(name: String,
               get: Doc => List[FacetValue],
