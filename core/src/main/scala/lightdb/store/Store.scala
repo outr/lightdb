@@ -60,7 +60,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc]
 
   def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, V]
+                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V]
 
   def aggregate(query: AggregateQuery[Doc, Model])
                (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]]

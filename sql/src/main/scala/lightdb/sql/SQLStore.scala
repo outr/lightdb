@@ -247,7 +247,6 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
                 case None => Nil
               }
               arr(list: _*)
-            case _: Tokenized[_] => arr(rs.getString(field.name).split(" ").toList.map(str): _*)
             case _ => toJson(rs.getObject(field.name), field.rw)
           }
           field.name -> json
@@ -329,7 +328,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
   protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart(field.name)
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
     var extraFields = List.empty[SQLPart]
     val fields = conversion match {
       case Conversion.Value(field) => List(field)
@@ -369,10 +368,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     val ps = rs.getStatement.asInstanceOf[PreparedStatement]
     val iteratorWithScore = ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
     SearchResults(
+      model = collection.model,
       offset = query.offset,
       limit = query.limit,
       total = total,
       iteratorWithScore = iteratorWithScore,
+      facetResults = Map.empty,
       transaction = transaction
     )
   }

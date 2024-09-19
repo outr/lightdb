@@ -6,6 +6,7 @@ import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
+import lightdb.facet.FacetQuery
 import lightdb.filter._
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, Geo}
@@ -20,7 +21,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                                                                     limit: Option[Int] = None,
                                                                     countTotal: Boolean = false,
                                                                     scoreDocs: Boolean = false,
-                                                                    minDocScore: Option[Double] = None) { query =>
+                                                                    minDocScore: Option[Double] = None,
+                                                                    facets: List[FacetQuery[Doc]] = Nil) { query =>
   def scored: Query[Doc, Model] = copy(scoreDocs = true)
 
   def minDocScore(min: Double): Query[Doc, Model] = copy(
@@ -39,6 +41,15 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     copy(filter = Some(combined))
   }
 
+  def facet(f: Model => FacetField[Doc],
+            path: List[String] = Nil,
+            childrenLimit: Option[Int] = Some(10),
+            dimsLimit: Option[Int] = Some(10)): Query[Doc, Model] = {
+    val facetField = f(collection.model)
+    val facetQuery = FacetQuery(facetField, path, childrenLimit, dimsLimit)
+    copy(facets = facetQuery :: facets)
+  }
+
   def clearSort: Query[Doc, Model] = copy(sort = Nil)
 
   def sort(sort: Sort*): Query[Doc, Model] = copy(sort = this.sort ::: sort.toList)
@@ -53,7 +64,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
 
   object search {
     def apply[V](conversion: Conversion[Doc, V])
-                (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
+                (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
       val storeMode = collection.store.storeMode
       if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode == StoreMode.All)) {
         val notIndexed = filter.toList.flatMap(_.fields(collection.model)).filter(!_.indexed)
@@ -72,23 +83,23 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
       )
     }
 
-    def docs(implicit transaction: Transaction[Doc]): SearchResults[Doc, Doc] = apply(Conversion.Doc())
+    def docs(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Doc] = apply(Conversion.Doc())
 
     def value[F](f: Model => Field[Doc, F])
-                (implicit transaction: Transaction[Doc]): SearchResults[Doc, F] =
+                (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, F] =
       apply(Conversion.Value(f(collection.model)))
 
-    def id(implicit transaction: Transaction[Doc]): SearchResults[Doc, Id[Doc]] =
+    def id(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Id[Doc]] =
       value(m => m._id)
 
-    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): SearchResults[Doc, Json] =
+    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Json] =
       apply(Conversion.Json(f(collection.model)))
 
-    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, T] =
+    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, T] =
       apply(Conversion.Converted(f))
 
     def materialized(f: Model => List[Field[Doc, _]])
-                    (implicit transaction: Transaction[Doc]): SearchResults[Doc, MaterializedIndex[Doc, Model]] = {
+                    (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedIndex[Doc, Model]] = {
       val fields = f(collection.model)
       apply(Conversion.Materialized(fields))
     }
@@ -97,7 +108,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                  from: Geo.Point,
                  sort: Boolean = true,
                  radius: Option[Distance] = None)
-                (implicit transaction: Transaction[Doc]): SearchResults[Doc, DistanceAndDoc[Doc]] = {
+                (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
       val field = f(collection.model)
       var q = Query.this
       if (sort) {
@@ -125,7 +136,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                                          from: Geo.Point,
                                          sort: Boolean,
                                          radius: Option[Distance])
-                              (implicit transaction: Transaction[Doc]): SearchResults[Doc, DistanceAndDoc[Doc]] = {
+                              (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
     search(Conversion.Distance(field, from, sort, radius))
   }
 

@@ -7,6 +7,8 @@ import fabric.rw._
 import lightdb.aggregate.AggregateSupport
 import lightdb.distance.Distance
 import lightdb.doc.Document
+import lightdb.facet.FacetValue
+import lightdb.filter.Filter.DrillDownFacetFilter
 import lightdb.filter.{Filter, FilterSupport}
 import lightdb.materialized.Materializable
 import lightdb.spatial.Geo
@@ -90,6 +92,14 @@ trait UniqueIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V]
 
 trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String]
 
+class FacetField[Doc <: Document[Doc]](name: String,
+                                       get: Doc => List[FacetValue],
+                                       val hierarchical: Boolean,
+                                       val multiValued: Boolean,
+                                       val requireDimCount: Boolean) extends Field[Doc, List[FacetValue]](name, get, getRW = () => implicitly[RW[List[FacetValue]]], indexed = true) with Indexed[Doc, List[FacetValue]] {
+  def drillDown(path: String*): DrillDownFacetFilter[Doc] = DrillDownFacetFilter(name, path.toList)
+}
+
 object Field {
   val NullString: String = "||NULL||"
 
@@ -126,6 +136,20 @@ object Field {
     indexed = true
   ) with UniqueIndex[Doc, V] {
     override def toString: String = s"Unique(name = ${this.name})"
+  }
+
+  def facet[Doc <: Document[Doc]](name: String,
+                                  get: Doc => List[FacetValue],
+                                  hierarchical: Boolean,
+                                  multiValued: Boolean,
+                                  requireDimCount: Boolean): FacetField[Doc] = new FacetField[Doc](
+    name = name,
+    get = get,
+    hierarchical = hierarchical,
+    multiValued = multiValued,
+    requireDimCount = requireDimCount
+  ) {
+    override def toString: String = s"FacetField(name = ${this.name}, hierarchical = ${this.hierarchical}, multiValued = ${this.multiValued}, requireDimCount = ${this.requireDimCount})"
   }
 
   def string2Json(name: String, s: String, definition: DefType): Json = definition match {

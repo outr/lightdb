@@ -75,7 +75,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     .map(_.getValue).map(bytes2Doc)
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] =
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] =
     throw new UnsupportedOperationException("HaloDBStore does not support searching")
 
   override def aggregate(query: AggregateQuery[Doc, Model])

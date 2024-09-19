@@ -2,8 +2,9 @@ package lightdb.doc
 
 import fabric.rw._
 import lightdb.collection.Collection
+import lightdb.facet.FacetValue
 import lightdb.filter.FilterBuilder
-import lightdb.{Field, Id, Indexed, Tokenized, Unique, UniqueIndex}
+import lightdb.{FacetField, Field, Id, Indexed, Tokenized, Unique, UniqueIndex}
 
 import scala.language.implicitConversions
 
@@ -22,6 +23,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
   type I[V] = Indexed[Doc, V]
   type U[V] = UniqueIndex[Doc, V]
   type T = Tokenized[Doc]
+  type FF = FacetField[Doc]
 
   def map2Doc(map: Map[String, Any]): Doc
 
@@ -52,5 +54,12 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
     def tokenized(name: String, get: Doc => String): Tokenized[Doc] =
       add[String, Tokenized[Doc]](Field.tokenized(name, doc => get(doc)))
+
+    def facet(name: String,
+              get: Doc => List[FacetValue],
+              hierarchical: Boolean = false,
+              multiValued: Boolean = false,
+              requireDimCount: Boolean = false): FacetField[Doc] =
+      add[List[FacetValue], FacetField[Doc]](Field.facet(name, get, hierarchical, multiValued, requireDimCount))
   }
 }

@@ -59,7 +59,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: O
     .map(fromString)
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] =
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] =
     throw new UnsupportedOperationException("MapDBStore does not support searching")
 
   override def aggregate(query: AggregateQuery[Doc, Model])

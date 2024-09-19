@@ -82,4 +82,10 @@ object Filter {
 
     override def fieldNames: List[String] = filters.flatMap(_.filter.fieldNames)
   }
+
+  case class DrillDownFacetFilter[Doc <: Document[Doc]](fieldName: String, path: List[String], showOnlyThisLevel: Boolean = false) extends Filter[Doc] {
+    override lazy val fieldNames: List[String] = List(fieldName)
+
+    def onlyThisLevel: DrillDownFacetFilter[Doc] = copy(showOnlyThisLevel = true)
+  }
 }
