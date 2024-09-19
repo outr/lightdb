@@ -3,7 +3,8 @@ package lightdb.async
 import cats.effect.IO
 import fabric.Json
 import lightdb.aggregate.AggregateFunction
-import lightdb.{Field, Id, Query, SearchResults, Sort, SortDirection, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}

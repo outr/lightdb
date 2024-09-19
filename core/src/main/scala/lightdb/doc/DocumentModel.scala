@@ -4,7 +4,8 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.facet.FacetValue
 import lightdb.filter.FilterBuilder
-import lightdb.{FacetField, Field, Id, Indexed, Tokenized, Unique, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 
 import scala.language.implicitConversions
 

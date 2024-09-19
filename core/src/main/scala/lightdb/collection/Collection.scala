@@ -9,7 +9,8 @@ import lightdb.store.Store
 import lightdb.transaction.Transaction
 import lightdb.trigger.CollectionTriggers
 import lightdb.util.Initializable
-import lightdb.{Id, Query, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala

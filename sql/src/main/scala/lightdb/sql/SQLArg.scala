@@ -6,7 +6,8 @@ import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.doc.Document
 import lightdb.spatial.Geo
-import lightdb.{Field, Id, Tokenized}
+import lightdb._
+import lightdb.Field._
 
 import java.sql.{JDBCType, PreparedStatement, SQLType, Types}
 

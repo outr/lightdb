@@ -2,12 +2,13 @@ package lightdb.redis
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, Query, SearchResults, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
-import redis.clients.jedis.{Jedis, JedisPool, JedisPoolConfig}
+import _root_.redis.clients.jedis.{Jedis, JedisPool, JedisPoolConfig}
 
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 

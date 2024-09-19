@@ -2,7 +2,8 @@ package lightdb.async
 
 import cats.effect.IO
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.{Field, Id, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 
 case class AsyncTransactionConvenience[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: AsyncCollection[Doc, Model]) {
   def insert(doc: Doc): IO[Doc] = collection.transaction { implicit transaction =>

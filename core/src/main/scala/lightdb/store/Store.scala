@@ -7,7 +7,8 @@ import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
-import lightdb.{Field, Id, Indexed, Query, SearchResults, Unique, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 
 import java.io.File
 

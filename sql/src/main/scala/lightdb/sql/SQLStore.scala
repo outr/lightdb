@@ -15,7 +15,8 @@ import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.ActionIterator
-import lightdb.{Field, Id, Indexed, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
@@ -491,6 +492,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     throw new UnsupportedOperationException("Distance filtering not supported in SQL!")
 
   private def filter2Part(f: Filter[Doc]): SQLPart = f match {
+    case f: Filter.DrillDownFacetFilter[Doc] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
     case f: Filter.Equals[Doc, _] if f.field(collection.model).isArr =>
       val values = f.getJson(collection.model).asVector
       val parts = values.map { json =>

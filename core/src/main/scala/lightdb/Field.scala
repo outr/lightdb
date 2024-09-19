@@ -86,20 +86,6 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   override def toString: String = s"Field(name = $name)"
 }
 
-trait Indexed[Doc <: Document[Doc], V] extends Field[Doc, V]
-
-trait UniqueIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V]
-
-trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String]
-
-class FacetField[Doc <: Document[Doc]](name: String,
-                                       get: Doc => List[FacetValue],
-                                       val hierarchical: Boolean,
-                                       val multiValued: Boolean,
-                                       val requireDimCount: Boolean) extends Field[Doc, List[FacetValue]](name, get, getRW = () => implicitly[RW[List[FacetValue]]], indexed = true) with Indexed[Doc, List[FacetValue]] {
-  def drillDown(path: String*): DrillDownFacetFilter[Doc] = DrillDownFacetFilter(name, path.toList)
-}
-
 object Field {
   val NullString: String = "||NULL||"
 
@@ -169,5 +155,19 @@ object Field {
     } catch {
       case t: Throwable => throw new RuntimeException(s"Failure to convert $name = $s to $definition", t)
     }
+  }
+
+  trait Indexed[Doc <: Document[Doc], V] extends Field[Doc, V]
+
+  trait UniqueIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V]
+
+  trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String]
+
+  class FacetField[Doc <: Document[Doc]](name: String,
+                                         get: Doc => List[FacetValue],
+                                         val hierarchical: Boolean,
+                                         val multiValued: Boolean,
+                                         val requireDimCount: Boolean) extends Field[Doc, List[FacetValue]](name, get, getRW = () => implicitly[RW[List[FacetValue]]], indexed = true) with Indexed[Doc, List[FacetValue]] {
+    def drillDown(path: String*): DrillDownFacetFilter[Doc] = DrillDownFacetFilter(name, path.toList)
   }
 }
