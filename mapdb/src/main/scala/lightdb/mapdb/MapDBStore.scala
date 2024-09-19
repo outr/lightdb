@@ -1,10 +1,9 @@
 package lightdb.mapdb
 
-import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}

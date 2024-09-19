@@ -1,6 +1,6 @@
 package lightdb.trigger
 
-import lightdb.UniqueIndex
+import lightdb.Field
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction
@@ -23,7 +23,7 @@ trait BasicCollectionTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] 
     }
   }
 
-  override final def delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Unit = {
+  override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Unit = {
     collection.query.filter(_ => index === value).iterator.foreach(removing)
   }
 

@@ -1,6 +1,7 @@
 package lightdb.util
 
-import lightdb.{Field, Id, Indexed}
+import lightdb._
+import lightdb.Field._
 import lightdb.doc.Document
 
 import java.util.Comparator

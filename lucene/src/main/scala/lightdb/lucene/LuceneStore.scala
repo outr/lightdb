@@ -7,7 +7,8 @@ import fabric.rw.{Asable, Convertible}
 import lightdb.SortDirection.Ascending
 import lightdb.aggregate.{AggregateQuery, AggregateType}
 import lightdb.collection.Collection
-import lightdb.{FacetField, Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.filter.{Condition, Filter}

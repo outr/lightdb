@@ -1,6 +1,7 @@
 package lightdb
 
 import fabric.Json
+import lightdb.Field._
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
 import lightdb.collection.Collection
 import lightdb.distance.Distance

@@ -2,7 +2,8 @@ package lightdb.store
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction

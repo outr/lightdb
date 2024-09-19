@@ -1,7 +1,8 @@
 package lightdb.async
 
 import cats.effect.IO
-import lightdb.{Field, Id, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction

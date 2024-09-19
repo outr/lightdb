@@ -6,7 +6,8 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
-import lightdb.{Field, Id, Query, SearchResults, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 
 import scala.language.implicitConversions
 

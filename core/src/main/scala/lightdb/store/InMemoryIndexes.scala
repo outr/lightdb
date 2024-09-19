@@ -1,6 +1,7 @@
 package lightdb.store
 
-import lightdb.{Id, Indexed, Query, SearchResults, UniqueIndex}
+import lightdb._
+import lightdb.Field._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction
