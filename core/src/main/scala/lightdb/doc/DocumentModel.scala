@@ -2,7 +2,7 @@ package lightdb.doc
 
 import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.facet.FacetValue
+import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.filter.FilterBuilder
 import lightdb._
 import lightdb.field.{Field, FieldGetter}
@@ -48,20 +48,36 @@ trait DocumentModel[Doc <: Document[Doc]] {
       add[V, Field[Doc, V]](Field(name, get))
     }
 
+    def apply[V: RW](name: String, get: Doc => V): Field[Doc, V] = {
+      add[V, Field[Doc, V]](Field(name, FieldGetter.func(get)))
+    }
+
     def index[V: RW](name: String, get: FieldGetter[Doc, V]): Indexed[Doc, V] =
       add[V, Indexed[Doc, V]](Field.indexed(name, get))
+
+    def index[V: RW](name: String, get: Doc => V): Indexed[Doc, V] =
+      add[V, Indexed[Doc, V]](Field.indexed(name, FieldGetter.func(get)))
 
     def unique[V: RW](name: String, get: FieldGetter[Doc, V]): UniqueIndex[Doc, V] =
       add[V, UniqueIndex[Doc, V]](Field.unique(name, get))
 
+    def unique[V: RW](name: String, get: Doc => V): UniqueIndex[Doc, V] =
+      add[V, UniqueIndex[Doc, V]](Field.unique(name, FieldGetter.func(get)))
+
     def tokenized(name: String, get: FieldGetter[Doc, String]): Tokenized[Doc] =
       add[String, Tokenized[Doc]](Field.tokenized(name, get))
 
+    def tokenized(name: String, get: Doc => String): Tokenized[Doc] =
+      add[String, Tokenized[Doc]](Field.tokenized(name, FieldGetter.func(get)))
+
+    def facet(name: String,
+              get: FieldGetter[Doc, List[FacetValue]],
+              config: FacetConfig): FacetField[Doc] =
+      add[List[FacetValue], FacetField[Doc]](Field.facet(name, get, config.hierarchical, config.multiValued, config.requireDimCount))
+
     def facet(name: String,
               get: Doc => List[FacetValue],
-              hierarchical: Boolean = false,
-              multiValued: Boolean = false,
-              requireDimCount: Boolean = false): FacetField[Doc] =
-      add[List[FacetValue], FacetField[Doc]](Field.facet(name, get, hierarchical, multiValued, requireDimCount))
+              config: FacetConfig): FacetField[Doc] =
+      add[List[FacetValue], FacetField[Doc]](Field.facet(name, FieldGetter.func(get), config.hierarchical, config.multiValued, config.requireDimCount))
   }
 }

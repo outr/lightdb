@@ -4,7 +4,7 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.{Id, LightDB}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.facet.FacetValue
+import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.filter._
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
@@ -285,9 +285,9 @@ abstract class AbstractFacetSpec extends AnyWordSpec with Matchers { spec =>
     val keywords: I[List[String]] = field.index("keywords", (e: Entry) => e.keywords)
     val publishDate: F[PublishDate] = field("publishDate", (e: Entry) => e.publishDate)
 
-    val authorsFacet: FF = field.facet("authorsFacet", _.authors.map(a => FacetValue(a)), multiValued = true)
-    val keywordsFacet: FF = field.facet("keywordsFacet", _.keywords.map(k => FacetValue(k)), multiValued = true)
-    val publishDateFacet: FF = field.facet("publishDateFacet", doc => List(FacetValue(List(doc.publishDate.year, doc.publishDate.month, doc.publishDate.day).flatMap(i => if (i == -1) None else Some(i)).map(_.toString))), hierarchical = true)
+    val authorsFacet: FF = field.facet("authorsFacet", _.authors.map(a => FacetValue(a)), FacetConfig(multiValued = true))
+    val keywordsFacet: FF = field.facet("keywordsFacet", _.keywords.map(k => FacetValue(k)), FacetConfig(multiValued = true))
+    val publishDateFacet: FF = field.facet("publishDateFacet", doc => List(FacetValue(List(doc.publishDate.year, doc.publishDate.month, doc.publishDate.day).flatMap(i => if (i == -1) None else Some(i)).map(_.toString))), FacetConfig(hierarchical = true))
   }
 
   case class PublishDate(year: Int = -1, month: Int = -1, day: Int = -1)
