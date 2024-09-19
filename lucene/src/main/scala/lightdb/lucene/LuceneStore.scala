@@ -7,8 +7,9 @@ import fabric.rw.{Asable, Convertible}
 import lightdb.SortDirection.Ascending
 import lightdb.aggregate.{AggregateQuery, AggregateType}
 import lightdb.collection.Collection
-import lightdb.{Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
+import lightdb.{FacetField, Field, Id, LightDB, Query, SearchResults, Sort, SortDirection, Tokenized, UniqueIndex}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.filter.{Condition, Filter}
 import lightdb.lucene.index.Index
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
@@ -17,17 +18,37 @@ import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, SortedNumericDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.geo.{Line, Polygon}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.util.BytesRef
+import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsConfig, FacetField => LuceneFacetField}
 
 import java.nio.file.Path
 import scala.language.implicitConversions
+import scala.util.Try
 
 class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Option[Path], val storeMode: StoreMode) extends Store[Doc, Model] {
   private lazy val index = Index(directory)
+  private lazy val facetsConfig: FacetsConfig = {
+    val c = new FacetsConfig
+    fields.foreach {
+      case ff: FacetField[_] =>
+        if (ff.hierarchical) c.setHierarchical(ff.name, ff.hierarchical)
+        if (ff.multiValued) c.setMultiValued(ff.name, ff.multiValued)
+        if (ff.requireDimCount) c.setRequireDimCount(ff.name, ff.requireDimCount)
+      case _ => // Ignore
+    }
+    c
+  }
+  private lazy val hasFacets: Boolean = fields.exists(_.isInstanceOf[FacetField[_]])
+  private def facetsPrepareDoc(doc: LuceneDocument): LuceneDocument = if (hasFacets) {
+    facetsConfig.build(index.taxonomyWriter, doc)
+  } else {
+    doc
+  }
 
   override def init(collection: Collection[Doc, Model]): Unit = {
     super.init(collection)
@@ -93,6 +114,14 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
     field match {
+      case ff: FacetField[Doc] => ff.get(doc).flatMap { value =>
+        if (value.path.nonEmpty || ff.hierarchical) {
+          val path = if (ff.hierarchical) value.path ::: List("$ROOT$") else value.path
+          Some(new LuceneFacetField(field.name, path: _*))
+        } else {
+          None
+        }
+      }
       case t: Tokenized[Doc] =>
         List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
@@ -147,9 +176,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     luceneFields.foreach(document.add)
 
     if (upsert) {
-      index.indexWriter.updateDocument(new Term("_id", id.value), document)
+      index.indexWriter.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document))
     } else {
-      index.indexWriter.addDocument(document)
+      index.indexWriter.addDocument(facetsPrepareDoc(document))
     }
   }
 
@@ -175,7 +204,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     doSearch[Doc](Query[Doc, Model](collection), Conversion.Doc()).iterator
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
     val q: LuceneQuery = filter2Lucene(query.filter)
     val sortFields = query.sort match {
       case Nil => List(SortField.FIELD_SCORE)
@@ -183,10 +212,41 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     }
     val s = new LuceneSort(sortFields: _*)
     val indexSearcher = state.indexSearcher
+    var facetsCollector: Option[FacetsCollector] = None
     val limit = query.limit.map(l => math.min(l, 100)).getOrElse(100) + query.offset
     if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
+    var facetResults: Map[FacetField[Doc], FacetResult] = Map.empty
     def search(total: Option[Int]): TopFieldDocs = {
-      val topFieldDocs = indexSearcher.search(q, total.getOrElse(limit), s, query.scoreDocs)
+      if (query.facets.nonEmpty) {
+        facetsCollector = Some(new FacetsCollector)
+      }
+      val topFieldDocs = facetsCollector match {
+        case Some(fc) => FacetsCollector.search(indexSearcher, q, total.getOrElse(limit), s, query.scoreDocs, fc)
+        case None => indexSearcher.search(q, total.getOrElse(limit), s, query.scoreDocs)
+      }
+      facetResults = facetsCollector match {
+        case Some(fc) =>
+          val facets = new FastTaxonomyFacetCounts(state.taxonomyReader, facetsConfig, fc)
+          query.facets.map { fq =>
+            Option(fq.childrenLimit match {
+              case Some(l) => facets.getTopChildren(l, fq.field.name, fq.path: _*)
+              case None => facets.getAllChildren(fq.field.name, fq.path: _*)
+            }) match {
+              case Some(facetResult) =>
+                val values = if (facetResult.childCount > 0) {
+                  facetResult.labelValues.toList.map(lv => FacetResultValue(lv.label, lv.value.intValue()))
+                } else {
+                  Nil
+                }
+                val updatedValues = values.filterNot(_.value == "$ROOT$")
+                val totalCount = updatedValues.map(_.count).sum
+                fq.field -> FacetResult(updatedValues, updatedValues.length, totalCount)
+              case None =>
+                fq.field -> FacetResult(Nil, 0, 0)
+            }
+          }.toMap
+        case None => Map.empty
+      }
       val totalHits = total.getOrElse(topFieldDocs.totalHits.value.toInt)
       if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty && query.limit.forall(l => l + query.offset > limit)) {
         search(Some(query.limit.map(l => math.min(l, totalHits)).getOrElse(totalHits)))
@@ -263,10 +323,12 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       }
     }
     SearchResults(
+      model = collection.model,
       offset = query.offset,
       limit = query.limit,
       total = Some(total),
       iteratorWithScore = iterator,
+      facetResults = facetResults,
       transaction = transaction
     )
   }
@@ -323,6 +385,14 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
         }
         b.build()
+      case Filter.DrillDownFacetFilter(fieldName, path, showOnlyThisLevel) =>
+        val indexedFieldName = facetsConfig.getDimConfig(fieldName).indexFieldName
+        val exactPath = if (showOnlyThisLevel) {
+          path ::: List("$ROOT$")
+        } else {
+          path
+        }
+        new TermQuery(DrillDownQuery.term(indexedFieldName, fieldName, exactPath: _*))
     }
     case None => new MatchAllDocsQuery
   }
@@ -390,10 +460,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     count
   }
 
-  override def dispose(): Unit = {
-    index.indexWriter.flush()
-    index.indexWriter.commit()
-    index.indexWriter.close()
+  override def dispose(): Unit = Try {
+    index.dispose()
   }
 }
 

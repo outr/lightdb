@@ -54,7 +54,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
 
   override def doSearch[V](query: Query[Doc, Model],
                            conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = throw new UnsupportedOperationException("MapStore does not support searching")
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = throw new UnsupportedOperationException("MapStore does not support searching")
 
   override def aggregate(query: AggregateQuery[Doc, Model])
                         (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = throw new UnsupportedOperationException("MapStore does not support aggregation")

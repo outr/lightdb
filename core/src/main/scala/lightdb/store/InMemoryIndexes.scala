@@ -40,7 +40,7 @@ trait InMemoryIndexes[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends
 
   override def doSearch[V](query: Query[Doc, Model],
                            conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
 
     ???
   }

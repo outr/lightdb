@@ -54,7 +54,7 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
   }
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, V] = {
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
     searching.doSearch[V](query, conversion)
   }
 
