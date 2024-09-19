@@ -8,7 +8,7 @@ import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.FacetQuery
-import lightdb.field.Field
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
 import lightdb.materialized.MaterializedIndex
 import lightdb.spatial.{DistanceAndDoc, Geo}
@@ -149,11 +149,12 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                  direction: SortDirection = SortDirection.Ascending)
                 (implicit transaction: Transaction[Doc]): GroupedIterator[Doc, F] = {
     val field = f(collection.model)
+    val state = new IndexingState
     val iterator = sort(Sort.ByField(field, direction))
       .search
       .docs
       .iterator
-    GroupedIterator[Doc, F](iterator, doc => field.get(doc, field))
+    GroupedIterator[Doc, F](iterator, doc => field.get(doc, field, state))
   }
 }
 

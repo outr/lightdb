@@ -37,7 +37,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   lazy val isSpatial: Boolean = className.exists(_.startsWith("lightdb.spatial.Geo"))
 
-  def getJson(doc: Doc): Json = get(doc, this).json
+  def getJson(doc: Doc, state: IndexingState): Json = get(doc, this, state).json
 
   override def is(value: V): Filter[Doc] = Filter.Equals(name, value)
 
@@ -76,9 +76,13 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
     parsed(words, allowLeadingWildcard = matchEndsWith)
   }
 
-  def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, (doc: Doc) => Option(get(doc, this)), () => implicitly[RW[Option[V]]], indexed)
+  def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, FieldGetter {
+    case (doc, _, state) => Option(get(doc, this, state))
+  }, () => implicitly[RW[Option[V]]], indexed)
 
-  def list: Field[Doc, List[V]] = new Field[Doc, List[V]](name, (doc: Doc) => List(get(doc, this)), () => implicitly[RW[List[V]]], indexed)
+  def list: Field[Doc, List[V]] = new Field[Doc, List[V]](name, FieldGetter {
+    case (doc, _, state) => List(get(doc, this, state))
+  }, () => implicitly[RW[List[V]]], indexed)
 
   override def distance(from: Geo.Point, radius: Distance): Filter[Doc] =
     Filter.Distance(name, from, radius)

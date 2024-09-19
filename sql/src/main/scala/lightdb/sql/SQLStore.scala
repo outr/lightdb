@@ -16,7 +16,7 @@ import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.ActionIterator
 import lightdb._
-import lightdb.field.Field
+import lightdb.field.{Field, IndexingState}
 import lightdb.field.Field._
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
@@ -138,9 +138,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val state = getState
+    val indexingState = new IndexingState
     state.withInsertPreparedStatement { ps =>
       fields.zipWithIndex.foreach {
-        case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
+        case (field, index) => SQLArg.FieldArg(doc, field, indexingState).set(ps, index + 1)
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
@@ -153,9 +154,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     val state = getState
+    val indexingState = new IndexingState
     state.withUpsertPreparedStatement { ps =>
       fields.zipWithIndex.foreach {
-        case (field, index) => SQLArg.FieldArg(doc, field).set(ps, index + 1)
+        case (field, index) => SQLArg.FieldArg(doc, field, indexingState).set(ps, index + 1)
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
