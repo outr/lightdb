@@ -9,8 +9,6 @@ trait FieldGetter[Doc <: Document[Doc], V] {
 }
 
 object FieldGetter {
-  implicit def function2Getter[Doc <: Document[Doc], V](f: Doc => V): FieldGetter[Doc, V] = func(f)
-
   def func[Doc <: Document[Doc], V](f: Doc => V): FieldGetter[Doc, V] = apply {
     case (doc, _, _) => f(doc)
   }
