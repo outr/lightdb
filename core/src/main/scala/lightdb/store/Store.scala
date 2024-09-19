@@ -8,7 +8,8 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field
+import lightdb.field.Field._
 
 import java.io.File
 

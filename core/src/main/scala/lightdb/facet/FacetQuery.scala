@@ -1,6 +1,6 @@
 package lightdb.facet
 
-import lightdb.Field.FacetField
+import lightdb.field.Field.FacetField
 import lightdb.doc.Document
 
 case class FacetQuery[Doc <: Document[Doc]](field: FacetField[Doc],

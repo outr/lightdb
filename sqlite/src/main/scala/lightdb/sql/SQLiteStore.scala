@@ -7,8 +7,9 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.{Field, LightDB, SortDirection}
+import lightdb.{LightDB, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}

@@ -7,7 +7,7 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field._
 
 import scala.language.implicitConversions
 

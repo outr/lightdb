@@ -1,10 +1,11 @@
 package spec
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.{Id, LightDB}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.FacetValue
+import lightdb.filter._
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -279,10 +280,10 @@ abstract class AbstractFacetSpec extends AnyWordSpec with Matchers { spec =>
   object Entry extends DocumentModel[Entry] with JsonConversion[Entry] {
     override implicit val rw: RW[Entry] = RW.gen
 
-    val name: I[String] = field.index("name", _.name)
-    val authors: F[List[String]] = field("authors", _.authors)
-    val keywords: I[List[String]] = field.index("keywords", _.keywords)
-    val publishDate: F[PublishDate] = field("publishDate", _.publishDate)
+    val name: I[String] = field.index("name", (e: Entry) => e.name)
+    val authors: F[List[String]] = field("authors", (e: Entry) => e.authors)
+    val keywords: I[List[String]] = field.index("keywords", (e: Entry) => e.keywords)
+    val publishDate: F[PublishDate] = field("publishDate", (e: Entry) => e.publishDate)
 
     val authorsFacet: FF = field.facet("authorsFacet", _.authors.map(a => FacetValue(a)), multiValued = true)
     val keywordsFacet: FF = field.facet("keywordsFacet", _.keywords.map(k => FacetValue(k)), multiValued = true)

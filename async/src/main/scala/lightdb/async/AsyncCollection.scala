@@ -2,7 +2,7 @@ package lightdb.async
 
 import cats.effect.IO
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction

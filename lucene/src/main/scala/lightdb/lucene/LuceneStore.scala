@@ -8,9 +8,10 @@ import lightdb.SortDirection.Ascending
 import lightdb.aggregate.{AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
+import lightdb.field.Field
 import lightdb.filter.{Condition, Filter}
 import lightdb.lucene.index.Index
 import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
@@ -115,7 +116,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
     field match {
-      case ff: FacetField[Doc] => ff.get(doc).flatMap { value =>
+      case ff: FacetField[Doc] => ff.get(doc, ff).flatMap { value =>
         if (value.path.nonEmpty || ff.hierarchical) {
           val path = if (ff.hierarchical) value.path ::: List("$ROOT$") else value.path
           Some(new LuceneFacetField(field.name, path: _*))
@@ -124,7 +125,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         }
       }
       case t: Tokenized[Doc] =>
-        List(new LuceneField(field.name, t.get(doc), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
+        List(new LuceneField(field.name, t.get(doc, t), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
         def addJson(json: Json, d: DefType): Unit = {
           if (field.isSpatial) {
@@ -319,7 +320,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
         case (id, score) =>
           val doc = collection(id)(transaction)
-          val distance = field.get(doc).map(d => Spatial.distance(from, d))
+          val distance = field.get(doc, field).map(d => Spatial.distance(from, d))
           DistanceAndDoc(doc, distance) -> score
       }
     }

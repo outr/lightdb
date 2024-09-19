@@ -6,8 +6,9 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Field, Id, LightDB}
+import lightdb.{Id, LightDB}
 import fabric.rw._
+import lightdb.field.Field
 
 import java.nio.file.Path
 import java.sql.ResultSet

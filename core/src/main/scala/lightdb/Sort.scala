@@ -1,6 +1,7 @@
 package lightdb
 
 import lightdb.doc.Document
+import lightdb.field.Field
 import lightdb.spatial.Geo
 
 trait Sort

@@ -2,8 +2,8 @@ package lightdb.aggregate
 
 import fabric.rw._
 import lightdb.distance.Distance
-import lightdb.Field
 import lightdb.doc.Document
+import lightdb.field.Field
 import lightdb.filter.FilterSupport
 import lightdb.materialized.Materializable
 import lightdb.spatial.Geo

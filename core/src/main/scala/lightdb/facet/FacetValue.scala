@@ -1,6 +1,6 @@
 package lightdb.facet
 
-import fabric.rw.RW
+import fabric.rw._
 
 case class FacetValue(path: List[String])
 

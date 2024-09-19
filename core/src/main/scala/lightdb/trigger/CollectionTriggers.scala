@@ -1,6 +1,6 @@
 package lightdb.trigger
 
-import lightdb.Field.UniqueIndex
+import lightdb.field.Field.UniqueIndex
 import lightdb.doc.Document
 import lightdb.transaction.Transaction
 

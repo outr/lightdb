@@ -3,7 +3,7 @@ package lightdb.mapdb
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb._
-import lightdb.Field._
+import lightdb.field.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}

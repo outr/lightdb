@@ -1,6 +1,6 @@
 package lightdb
 
-import lightdb.Field._
+import lightdb.field.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.FacetResult
 import lightdb.transaction.Transaction
