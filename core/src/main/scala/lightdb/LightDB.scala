@@ -169,13 +169,19 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
                          stillBlocking: Boolean): Unit = upgrades.headOption match {
     case Some(upgrade) =>
       val continueBlocking = upgrades.exists(_.blockStartup)
-      upgrade.upgrade(this)
-      appliedUpgrades.modify { set =>
-        set + upgrade.label
-      }
       if (stillBlocking && !continueBlocking) {
-        scribe.Platform.executionContext.execute(() => doUpgrades(upgrades.tail, continueBlocking))
+        scribe.Platform.executionContext.execute(() => {
+          upgrade.upgrade(this)
+          appliedUpgrades.modify { set =>
+            set + upgrade.label
+          }
+          doUpgrades(upgrades.tail, continueBlocking)
+        })
       } else {
+        upgrade.upgrade(this)
+        appliedUpgrades.modify { set =>
+          set + upgrade.label
+        }
         doUpgrades(upgrades.tail, continueBlocking)
       }
     case None => scribe.info("Upgrades completed successfully")
