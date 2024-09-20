@@ -10,7 +10,7 @@ import lightdb.error.NonIndexedFieldException
 import lightdb.facet.FacetQuery
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
-import lightdb.materialized.MaterializedIndex
+import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Conversion, StoreMode}
 import lightdb.transaction.Transaction
@@ -104,6 +104,15 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                     (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedIndex[Doc, Model]] = {
       val fields = f(collection.model)
       apply(Conversion.Materialized(fields))
+    }
+
+    def indexes()(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedIndex[Doc, Model]] = {
+      val fields = collection.model.fields.filter(_.indexed)
+      apply(Conversion.Materialized(fields))
+    }
+
+    def docAndIndexes()(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedAndDoc[Doc, Model]] = {
+      apply(Conversion.DocAndIndexes())
     }
 
     def distance[G <: Geo](f: Model => Field[Doc, List[G]],

@@ -4,7 +4,7 @@ import fabric.Json
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 
-case class MaterializedIndex[Doc <: Document[Doc], Model <: DocumentModel[Doc]](json: Json, model: Model) extends Materialized[Doc, Model] {
+case class MaterializedAndDoc[Doc <: Document[Doc], Model <: DocumentModel[Doc]](json: Json, model: Model, doc: Doc) extends Materialized[Doc, Model] {
   def get[V](f: Model => Field[Doc, V]): Option[V] = {
     val index = f(model)
     get(index.name, index.rw)

@@ -14,7 +14,7 @@ import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.lucene.index.Index
-import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
+import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
@@ -58,7 +58,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = transaction.put(
     key = StateKey[Doc],
-    value = LuceneState[Doc](index)
+    value = LuceneState[Doc](index, hasFacets)
   )
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
@@ -276,34 +276,32 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       Field.string2Json(field.name, s, field.rw.definition)
     }
     def value[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): F = json[F](scoreDoc, field).as[F](field.rw)
-    def docIterator(): Iterator[(Doc, Double)] = if (storeMode == StoreMode.All) {
-      val i = scoreDocs.iterator
-      val docIterator = collection.model match {
-        case c: JsonConversion[Doc] => i.map { scoreDoc =>
+    def loadScoreDoc(scoreDoc: ScoreDoc): (Doc, Double) = if (storeMode == StoreMode.All) {
+      collection.model match {
+        case c: JsonConversion[Doc] =>
           val o = obj(fields.map(f => f.name -> json(scoreDoc, f)): _*)
           c.convertFromJson(o) -> scoreDoc.score.toDouble
-        }
-        case _ => i.map { scoreDoc =>
+        case _ =>
           val map = fields.map { field =>
             field.name -> value(scoreDoc, field)
           }.toMap
           collection.model.map2Doc(map) -> scoreDoc.score.toDouble
-        }
       }
-      docIterator
     } else {
-      idsAndScores.iterator.flatMap {
-        case (id, score) => collection.get(id)(transaction).map(doc => doc -> score)
-      }
+      val docId = scoreDoc.doc
+      val id = Id[Doc](storedFields.document(docId).get("_id"))
+      val score = scoreDoc.score.toDouble
+      collection(id)(transaction) -> score
     }
-    def jsonIterator(fields: List[Field[Doc, _]]): Iterator[(Json, Double)] = {
+    def docIterator(): Iterator[(Doc, Double)] = scoreDocs.iterator.map(loadScoreDoc)
+    def jsonIterator(fields: List[Field[Doc, _]]): Iterator[(ScoreDoc, Json, Double)] = {
       scoreDocs.iterator.map { scoreDoc =>
         val json = obj(fields.map { field =>
           val s = storedFields.document(scoreDoc.doc).get(field.name)
           field.name -> Field.string2Json(field.name, s, field.rw.definition)
         }: _*)
         val score = scoreDoc.score.toDouble
-        json -> score
+        (scoreDoc, json, score)
       }
     }
     val iterator: Iterator[(V, Double)] = conversion match {
@@ -315,9 +313,12 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         case (doc, score) => c(doc) -> score
       }
       case Conversion.Materialized(fields) => jsonIterator(fields).map {
-        case (json, score) => MaterializedIndex[Doc, Model](json, collection.model).asInstanceOf[V] -> score
+        case (_, json, score) => MaterializedIndex[Doc, Model](json, collection.model).asInstanceOf[V] -> score
       }
-      case Conversion.Json(fields) => jsonIterator(fields).asInstanceOf[Iterator[(V, Double)]]
+      case Conversion.DocAndIndexes() => jsonIterator(fields.filter(_.indexed)).map {
+        case (scoreDoc, json, score) => MaterializedAndDoc[Doc, Model](json, collection.model, loadScoreDoc(scoreDoc)._1).asInstanceOf[V] -> score
+      }
+      case Conversion.Json(fields) => jsonIterator(fields).map(t => t._2 -> t._3).asInstanceOf[Iterator[(V, Double)]]
       case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
         case (id, score) =>
           val state = new IndexingState

@@ -126,6 +126,10 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       collection.get(id)
     }
 
+    def getAll(ids: Seq[Id[Doc]]): Iterator[Doc] = transaction { implicit transaction =>
+      collection.getAll(ids)
+    }
+
     def apply(id: Id[Doc]): Doc = transaction { implicit transaction =>
       collection(id)
     }
