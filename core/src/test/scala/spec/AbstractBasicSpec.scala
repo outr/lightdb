@@ -271,6 +271,13 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         people.map(_.name) should be(List("Oscar"))
       }
     }
+    "query with indexes" in {
+      db.people.transaction { implicit transaction =>
+        val results = db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).search.indexes().list
+        results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
+        results.map(_(_.doc).name).toSet should be(Set("Allan", "Brenda", "Charlie"))
+      }
+    }
     "query with doc and indexes" in {
       db.people.transaction { implicit transaction =>
         val results = db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).search.docAndIndexes().list
@@ -429,6 +436,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     val city: I[Option[City]] = field.index("city", (p: Person) => p.city)
     val nicknames: I[Set[String]] = field.index("nicknames", (p: Person) => p.nicknames)
     val search: T = field.tokenized("search", (doc: Person) => s"${doc.name} ${doc.age}")
+    val doc: I[Person] = field.index("doc", (p: Person) => p)
   }
 
   case class City(name: String)
