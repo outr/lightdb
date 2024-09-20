@@ -271,6 +271,13 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         people.map(_.name) should be(List("Oscar"))
       }
     }
+    "query with doc and indexes" in {
+      db.people.transaction { implicit transaction =>
+        val results = db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).search.docAndIndexes().list
+        results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
+        results.map(_.doc.name).toSet should be(Set("Allan", "Brenda", "Charlie"))
+      }
+    }
     "query with multi-value nicknames" in {
       db.people.transaction { implicit transaction =>
         val people = db.people.query

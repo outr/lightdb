@@ -34,14 +34,14 @@ case class Index(path: Option[Path]) {
     taxonomyLoaded = true
     FSDirectory.open(path)
   }.getOrElse(new ByteBuffersDirectory)
-  lazy val taxonomyWriter: TaxonomyWriter = new DirectoryTaxonomyWriter(taxonomyDirectory)
+  lazy val taxonomyWriter: DirectoryTaxonomyWriter = new DirectoryTaxonomyWriter(taxonomyDirectory)
 
   def createIndexSearcher(): IndexSearcher = {
     searcherManager.maybeRefreshBlocking()
     searcherManager.acquire()
   }
 
-  def createTaxonomyReader(): TaxonomyReader = new DirectoryTaxonomyReader(taxonomyDirectory)
+  def createTaxonomyReader(): TaxonomyReader = new DirectoryTaxonomyReader(taxonomyWriter)
 
   def releaseIndexSearch(indexSearcher: IndexSearcher): Unit = searcherManager.release(indexSearcher)
 

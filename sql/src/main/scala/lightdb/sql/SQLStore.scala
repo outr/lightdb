@@ -9,7 +9,7 @@ import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.{Condition, Filter}
-import lightdb.materialized.{MaterializedAggregate, MaterializedIndex}
+import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
@@ -281,6 +281,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
         case Conversion.Materialized(fields) =>
           val json = jsonFromFields(fields)
           MaterializedIndex[Doc, Model](json, collection.model).asInstanceOf[V]
+        case Conversion.DocAndIndexes() =>
+          val json = jsonFromFields(fields.filter(_.indexed))
+          val doc = getDoc(rs)
+          MaterializedAndDoc[Doc, Model](json, collection.model, doc).asInstanceOf[V]
         case Conversion.Json(fields) =>
           jsonFromFields(fields).asInstanceOf[V]
         case Conversion.Distance(field, _, _, _) =>
@@ -338,6 +342,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case Conversion.Value(field) => List(field)
       case Conversion.Doc() | Conversion.Converted(_) => this.fields
       case Conversion.Materialized(fields) => fields
+      case Conversion.DocAndIndexes() => if (storeMode == StoreMode.Indexes) {
+        this.fields.filter(_.indexed)
+      } else {
+        this.fields
+      }
       case Conversion.Json(fields) => fields
       case d: Conversion.Distance[Doc, _] =>
         extraFields = extraFields ::: extraFieldsForDistance(d)
