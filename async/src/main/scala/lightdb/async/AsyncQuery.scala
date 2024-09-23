@@ -8,6 +8,7 @@ import lightdb.field.Field._
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.facet.FacetQuery
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
 import lightdb.materialized.MaterializedIndex
@@ -23,9 +24,9 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                                                                          limit: Option[Int] = None,
                                                                          countTotal: Boolean = false,
                                                                          scoreDocs: Boolean = false,
-                                                                         minDocScore: Option[Double] = None) {
-  query =>
-  private[async] def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal, scoreDocs, minDocScore)
+                                                                         minDocScore: Option[Double] = None,
+                                                                         facets: List[FacetQuery[Doc]] = Nil) { query =>
+  private[async] def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal, scoreDocs, minDocScore, facets)
 
   def scored: AsyncQuery[Doc, Model] = copy(scoreDocs = true)
 
@@ -43,6 +44,15 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
       case None => filter
     }
     copy(filter = Some(combined))
+  }
+
+  def facet(f: Model => FacetField[Doc],
+            path: List[String] = Nil,
+            childrenLimit: Option[Int] = Some(10),
+            dimsLimit: Option[Int] = Some(10)): AsyncQuery[Doc, Model] = {
+    val facetField = f(collection.model)
+    val facetQuery = FacetQuery(facetField, path, childrenLimit, dimsLimit)
+    copy(facets = facetQuery :: facets)
   }
 
   def clearSort: AsyncQuery[Doc, Model] = copy(sort = Nil)
@@ -129,44 +139,46 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
 
   object search {
     def apply[V](conversion: Conversion[Doc, V])
-                (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, V]] =
+                (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, V]] =
       IO.blocking(collection.store.doSearch(
         query = toQuery,
         conversion = conversion
       )).map { searchResults =>
         AsyncSearchResults(
+          model = collection.model,
           offset = searchResults.offset,
           limit = searchResults.limit,
           total = searchResults.total,
           scoredStream = fs2.Stream.fromBlockingIterator[IO](searchResults.iteratorWithScore, 512),
+          facetResults = searchResults.facetResults,
           transaction = transaction
         )
       }
 
-    def docs(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Doc]] = apply(Conversion.Doc())
+    def docs(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, Doc]] = apply(Conversion.Doc())
 
     def value[F](f: Model => Field[Doc, F])
-                (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, F]] =
+                (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, F]] =
       apply(Conversion.Value(f(collection.model)))
 
-    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[AsyncSearchResults[Doc, Id[Doc]]] =
+    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): IO[AsyncSearchResults[Doc, Model, Id[Doc]]] =
       value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
 
-    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Json]] =
+    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, Json]] =
       apply(Conversion.Json(f(collection.model)))
 
-    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, T]] =
+    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, T]] =
       apply(Conversion.Converted(f))
 
     def materialized(f: Model => List[Field[Doc, _]])
-                    (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, MaterializedIndex[Doc, Model]]] =
+                    (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, MaterializedIndex[Doc, Model]]] =
       apply(Conversion.Materialized(f(collection.model)))
 
     def distance[G <: Geo](f: Model => Field[Doc, List[G]],
                            from: Geo.Point,
                            sort: Boolean = true,
                            radius: Option[Distance] = None)
-                          (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, DistanceAndDoc[Doc]]] =
+                          (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, DistanceAndDoc[Doc]]] =
       apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
 
