@@ -31,6 +31,10 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   def fields: List[Field[Doc, _]] = _fields
 
+  def facetFields: List[FF] = fields.collect {
+    case ff: FF => ff
+  }
+
   def fieldByName[F](name: String): Field[Doc, F] = _fields
     .find(_.name == name)
     .getOrElse(throw new NullPointerException(s"$name field not found"))

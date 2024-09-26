@@ -52,6 +52,14 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     copy(facets = facetQuery :: facets)
   }
 
+  def facets(f: Model => List[FacetField[Doc]],
+             childrenLimit: Option[Int] = Some(10),
+             dimsLimit: Option[Int] = Some(10)): Query[Doc, Model] = {
+    val facetFields = f(collection.model)
+    val facetQueries = facetFields.map(ff => FacetQuery(ff, Nil, childrenLimit, dimsLimit))
+    copy(facets = facets ::: facetQueries)
+  }
+
   def clearSort: Query[Doc, Model] = copy(sort = Nil)
 
   def sort(sort: Sort*): Query[Doc, Model] = copy(sort = this.sort ::: sort.toList)
