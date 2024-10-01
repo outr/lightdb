@@ -136,8 +136,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
                 case Null => add(new StringField(field.name, Field.NullString, fs))
                 case _ => add(new StringField(field.name, json.asString, fs))
               }
-              case DefType.Json | DefType.Obj(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
               case DefType.Opt(d) => addJson(json, d)
+              case DefType.Json | DefType.Obj(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+              case _ if json == Null => // Ignore null values
               case DefType.Arr(d) => json.asVector.foreach(json => addJson(json, d))
               case DefType.Bool => add(new IntField(field.name, if (json.asBoolean) 1 else 0, fs))
               case DefType.Int => add(new LongField(field.name, json.asLong, fs))
@@ -440,7 +441,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         }
         val sortType = st(field.rw.definition)
         def sf(d: DefType): SortField = d match {
-          case DefType.Int => new SortedNumericSortField(fieldSortName, sortType, dir == SortDirection.Descending)
+          case DefType.Int | DefType.Dec => new SortedNumericSortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Str => new SortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Opt(t) => sf(t)
           case d => throw new RuntimeException(s"Unsupported sort definition: $d")
