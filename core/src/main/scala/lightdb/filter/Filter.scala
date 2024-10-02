@@ -66,7 +66,22 @@ object Filter {
     override lazy val fieldNames: List[String] = List(fieldName)
   }
 
-  case class Parsed[Doc <: Document[Doc], F](fieldName: String, query: String, allowLeadingWildcard: Boolean) extends Filter[Doc] {
+  case class StartsWith[Doc <: Document[Doc], F](fieldName: String, query: String) extends Filter[Doc] {
+    def field(model: DocumentModel[Doc]): Field[Doc, F] = model.fieldByName(fieldName)
+    override lazy val fieldNames: List[String] = List(fieldName)
+  }
+
+  case class EndsWith[Doc <: Document[Doc], F](fieldName: String, query: String) extends Filter[Doc] {
+    def field(model: DocumentModel[Doc]): Field[Doc, F] = model.fieldByName(fieldName)
+    override lazy val fieldNames: List[String] = List(fieldName)
+  }
+
+  case class Contains[Doc <: Document[Doc], F](fieldName: String, query: String) extends Filter[Doc] {
+    def field(model: DocumentModel[Doc]): Field[Doc, F] = model.fieldByName(fieldName)
+    override lazy val fieldNames: List[String] = List(fieldName)
+  }
+
+  case class Exact[Doc <: Document[Doc], F](fieldName: String, query: String) extends Filter[Doc] {
     def field(model: DocumentModel[Doc]): Field[Doc, F] = model.fieldByName(fieldName)
     override lazy val fieldNames: List[String] = List(fieldName)
   }

@@ -40,7 +40,10 @@ object AggregateFilter {
 
   case class RangeDouble[Doc <: Document[Doc]](name: String, field: Field[Doc, Double], from: Option[Double], to: Option[Double]) extends AggregateFilter[Doc]
 
-  case class Parsed[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], query: String, allowLeadingWildcard: Boolean) extends AggregateFilter[Doc]
+  case class StartsWith[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], query: String) extends AggregateFilter[Doc]
+  case class EndsWith[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], query: String) extends AggregateFilter[Doc]
+  case class Contains[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], query: String) extends AggregateFilter[Doc]
+  case class Exact[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], query: String) extends AggregateFilter[Doc]
 
   case class Distance[Doc <: Document[Doc]](name: String, field: Field[Doc, Geo.Point], from: Geo.Point, radius: lightdb.distance.Distance) extends AggregateFilter[Doc]
 }

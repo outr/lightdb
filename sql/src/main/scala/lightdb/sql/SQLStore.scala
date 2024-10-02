@@ -537,18 +537,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.DoubleArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
-    case f: Filter.Parsed[Doc, _] =>
-      val parts = f.query.split(" ").map { q =>
-        var s = q
-        if (!s.startsWith("%")) {
-          s = s"%$s"
-        }
-        if (!s.endsWith("%")) {
-          s = s"$s%"
-        }
-        s
-      }.toList
-      SQLPart(parts.map(_ => s"${f.fieldName} LIKE ?").mkString(" AND "), parts.map(s => SQLArg.StringArg(s)))
+    case Filter.StartsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"$query%")))
+    case Filter.EndsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query")))
+    case Filter.Contains(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query%")))
+    case Filter.Exact(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(query)))
     case f: Filter.Distance[Doc] => distanceFilter(f)
     case f: Filter.Multi[Doc] =>
       val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
@@ -595,7 +587,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(SQLArg.DoubleArg(from)))
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
-    case f: AggregateFilter.Parsed[_, _] => throw new UnsupportedOperationException("Parsed not supported in SQL!")
+    case AggregateFilter.StartsWith(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(s"$query%")))
+    case AggregateFilter.EndsWith(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(s"%$query")))
+    case AggregateFilter.Contains(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(s"%$query%")))
+    case AggregateFilter.Exact(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(query)))
     case f: AggregateFilter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
   }
 

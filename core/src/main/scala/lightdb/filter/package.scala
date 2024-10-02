@@ -7,6 +7,7 @@ import scala.language.implicitConversions
 package object filter {
   implicit class ListFilterExtras[V, Doc, Filter](fs: FilterSupport[List[V], Doc, Filter]) {
     def has(value: V): Filter = fs.is(List(value))
+    def hasAny(values: List[V]): Filter = fs.is(values)
   }
   implicit class SetFilterExtras[V, Doc, Filter](fs: FilterSupport[Set[V], Doc, Filter]) {
     def has(value: V): Filter = fs.is(Set(value))

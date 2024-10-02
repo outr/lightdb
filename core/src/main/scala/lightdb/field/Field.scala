@@ -9,7 +9,7 @@ import lightdb.distance.Distance
 import lightdb.doc.Document
 import lightdb.facet.FacetValue
 import lightdb.filter.Filter.DrillDownFacetFilter
-import lightdb.filter.{Filter, FilterSupport}
+import lightdb.filter.{Condition, Filter, FilterClause, FilterSupport}
 import lightdb.materialized.Materializable
 import lightdb.spatial.Geo
 
@@ -37,6 +37,8 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   lazy val isSpatial: Boolean = className.exists(_.startsWith("lightdb.spatial.Geo"))
 
+  def isTokenized: Boolean = false
+
   def getJson(doc: Doc, state: IndexingState): Json = get(doc, this, state).json
 
   override def is(value: V): Filter[Doc] = Filter.Equals(name, value)
@@ -58,22 +60,25 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
     Filter.In(name, values)
   }
 
-  override def parsed(query: String, allowLeadingWildcard: Boolean): Filter[Doc] =
-    Filter.Parsed(name, query, allowLeadingWildcard)
+  override def startsWith(value: String): Filter[Doc] = Filter.StartsWith(name, value)
+  override def endsWith(value: String): Filter[Doc] = Filter.EndsWith(name, value)
+  override def contains(value: String): Filter[Doc] = Filter.Contains(name, value)
+  override def exactly(value: String): Filter[Doc] = Filter.Exact(name, value)
 
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): Filter[Doc] = {
     val words = s.split("\\s+").map { w =>
       if (matchStartsWith && matchEndsWith) {
-        s"%$w%"
+        contains(w)
       } else if (matchStartsWith) {
-        s"%$w"
+        startsWith(w)
       } else if (matchEndsWith) {
-        s"$w%"
+        endsWith(w)
       } else {
-        w
+        exactly(w)
       }
-    }.mkString(" ")
-    parsed(words, allowLeadingWildcard = matchEndsWith)
+    }.toList
+    val filters = words.map(filter => FilterClause(filter, Condition.Must, None))
+    Filter.Multi(minShould = 0, filters = filters)
   }
 
   def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, FieldGetter {
@@ -165,7 +170,9 @@ object Field {
 
   trait UniqueIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V]
 
-  trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String]
+  trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String] {
+    override def isTokenized: Boolean = true
+  }
 
   class FacetField[Doc <: Document[Doc]](name: String,
                                          get: FieldGetter[Doc, List[FacetValue]],
