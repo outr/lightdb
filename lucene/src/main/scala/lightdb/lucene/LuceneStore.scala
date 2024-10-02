@@ -26,7 +26,7 @@ import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldE
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.util.BytesRef
-import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsConfig, FacetField => LuceneFacetField}
+import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager, FacetsConfig, FacetField => LuceneFacetField}
 
 import java.nio.file.Path
 import scala.language.implicitConversions
@@ -216,17 +216,19 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     }
     val s = new LuceneSort(sortFields: _*)
     val indexSearcher = state.indexSearcher
-    var facetsCollector: Option[FacetsCollector] = None
+    var facetsCollectorManager: Option[FacetsCollectorManager] = None
     val limit = query.limit.map(l => math.min(l, 100)).getOrElse(100) + query.offset
     if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     var facetResults: Map[FacetField[Doc], FacetResult] = Map.empty
     def search(total: Option[Int]): TopFieldDocs = {
       if (query.facets.nonEmpty) {
-        facetsCollector = Some(new FacetsCollector)
+        facetsCollectorManager = Some(new FacetsCollectorManager(query.scoreDocs))
       }
-      val topFieldDocs = facetsCollector match {
-        case Some(fc) => FacetsCollector.search(indexSearcher, q, total.getOrElse(limit), s, query.scoreDocs, fc)
-        case None => indexSearcher.search(q, total.getOrElse(limit), s, query.scoreDocs)
+      val (facetsCollector, topFieldDocs) = facetsCollectorManager match {
+        case Some(fcm) =>
+          val facetsResult = FacetsCollectorManager.search(indexSearcher, q, total.getOrElse(limit), s, query.scoreDocs, fcm)
+          (Some(facetsResult.facetsCollector()), facetsResult.topDocs().asInstanceOf[TopFieldDocs])
+        case None => (None, indexSearcher.search(q, total.getOrElse(limit), s, query.scoreDocs))
       }
       facetResults = facetsCollector match {
         case Some(fc) =>
