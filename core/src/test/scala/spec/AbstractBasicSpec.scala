@@ -43,7 +43,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   private val ruth = Person("Ruth", 102, _id = Person.id("ruth"))
   private val sam = Person("Sam", 81, _id = Person.id("sam"))
   private val tori = Person("Tori", 30, nicknames = Set("Nica"), _id = Person.id("tori"))
-  private val uba = Person("Uba", 21, _id = Person.id("uba"))
+  private val uba = Person("Uba", 21, nicknames = Set("multiple terms"), _id = Person.id("uba"))
   private val veronica = Person("Veronica", 13, nicknames = Set("Vera", "Nica"), _id = Person.id("veronica"))
   private val wyatt = Person("Wyatt", 30, _id = Person.id("wyatt"))
   private val xena = Person("Xena", 63, _id = Person.id("xena"))
@@ -217,7 +217,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "search using tokenized data and a parsed query" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.search.words("nica 13")).toList
+        val people = db.people.query.filter(_.search.words("nica 13", matchEndsWith = true)).toList
         people.map(_.name) should be(List("Veronica"))
       }
     }
@@ -227,12 +227,12 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
           val results = db.people.query.scored.filter(_
             .builder
             .minShould(0)
-            .should(_.search.words("nica 13"), boost = Some(2.0))
+            .should(_.search.words("nica 13", matchEndsWith = true), boost = Some(2.0))
             .should(_.age <=> (10, 15))
           ).search.docs
           val people = results.list
           people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
-          results.scores should be(List(4.660672187805176, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+          results.scores should be(List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
         }
       }
     }
@@ -298,6 +298,20 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
       db.people.transaction { implicit transaction =>
         val people = db.people.query.filter(_.name ~* "Han.+").toList
         people.map(_.name) should be(List("Hanna"))
+      }
+    }
+    "query nicknames that contain ica" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query
+          .filter(_.nicknames.contains("ica"))
+          .toList
+        people.map(_.name).toSet should be(Set("Tori", "Veronica"))
+      }
+    }
+    "query all names that start with t" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query.filter(_.allNames.startsWith("t")).toList
+        people.map(_.name).toSet should be(Set("Tori"))
       }
     }
     "query nicknames with regex match" in {
@@ -435,6 +449,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     val age: I[Int] = field.index("age", (p: Person) => p.age)
     val city: I[Option[City]] = field.index("city", (p: Person) => p.city)
     val nicknames: I[Set[String]] = field.index("nicknames", (p: Person) => p.nicknames)
+    val allNames: I[List[String]] = field.index("allNames", p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized("search", (doc: Person) => s"${doc.name} ${doc.age}")
     val doc: I[Person] = field.index("doc", (p: Person) => p)
   }

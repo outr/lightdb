@@ -23,6 +23,11 @@ trait FilterSupport[F, Doc, Filter] {
   def ~*(expression: String): Filter = regex(expression)
   def regex(expression: String): Filter
 
+  def startsWith(value: String): Filter
+  def endsWith(value: String): Filter
+  def contains(value: String): Filter
+  def exactly(value: String): Filter
+
   def BETWEEN(tuple: (F, F))(implicit num: Numeric[F]): Filter = range(Some(tuple._1), Some(tuple._2))
   def <=>(tuple: (F, F))(implicit num: Numeric[F]): Filter = range(Some(tuple._1), Some(tuple._2))
 
@@ -54,8 +59,6 @@ trait FilterSupport[F, Doc, Filter] {
   protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter
 
   def IN(values: Seq[F]): Filter
-
-  def parsed(query: String, allowLeadingWildcard: Boolean = false): Filter
 
   def words(s: String,
             matchStartsWith: Boolean = true,

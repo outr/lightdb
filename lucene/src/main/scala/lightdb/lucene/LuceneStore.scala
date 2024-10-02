@@ -22,7 +22,7 @@ import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, SortedNumericDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.geo.{Line, Polygon}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, PrefixQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.util.BytesRef
@@ -340,66 +340,77 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   private def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = filter match {
-    case Some(f) => f match {
-      case f: Filter.Equals[Doc, _] => exactQuery(f.field(collection.model), f.getJson(collection.model))
-      case f: Filter.NotEquals[Doc, _] =>
-        val b = new BooleanQuery.Builder
-        b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
-        b.add(exactQuery(f.field(collection.model), f.getJson(collection.model)), BooleanClause.Occur.MUST_NOT)
-        b.build()
-      case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression))
-      case f: Filter.In[Doc, _] =>
-        val queries = f.getJson(collection.model).map(json => exactQuery(f.field(collection.model), json))
-        val b = new BooleanQuery.Builder
-        b.setMinimumNumberShouldMatch(1)
-        queries.foreach { q =>
-          b.add(q, BooleanClause.Occur.SHOULD)
-        }
-        b.build()
-      case Filter.RangeLong(fieldName, from, to) => LongField.newRangeQuery(fieldName, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
-      case Filter.RangeDouble(fieldName, from, to) => DoubleField.newRangeQuery(fieldName, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
-      case Filter.Parsed(fieldName, query, allowLeadingWildcard) =>
-        val parser = new QueryParser(fieldName, this.index.analyzer)
-        parser.setAllowLeadingWildcard(allowLeadingWildcard)
+    case Some(f) =>
+      val fields = f.fields(collection.model)
+      def parsed(q: String, allowLeading: Boolean = false): LuceneQuery = {
+        val parser = new QueryParser(f.fieldNames.head, this.index.analyzer)
+        parser.setAllowLeadingWildcard(allowLeading)
         parser.setSplitOnWhitespace(true)
-        parser.parse(query)
-      case Filter.Distance(fieldName, from, radius) =>
-        val b = new BooleanQuery.Builder
-        b.add(LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
-        b.add(LatLonPoint.newBoxQuery(fieldName, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
-        b.build()
-      case Filter.Multi(minShould, clauses) =>
-        val b = new BooleanQuery.Builder
-        val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
-        val minShouldMatch = if (hasShould) minShould else 0
-        b.setMinimumNumberShouldMatch(minShouldMatch)
-        clauses.foreach { c =>
-          val q = filter2Lucene(Some(c.filter))
-          val query = c.boost match {
-            case Some(boost) => new BoostQuery(q, boost.toFloat)
-            case None => q
-          }
-          val occur = c.condition match {
-            case Condition.Must => BooleanClause.Occur.MUST
-            case Condition.MustNot => BooleanClause.Occur.MUST_NOT
-            case Condition.Filter => BooleanClause.Occur.FILTER
-            case Condition.Should => BooleanClause.Occur.SHOULD
-          }
-          b.add(query, occur)
-        }
-        if (minShouldMatch == 0 && !clauses.exists(_.condition == Condition.Must)) {
+        parser.parse(q)
+      }
+      f match {
+        case f: Filter.Equals[Doc, _] => exactQuery(f.field(collection.model), f.getJson(collection.model))
+        case f: Filter.NotEquals[Doc, _] =>
+          val b = new BooleanQuery.Builder
           b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
-        }
-        b.build()
-      case Filter.DrillDownFacetFilter(fieldName, path, showOnlyThisLevel) =>
-        val indexedFieldName = facetsConfig.getDimConfig(fieldName).indexFieldName
-        val exactPath = if (showOnlyThisLevel) {
-          path ::: List("$ROOT$")
-        } else {
-          path
-        }
-        new TermQuery(DrillDownQuery.term(indexedFieldName, fieldName, exactPath: _*))
-    }
+          b.add(exactQuery(f.field(collection.model), f.getJson(collection.model)), BooleanClause.Occur.MUST_NOT)
+          b.build()
+        case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression))
+        case f: Filter.In[Doc, _] =>
+          val queries = f.getJson(collection.model).map(json => exactQuery(f.field(collection.model), json))
+          val b = new BooleanQuery.Builder
+          b.setMinimumNumberShouldMatch(1)
+          queries.foreach { q =>
+            b.add(q, BooleanClause.Occur.SHOULD)
+          }
+          b.build()
+        case Filter.RangeLong(fieldName, from, to) => LongField.newRangeQuery(fieldName, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
+        case Filter.RangeDouble(fieldName, from, to) => DoubleField.newRangeQuery(fieldName, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
+        case Filter.StartsWith(_, query) if fields.head.isTokenized => parsed(s"$query*")
+        case Filter.EndsWith(_, query) if fields.head.isTokenized => parsed(s"*$query", allowLeading = true)
+        case Filter.Contains(_, query) if fields.head.isTokenized => parsed(s"*$query*", allowLeading = true)
+        case Filter.Exact(_, query) if fields.head.isTokenized => parsed(query)
+        case Filter.StartsWith(fieldName, query) => new WildcardQuery(new Term(fieldName, s"$query*"))
+        case Filter.EndsWith(fieldName, query) => new WildcardQuery(new Term(fieldName, s"*$query"))
+        case Filter.Contains(fieldName, query) => new WildcardQuery(new Term(fieldName, s"*$query*"))
+        case Filter.Exact(fieldName, query) => new WildcardQuery(new Term(fieldName, query))
+        case Filter.Distance(fieldName, from, radius) =>
+          val b = new BooleanQuery.Builder
+          b.add(LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
+          b.add(LatLonPoint.newBoxQuery(fieldName, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
+          b.build()
+        case Filter.Multi(minShould, clauses) =>
+          val b = new BooleanQuery.Builder
+          val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
+          val minShouldMatch = if (hasShould) minShould else 0
+          b.setMinimumNumberShouldMatch(minShouldMatch)
+          clauses.foreach { c =>
+            val q = filter2Lucene(Some(c.filter))
+            val query = c.boost match {
+              case Some(boost) => new BoostQuery(q, boost.toFloat)
+              case None => q
+            }
+            val occur = c.condition match {
+              case Condition.Must => BooleanClause.Occur.MUST
+              case Condition.MustNot => BooleanClause.Occur.MUST_NOT
+              case Condition.Filter => BooleanClause.Occur.FILTER
+              case Condition.Should => BooleanClause.Occur.SHOULD
+            }
+            b.add(query, occur)
+          }
+          if (minShouldMatch == 0 && !clauses.exists(_.condition == Condition.Must)) {
+            b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
+          }
+          b.build()
+        case Filter.DrillDownFacetFilter(fieldName, path, showOnlyThisLevel) =>
+          val indexedFieldName = facetsConfig.getDimConfig(fieldName).indexFieldName
+          val exactPath = if (showOnlyThisLevel) {
+            path ::: List("$ROOT$")
+          } else {
+            path
+          }
+          new TermQuery(DrillDownQuery.term(indexedFieldName, fieldName, exactPath: _*))
+      }
     case None => new MatchAllDocsQuery
   }
 

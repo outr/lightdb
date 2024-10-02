@@ -4,7 +4,7 @@ import fabric.rw._
 import lightdb.distance.Distance
 import lightdb.doc.Document
 import lightdb.field.Field
-import lightdb.filter.FilterSupport
+import lightdb.filter.{Condition, Filter, FilterClause, FilterSupport}
 import lightdb.materialized.Materializable
 import lightdb.spatial.Geo
 
@@ -28,22 +28,24 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
 
   override def IN(values: Seq[V]): AggregateFilter[Doc] = AggregateFilter.In(name, field, values)
 
-  override def parsed(query: String, allowLeadingWildcard: Boolean): AggregateFilter[Doc] =
-    AggregateFilter.Parsed(name, field, query, allowLeadingWildcard)
+  override def startsWith(value: String): AggregateFilter[Doc] = AggregateFilter.StartsWith(name, field, value)
+  override def endsWith(value: String): AggregateFilter[Doc] = AggregateFilter.EndsWith(name, field, value)
+  override def contains(value: String): AggregateFilter[Doc] = AggregateFilter.Contains(name, field, value)
+  override def exactly(value: String): AggregateFilter[Doc] = AggregateFilter.Exact(name, field, value)
 
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): AggregateFilter[Doc] = {
     val words = s.split("\\s+").map { w =>
       if (matchStartsWith && matchEndsWith) {
-        s"%$w%"
+        contains(w)
       } else if (matchStartsWith) {
-        s"%$w"
+        startsWith(w)
       } else if (matchEndsWith) {
-        s"$w%"
+        endsWith(w)
       } else {
-        w
+        exactly(w)
       }
-    }.mkString(" ")
-    parsed(words, allowLeadingWildcard = matchEndsWith)
+    }.toList
+    AggregateFilter.Combined(words)
   }
 
   override def distance(from: Geo.Point, radius: Distance): AggregateFilter[Doc] =
