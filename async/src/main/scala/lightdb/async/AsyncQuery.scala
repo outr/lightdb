@@ -11,7 +11,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.FacetQuery
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
-import lightdb.materialized.MaterializedIndex
+import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
@@ -103,6 +103,15 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                       (implicit transaction: Transaction[Doc]): fs2.Stream[IO, (MaterializedIndex[Doc, Model], Double)] =
         apply(Conversion.Materialized[Doc, Model](f(collection.model)))
 
+      def indexes()(implicit transaction: Transaction[Doc]): fs2.Stream[IO, (MaterializedIndex[Doc, Model], Double)] = {
+        val fields = collection.model.fields.filter(_.indexed)
+        apply(Conversion.Materialized[Doc, Model](fields))
+      }
+
+      def docAndIndexes()(implicit transaction: Transaction[Doc]): fs2.Stream[IO, (MaterializedAndDoc[Doc, Model], Double)] = {
+        apply(Conversion.DocAndIndexes[Doc, Model]())
+      }
+
       def distance[G <: Geo](f: Model => Field[Doc, List[G]],
                              from: Geo.Point,
                              sort: Boolean = true,
@@ -136,6 +145,15 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
     def materialized(f: Model => List[Field[Doc, _]])
                     (implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedIndex[Doc, Model]] =
       apply(Conversion.Materialized[Doc, Model](f(collection.model)))
+
+    def indexes()(implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedIndex[Doc, Model]] = {
+      val fields = collection.model.fields.filter(_.indexed)
+      apply(Conversion.Materialized[Doc, Model](fields))
+    }
+
+    def docAndIndexes()(implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedAndDoc[Doc, Model]] = {
+      apply(Conversion.DocAndIndexes[Doc, Model]())
+    }
 
     def distance[G <: Geo](f: Model => Field[Doc, List[G]],
                            from: Geo.Point,
@@ -181,6 +199,15 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
     def materialized(f: Model => List[Field[Doc, _]])
                     (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, MaterializedIndex[Doc, Model]]] =
       apply(Conversion.Materialized(f(collection.model)))
+
+    def indexes()(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, MaterializedIndex[Doc, Model]]] = {
+      val fields = collection.model.fields.filter(_.indexed)
+      apply(Conversion.Materialized(fields))
+    }
+
+    def docAndIndexes()(implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, MaterializedAndDoc[Doc, Model]]] = {
+      apply(Conversion.DocAndIndexes())
+    }
 
     def distance[G <: Geo](f: Model => Field[Doc, List[G]],
                            from: Geo.Point,
