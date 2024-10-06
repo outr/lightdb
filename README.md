@@ -42,8 +42,6 @@ Computationally focused database using pluggable store + indexer
   
 ## 1.1 TODO
 - [ ] Add btree supported indexes in Store
-- [ ] Support SQL as a Store as well as Indexer
-- [ ] Support Lucene as a Store as well as Indexer
 - [ ] Provide a Scala.js implementation of Store using Web Storage API
 - [ ] Provide a Scala.js implementation using IndexedDB
 - [ ] ScalaNative support
