@@ -246,7 +246,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
                 }
                 val updatedValues = values.filterNot(_.value == "$ROOT$")
                 val totalCount = updatedValues.map(_.count).sum
-                fq.field -> FacetResult(updatedValues, updatedValues.length, totalCount)
+                fq.field -> FacetResult(updatedValues, facetResult.childCount, totalCount)
               case None =>
                 fq.field -> FacetResult(Nil, 0, 0)
             }
