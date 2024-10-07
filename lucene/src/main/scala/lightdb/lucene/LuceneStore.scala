@@ -22,7 +22,7 @@ import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, SortedNumericDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.geo.{Line, Polygon}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, PrefixQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, MultiCollectorManager, PrefixQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollector, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.util.BytesRef
@@ -221,15 +221,21 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     var facetResults: Map[FacetField[Doc], FacetResult] = Map.empty
     def search(total: Option[Int]): TopFieldDocs = {
+      val hitCountCollectorManager = new TotalHitCountCollectorManager
+      val topFieldCollectorManager = new TopFieldCollectorManager(s, total.getOrElse(limit), Int.MaxValue)
       if (query.facets.nonEmpty) {
         facetsCollectorManager = Some(new FacetsCollectorManager(query.scoreDocs))
       }
-      val (facetsCollector, topFieldDocs) = facetsCollectorManager match {
-        case Some(fcm) =>
-          val facetsResult = FacetsCollectorManager.search(indexSearcher, q, total.getOrElse(limit), s, query.scoreDocs, fcm)
-          (Some(facetsResult.facetsCollector()), facetsResult.topDocs().asInstanceOf[TopFieldDocs])
-        case None => (None, indexSearcher.search(q, total.getOrElse(limit), s, query.scoreDocs))
-      }
+      val collectors = List(
+        Some(hitCountCollectorManager), Some(topFieldCollectorManager), facetsCollectorManager
+      ).flatten
+      // TODO: Support exclusion of hitCountCollectorManager if countTotal is false
+      val manager = new MultiCollectorManager(collectors: _*)
+      val resultCollectors = indexSearcher.search(q, manager).toVector
+      val actualCount = resultCollectors(0).asInstanceOf[java.lang.Integer].intValue()
+      val topFieldDocs = resultCollectors(1).asInstanceOf[TopFieldDocs]
+      val facetsCollector = if (facetsCollectorManager.nonEmpty) Some(resultCollectors(2).asInstanceOf[FacetsCollector]) else None
+
       facetResults = facetsCollector match {
         case Some(fc) =>
           val facets = new FastTaxonomyFacetCounts(state.taxonomyReader, facetsConfig, fc)
@@ -253,7 +259,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           }.toMap
         case None => Map.empty
       }
-      val totalHits = total.getOrElse(topFieldDocs.totalHits.value.toInt)
+      val totalHits = total.getOrElse(actualCount)
       if (totalHits > topFieldDocs.scoreDocs.length && total.isEmpty && query.limit.forall(l => l + query.offset > limit)) {
         search(Some(query.limit.map(l => math.min(l, totalHits)).getOrElse(totalHits)))
       } else {
@@ -266,6 +272,15 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         .scoreDocs
         .toList
         .drop(query.offset)
+        .map { scoreDoc =>
+          if (query.scoreDocs) {
+            val explanation = indexSearcher.explain(q, scoreDoc.doc)
+            // TODO: Add explanation info
+            new ScoreDoc(scoreDoc.doc, explanation.getValue.floatValue())
+          } else {
+            scoreDoc
+          }
+        }
       query.minDocScore match {
         case Some(min) => list.filter(_.score.toDouble >= min)
         case None => list
