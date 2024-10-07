@@ -360,6 +360,13 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         db.people.count should be(1_024)
       }
     }
+    "verify id count matches total count" in {
+      db.people.transaction { implicit transaction =>
+        val results = db.people.query.countTotal(true).search.id
+        results.total should be(Some(1_024))
+        results.list.length should be(1_024)
+      }
+    }
     "verify the correct count in query total" in {
       db.people.transaction { implicit transaction =>
         val results = db.people.query
