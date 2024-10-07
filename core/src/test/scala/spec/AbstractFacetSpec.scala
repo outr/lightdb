@@ -60,10 +60,10 @@ abstract class AbstractFacetSpec extends AnyWordSpec with Matchers { spec =>
           .search
           .docs
         val publishDateResult = results.facet(_.publishDateFacet)
-        publishDateResult.childCount should be(3)
-        publishDateResult.totalCount should be(6)
         publishDateResult.values.map(_.value) should be(List("2010", "2012", "1999"))
+        publishDateResult.childCount should be(4)
         publishDateResult.values.map(_.count) should be(List(2, 2, 2))
+        publishDateResult.totalCount should be(6)
       }
     }
     "list all support@one.com keyword facets" in {
@@ -119,7 +119,7 @@ abstract class AbstractFacetSpec extends AnyWordSpec with Matchers { spec =>
         authorResult.values.map(_.value) should be(List("Bob", "Lisa", "Susan", "Frank", "George"))
         authorResult.values.map(_.count) should be(List(1, 1, 1, 1, 1))
         val publishResult = results.facet(_.publishDateFacet)
-        publishResult.childCount should be(2)
+        publishResult.childCount should be(3)
         publishResult.totalCount should be(4)
         publishResult.values.map(_.value) should be(List("2012", "1999"))
         publishResult.values.map(_.count) should be(List(2, 2))
@@ -159,7 +159,7 @@ abstract class AbstractFacetSpec extends AnyWordSpec with Matchers { spec =>
         authorResult.values.map(_.value) should be(List("Lisa"))
         authorResult.values.map(_.count) should be(List(1))
         val publishResult = results.facet(_.publishDateFacet)
-        publishResult.childCount should be(0)
+        publishResult.childCount should be(1)
         publishResult.totalCount should be(0)
         publishResult.values should be(Nil)
       }
@@ -178,7 +178,7 @@ abstract class AbstractFacetSpec extends AnyWordSpec with Matchers { spec =>
         authorResult.values.map(_.value) should be(List("George"))
         authorResult.values.map(_.count) should be(List(1))
         val publishResult = results.facet(_.publishDateFacet)
-        publishResult.childCount should be(0)
+        publishResult.childCount should be(1)
         publishResult.totalCount should be(0)
         publishResult.values should be(Nil)
       }
@@ -232,7 +232,7 @@ abstract class AbstractFacetSpec extends AnyWordSpec with Matchers { spec =>
         authorResult.values.map(_.value) should be(List("Bob"))
         authorResult.values.map(_.count) should be(List(1))
         val publishResult = results.facet(_.publishDateFacet)
-        publishResult.childCount should be(0)
+        publishResult.childCount should be(1)
         publishResult.totalCount should be(0)
       }
     }
