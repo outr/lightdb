@@ -33,6 +33,8 @@ import scala.language.implicitConversions
 import scala.util.Try
 
 class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Option[Path], val storeMode: StoreMode) extends Store[Doc, Model] {
+  IndexSearcher.setMaxClauseCount(10_000_000)
+
   private lazy val index = Index(directory)
   private lazy val facetsConfig: FacetsConfig = {
     val c = new FacetsConfig
@@ -246,7 +248,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
             }) match {
               case Some(facetResult) =>
                 val values = if (facetResult.childCount > 0) {
-                  facetResult.labelValues.toList.map(lv => FacetResultValue(lv.label, lv.value.intValue()))
+                  facetResult.labelValues.toList.map { lv =>
+                    FacetResultValue(lv.label, lv.value.intValue())
+                  }
                 } else {
                   Nil
                 }
