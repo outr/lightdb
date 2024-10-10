@@ -469,6 +469,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           case DefType.Dec => SortField.Type.DOUBLE
           case DefType.Int => SortField.Type.LONG
           case DefType.Opt(t) => st(t)
+          case DefType.Arr(t) => st(t)
           case _ => throw new RuntimeException(s"Unsupported sort type for ${field.rw.definition}")
         }
         val sortType = st(field.rw.definition)
@@ -476,6 +477,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           case DefType.Int | DefType.Dec => new SortedNumericSortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Str => new SortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Opt(t) => sf(t)
+          case DefType.Arr(t) => sf(t)
           case d => throw new RuntimeException(s"Unsupported sort definition: $d")
         }
         sf(field.rw.definition)
