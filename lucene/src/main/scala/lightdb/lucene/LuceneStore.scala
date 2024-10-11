@@ -138,6 +138,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
                 case Null => add(new StringField(field.name, Field.NullString, fs))
                 case _ => add(new StringField(field.name, json.asString, fs))
               }
+              case DefType.Enum(_, _) => add(new StringField(field.name, json.asString, fs))
               case DefType.Opt(d) => addJson(json, d)
               case DefType.Json | DefType.Obj(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
               case _ if json == Null => // Ignore null values
