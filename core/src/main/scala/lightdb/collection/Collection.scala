@@ -75,11 +75,13 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       if (Collection.LogTransactions) scribe.info(s"Creating new Transaction for $name")
       val transaction = store.createTransaction()
       set.add(transaction)
+      trigger.transactionStart(transaction)
       transaction
     }
 
     def release(transaction: Transaction[Doc]): Unit = {
       if (Collection.LogTransactions) scribe.info(s"Releasing Transaction for $name")
+      trigger.transactionEnd(transaction)
       store.releaseTransaction(transaction)
       transaction.close()
       set.remove(transaction)

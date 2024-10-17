@@ -15,6 +15,12 @@ class CollectionTriggers[Doc <: Document[Doc]] extends CollectionTrigger[Doc] {
     list = list.filterNot(_ eq trigger)
   }
 
+  override def transactionStart(transaction: Transaction[Doc]): Unit =
+    list.foreach(_.transactionStart(transaction))
+
+  override def transactionEnd(transaction: Transaction[Doc]): Unit =
+    list.foreach(_.transactionEnd(transaction))
+
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit =
     list.foreach(_.insert(doc))
 

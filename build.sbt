@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.14.4"
+ThisBuild / version := "0.14.5-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -289,4 +289,15 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.jooq" % "jooq" % "3.19.10",
 			"io.quickchart" % "QuickChart" % "1.2.0"
 		)
+	)
+
+lazy val docs = project
+	.in(file("documentation"))
+	.dependsOn(core.jvm)
+	.enablePlugins(MdocPlugin)
+	.settings(
+	  mdocVariables := Map(
+		"VERSION" -> version.value
+	  ),
+	  mdocOut := file(".")
 	)

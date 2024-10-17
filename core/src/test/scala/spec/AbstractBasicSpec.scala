@@ -3,7 +3,7 @@ package spec
 import fabric.rw._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.collection.Collection
-import lightdb.doc.{Document, DocumentModel, JsonConversion, MaterializedModel}
+import lightdb.doc.{DocState, Document, DocumentModel, JsonConversion, MaterializedBatchModel, MaterializedModel}
 import lightdb.feature.DBFeatureKey
 import lightdb.field.Field
 import lightdb.filter._
@@ -19,6 +19,8 @@ import java.io.File
 import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
+  val CreateRecords = 100_000
+
   protected def aggregationSupported: Boolean = true
   protected def filterBuilderSupported: Boolean = false
   protected def memoryOnly: Boolean = false
@@ -104,9 +106,9 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
       }
     }
-    /*"verify the AgeLinks is properly updated" in {
-      db.ageLinks.t.get(AgeLinks.id(30)).map(_.people) should be(Some(List(Id("yuri"), Id("wyatt"), Id("tori"))))
-    }*/
+    "verify the AgeLinks is properly updated" in {
+      db.ageLinks.t.get(AgeLinks.id(30)).map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori"))))
+    }
     "query with aggregate functions" in {
       if (aggregationSupported) {
         db.people.transaction { implicit transaction =>
@@ -340,11 +342,11 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
       }
     }
     "do a database backup" in {
-      DatabaseBackup.archive(db, new File(s"backups/$specName.zip")) should be(27)
+      DatabaseBackup.archive(db, new File(s"backups/$specName.zip")) should be(49)
     }
     "insert a lot more names" in {
       db.people.transaction { implicit transaction =>
-        val p = (1 to 1_000).toList.map { index =>
+        val p = (1 to CreateRecords).toList.map { index =>
           Person(
             name = s"Unique Snowflake $index",
             age = if (index > 100) 0 else index,
@@ -357,28 +359,28 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "verify the correct number of people exist in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(1_024)
+        db.people.count should be(CreateRecords + 24)
       }
     }
     "verify id count matches total count" in {
       db.people.transaction { implicit transaction =>
         val results = db.people.query.countTotal(true).search.id
-        results.total should be(Some(1_024))
-        results.list.length should be(1_024)
+        results.total should be(Some(CreateRecords + 24))
+        results.list.length should be(CreateRecords + 24)
       }
     }
     "verify the correct count in query total" in {
       db.people.transaction { implicit transaction =>
         val results = db.people.query
-          .filter(_.nicknames has "robot")
+          .filter(_.nicknames.has("robot"))
           .sort(Sort.ByField(Person.age).descending)
           .limit(100)
           .countTotal(true)
           .search
           .docs
         results.list.length should be(100)
-        results.total should be(Some(1_000))
-        results.remaining should be(Some(1_000))
+        results.total should be(Some(CreateRecords))
+        results.remaining should be(Some(CreateRecords))
       }
     }
     "verify the correct count in query total with offset" in {
@@ -391,13 +393,13 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
           .search
           .docs
         results.list.length should be(100)
-        results.total should be(Some(1_000))
-        results.remaining should be(Some(900))
+        results.total should be(Some(CreateRecords))
+        results.remaining should be(Some(CreateRecords - 100))
       }
     }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
-        db.people.truncate() should be(1_024)
+        db.people.truncate() should be(CreateRecords + 24)
       }
     }
     "verify the collection is empty" in {
@@ -406,7 +408,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
       }
     }
     "restore from database backup" in {
-      DatabaseRestore.archive(db, new File(s"backups/$specName.zip")) should be(27)
+      DatabaseRestore.archive(db, new File(s"backups/$specName.zip")) should be(49)
     }
     "verify the correct number of records exist" in {
       db.people.transaction { implicit transaction =>
@@ -437,7 +439,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
     val people: Collection[Person, Person.type] = collection(Person)
     // TODO: Revisit this - performance is currently awful and transaction state causes overlapping dirty data
-//    val ageLinks: Collection[AgeLinks, AgeLinks.type] = collection(AgeLinks)
+    val ageLinks: Collection[AgeLinks, AgeLinks.type] = collection(AgeLinks)
 
     override def storeManager: StoreManager = spec.storeManager
 
@@ -468,11 +470,11 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     implicit val rw: RW[City] = RW.gen
   }
 
-  /*case class AgeLinks(age: Int, people: List[Id[Person]]) extends Document[AgeLinks] {
+  case class AgeLinks(age: Int, people: List[Id[Person]]) extends Document[AgeLinks] {
     lazy val _id: Id[AgeLinks] = AgeLinks.id(age)
   }
 
-  object AgeLinks extends MaterializedModel[AgeLinks, Person, Person.type] with JsonConversion[AgeLinks] {
+  object AgeLinks extends MaterializedBatchModel[AgeLinks, Person, Person.type] with JsonConversion[AgeLinks] {
     override implicit val rw: RW[AgeLinks] = RW.gen
 
     val age: F[Int] = field("age", _.age)
@@ -482,22 +484,61 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
     def id(age: Int): Id[AgeLinks] = Id(age.toString)
 
-    override protected def adding(doc: Person)(implicit transaction: Transaction[Person]): Unit = db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
-      case Some(links) => Some(links.copy(people = (doc._id :: links.people).distinct))
-      case None => Some(AgeLinks(doc.age, List(doc._id)))
+    override protected def process(list: List[List[DocState[Person]]]): Unit = db.ageLinks.transaction { implicit transaction =>
+      list.groupBy(_.head.doc.age).foreach {
+        case (age, states) =>
+          val firsts = states.map(_.head)
+          val add = firsts.collect {
+            case DocState.Added(doc) => doc._id
+            case DocState.Modified(doc) => doc._id
+          }
+          val remove = firsts.collect {
+            case DocState.Removed(doc) => doc._id
+          }.toSet
+          db.ageLinks.modify(AgeLinks.id(age)) { existing =>
+            val current = existing.getOrElse(AgeLinks(age, Nil))
+            val modified = current.copy(
+              people = (current.people ::: add).filterNot(remove.contains)
+            )
+            if (modified.people.isEmpty) {
+              None
+            } else {
+              Some(modified)
+            }
+          }
+      }
     }
-    override protected def modifying(oldDoc: Person, newDoc: Person)(implicit transaction: Transaction[Person]): Unit = adding(newDoc)
-    override protected def removing(doc: Person)(implicit transaction: Transaction[Person]): Unit = db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
-      case Some(links) =>
-        val l = links.copy(people = links.people.filterNot(_ == doc._id))
-        if (l.people.isEmpty) {
-          None
-        } else {
-          Some(l)
-        }
-      case None => None
-    }
-  }*/
+
+    /*override protected def adding(doc: Person)(implicit transaction: Transaction[Person]): Unit = {
+              if (doc.age == 30) {
+                scribe.info(s"Adding: $doc")
+              }
+              db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
+                case Some(links) =>
+                  val result = Some(links.copy(people = (doc._id :: links.people).distinct))
+                  if (doc.age == 30) {
+                    scribe.info(s"Current: $links, adding: $doc, Result: $result")
+                  }
+                  result
+                case None =>
+                  if (doc.age == 30) {
+                    scribe.info(s"New AgeLink: $doc")
+                  }
+                  Some(AgeLinks(doc.age, List(doc._id)))
+              }
+            }
+            override protected def modifying(oldDoc: Person, newDoc: Person)(implicit transaction: Transaction[Person]): Unit = adding(newDoc)
+            override protected def removing(doc: Person)(implicit transaction: Transaction[Person]): Unit = db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
+              case Some(links) =>
+                val l = links.copy(people = links.people.filterNot(_ == doc._id))
+                if (l.people.isEmpty) {
+                  None
+                } else {
+                  Some(l)
+                }
+              case None => None
+            }*/
+  }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
     override def applyToNew: Boolean = true

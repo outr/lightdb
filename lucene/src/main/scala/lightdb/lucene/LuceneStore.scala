@@ -294,15 +294,24 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     val total: Int = topFieldDocs.totalHits.value.toInt
     val storedFields: StoredFields = indexSearcher.storedFields()
     val idsAndScores = scoreDocs.map(doc => Id[Doc](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
-    def json[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): Json = {
-      val s = storedFields.document(scoreDoc.doc).get(field.name)
-      Field.string2Json(field.name, s, field.rw.definition)
+    def jsonField[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): Json = {
+      val values = storedFields.document(scoreDoc.doc).getValues(field.name)
+        .toVector
+        .map(s => Field.string2Json(field.name, s, field.rw.definition))
+      if (values.nonEmpty && values.head.isArr) {
+        Arr(values.map(_.asVector).flatten)
+      } else {
+        if (values.length > 1) {
+          throw new RuntimeException(s"Failure: $values, ${values.head.getClass()}")
+        }
+        values.headOption.getOrElse(Null)
+      }
     }
-    def value[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): F = json[F](scoreDoc, field).as[F](field.rw)
+    def value[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): F = jsonField[F](scoreDoc, field).as[F](field.rw)
     def loadScoreDoc(scoreDoc: ScoreDoc): (Doc, Double) = if (storeMode == StoreMode.All) {
       collection.model match {
         case c: JsonConversion[Doc] =>
-          val o = obj(fields.map(f => f.name -> json(scoreDoc, f)): _*)
+          val o = obj(fields.map(f => f.name -> jsonField(scoreDoc, f)): _*)
           c.convertFromJson(o) -> scoreDoc.score.toDouble
         case _ =>
           val map = fields.map { field =>
@@ -320,8 +329,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     def jsonIterator(fields: List[Field[Doc, _]]): Iterator[(ScoreDoc, Json, Double)] = {
       scoreDocs.iterator.map { scoreDoc =>
         val json = obj(fields.map { field =>
-          val s = storedFields.document(scoreDoc.doc).get(field.name)
-          field.name -> Field.string2Json(field.name, s, field.rw.definition)
+          field.name -> jsonField(scoreDoc, field)
         }: _*)
         val score = scoreDoc.score.toDouble
         (scoreDoc, json, score)
