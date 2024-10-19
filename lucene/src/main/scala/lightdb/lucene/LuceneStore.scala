@@ -224,7 +224,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     var facetResults: Map[FacetField[Doc], FacetResult] = Map.empty
     def search(total: Option[Int]): TopFieldDocs = {
-      val hitCountCollectorManager = new TotalHitCountCollectorManager
+      val hitCountCollectorManager = new TotalHitCountCollectorManager(indexSearcher.getSlices)
       val topFieldCollectorManager = new TopFieldCollectorManager(s, total.getOrElse(limit), Int.MaxValue)
       if (query.facets.nonEmpty) {
         facetsCollectorManager = Some(new FacetsCollectorManager(query.scoreDocs))
