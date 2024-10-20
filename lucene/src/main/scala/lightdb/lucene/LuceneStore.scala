@@ -23,12 +23,13 @@ import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint,
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.geo.{Line, Polygon}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, MultiCollectorManager, PrefixQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollector, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
-import org.apache.lucene.index.{StoredFields, Term}
+import org.apache.lucene.index.{DirectoryReader, SegmentInfos, SegmentReader, StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.util.BytesRef
+import org.apache.lucene.util.{BytesRef, Version}
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager, FacetsConfig, FacetField => LuceneFacetField}
+import org.apache.lucene.store.FSDirectory
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -56,6 +57,21 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def init(collection: Collection[Doc, Model]): Unit = {
     super.init(collection)
+
+    directory.foreach { path =>
+      if (Files.exists(path)) {
+        val directory = FSDirectory.open(path)
+        val reader = DirectoryReader.open(directory)
+        reader.leaves().forEach { leaf =>
+          val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
+          val latest = Version.LATEST
+          if (latest != dataVersion) {
+            // TODO: Support re-indexing
+            scribe.info(s"Data Version: $dataVersion, Latest Version: $latest")
+          }
+        }
+      }
+    }
   }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = transaction.put(
