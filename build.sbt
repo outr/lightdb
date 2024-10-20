@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.14.5"
+ThisBuild / version := "0.14.6-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -198,6 +198,7 @@ lazy val lucene = project.in(file("lucene"))
 			"org.apache.lucene" % "lucene-queryparser" % luceneVersion,
 			"org.apache.lucene" % "lucene-facet" % luceneVersion,
 			"org.apache.lucene" % "lucene-highlighter" % luceneVersion,
+			"org.apache.lucene" % "lucene-backward-codecs" % luceneVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
