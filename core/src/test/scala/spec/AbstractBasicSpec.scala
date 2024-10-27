@@ -508,36 +508,6 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
           }
       }
     }
-
-    /*override protected def adding(doc: Person)(implicit transaction: Transaction[Person]): Unit = {
-              if (doc.age == 30) {
-                scribe.info(s"Adding: $doc")
-              }
-              db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
-                case Some(links) =>
-                  val result = Some(links.copy(people = (doc._id :: links.people).distinct))
-                  if (doc.age == 30) {
-                    scribe.info(s"Current: $links, adding: $doc, Result: $result")
-                  }
-                  result
-                case None =>
-                  if (doc.age == 30) {
-                    scribe.info(s"New AgeLink: $doc")
-                  }
-                  Some(AgeLinks(doc.age, List(doc._id)))
-              }
-            }
-            override protected def modifying(oldDoc: Person, newDoc: Person)(implicit transaction: Transaction[Person]): Unit = adding(newDoc)
-            override protected def removing(doc: Person)(implicit transaction: Transaction[Person]): Unit = db.ageLinks.t.modify(AgeLinks.id(doc.age)) {
-              case Some(links) =>
-                val l = links.copy(people = links.people.filterNot(_ == doc._id))
-                if (l.people.isEmpty) {
-                  None
-                } else {
-                  Some(l)
-                }
-              case None => None
-            }*/
   }
 
   object InitialSetupUpgrade extends DatabaseUpgrade {
