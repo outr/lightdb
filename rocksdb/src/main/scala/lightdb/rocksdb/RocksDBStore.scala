@@ -8,16 +8,18 @@ import lightdb._
 import lightdb.field.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Conversion, Store, StoreMode}
+import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import org.rocksdb.{FlushOptions, RocksDB, RocksIterator}
+import org.rocksdb.{FlushOptions, Options, RocksDB, RocksIterator}
 
 import java.nio.file.{Files, Path}
 
 class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Path, val storeMode: StoreMode) extends Store[Doc, Model] {
   private lazy val db: RocksDB = {
     Files.createDirectories(directory.getParent)
-    RocksDB.open(directory.toAbsolutePath.toString)
+    val options = new Options()
+      .setCreateIfMissing(true)
+    RocksDB.open(options, directory.toAbsolutePath.toString)
   }
 
   override def init(collection: Collection[Doc, Model]): Unit = {
@@ -85,7 +87,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
     db.close()
   }
 
-  private def iterator(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
+  private def iteratorOld(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
     override def hasNext: Boolean = rocksIterator.isValid
 
     override def next(): Array[Byte] = try {
@@ -98,4 +100,32 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
       rocksIterator.next()
     }
   }
+
+  private def iterator(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
+    // Initialize the iterator to the first position
+    rocksIterator.seekToFirst()
+
+    override def hasNext: Boolean = rocksIterator.isValid
+
+    override def next(): Array[Byte] = {
+      if (!hasNext) throw new NoSuchElementException("No more elements in the RocksDB iterator")
+
+      val result = if (value) {
+        rocksIterator.value()
+      } else {
+        rocksIterator.key()
+      }
+
+      // Move to the next entry after retrieving the current value or key
+      rocksIterator.next()
+      result
+    }
+  }
+}
+
+object RocksDBStore extends StoreManager {
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         name: String,
+                                                                         storeMode: StoreMode): Store[Doc, Model] =
+    new RocksDBStore[Doc, Model](db.directory.get.resolve(name), storeMode)
 }
