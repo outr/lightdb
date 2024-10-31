@@ -83,7 +83,7 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
-val catsVersion: String = "3.5.4"
+val catsVersion: String = "3.5.5"
 
 val fs2Version: String = "3.11.0"
 
