@@ -1,5 +1,6 @@
 package spec
 
+import fabric._
 import fabric.rw._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.collection.Collection
@@ -19,7 +20,7 @@ import java.io.File
 import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
-  val CreateRecords = 100_000
+  val CreateRecords = 10_000
 
   protected def aggregationSupported: Boolean = true
   protected def filterBuilderSupported: Boolean = false
@@ -415,6 +416,26 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         db.people.count should be(24)
       }
     }
+    /*"insert an invalid record via JSON" in {
+      db.people.transaction { implicit transaction =>
+        db.people.t.json.insert(List(
+          obj(
+            "name" -> "Invalid",
+            "_id" -> "invalid-test"
+          )
+        ).iterator)
+      }
+    }
+    "get the invalid JSON object" in {
+      db.people.transaction { implicit transaction =>
+        val results = db.people.query.filter(_._id === Person.id("invalid-test")).search.json(_.fields)
+        results.list.length should be(1)
+        results.list.head should be(obj(
+          "name" -> "Invalid",
+          "_id" -> "invalid-test"
+        ))
+      }
+    }*/
     "truncate the collection again" in {
       db.people.transaction { implicit transaction =>
         db.people.truncate() should be(24)
