@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw.RW
+import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.{Id, LightDB}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}

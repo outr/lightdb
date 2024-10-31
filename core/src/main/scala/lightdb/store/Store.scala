@@ -1,5 +1,6 @@
 package lightdb.store
 
+import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
@@ -60,6 +61,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def count(implicit transaction: Transaction[Doc]): Int
 
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc]
+
+  def jsonIterator(implicit transaction: Transaction[Doc]): Iterator[Json] = iterator.map(_.json(collection.model.rw))
 
   def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
                  (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V]

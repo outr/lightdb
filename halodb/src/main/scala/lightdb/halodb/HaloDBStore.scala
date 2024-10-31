@@ -1,6 +1,7 @@
 package lightdb.halodb
 
 import com.oath.halodb.{HaloDB, HaloDBOptions}
+import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
@@ -60,9 +61,13 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   private def bytes2Doc(bytes: Array[Byte]): Doc = {
-    val jsonString = new String(bytes, "UTF-8")
-    val json = JsonParser(jsonString)
+    val json = bytes2Json(bytes)
     json.as[Doc](collection.model.rw)
+  }
+
+  private def bytes2Json(bytes: Array[Byte]): Json = {
+    val jsonString = new String(bytes, "UTF-8")
+    JsonParser(jsonString)
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
@@ -74,6 +79,9 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = instance.newIterator().asScala
     .map(_.getValue).map(bytes2Doc)
+
+  override def jsonIterator(implicit transaction: Transaction[Doc]): Iterator[Json] = instance.newIterator().asScala
+    .map(_.getValue).map(bytes2Json)
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
                           (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] =

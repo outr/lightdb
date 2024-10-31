@@ -145,7 +145,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       }
 
       def iterator[Return](f: Iterator[Json] => Return): Return = transaction { implicit transaction =>
-        val iterator = collection.iterator.map(doc => doc.json(model.rw))
+        val iterator = collection.store.jsonIterator
         f(iterator)
       }
     }
