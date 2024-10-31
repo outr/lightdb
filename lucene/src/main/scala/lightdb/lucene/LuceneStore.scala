@@ -315,10 +315,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         .toVector
         .map(s => Field.string2Json(field.name, s, field.rw.definition))
       if (values.nonEmpty && values.head.isArr) {
-        Arr(values.map(_.asVector).flatten)
+        Arr(values.flatMap(_.asVector))
       } else {
         if (values.length > 1) {
-          throw new RuntimeException(s"Failure: $values, ${values.head.getClass()}")
+          throw new RuntimeException(s"Failure: $values, ${values.head.getClass}")
         }
         values.headOption.getOrElse(Null)
       }
