@@ -1,5 +1,6 @@
 package lightdb.store.split
 
+import fabric.Json
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
@@ -52,6 +53,10 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
 
   override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = {
     storage.iterator
+  }
+
+  override def jsonIterator(implicit transaction: Transaction[Doc]): Iterator[Json] = {
+    storage.jsonIterator
   }
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
