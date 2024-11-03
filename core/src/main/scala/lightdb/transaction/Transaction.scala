@@ -72,8 +72,8 @@ object Transaction {
 
   @tailrec
   private def lock[Doc <: Document[Doc]](id: Id[Doc],
-                        transaction: Transaction[Doc],
-                        delay: FiniteDuration): Unit = {
+                                         transaction: Transaction[Doc],
+                                         delay: FiniteDuration): Unit = {
     val existingTransaction = locks
       .compute(id, (_, currentTransaction) => {
         if (currentTransaction == null || currentTransaction == transaction) {

@@ -26,14 +26,17 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     searching.prepareTransaction(transaction)
   }
 
+  private def ignoreSearchUpdates(implicit transaction: Transaction[Doc]): Boolean =
+    transaction.get(SplitStore.NoSearchUpdates).contains(true)
+
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     storage.insert(doc)
-    searching.insert(doc)
+    if (!ignoreSearchUpdates) searching.insert(doc)
   }
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     storage.upsert(doc)
-    searching.upsert(doc)
+    if (!ignoreSearchUpdates) searching.upsert(doc)
   }
 
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = storage.exists(id)
@@ -43,8 +46,9 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
-    storage.delete(field, value)
-    searching.delete(field, value)
+    val b = storage.delete(field, value)
+    if (!ignoreSearchUpdates) searching.delete(field, value)
+    b
   }
 
   override def count(implicit transaction: Transaction[Doc]): Int = {
@@ -107,4 +111,8 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     storage.dispose()
     searching.dispose()
   }
+}
+
+object SplitStore {
+  val NoSearchUpdates: TransactionKey[Boolean] = TransactionKey[Boolean]("splitStoreNoSearchUpdates")
 }
