@@ -182,6 +182,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         db.people.count should be(24)
       }
     }
+    // TODO: Fix same transaction modifying the same record concurrently
     "modify a record" in {
       db.people.transaction { implicit transaction =>
         db.people.modify(adam._id) {
