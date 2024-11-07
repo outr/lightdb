@@ -43,20 +43,32 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
   def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): IO[Doc] =
     IO.blocking(underlying(id))
 
+  def withLock(id: Id[Doc], doc: IO[Option[Doc]], establishLock: Boolean = true)
+           (f: Option[Doc] => IO[Option[Doc]]): IO[Option[Doc]] = if (establishLock) {
+    doc.map(d => if (establishLock) underlying.lock.acquire(id, d) else d).flatMap { existing =>
+      f(existing)
+        .attempt
+        .flatMap {
+          case Left(err) =>
+            if (establishLock) underlying.lock.release(id, existing)
+            IO.raiseError(err)
+          case Right(modified) =>
+            if (establishLock) underlying.lock.release(id, modified)
+            IO.pure(modified)
+        }
+    }
+  } else {
+    doc.flatMap(f)
+  }
+
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Option[Doc] => IO[Option[Doc]])
-            (implicit transaction: Transaction[Doc]): IO[Option[Doc]] = {
-    if (lock) transaction.lock(id)
-    get(id)
-      .flatMap(f)
-      .flatMap {
-        case Some(doc) => upsert(doc).map(doc => Some(doc))
-        case None if deleteOnNone => delete(id).map(_ => None)
-        case None => IO.pure(None)
-      }
-      .guarantee(IO {
-        if (lock) transaction.unlock(id)
-      })
+            (implicit transaction: Transaction[Doc]): IO[Option[Doc]] = withLock(id, get(id), lock) { existing =>
+    f(existing).flatMap {
+      case Some(doc) => upsert(doc).map(doc => Some(doc))
+      case None if deleteOnNone => delete(id).map(_ => None)
+      case None => IO.pure(None)
+    }
   }
 
   def getOrCreate(id: Id[Doc], create: => IO[Doc], lock: Boolean = true)
