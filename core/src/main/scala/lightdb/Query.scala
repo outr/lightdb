@@ -140,6 +140,18 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     }
   }
 
+  def process(establishLock: Boolean = true)
+             (f: Doc => Doc)
+             (implicit transaction: Transaction[Doc]): Unit = if (establishLock) {
+    search.docs.iterator.foreach { doc =>
+      collection.lock(doc._id, Some(doc)) { current =>
+        Some(f(current.getOrElse(doc)))
+      }
+    }
+  } else {
+    search.docs.iterator.foreach(f)
+  }
+
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = search.docs.iterator
 
   def toList(implicit transaction: Transaction[Doc]): List[Doc] = search.docs.list
