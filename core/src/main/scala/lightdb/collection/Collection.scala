@@ -11,6 +11,7 @@ import lightdb.trigger.CollectionTriggers
 import lightdb.util.Initializable
 import lightdb._
 import lightdb.field.Field._
+import lightdb.lock.LockManager
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -20,6 +21,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                                          loadStore: () => Store[Doc, Model],
                                                                          maxInsertBatch: Int = 1_000_000,
                                                                          cacheQueries: Boolean = Collection.DefaultCacheQueries) extends Initializable { collection =>
+  lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
+
   object trigger extends CollectionTriggers[Doc]
 
   lazy val store: Store[Doc, Model] = loadStore()
@@ -220,15 +223,17 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def list()(implicit transaction: Transaction[Doc]): List[Doc] = iterator.toList
 
-  def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
+  def modify(id: Id[Doc],
+             lock: Boolean = true,
+             deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc])
-            (implicit transaction: Transaction[Doc]): Option[Doc] = transaction.mayLock(id, lock) {
-    f(get(_ => model._id -> id)) match {
+            (implicit transaction: Transaction[Doc]): Option[Doc] = this.lock(id, get(id), lock) { existing =>
+    f(existing) match {
       case Some(doc) =>
         upsert(doc)
         Some(doc)
       case None if deleteOnNone =>
-        delete(_ => model._id -> id)
+        delete(id)
         None
       case None => None
     }
