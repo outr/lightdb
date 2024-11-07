@@ -90,7 +90,7 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
 
   def list(implicit transaction: Transaction[Doc]): IO[List[Doc]] = stream.compile.toList
 
-  def query: AsyncQuery[Doc, Model] = AsyncQuery(underlying)
+  def query: AsyncQuery[Doc, Model] = AsyncQuery(this)
 
   def truncate()(implicit transaction: Transaction[Doc]): IO[Int] = IO.blocking(underlying.truncate())
 

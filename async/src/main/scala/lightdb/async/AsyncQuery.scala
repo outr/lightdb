@@ -17,7 +17,7 @@ import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
-case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
+case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](asyncCollection: AsyncCollection[Doc, Model],
                                                                          filter: Option[Filter[Doc]] = None,
                                                                          sort: List[Sort] = Nil,
                                                                          offset: Int = 0,
@@ -26,6 +26,8 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                                                                          scoreDocs: Boolean = false,
                                                                          minDocScore: Option[Double] = None,
                                                                          facets: List[FacetQuery[Doc]] = Nil) { query =>
+  protected def collection: Collection[Doc, Model] = asyncCollection.underlying
+
   def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal, scoreDocs, minDocScore, facets)
 
   def scored: AsyncQuery[Doc, Model] = copy(scoreDocs = true)
@@ -216,6 +218,19 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collect
                           (implicit transaction: Transaction[Doc]): IO[AsyncSearchResults[Doc, Model, DistanceAndDoc[Doc]]] =
       apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
+
+  def process(establishLock: Boolean = true)
+             (f: Doc => IO[Doc])
+             (implicit transaction: Transaction[Doc]): IO[Int] = stream
+    .docs
+    .evalMap { doc =>
+      asyncCollection.withLock(doc._id, IO.pure(Some(doc)), establishLock) { current =>
+        f(current.getOrElse(doc)).map(Some.apply)
+      }
+    }
+    .compile
+    .count
+    .map(_.toInt)
 
   def toList(implicit transaction: Transaction[Doc]): IO[List[Doc]] = stream.docs.compile.toList
 
