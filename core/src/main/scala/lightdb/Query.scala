@@ -24,7 +24,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                                                                     countTotal: Boolean = false,
                                                                     scoreDocs: Boolean = false,
                                                                     minDocScore: Option[Double] = None,
-                                                                    facets: List[FacetQuery[Doc]] = Nil) { query =>
+                                                                    facets: List[FacetQuery[Doc]] = Nil) {
+  query =>
   def scored: Query[Doc, Model] = copy(scoreDocs = true)
 
   def minDocScore(min: Double): Query[Doc, Model] = copy(
@@ -124,10 +125,10 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     }
 
     def distance[G <: Geo](f: Model => Field[Doc, List[G]],
-                 from: Geo.Point,
-                 sort: Boolean = true,
-                 radius: Option[Distance] = None)
-                (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
+                           from: Geo.Point,
+                           sort: Boolean = true,
+                           radius: Option[Distance] = None)
+                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
       val field = f(collection.model)
       var q = Query.this
       if (sort) {
@@ -140,16 +141,34 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
     }
   }
 
-  def process(establishLock: Boolean = true)
-             (f: Doc => Doc)
-             (implicit transaction: Transaction[Doc]): Unit = if (establishLock) {
-    search.docs.iterator.foreach { doc =>
+  /**
+   * Processes through each result record from the query modifying the data in the database.
+   *
+   * @param establishLock whether to establish an id lock to avoid concurrent modification (defaults to true)
+   * @param deleteOnNone whether to delete the record if the function returns None (defaults to true)
+   * @param safeModify whether to use safe modification. This results in loading the same object twice, but should never
+   *                   risk concurrent modification occurring. (defaults to true)
+   * @param f the processing function for records
+   */
+  def process(establishLock: Boolean = true,
+              deleteOnNone: Boolean = true,
+              safeModify: Boolean = true)
+             (f: Doc => Option[Doc])
+             (implicit transaction: Transaction[Doc]): Unit = search.docs.iterator.foreach { doc =>
+    if (safeModify) {
+      collection.modify(doc._id, establishLock, deleteOnNone) { existing =>
+        existing.flatMap(f)
+      }
+    } else {
       collection.lock(doc._id, Some(doc)) { current =>
-        Some(f(current.getOrElse(doc)))
+        val result = f(current.getOrElse(doc))
+        result match {
+          case Some(modified) => if (!current.contains(modified)) collection.upsert(modified)
+          case None => if (deleteOnNone) collection.delete(doc._id)
+        }
+        result
       }
     }
-  } else {
-    search.docs.iterator.foreach(f)
   }
 
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = search.docs.iterator
@@ -167,7 +186,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                                          from: Geo.Point,
                                          sort: Boolean,
                                          radius: Option[Distance])
-                              (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
+                                        (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
     search(Conversion.Distance(field, from, sort, radius))
   }
 

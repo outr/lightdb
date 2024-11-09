@@ -61,9 +61,9 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
     doc.flatMap(f)
   }
 
-  def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
+  def modify(id: Id[Doc], establishLock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Option[Doc] => IO[Option[Doc]])
-            (implicit transaction: Transaction[Doc]): IO[Option[Doc]] = withLock(id, get(id), lock) { existing =>
+            (implicit transaction: Transaction[Doc]): IO[Option[Doc]] = withLock(id, get(id), establishLock) { existing =>
     f(existing).flatMap {
       case Some(doc) => upsert(doc).map(doc => Some(doc))
       case None if deleteOnNone => delete(id).map(_ => None)
@@ -72,7 +72,7 @@ case class AsyncCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](un
   }
 
   def getOrCreate(id: Id[Doc], create: => IO[Doc], lock: Boolean = true)
-                 (implicit transaction: Transaction[Doc]): IO[Doc] = modify(id, lock = lock) {
+                 (implicit transaction: Transaction[Doc]): IO[Doc] = modify(id, establishLock = lock) {
     case Some(doc) => IO.pure(Some(doc))
     case None => create.map(Some.apply)
   }.map(_.get)

@@ -224,10 +224,10 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   def list()(implicit transaction: Transaction[Doc]): List[Doc] = iterator.toList
 
   def modify(id: Id[Doc],
-             lock: Boolean = true,
+             establishLock: Boolean = true,
              deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc])
-            (implicit transaction: Transaction[Doc]): Option[Doc] = this.lock(id, get(id), lock) { existing =>
+            (implicit transaction: Transaction[Doc]): Option[Doc] = this.lock(id, get(id), establishLock) { existing =>
     f(existing) match {
       case Some(doc) =>
         upsert(doc)
@@ -239,8 +239,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
-  def getOrCreate(id: Id[Doc], create: => Doc, lock: Boolean = true)
-                 (implicit transaction: Transaction[Doc]): Doc = modify(id, lock = lock) {
+  def getOrCreate(id: Id[Doc], create: => Doc, establishLock: Boolean = true)
+                 (implicit transaction: Transaction[Doc]): Doc = modify(id, establishLock = establishLock) {
     case Some(doc) => Some(doc)
     case None => Some(create)
   }.get

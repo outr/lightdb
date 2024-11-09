@@ -7,6 +7,7 @@ import lightdb.h2.H2Store
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.postgresql.PostgreSQLStoreManager
+import lightdb.rocksdb.RocksDBStore
 import lightdb.sql.SQLiteStore
 import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
 import lightdb.store.{MapStore, StoreMode}
@@ -29,6 +30,7 @@ object Runner {
     "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
     "LightDB-Lucene" -> LightDBBench(LuceneStore),
     "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore, searchingMode = StoreMode.Indexes)),
+    "LightDB-RocksDB-Lucene" -> LightDBBench(SplitStoreManager(RocksDBStore, LuceneStore, searchingMode = StoreMode.Indexes)),
     "LightDB-H2" -> LightDBBench(H2Store),
     "LightDB-HaloDB-H2" -> LightDBBench(SplitStoreManager(HaloDBStore, H2Store, searchingMode = StoreMode.Indexes)),
 //    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(

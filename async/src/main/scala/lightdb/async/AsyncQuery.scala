@@ -219,13 +219,41 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](asyncCo
       apply(Conversion.Distance(f(collection.model), from, sort, radius))
   }
 
-  def process(establishLock: Boolean = true)
-             (f: Doc => IO[Doc])
+  /**
+   * Processes through each result record from the query modifying the data in the database.
+   *
+   * @param establishLock whether to establish an id lock to avoid concurrent modification (defaults to true)
+   * @param deleteOnNone whether to delete the record if the function returns None (defaults to true)
+   * @param safeModify whether to use safe modification. This results in loading the same object twice, but should never
+   *                   risk concurrent modification occurring. (defaults to true)
+   * @param maxConcurrent the number of concurrent threads to process with (defaults to 1 for single-threaded)
+   * @param f the processing function for records
+   */
+  def process(establishLock: Boolean = true,
+              deleteOnNone: Boolean = true,
+              safeModify: Boolean = true,
+              maxConcurrent: Int = 1)
+             (f: Doc => IO[Option[Doc]])
              (implicit transaction: Transaction[Doc]): IO[Int] = stream
     .docs
-    .evalMap { doc =>
-      asyncCollection.withLock(doc._id, IO.pure(Some(doc)), establishLock) { current =>
-        f(current.getOrElse(doc)).map(Some.apply)
+    .parEvalMap(maxConcurrent) { doc =>
+      if (safeModify) {
+        asyncCollection.modify(doc._id, establishLock, deleteOnNone) {
+          case Some(doc) => f(doc)
+          case None => IO.pure(None)
+        }
+      } else {
+        asyncCollection.withLock(doc._id, IO.pure(Some(doc)), establishLock) { current =>
+          val io = current match {
+            case Some(doc) => f(doc)
+            case None => IO.pure(None)
+          }
+          io.flatTap {
+            case Some(modified) if !current.contains(modified) => asyncCollection.upsert(modified)
+            case None if deleteOnNone => asyncCollection.delete(doc._id)
+            case _ => IO.unit
+          }
+        }
       }
     }
     .compile

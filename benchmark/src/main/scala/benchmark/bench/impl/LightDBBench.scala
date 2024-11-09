@@ -15,7 +15,7 @@ import java.sql.ResultSet
 import scala.language.implicitConversions
 
 case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
-  override def name: String = s"LightDB ${storeManager.getClass.getSimpleName.replace("$", "")}"
+  override def name: String = s"LightDB ${storeManager.name}"
 
   override def init(): Unit = DB.init()
 
