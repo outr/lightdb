@@ -1,7 +1,7 @@
 # lightdb
 [![CI](https://github.com/outr/lightdb/actions/workflows/ci.yml/badge.svg)](https://github.com/outr/lightdb/actions/workflows/ci.yml)
 
-Computationally focused database using pluggable store + indexer
+Computationally focused database using pluggable stores
 
 ## Provided Stores
 - Yahoo's HaloDB (https://github.com/yahoo/HaloDB)
@@ -19,10 +19,10 @@ Computationally focused database using pluggable store + indexer
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "0.14.5"
+libraryDependencies += "com.outr" %% "lightdb-all" % "0.15.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "0.14.5"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "0.15.0"
 ```
