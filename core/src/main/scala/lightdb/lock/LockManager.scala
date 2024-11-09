@@ -24,10 +24,10 @@ class LockManager[K, V] {
   // Attempts to acquire a lock for a given K and V.
   def acquire(key: K, value: => Option[V]): Option[V] = {
     // Get or create the Lock object with the ReentrantLock.
-    val lock = locks.computeIfAbsent(key, _ => new Lock(value, new ReentrantLock))
+    val lock = locks.computeIfAbsent(key, _ => new Lock(value))
 
     // Acquire the underlying ReentrantLock.
-    lock.lock.lock()
+    lock.lock.acquire()
     lock() // Return the associated value after acquiring the lock.
   }
 
@@ -36,9 +36,9 @@ class LockManager[K, V] {
     val v: Option[V] = newValue
     locks.compute(key, (_, existingLock) => {
       // Update the value associated with the lock.
-      existingLock.lock.unlock()
+      existingLock.lock.release()
 
-      if (!existingLock.lock.hasQueuedThreads) {
+      if (existingLock.lock.availablePermits() > 0) {
         // No other threads are waiting, so remove the lock entry.
         null
       } else {

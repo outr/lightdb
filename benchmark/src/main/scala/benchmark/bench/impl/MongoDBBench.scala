@@ -46,8 +46,7 @@ object MongoDBBench extends Bench {
 
   override protected def getEachRecord(idIterator: Iterator[String]): Unit = {
     idIterator.foreach { id =>
-      val list = people.find(Filters.eq("id", id)).iterator().asScala.toList
-      val document = list.head
+      val document = people.find(Filters.eq("id", id)).first()
       val p = P(
         id = document.getString("id"),
         name = document.getString("name"),
@@ -56,16 +55,12 @@ object MongoDBBench extends Bench {
       if (p.id != id) {
         scribe.warn(s"${p.id} was not $id")
       }
-      if (list.size > 1) {
-        scribe.warn(s"More than one result for $id")
-      }
     }
   }
 
   override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = {
     ageIterator.foreach { age =>
-      val list = people.find(Filters.eq("age", age)).iterator().asScala.toList
-      val document = list.head
+      val document = people.find(Filters.eq("age", age)).first()
       val p = P(
         id = document.getString("id"),
         name = document.getString("name"),
@@ -73,9 +68,6 @@ object MongoDBBench extends Bench {
       )
       if (p.age != age) {
         scribe.warn(s"${p.age} was not $age")
-      }
-      if (list.size > 1) {
-        scribe.warn(s"More than one result for $age")
       }
     }
   }
