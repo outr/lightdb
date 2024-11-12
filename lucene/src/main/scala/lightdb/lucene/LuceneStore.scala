@@ -106,19 +106,21 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           val polygon = convert(p)
           LatLonShape.createIndexableFields(field.name, polygon)
         }
+        def indexGeo(geo: Geo): Unit = geo match {
+          case p: Geo.Point => indexPoint(p)
+          case Geo.MultiPoint(points) => points.foreach(indexPoint)
+          case l: Geo.Line => indexLine(l)
+          case Geo.MultiLine(lines) => lines.foreach(indexLine)
+          case p: Geo.Polygon => indexPolygon(p)
+          case Geo.MultiPolygon(polygons) => polygons.foreach(indexPolygon)
+          case Geo.GeometryCollection(geometries) => geometries.foreach(indexGeo)
+        }
         val list = json match {
           case Arr(value, _) => value.toList.map(_.as[Geo])
           case _ => List(json.as[Geo])
         }
         list.foreach { geo =>
-          geo match {
-            case p: Geo.Point => indexPoint(p)
-            case Geo.MultiPoint(points) => points.foreach(indexPoint)
-            case l: Geo.Line => indexLine(l)
-            case Geo.MultiLine(lines) => lines.foreach(indexLine)
-            case p: Geo.Polygon => indexPolygon(p)
-            case Geo.MultiPolygon(polygons) => polygons.foreach(indexPolygon)
-          }
+          indexGeo(geo)
           add(new LatLonPoint(field.name, geo.center.latitude, geo.center.longitude))
         }
         if (list.isEmpty) {
