@@ -57,6 +57,8 @@ val reactifyVersion: String = "4.1.2"
 
 val spatial4JVersion: String = "0.8"
 
+val jtsVersion: String = "1.20.0"
+
 val haloDBVersion: String = "0.5.6"
 
 val rocksDBVersion: String = "9.7.3"
@@ -108,6 +110,7 @@ lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlat
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
+			"org.locationtech.jts" % "jts-core" % jtsVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
 		libraryDependencies ++= (

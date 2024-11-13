@@ -42,6 +42,11 @@ object Geo {
     )
   })
 
+  def parseMulti(json: Json): List[Geo] = parse(json) match {
+    case GeometryCollection(geometries) => geometries
+    case geo => List(geo)
+  }
+
   def parse(json: Json): Geo = json("type").asString match {
     case "Point" =>
       val v = json("coordinates").asVector
