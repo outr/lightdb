@@ -1,14 +1,18 @@
 package lightdb.spatial
 
 import lightdb.distance._
+import org.locationtech.jts.geom.{Coordinate, Geometry, GeometryFactory, LineString, Polygon}
 import org.locationtech.spatial4j.context.SpatialContext
+import org.locationtech.spatial4j.context.jts.JtsSpatialContext
 import org.locationtech.spatial4j.distance.DistanceUtils
 import org.locationtech.spatial4j.shape
 import org.locationtech.spatial4j.shape.Shape
 import org.locationtech.spatial4j.shape.ShapeFactory.{LineStringBuilder, PolygonBuilder}
+import org.locationtech.spatial4j.shape.jts.JtsGeometry
 
 object Spatial {
-  private lazy val context = SpatialContext.GEO
+  private lazy val context = JtsSpatialContext.GEO
+  private lazy val factory = new GeometryFactory()
 
   def distance(p1: Geo, p2: Geo): Distance = {
     val point1 = context.getShapeFactory.pointLatLon(p1.center.latitude, p1.center.longitude)
@@ -28,24 +32,30 @@ object Spatial {
       b.pointLatLon(p.latitude, p.longitude)
     )
 
-  private def toShape(g: Geo): Shape = g match {
-    case Geo.Point(lat, lon) => context.getShapeFactory.pointLatLon(lat, lon)
-    case Geo.MultiPoint(points) => points.foldLeft(context.getShapeFactory.multiPoint())((b, p) =>
-      b.pointLatLon(p.latitude, p.longitude)
-    ).build()
-    case line: Geo.Line => line2Builder(line).build()
-    case Geo.MultiLine(lines) => lines.foldLeft(context.getShapeFactory.multiLineString())((b, l) =>
-      b.add(line2Builder(l))
-    ).build()
-    case polygon: Geo.Polygon => polygon2Builder(polygon).build()
-    case Geo.MultiPolygon(polygons) => polygons.foldLeft(context.getShapeFactory.multiPolygon())((b, p) =>
-      b.add(polygon2Builder(p))
-    ).build()
+  private def toShape(g: Geo): Geometry = g match {
+    case Geo.Point(lat, lon) => factory.createPoint(new Coordinate(lon, lat))
+    case Geo.MultiPoint(points) =>
+      factory.createMultiPoint(points.map {
+        case Geo.Point(lat, lon) => factory.createPoint(new Coordinate(lon, lat))
+        case _ => throw new IllegalArgumentException("Invalid point in MultiPoint")
+      }.toArray)
+    case line: Geo.Line => factory.createLineString(line.points.map {
+      case Geo.Point(lat, lon) => new Coordinate(lon, lat)
+    }.toArray)
+    case Geo.MultiLine(lines) => factory.createMultiLineString(lines.map(toShape).map {
+      case l: LineString => l
+    }.toArray)
+    case polygon: Geo.Polygon => factory.createPolygon(polygon.points.map {
+      case Geo.Point(lat, lon) => new Coordinate(lon, lat)
+    }.toArray)
+    case Geo.MultiPolygon(polygons) => factory.createMultiPolygon(polygons.map(toShape).map {
+      case p: Polygon => p
+    }.toArray)
   }
 
   def relation(g1: Geo, g2: Geo): SpatialRelation = {
-    val s1 = toShape(g1)
-    val s2 = toShape(g2)
+    val s1 = new JtsGeometry(toShape(g1), context, false, false)
+    val s2 = new JtsGeometry(toShape(g2), context, false, false)
     s1.relate(s2) match {
       case shape.SpatialRelation.WITHIN => SpatialRelation.Within
       case shape.SpatialRelation.CONTAINS => SpatialRelation.Contains
