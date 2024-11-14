@@ -96,8 +96,12 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def truncate()(implicit transaction: Transaction[Doc]): Int = {
     val size = count
-    instance.newIterator().asScala.foreach(r => instance.delete(r.getKey))
-    size
+    if (size == 0) {
+      0
+    } else {
+      instance.newIterator().asScala.foreach(r => instance.delete(r.getKey))
+      size + truncate()
+    }
   }
 
   override def dispose(): Unit = {
