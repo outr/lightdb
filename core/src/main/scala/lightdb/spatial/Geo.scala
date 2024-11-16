@@ -49,24 +49,24 @@ object Geo {
 
   def parse(json: Json): Geo = json("type").asString match {
     case "Point" =>
-      val v = json("coordinates").asVector
-      Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble)
+      val v = json("coordinates").asVector.map(_.asDouble)
+      Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
     case "LineString" => Line(
       json("coordinates").asVector.toList.map { p =>
         val v = p.asVector
-        Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble)
+        Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
       }
     )
     case "Polygon" => Polygon(
       json("coordinates").asVector.head.asVector.toList.map { p =>
         val v = p.asVector
-        Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble)
+        Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
       }
     )
     case "MultiPolygon" => MultiPolygon(
       json("coordinates").asVector.toList.map { p =>
         p.asVector.head.asVector.toList.map(_.asVector.toList).map { v =>
-          Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble)
+          Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
         }
       }.map(list => Polygon(list))
     )
@@ -98,6 +98,12 @@ object Geo {
 
   case class Point(latitude: Double, longitude: Double) extends Geo {
     override def center: Point = this
+
+    def fixed: Point = if (latitude < -90.0 || latitude > 90.0) {
+      Point(longitude, latitude)
+    } else {
+      this
+    }
   }
   case class MultiPoint(points: List[Point]) extends Geo {
     lazy val center: Point = Geo.center(points)
