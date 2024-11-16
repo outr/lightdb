@@ -1,5 +1,6 @@
 package spec
 
+import fabric.io.JsonParser
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.distance._
@@ -108,6 +109,18 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
         } should be(List(
           "Jane Doe" -> List(16.01508397712445),
           "Bob Dole" -> List(695.6419047674393, 1334.038796028706)
+        ))
+      }
+    }
+    "parse and insert from a GeometryCollection" in {
+      DB.people.transaction { implicit transaction =>
+        val json = JsonParser("""{"crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::4269"}}, "type": "GeometryCollection", "geometries": [{"type": "LineString", "coordinates": [[-103.79558, 32.30492], [-103.793467263, 32.331700182]]}]}""")
+        val geo = Geo.parseMulti(json)
+        DB.people.insert(Person(
+          name = "Baby Dole",
+          age = 2,
+          point = yonkers,
+          geo = geo
         ))
       }
     }

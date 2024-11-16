@@ -26,3 +26,7 @@ For a specific implementation like Lucene:
 ```scala
 libraryDependencies += "com.outr" %% "lightdb-lucene" % "0.15.0"
 ```
+
+## Videos
+OKC JUG Presentation
+https://www.youtube.com/watch?v=E_5fwgbF4rc
