@@ -44,7 +44,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
   private val penny = Person("Penny", 2, _id = Person.id("penny"))
   private val quintin = Person("Quintin", 99, _id = Person.id("quintin"))
   private val ruth = Person("Ruth", 102, _id = Person.id("ruth"))
-  private val sam = Person("Sam", 81, _id = Person.id("sam"))
+  private val sam = Person("Sam", 81, friends = List(adam._id, fiona._id), _id = Person.id("sam"))
   private val tori = Person("Tori", 30, nicknames = Set("Nica"), _id = Person.id("tori"))
   private val uba = Person("Uba", 21, nicknames = Set("multiple terms"), _id = Person.id("uba"))
   private val veronica = Person("Veronica", 13, nicknames = Set("Vera", "Nica"), _id = Person.id("veronica"))
@@ -343,6 +343,15 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         q.offset(20).search.docs.list.map(_.name) should be(List("Veronica", "Wyatt", "Xena", "Zoey"))
       }
     }
+    "filter by list of friend ids" in {
+      db.people.transaction { implicit transaction =>
+        val q = db.people.query.filter(_
+          .builder
+          .should(_.friends has fiona._id)
+        )
+        q.toList.map(_.name).toSet should be(Set("Sam"))
+      }
+    }
     "do a database backup" in {
       DatabaseBackup.archive(db, new File(s"backups/$specName.zip")) should be(49)
     }
@@ -472,6 +481,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
                     age: Int,
                     city: Option[City] = None,
                     nicknames: Set[String] = Set.empty,
+                    friends: List[Id[Person]] = Nil,
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
   object Person extends DocumentModel[Person] with JsonConversion[Person] {
@@ -481,6 +491,7 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     val age: I[Int] = field.index("age", (p: Person) => p.age)
     val city: I[Option[City]] = field.index("city", (p: Person) => p.city)
     val nicknames: I[Set[String]] = field.index("nicknames", (p: Person) => p.nicknames)
+    val friends: I[List[Id[Person]]] = field.index("friends", _.friends)
     val allNames: I[List[String]] = field.index("allNames", p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized("search", (doc: Person) => s"${doc.name} ${doc.age}")
     val doc: I[Person] = field.index("doc", (p: Person) => p)
