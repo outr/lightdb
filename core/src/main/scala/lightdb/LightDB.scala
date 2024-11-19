@@ -80,13 +80,10 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
     // Get applied database upgrades
     val applied = appliedUpgrades.get()
     // Determine upgrades that need to be applied
-    val upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label)) match {
-      case list if !dbInitialized => list.filter(_.applyToNew)
-      case list => list
-    }
+    val upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label))
     if (upgrades.nonEmpty) {
       scribe.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
-      doUpgrades(upgrades, stillBlocking = true)
+      doUpgrades(upgrades, dbInitialized = dbInitialized, stillBlocking = true)
     }
     // Setup shutdown hook
     Runtime.getRuntime.addShutdownHook(new Thread(() => {
@@ -166,23 +163,29 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
   }
 
   private def doUpgrades(upgrades: List[DatabaseUpgrade],
+                         dbInitialized: Boolean,
                          stillBlocking: Boolean): Unit = upgrades.headOption match {
     case Some(upgrade) =>
       val continueBlocking = upgrades.exists(_.blockStartup)
-      if (stillBlocking && !continueBlocking) {
+      if (!dbInitialized && !upgrade.applyToNew) {
+        appliedUpgrades.modify { set =>
+          set + upgrade.label
+        }
+        doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
+      } else if (stillBlocking && !continueBlocking) {
         scribe.Platform.executionContext.execute(() => {
           upgrade.upgrade(this)
           appliedUpgrades.modify { set =>
             set + upgrade.label
           }
-          doUpgrades(upgrades.tail, continueBlocking)
+          doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
         })
       } else {
         upgrade.upgrade(this)
         appliedUpgrades.modify { set =>
           set + upgrade.label
         }
-        doUpgrades(upgrades.tail, continueBlocking)
+        doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
       }
     case None => scribe.info("Upgrades completed successfully")
   }
