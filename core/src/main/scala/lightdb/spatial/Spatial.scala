@@ -51,6 +51,9 @@ object Spatial {
     case Geo.MultiPolygon(polygons) => factory.createMultiPolygon(polygons.map(toShape).map {
       case p: Polygon => p
     }.toArray)
+    case Geo.GeometryCollection(list) => factory.createGeometryCollection(
+      list.map(toShape).toArray
+    )
   }
 
   def relation(g1: Geo, g2: Geo): SpatialRelation = {
