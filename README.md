@@ -19,14 +19,10 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "0.15.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "0.16.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "0.15.0"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "0.16.0"
 ```
-
-## Videos
-OKC JUG Presentation
-https://www.youtube.com/watch?v=E_5fwgbF4rc
