@@ -87,20 +87,6 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
     db.close()
   }
 
-  private def iteratorOld(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
-    override def hasNext: Boolean = rocksIterator.isValid
-
-    override def next(): Array[Byte] = try {
-      if (value) {
-        rocksIterator.value()
-      } else {
-        rocksIterator.key()
-      }
-    } finally {
-      rocksIterator.next()
-    }
-  }
-
   private def iterator(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
     // Initialize the iterator to the first position
     rocksIterator.seekToFirst()
