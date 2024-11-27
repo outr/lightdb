@@ -77,7 +77,7 @@ val hikariCPVersion: String = "6.2.1"
 
 val commonsDBCP2Version: String = "2.12.0"
 
-val sqliteVersion: String = "3.47.0.0"
+val sqliteVersion: String = "3.47.1.0"
 
 val duckdbVersion: String = "1.1.3"
 
