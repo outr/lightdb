@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.16.0"
+ThisBuild / version := "0.17.0"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -37,9 +37,6 @@ ThisBuild / developers := List(
 	Developer(id=developerId, name=developerName, email=email, url=url(developerURL))
 )
 
-ThisBuild / resolvers += Resolver.mavenLocal
-ThisBuild / resolvers += "jitpack" at "https://jitpack.io"
-
 ThisBuild / outputStrategy := Some(StdoutOutput)
 
 ThisBuild / javaOptions ++= Seq(
@@ -59,7 +56,7 @@ val spatial4JVersion: String = "0.8"
 
 val jtsVersion: String = "1.20.0"
 
-val haloDBVersion: String = "0.5.6"
+val haloDBVersion: String = "0.5.7"
 
 val rocksDBVersion: String = "9.7.3"
 
@@ -212,7 +209,7 @@ lazy val halodb = project.in(file("halodb"))
 		name := s"$projectName-halo",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"com.github.yahoo" % "HaloDB" % haloDBVersion,
+			"com.outr" % "halodb-revive" % haloDBVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
