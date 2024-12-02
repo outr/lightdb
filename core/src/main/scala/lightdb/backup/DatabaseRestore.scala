@@ -65,11 +65,16 @@ object DatabaseRestore {
       f(collection) match {
         case Some(source) =>
           try {
+            scribe.info(s"Restoring ${collection.name}...")
             if (truncate) collection.t.truncate()
             val iterator = source
               .getLines()
               .map(s => JsonParser(s))
-            collection.t.json.insert(iterator)
+            val count = collection.t.json.insert(iterator)
+            scribe.info(s"Re-Indexing ${collection.name}...")
+            collection.reIndex()
+            scribe.info(s"Restored $count documents to ${collection.name}")
+            count
           } finally {
             source.close()
           }

@@ -100,27 +100,17 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connect
 
 object SQLiteStore extends StoreManager {
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
-    val connection: Connection = {
-      val path = file match {
-        case Some(f) =>
-          val file = f.toFile
-          Option(file.getParentFile).foreach(_.mkdirs())
-          file.getCanonicalPath
-        case None => ":memory:"
-      }
-
-      val config = new SQLiteConfig
-      config.enableLoadExtension(true)
-      val uri = s"jdbc:sqlite:$path"
-      try {
-        val c = config.createConnection(uri)
-        c.setAutoCommit(false)
-        c
-      } catch {
-        case t: Throwable => throw new RuntimeException(s"Error establishing SQLite connection to $uri", t)
-      }
+    val path = file match {
+      case Some(f) =>
+        val file = f.toFile
+        Option(file.getParentFile).foreach(_.mkdirs())
+        file.getCanonicalPath
+      case None => ":memory:"
     }
-    SingleConnectionManager(connection)
+
+    SingleConnectionManager(SQLConfig(
+      jdbcUrl = s"jdbc:sqlite:$path"
+    ))
   }
 
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], storeMode: StoreMode): SQLiteStore[Doc, Model] = {
