@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "0.17.0"
+ThisBuild / version := "1.0.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -298,7 +298,7 @@ lazy val docs = project
 	.enablePlugins(MdocPlugin)
 	.settings(
 	  mdocVariables := Map(
-		"VERSION" -> version.value
+			"VERSION" -> version.value
 	  ),
 	  mdocOut := file(".")
 	)
