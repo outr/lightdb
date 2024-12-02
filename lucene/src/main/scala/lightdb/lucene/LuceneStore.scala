@@ -67,7 +67,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
           val latest = Version.LATEST
           if (latest != dataVersion) {
             // TODO: Support re-indexing
-            scribe.info(s"Data Version: $dataVersion, Latest Version: $latest")
+            scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
           }
         }
       }

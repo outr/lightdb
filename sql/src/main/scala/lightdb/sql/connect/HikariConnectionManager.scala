@@ -11,7 +11,6 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     config.password.foreach(hc.setPassword)
     config.maximumPoolSize.foreach(hc.setMaximumPoolSize)
     hc.setAutoCommit(config.autoCommit)
-    // TODO: Configure
     hc.addDataSourceProperty("cachePrepStmts", "true")
     hc.addDataSourceProperty("prepStmtCacheSize", "250")
     hc.addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
