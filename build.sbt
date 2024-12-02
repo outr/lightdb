@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "1.0.0-SNAPSHOT"
+ThisBuild / version := "1.0.0"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -98,7 +98,7 @@ lazy val root = project.in(file("."))
 		publishLocal := {}
 	)
 
-lazy val core = crossProject(JVMPlatform) // TODO: Add JSPlatform and NativePlatform
+lazy val core = crossProject(JVMPlatform)
 	.crossType(CrossType.Pure)
 	.settings(
 		name := s"$projectName-core",
