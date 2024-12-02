@@ -294,7 +294,7 @@ lazy val benchmark = project.in(file("benchmark"))
 
 lazy val docs = project
 	.in(file("documentation"))
-	.dependsOn(core.jvm)
+	.dependsOn(all)
 	.enablePlugins(MdocPlugin)
 	.settings(
 	  mdocVariables := Map(
