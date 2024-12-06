@@ -12,7 +12,7 @@ case class AsyncAggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]
                                                                  filter: Option[AggregateFilter[Doc]] = None,
                                                                  sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
   def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AsyncAggregateQuery[Doc, Model] = {
-    val filter = f(query.collection.model)
+    val filter = f(query.model)
     if (and && this.filter.nonEmpty) {
       copy(filter = Some(this.filter.get && filter))
     } else {
@@ -21,7 +21,7 @@ case class AsyncAggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]
   }
 
   def filters(f: Model => List[AggregateFilter[Doc]]): AsyncAggregateQuery[Doc, Model] = {
-    val filters = f(query.collection.model)
+    val filters = f(query.model)
     if (filters.nonEmpty) {
       var filter = filters.head
       filters.tail.foreach { f =>
@@ -35,7 +35,7 @@ case class AsyncAggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]
 
   def sort(f: Model => AggregateFunction[_, _, Doc],
            direction: SortDirection = SortDirection.Ascending): AsyncAggregateQuery[Doc, Model] = copy(
-    sort = sort ::: List((f(query.collection.model), direction))
+    sort = sort ::: List((f(query.model), direction))
   )
 
   private lazy val aggregateQuery = AggregateQuery(
@@ -46,10 +46,10 @@ case class AsyncAggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]
   )
 
   def count(implicit transaction: Transaction[Doc]): IO[Int] =
-    IO.blocking(query.collection.store.aggregateCount(aggregateQuery))
+    IO.blocking(query.store.aggregateCount(aggregateQuery))
 
   def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedAggregate[Doc, Model]] = {
-    val iterator = query.collection.store.aggregate(aggregateQuery)
+    val iterator = query.store.aggregate(aggregateQuery)
     fs2.Stream.fromBlockingIterator[IO](iterator, 100)
   }
 

@@ -33,7 +33,10 @@ import java.nio.file.{Files, Path}
 import scala.language.implicitConversions
 import scala.util.Try
 
-class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Option[Path], val storeMode: StoreMode) extends Store[Doc, Model] {
+class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                     model: Model,
+                                                                     directory: Option[Path],
+                                                                     val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
   IndexSearcher.setMaxClauseCount(10_000_000)
 
   private lazy val index = Index(directory)
@@ -55,20 +58,16 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     doc
   }
 
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-
-    directory.foreach { path =>
-      if (Files.exists(path)) {
-        val directory = FSDirectory.open(path)
-        val reader = DirectoryReader.open(directory)
-        reader.leaves().forEach { leaf =>
-          val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
-          val latest = Version.LATEST
-          if (latest != dataVersion) {
-            // TODO: Support re-indexing
-            scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
-          }
+  directory.foreach { path =>
+    if (Files.exists(path)) {
+      val directory = FSDirectory.open(path)
+      val reader = DirectoryReader.open(directory)
+      reader.leaves().forEach { leaf =>
+        val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
+        val latest = Version.LATEST
+        if (latest != dataVersion) {
+          // TODO: Support re-indexing
+          scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
         }
       }
     }
@@ -139,7 +138,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   }
 
   private def createLuceneFields(field: Field[Doc, _], doc: Doc, state: IndexingState): List[LuceneField] = {
-    def fs: LuceneField.Store = if (storeMode == StoreMode.All || field.indexed) LuceneField.Store.YES else LuceneField.Store.NO
+    def fs: LuceneField.Store = if (storeMode.isAll || field.indexed) LuceneField.Store.YES else LuceneField.Store.NO
     val json = field.getJson(doc, state)
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
@@ -220,7 +219,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
   override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     val filter = Filter.Equals(field, value)
-    val query = Query[Doc, Model](collection, filter = Some(filter), limit = Some(1))
+    val query = Query[Doc, Model](model, this, filter = Some(filter), limit = Some(1))
     doSearch[Doc](query, Conversion.Doc()).list.headOption
   }
 
@@ -234,7 +233,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     state.indexSearcher.count(new MatchAllDocsQuery)
 
   override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] =
-    doSearch[Doc](Query[Doc, Model](collection), Conversion.Doc()).iterator
+    doSearch[Doc](Query[Doc, Model](model, this), Conversion.Doc()).iterator
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
                           (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
@@ -334,22 +333,23 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
       }
     }
     def value[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): F = jsonField[F](scoreDoc, field).as[F](field.rw)
-    def loadScoreDoc(scoreDoc: ScoreDoc): (Doc, Double) = if (storeMode == StoreMode.All) {
-      collection.model match {
-        case c: JsonConversion[Doc] =>
-          val o = obj(fields.map(f => f.name -> jsonField(scoreDoc, f)): _*)
-          c.convertFromJson(o) -> scoreDoc.score.toDouble
-        case _ =>
-          val map = fields.map { field =>
-            field.name -> value(scoreDoc, field)
-          }.toMap
-          collection.model.map2Doc(map) -> scoreDoc.score.toDouble
-      }
-    } else {
-      val docId = scoreDoc.doc
-      val id = Id[Doc](storedFields.document(docId).get("_id"))
-      val score = scoreDoc.score.toDouble
-      collection(id)(transaction) -> score
+    def loadScoreDoc(scoreDoc: ScoreDoc): (Doc, Double) = storeMode match {
+      case StoreMode.All() =>
+        model match {
+          case c: JsonConversion[Doc] =>
+            val o = obj(fields.map(f => f.name -> jsonField(scoreDoc, f)): _*)
+            c.convertFromJson(o) -> scoreDoc.score.toDouble
+          case _ =>
+            val map = fields.map { field =>
+              field.name -> value(scoreDoc, field)
+            }.toMap
+            model.map2Doc(map) -> scoreDoc.score.toDouble
+        }
+      case StoreMode.Indexes(storage) =>
+        val docId = scoreDoc.doc
+        val id = Id[Doc](storedFields.document(docId).get("_id"))
+        val score = scoreDoc.score.toDouble
+        storage(id) -> score
     }
     def docIterator(): Iterator[(Doc, Double)] = scoreDocs.iterator.map(loadScoreDoc)
     def jsonIterator(fields: List[Field[Doc, _]]): Iterator[(ScoreDoc, Json, Double)] = {
@@ -370,22 +370,22 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         case (doc, score) => c(doc) -> score
       }
       case Conversion.Materialized(fields) => jsonIterator(fields).map {
-        case (_, json, score) => MaterializedIndex[Doc, Model](json, collection.model).asInstanceOf[V] -> score
+        case (_, json, score) => MaterializedIndex[Doc, Model](json, model).asInstanceOf[V] -> score
       }
       case Conversion.DocAndIndexes() => jsonIterator(fields.filter(_.indexed)).map {
-        case (scoreDoc, json, score) => MaterializedAndDoc[Doc, Model](json, collection.model, loadScoreDoc(scoreDoc)._1).asInstanceOf[V] -> score
+        case (scoreDoc, json, score) => MaterializedAndDoc[Doc, Model](json, model, loadScoreDoc(scoreDoc)._1).asInstanceOf[V] -> score
       }
       case Conversion.Json(fields) => jsonIterator(fields).map(t => t._2 -> t._3).asInstanceOf[Iterator[(V, Double)]]
       case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
         case (id, score) =>
           val state = new IndexingState
-          val doc = collection(id)(transaction)
+          val doc = apply(id)(transaction)
           val distance = field.get(doc, field, state).map(d => Spatial.distance(from, d))
           DistanceAndDoc(doc, distance) -> score
       }
     }
     SearchResults(
-      model = collection.model,
+      model = model,
       offset = query.offset,
       limit = query.limit,
       total = Some(total),
@@ -397,7 +397,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   private def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = filter match {
     case Some(f) =>
-      val fields = f.fields(collection.model)
+      val fields = f.fields(model)
       def parsed(q: String, allowLeading: Boolean = false): LuceneQuery = {
         val parser = new QueryParser(f.fieldNames.head, this.index.analyzer)
         parser.setAllowLeadingWildcard(allowLeading)
@@ -405,15 +405,15 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
         parser.parse(q)
       }
       f match {
-        case f: Filter.Equals[Doc, _] => exactQuery(f.field(collection.model), f.getJson(collection.model))
+        case f: Filter.Equals[Doc, _] => exactQuery(f.field(model), f.getJson(model))
         case f: Filter.NotEquals[Doc, _] =>
           val b = new BooleanQuery.Builder
           b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
-          b.add(exactQuery(f.field(collection.model), f.getJson(collection.model)), BooleanClause.Occur.MUST_NOT)
+          b.add(exactQuery(f.field(model), f.getJson(model)), BooleanClause.Occur.MUST_NOT)
           b.build()
         case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression))
         case f: Filter.In[Doc, _] =>
-          val queries = f.getJson(collection.model).map(json => exactQuery(f.field(collection.model), json))
+          val queries = f.getJson(model).map(json => exactQuery(f.field(model), json))
           val b = new BooleanQuery.Builder
           b.setMinimumNumberShouldMatch(1)
           queries.foreach { q =>
@@ -524,7 +524,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   override def aggregate(query: AggregateQuery[Doc, Model])
                         (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
-    Aggregator(query, collection)
+    Aggregator(query, model)
 
   override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int =
     aggregate(query).length
@@ -541,6 +541,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 }
 
 object LuceneStore extends StoreManager {
-  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB, name: String, storeMode: StoreMode): Store[Doc, Model] =
-    new LuceneStore[Doc, Model](db.directory.map(_.resolve(s"$name.lucene")), storeMode)
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         model: Model,
+                                                                         name: String,
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.lucene")), storeMode)
 }

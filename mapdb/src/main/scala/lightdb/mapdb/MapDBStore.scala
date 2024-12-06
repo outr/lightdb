@@ -13,8 +13,10 @@ import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Option[Path],
-                                                                    val storeMode: StoreMode) extends Store[Doc, Model] {
+class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                    model: Model,
+                                                                    directory: Option[Path],
+                                                                    val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
   private lazy val db: DB = {
     val maker = directory.map { path =>
       Files.createDirectories(path.getParent)
@@ -24,10 +26,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: O
   }
   private lazy val map: HTreeMap[String, String] = db.hashMap("map", Serializer.STRING, Serializer.STRING).createOrOpen()
 
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-    map.verify()
-  }
+  map.verify()
 
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
@@ -82,7 +81,8 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: O
 
 object MapDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode): Store[Doc, Model] =
-    new MapDBStore[Doc, Model](db.directory.map(_.resolve(name)), storeMode)
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+    new MapDBStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode)
 }

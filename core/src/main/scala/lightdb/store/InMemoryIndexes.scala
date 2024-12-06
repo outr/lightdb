@@ -14,15 +14,11 @@ trait InMemoryIndexes[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends
   }: _*)
   private lazy val indexes = indexMap.values.toList
 
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-
-    // Populate indexes
-    collection.transaction { implicit transaction =>
-      val state = new IndexingState
-      collection.iterator.foreach { doc =>
-        indexes.foreach(_.set(doc, state))
-      }
+  // Populate indexes
+  transaction { implicit transaction =>
+    val state = new IndexingState
+    iterator.foreach { doc =>
+      indexes.foreach(_.set(doc, state))
     }
   }
 

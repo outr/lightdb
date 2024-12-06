@@ -14,7 +14,7 @@ import lightdb.transaction.Transaction
  * Convenience class to stream aggregation for Stores that don't directly support aggregation
  */
 object Aggregator {
-  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: AggregateQuery[Doc, Model], collection: Collection[Doc, Model])
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: AggregateQuery[Doc, Model], model: Model)
                                                               (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
     val fields = query.functions.map(_.field).distinct
     val groupFields = query.functions.filter(_.`type` == AggregateType.Group).map(_.field)
@@ -112,7 +112,7 @@ object Aggregator {
         }
         key -> map
     }
-    var list = groups.toList.map(t => MaterializedAggregate[Doc, Model](Obj(t._2), collection.model))
+    var list = groups.toList.map(t => MaterializedAggregate[Doc, Model](Obj(t._2), model))
     query.sort.reverse.foreach {
       case (f, direction) =>
         list = list.sortBy(_.json(f.name))(if (direction == Ascending) JsonOrdering else JsonOrdering.reverse)

@@ -8,12 +8,10 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 
-class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode: StoreMode) extends Store[Doc, Model] {
+class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                  model: Model,
+                                                                  val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
   private var map = Map.empty[Id[Doc], Doc]
-
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-  }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
@@ -75,6 +73,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode:
 
 object MapStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode): Store[Doc, Model] = new MapStore[Doc, Model](storeMode)
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = new MapStore[Doc, Model](name, model, storeMode)
 }

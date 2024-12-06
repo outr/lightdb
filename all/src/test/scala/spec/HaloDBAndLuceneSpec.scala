@@ -8,5 +8,5 @@ import lightdb.store.split.SplitStoreManager
 class HaloDBAndLuceneSpec extends AbstractBasicSpec {
   override protected def filterBuilderSupported: Boolean = true
 
-  override def storeManager: StoreManager = SplitStoreManager(HaloDBStore, LuceneStore, searchingMode = StoreMode.Indexes)
+  override def storeManager: StoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
 }

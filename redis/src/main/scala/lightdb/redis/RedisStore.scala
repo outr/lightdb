@@ -12,19 +12,17 @@ import _root_.redis.clients.jedis.{Jedis, JedisPool, JedisPoolConfig}
 
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMode: StoreMode,
+class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                    model: Model,
+                                                                    val storeMode: StoreMode[Doc, Model],
                                                                     hostname: String = "localhost",
-                                                                    port: Int = 6379) extends Store[Doc, Model] {
+                                                                    port: Int = 6379) extends Store[Doc, Model](name, model) {
   private lazy val InstanceKey: TransactionKey[Jedis] = TransactionKey("redisInstance")
 
   private lazy val config = new JedisPoolConfig
   private lazy val pool = new JedisPool(config, hostname, port)
 
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-
-    pool.preparePool()
-  }
+  pool.preparePool()
 
   private def getInstance(implicit transaction: Transaction[Doc]): Jedis =
     transaction.getOrCreate(InstanceKey, pool.getResource)
@@ -39,15 +37,15 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMod
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit =
-    getInstance.hset(collection.name, doc._id.value, toString(doc))
+    getInstance.hset(name, doc._id.value, toString(doc))
 
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean =
-    getInstance.hexists(collection.name, id.value)
+    getInstance.hexists(name, id.value)
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Option[Doc] = {
     if (field == idField) {
-      Option(getInstance.hget(collection.name, value.asInstanceOf[Id[Doc]].value)).map(fromString)
+      Option(getInstance.hget(name, value.asInstanceOf[Id[Doc]].value)).map(fromString)
     } else {
       throw new UnsupportedOperationException(s"HaloDBStore can only get on _id, but ${field.name} was attempted")
     }
@@ -57,9 +55,9 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMod
                         (implicit transaction: Transaction[Doc]): Boolean =
     getInstance.hdel(value.asInstanceOf[Id[Doc]].value) > 0L
 
-  override def count(implicit transaction: Transaction[Doc]): Int = getInstance.hlen(collection.name).toInt
+  override def count(implicit transaction: Transaction[Doc]): Int = getInstance.hlen(name).toInt
 
-  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = getInstance.hgetAll(collection.name)
+  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = getInstance.hgetAll(name)
     .values().iterator().asScala.map(fromString)
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
@@ -75,7 +73,7 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val storeMod
 
   override def truncate()(implicit transaction: Transaction[Doc]): Int = {
     val size = count
-    getInstance.del(collection.name)
+    getInstance.del(name)
     size
   }
 

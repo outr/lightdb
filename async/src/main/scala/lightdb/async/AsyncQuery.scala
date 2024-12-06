@@ -28,7 +28,7 @@ case class AsyncQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](asyncCo
                                                                          facets: List[FacetQuery[Doc]] = Nil) { query =>
   protected def collection: Collection[Doc, Model] = asyncCollection.underlying
 
-  def toQuery: Query[Doc, Model] = Query[Doc, Model](collection, filter, sort, offset, limit, countTotal, scoreDocs, minDocScore, facets)
+  def toQuery: Query[Doc, Model] = Query[Doc, Model](asyncCollection.underlying.model, asyncCollection.underlying.store, filter, sort, offset, limit, countTotal, scoreDocs, minDocScore, facets)
 
   def scored: AsyncQuery[Doc, Model] = copy(scoreDocs = true)
 

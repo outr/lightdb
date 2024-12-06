@@ -11,9 +11,11 @@ import java.nio.file.Path
 import java.sql.Connection
 
 // TODO: Look into http://www.h2gis.org/docs/1.5.0/quickstart/ for spatial support
-class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
+class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                 model: Model,
+                                                                 val connectionManager: ConnectionManager,
                                                                  val connectionShared: Boolean,
-                                                                 val storeMode: StoreMode) extends SQLStore[Doc, Model] {
+                                                                 val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
   override protected def upsertPrefix: String = "MERGE"
 
   protected def tables(connection: Connection): Set[String] = {
@@ -40,24 +42,31 @@ object H2Store extends StoreManager {
     jdbcUrl = s"jdbc:h2:${file.map(_.toFile.getCanonicalPath).map(p => s"file:$p").getOrElse(s"test:${Unique()}")};NON_KEYWORDS=VALUE,USER,SEARCH"
   )
 
-  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path],
-                                                               storeMode: StoreMode): H2Store[Doc, Model] =
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                               model: Model,
+                                                               file: Option[Path],
+                                                               storeMode: StoreMode[Doc, Model]): H2Store[Doc, Model] =
     new H2Store[Doc, Model](
+      name = name,
+      model = model,
       connectionManager = SingleConnectionManager(config(file)),
       connectionShared = false,
       storeMode = storeMode
     )
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) => new H2Store[Doc, Model](
+        name = name,
+        model = model,
         connectionManager = sqlDB.connectionManager,
         connectionShared = true,
         storeMode
       )
-      case None => apply[Doc, Model](db.directory.map(_.resolve(s"$name.h2")), storeMode)
+      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.h2")), storeMode)
     }
   }
 }
