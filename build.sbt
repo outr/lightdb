@@ -88,7 +88,7 @@ val fs2Version: String = "3.11.0"
 
 val scalaTestVersion: String = "3.2.19"
 
-val catsEffectTestingVersion: String = "1.5.0"
+val catsEffectTestingVersion: String = "1.6.0"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, async, all)
