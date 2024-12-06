@@ -14,19 +14,16 @@ import org.rocksdb.{FlushOptions, Options, RocksDB, RocksIterator}
 
 import java.nio.file.{Files, Path}
 
-class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Path, val storeMode: StoreMode) extends Store[Doc, Model] {
-  private lazy val db: RocksDB = {
+class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                      model: Model,
+                                                                      directory: Path,
+                                                                      val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+  RocksDB.loadLibrary()
+  private val db: RocksDB = {
     Files.createDirectories(directory.getParent)
     val options = new Options()
       .setCreateIfMissing(true)
     RocksDB.open(options, directory.toAbsolutePath.toString)
-  }
-
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-
-    RocksDB.loadLibrary()
-    db
   }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
@@ -34,7 +31,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
-    val json = doc.json(collection.model.rw)
+    val json = doc.json(model.rw)
     db.put(doc._id.bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
   }
 
@@ -52,7 +49,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
   private def bytes2Doc(bytes: Array[Byte]): Doc = {
     val jsonString = new String(bytes, "UTF-8")
     val json = JsonParser(jsonString)
-    json.as[Doc](collection.model.rw)
+    json.as[Doc](model.rw)
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)
@@ -111,7 +108,8 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory:
 
 object RocksDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode): Store[Doc, Model] =
-    new RocksDBStore[Doc, Model](db.directory.get.resolve(name), storeMode)
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+    new RocksDBStore[Doc, Model](name, model, db.directory.get.resolve(name), storeMode)
 }

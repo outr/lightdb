@@ -5,7 +5,7 @@ import lightdb.doc.Document
 
 import java.sql.{PreparedStatement, ResultSet, SQLException}
 
-case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
+case class SQLQueryBuilder[Doc <: Document[Doc]](store: SQLStore[Doc, _],
                                                  state: SQLState[Doc],
                                                  fields: List[SQLPart] = Nil,
                                                  filters: List[SQLPart] = Nil,
@@ -19,7 +19,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc]](collection: Collection[Doc, _],
     b.append("SELECT\n")
     b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
     b.append("FROM\n")
-    b.append(s"\t${collection.name}\n")
+    b.append(s"\t${store.name}\n")
     filters.zipWithIndex.foreach {
       case (f, index) =>
         if (index == 0) {

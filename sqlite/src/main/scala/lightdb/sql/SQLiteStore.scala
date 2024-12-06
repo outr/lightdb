@@ -22,13 +22,15 @@ import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 import java.util.regex.Pattern
 
-class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
+class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                     model: Model,
+                                                                     val connectionManager: ConnectionManager,
                                                                      val connectionShared: Boolean,
-                                                                     val storeMode: StoreMode) extends SQLStore[Doc, Model] {
+                                                                     val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
     val c = connectionManager.getConnection
     if (hasSpatial) {
-      scribe.info(s"${collection.name} has spatial features. Enabling...")
+      scribe.info(s"$name has spatial features. Enabling...")
       org.sqlite.Function.create(c, "DISTANCE", new org.sqlite.Function() {
         override def xFunc(): Unit = {
           def s(index: Int): List[Geo] = Option(value_text(index))
@@ -113,8 +115,13 @@ object SQLiteStore extends StoreManager {
     ))
   }
 
-  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](file: Option[Path], storeMode: StoreMode): SQLiteStore[Doc, Model] = {
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                               model: Model,
+                                                               file: Option[Path],
+                                                               storeMode: StoreMode[Doc, Model]): SQLiteStore[Doc, Model] = {
     new SQLiteStore[Doc, Model](
+      name = name,
+      model = model,
       connectionManager = singleConnectionManager(file),
       connectionShared = false,
       storeMode = storeMode
@@ -122,16 +129,19 @@ object SQLiteStore extends StoreManager {
   }
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) =>
         new SQLiteStore[Doc, Model](
-        connectionManager = sqlDB.connectionManager,
-        connectionShared = true,
-        storeMode
-      )
-      case None => apply[Doc, Model](db.directory.map(_.resolve(s"$name.sqlite")), storeMode)
+          name = name,
+          model = model,
+          connectionManager = sqlDB.connectionManager,
+          connectionShared = true,
+          storeMode = storeMode
+        )
+      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.sqlite")), storeMode)
     }
   }
 

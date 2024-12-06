@@ -9,32 +9,37 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb._
+import lightdb.error.DocNotFoundException
 import lightdb.field.Field
 import lightdb.field.Field._
+import lightdb.lock.LockManager
+import lightdb.trigger.CollectionTriggers
 
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
-  protected var collection: Collection[Doc, Model] = _
-
+abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
+                                                                        model: Model) {
   protected def id(doc: Doc): Id[Doc] = doc.asInstanceOf[Document[_]]._id.asInstanceOf[Id[Doc]]
-  protected lazy val idField: UniqueIndex[Doc, Id[Doc]] = collection.model._id
+  lazy val idField: UniqueIndex[Doc, Id[Doc]] = model._id
 
-  def storeMode: StoreMode
+  lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
 
-  protected lazy val fields: List[Field[Doc, _]] = collection.model.fields match {
-    case fields if storeMode == StoreMode.Indexes => fields.filter(_.isInstanceOf[Indexed[_, _]])
-    case fields => fields
+  object trigger extends CollectionTriggers[Doc]
+
+  def storeMode: StoreMode[Doc, Model]
+
+  protected lazy val fields: List[Field[Doc, _]] = if (storeMode.isIndexes) {
+    model.fields.filter(_.isInstanceOf[Indexed[_, _]])
+  } else {
+    model.fields
   }
 
-  protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(collection.model.rw))
-  protected def fromString(string: String): Doc = JsonParser(string).as[Doc](collection.model.rw)
+  protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(model.rw))
+  protected def fromString(string: String): Doc = JsonParser(string).as[Doc](model.rw)
 
   lazy val hasSpatial: Boolean = fields.exists(_.isSpatial)
-
-  def init(collection: Collection[Doc, Model]): Unit = {
-    this.collection = collection
-  }
 
   final def createTransaction(): Transaction[Doc] = {
     val t = new Transaction[Doc]
@@ -62,7 +67,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc]
 
-  def jsonIterator(implicit transaction: Transaction[Doc]): Iterator[Json] = iterator.map(_.json(collection.model.rw))
+  def jsonIterator(implicit transaction: Transaction[Doc]): Iterator[Json] = iterator.map(_.json(model.rw))
 
   def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
                  (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V]
@@ -77,6 +82,65 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def verify(): Boolean = false
 
   def reIndex(): Boolean = false
+
+  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Doc = get(model._id, id).getOrElse {
+    throw DocNotFoundException(name, "_id", id)
+  }
+
+  def modify(id: Id[Doc],
+             establishLock: Boolean = true,
+             deleteOnNone: Boolean = false)
+            (f: Option[Doc] => Option[Doc])
+            (implicit transaction: Transaction[Doc]): Option[Doc] = this.lock(id, get(idField, id), establishLock) { existing =>
+    f(existing) match {
+      case Some(doc) =>
+        upsert(doc)
+        Some(doc)
+      case None if deleteOnNone =>
+        delete(idField, id)
+        None
+      case None => None
+    }
+  }
+
+  object transaction {
+    private val set = ConcurrentHashMap.newKeySet[Transaction[Doc]]
+
+    def active: Int = set.size()
+
+    def apply[Return](f: Transaction[Doc] => Return): Return = {
+      val transaction = create()
+      try {
+        f(transaction)
+      } finally {
+        release(transaction)
+      }
+    }
+
+    def create(): Transaction[Doc] = {
+      if (Collection.LogTransactions) scribe.info(s"Creating new Transaction for $name")
+      val transaction = createTransaction()
+      set.add(transaction)
+      trigger.transactionStart(transaction)
+      transaction
+    }
+
+    def release(transaction: Transaction[Doc]): Unit = {
+      if (Collection.LogTransactions) scribe.info(s"Releasing Transaction for $name")
+      trigger.transactionEnd(transaction)
+      releaseTransaction(transaction)
+      transaction.close()
+      set.remove(transaction)
+    }
+
+    def releaseAll(): Int = {
+      val list = set.iterator().asScala.toList
+      list.foreach { transaction =>
+        release(transaction)
+      }
+      list.size
+    }
+  }
 
   def dispose(): Unit
 }

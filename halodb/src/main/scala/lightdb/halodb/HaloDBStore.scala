@@ -16,11 +16,13 @@ import lightdb.transaction.Transaction
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
 
-class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: Path,
-                                                                     val storeMode: StoreMode,
+class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                     model: Model,
+                                                                     directory: Path,
+                                                                     val storeMode: StoreMode[Doc, Model],
                                                                      indexThreads: Int = Runtime.getRuntime.availableProcessors(),
-                                                                     maxFileSize: Int = 1024 * 1024 * 1024) extends Store[Doc, Model] {
-  private lazy val instance: HaloDB = {
+                                                                     maxFileSize: Int = 1024 * 1024 * 1024) extends Store[Doc, Model](name, model) {
+  private val instance: HaloDB = {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
     opts.setMaxFileSize(maxFileSize)
@@ -36,17 +38,12 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
 
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-    instance
-  }
-
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
-    val json = doc.json(collection.model.rw)
+    val json = doc.json(model.rw)
     instance.put(id(doc).bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
   }
 
@@ -62,7 +59,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
   private def bytes2Doc(bytes: Array[Byte]): Doc = {
     val json = bytes2Json(bytes)
-    json.as[Doc](collection.model.rw)
+    json.as[Doc](model.rw)
   }
 
   private def bytes2Json(bytes: Array[Byte]): Json = {
@@ -112,7 +109,8 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](directory: 
 
 object HaloDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
+                                                                         model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode): Store[Doc, Model] =
-    new HaloDBStore[Doc, Model](db.directory.get.resolve(name), storeMode)
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+    new HaloDBStore[Doc, Model](name, model, db.directory.get.resolve(name), storeMode)
 }

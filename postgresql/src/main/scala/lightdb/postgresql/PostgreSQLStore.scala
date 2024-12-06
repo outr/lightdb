@@ -7,9 +7,11 @@ import lightdb.store.StoreMode
 
 import java.sql.Connection
 
-class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val connectionManager: ConnectionManager,
+class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                         model: Model,
+                                                                         val connectionManager: ConnectionManager,
                                                                          val connectionShared: Boolean,
-                                                                         val storeMode: StoreMode) extends SQLStore[Doc, Model] {
+                                                                         val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
   protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT * FROM information_schema.tables;")
     try {
@@ -31,7 +33,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val con
   override protected def createUpsertSQL(): String = {
     val fieldNames = fields.map(_.name)
     val values = fields.map(field2Value)
-    s"""MERGE INTO ${collection.name} target
+    s"""MERGE INTO $name target
        |USING (VALUES (${values.mkString(", ")})) AS source (${fieldNames.mkString(", ")})
        |ON target._id = source._id
        |WHEN MATCHED THEN

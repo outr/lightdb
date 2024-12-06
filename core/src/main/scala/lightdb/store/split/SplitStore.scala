@@ -12,15 +12,11 @@ import lightdb.field.Field._
 
 import scala.language.implicitConversions
 
-case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage: Store[Doc, Model],
+case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
+                                                                         model: Model,
+                                                                         storage: Store[Doc, Model],
                                                                          searching: Store[Doc, Model],
-                                                                         storeMode: StoreMode) extends Store[Doc, Model] {
-  override def init(collection: Collection[Doc, Model]): Unit = {
-    super.init(collection)
-    storage.init(collection)
-    searching.init(collection)
-  }
-
+                                                                         storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
   override def prepareTransaction(transaction: Transaction[Doc]): Unit = {
     storage.prepareTransaction(transaction)
     searching.prepareTransaction(transaction)
@@ -82,20 +78,20 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](storage
     searching.truncate()
   }
 
-  override def verify(): Boolean = collection.transaction { implicit transaction =>
+  override def verify(): Boolean = transaction { implicit transaction =>
     val storageCount = storage.count
     val searchCount = searching.count
     if (storageCount != searchCount) {
-      scribe.warn(s"${collection.name} out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
+      scribe.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
       reIndexInternal()
-      scribe.info(s"${collection.name} re-indexed successfully!")
+      scribe.info(s"$name re-indexed successfully!")
       true
     } else {
       false
     }
   }
 
-  override def reIndex(): Boolean = collection.transaction { implicit transaction =>
+  override def reIndex(): Boolean = transaction { implicit transaction =>
     reIndexInternal()
     true
   }

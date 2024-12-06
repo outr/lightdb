@@ -12,11 +12,12 @@ import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
-import lightdb.store.{Conversion, StoreMode}
+import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
 
-case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
+case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                    store: Store[Doc, Model],
                                                                     filter: Option[Filter[Doc]] = None,
                                                                     sort: List[Sort] = Nil,
                                                                     offset: Int = 0,
@@ -36,7 +37,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
   def clearFilters: Query[Doc, Model] = copy(filter = None)
 
   def filter(f: Model => Filter[Doc]): Query[Doc, Model] = {
-    val filter = f(collection.model)
+    val filter = f(model)
     val combined = this.filter match {
       case Some(current) => current && filter
       case None => filter
@@ -48,7 +49,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
             path: List[String] = Nil,
             childrenLimit: Option[Int] = Some(10),
             dimsLimit: Option[Int] = Some(10)): Query[Doc, Model] = {
-    val facetField = f(collection.model)
+    val facetField = f(model)
     val facetQuery = FacetQuery(facetField, path, childrenLimit, dimsLimit)
     copy(facets = facetQuery :: facets)
   }
@@ -56,7 +57,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
   def facets(f: Model => List[FacetField[Doc]],
              childrenLimit: Option[Int] = Some(10),
              dimsLimit: Option[Int] = Some(10)): Query[Doc, Model] = {
-    val facetFields = f(collection.model)
+    val facetFields = f(model)
     val facetQueries = facetFields.map(ff => FacetQuery(ff, Nil, childrenLimit, dimsLimit))
     copy(facets = facets ::: facetQueries)
   }
@@ -76,19 +77,20 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
   object search {
     def apply[V](conversion: Conversion[Doc, V])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
-      val storeMode = collection.store.storeMode
-      if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode == StoreMode.All)) {
-        val notIndexed = filter.toList.flatMap(_.fields(collection.model)).filter(!_.indexed)
-        storeMode match {
-          case StoreMode.Indexes => if (notIndexed.nonEmpty) {
+      val storeMode = store.storeMode
+      if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
+        val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
+        if (storeMode.isIndexes) {
+          if (notIndexed.nonEmpty) {
             throw NonIndexedFieldException(query, notIndexed)
           }
-          case StoreMode.All => if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
+        } else {
+          if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
             scribe.warn(s"Inefficient query filtering on non-indexed field(s): ${notIndexed.map(_.name).mkString(", ")}")
           }
         }
       }
-      collection.store.doSearch(
+      store.doSearch(
         query = query,
         conversion = conversion
       )
@@ -98,25 +100,25 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
 
     def value[F](f: Model => Field[Doc, F])
                 (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, F] =
-      apply(Conversion.Value(f(collection.model)))
+      apply(Conversion.Value(f(model)))
 
     def id(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Id[Doc]] =
       value(m => m._id)
 
     def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Json] =
-      apply(Conversion.Json(f(collection.model)))
+      apply(Conversion.Json(f(model)))
 
     def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, T] =
       apply(Conversion.Converted(f))
 
     def materialized(f: Model => List[Field[Doc, _]])
                     (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedIndex[Doc, Model]] = {
-      val fields = f(collection.model)
+      val fields = f(model)
       apply(Conversion.Materialized(fields))
     }
 
     def indexes()(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedIndex[Doc, Model]] = {
-      val fields = collection.model.fields.filter(_.indexed)
+      val fields = model.fields.filter(_.indexed)
       apply(Conversion.Materialized(fields))
     }
 
@@ -129,7 +131,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
                            sort: Boolean = true,
                            radius: Option[Distance] = None)
                           (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
-      val field = f(collection.model)
+      val field = f(model)
       var q = Query.this
       if (sort) {
         q = q.clearSort.sort(Sort.ByDistance(field, from))
@@ -156,15 +158,15 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
              (f: Doc => Option[Doc])
              (implicit transaction: Transaction[Doc]): Unit = search.docs.iterator.foreach { doc =>
     if (safeModify) {
-      collection.modify(doc._id, establishLock, deleteOnNone) { existing =>
+      store.modify(doc._id, establishLock, deleteOnNone) { existing =>
         existing.flatMap(f)
       }
     } else {
-      collection.lock(doc._id, Some(doc)) { current =>
+      store.lock(doc._id, Some(doc)) { current =>
         val result = f(current.getOrElse(doc))
         result match {
-          case Some(modified) => if (!current.contains(modified)) collection.upsert(modified)
-          case None => if (deleteOnNone) collection.delete(doc._id)
+          case Some(modified) => if (!current.contains(modified)) store.upsert(modified)
+          case None => if (deleteOnNone) store.delete(store.idField, doc._id)
         }
         result
       }
@@ -191,12 +193,12 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: 
   }
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
-    AggregateQuery(this, f(collection.model))
+    AggregateQuery(this, f(model))
 
   def grouped[F](f: Model => Field[Doc, F],
                  direction: SortDirection = SortDirection.Ascending)
                 (implicit transaction: Transaction[Doc]): GroupedIterator[Doc, F] = {
-    val field = f(collection.model)
+    val field = f(model)
     val state = new IndexingState
     val iterator = sort(Sort.ByField(field, direction))
       .search

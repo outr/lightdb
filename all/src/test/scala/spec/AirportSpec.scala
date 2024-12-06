@@ -110,7 +110,7 @@ class AirportSpec extends AnyWordSpec with Matchers {
   }
 
   object DB extends LightDB {
-    override def storeManager: StoreManager = SplitStoreManager(HaloDBStore, LuceneStore, searchingMode = StoreMode.Indexes)
+    override def storeManager: StoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
 
     lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 

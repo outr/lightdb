@@ -18,18 +18,12 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,
-                                                                         loadStore: () => Store[Doc, Model],
-                                                                         maxInsertBatch: Int = 1_000_000,
-                                                                         cacheQueries: Boolean = Collection.DefaultCacheQueries) extends Initializable { collection =>
-  lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
+                                                                         store: Store[Doc, Model]) extends Initializable { collection =>
+  def lock: LockManager[Id[Doc], Doc] = store.lock
 
-  object trigger extends CollectionTriggers[Doc]
-
-  lazy val store: Store[Doc, Model] = loadStore()
+  def trigger: store.trigger.type = store.trigger
 
   override protected def initialize(): Unit = {
-    store.init(this)
-
     model match {
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet
@@ -60,44 +54,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def reIndex(): Boolean = store.reIndex()
 
-  object transaction {
-    private val set = ConcurrentHashMap.newKeySet[Transaction[Doc]]
-
-    def active: Int = set.size()
-
-    def apply[Return](f: Transaction[Doc] => Return): Return = {
-      val transaction = create()
-      try {
-        f(transaction)
-      } finally {
-        release(transaction)
-      }
-    }
-
-    def create(): Transaction[Doc] = {
-      if (Collection.LogTransactions) scribe.info(s"Creating new Transaction for $name")
-      val transaction = store.createTransaction()
-      set.add(transaction)
-      trigger.transactionStart(transaction)
-      transaction
-    }
-
-    def release(transaction: Transaction[Doc]): Unit = {
-      if (Collection.LogTransactions) scribe.info(s"Releasing Transaction for $name")
-      trigger.transactionEnd(transaction)
-      store.releaseTransaction(transaction)
-      transaction.close()
-      set.remove(transaction)
-    }
-
-    def releaseAll(): Int = {
-      val list = set.iterator().asScala.toList
-      list.foreach { transaction =>
-        release(transaction)
-      }
-      list.size
-    }
-  }
+  def transaction: store.transaction.type = store.transaction
 
   /**
    * Convenience feature for simple one-off operations removing the need to manually create a transaction around it.
@@ -216,10 +173,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     .iterator
     .flatMap(get)
 
-  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Doc =
-    store.get(model._id, id).getOrElse {
-      throw DocNotFoundException(name, "_id", id)
-    }
+  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Doc = store(id)
 
   def list()(implicit transaction: Transaction[Doc]): List[Doc] = iterator.toList
 
@@ -227,17 +181,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
              establishLock: Boolean = true,
              deleteOnNone: Boolean = false)
             (f: Option[Doc] => Option[Doc])
-            (implicit transaction: Transaction[Doc]): Option[Doc] = this.lock(id, get(id), establishLock) { existing =>
-    f(existing) match {
-      case Some(doc) =>
-        upsert(doc)
-        Some(doc)
-      case None if deleteOnNone =>
-        delete(id)
-        None
-      case None => None
-    }
-  }
+            (implicit transaction: Transaction[Doc]): Option[Doc] = store.modify(id, establishLock, deleteOnNone)(f)
 
   def getOrCreate(id: Id[Doc], create: => Doc, establishLock: Boolean = true)
                  (implicit transaction: Transaction[Doc]): Doc = modify(id, establishLock = establishLock) {
@@ -260,7 +204,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = store.iterator
 
-  lazy val query: Query[Doc, Model] = Query(this)
+  lazy val query: Query[Doc, Model] = Query(model, store)
 
   def truncate()(implicit transaction: Transaction[Doc]): Int = {
     trigger.truncate()
@@ -279,6 +223,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 }
 
 object Collection {
-  var DefaultCacheQueries: Boolean = false
+  var CacheQueries: Boolean = false
+  var MaxInsertBatch: Int = 1_000_000
   var LogTransactions: Boolean = false
 }

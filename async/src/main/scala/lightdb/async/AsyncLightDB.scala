@@ -69,11 +69,8 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
 
   def collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
                                                                     name: Option[String] = None,
-                                                                    store: Option[Store[Doc, Model]] = None,
-                                                                    storeManager: Option[StoreManager] = None,
-                                                                    maxInsertBatch: Int = 1_000_000,
-                                                                    cacheQueries: Boolean = Collection.DefaultCacheQueries): AsyncCollection[Doc, Model] =
-    AsyncCollection(underlying.collection[Doc, Model](model, name, store, storeManager, maxInsertBatch, cacheQueries))
+                                                                    storeManager: Option[StoreManager] = None): AsyncCollection[Doc, Model] =
+    AsyncCollection(underlying.collection[Doc, Model](model, name, storeManager))
 
   def reIndex(): IO[Int] = fs2.Stream(underlying.collections: _*)
     .covary[IO]
