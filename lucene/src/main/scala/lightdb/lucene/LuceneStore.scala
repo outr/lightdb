@@ -88,7 +88,11 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   private def createGeoFields(field: Field[Doc, _],
                               json: Json,
-                              add: LuceneField => Unit): Unit = {
+                              add: LuceneField => Unit): Unit = if (json.isArr) {
+    json.asVector.foreach { json =>
+      createGeoFields(field, json, add)
+    }
+  } else {
     field.className match {
       case Some("lightdb.spatial.Geo.Point") =>
         val p = json.as[Geo.Point]
@@ -156,7 +160,11 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       case _ =>
         def addJson(json: Json, d: DefType): Unit = {
           if (field.isSpatial) {
-            if (json != Null) createGeoFields(field, json, add)
+            if (json != Null) try {
+              createGeoFields(field, json, add)
+            } catch {
+              case t: Throwable => throw new RuntimeException(s"Failure to populate geo field '$name.${field.name}' for $doc (json: $json)", t)
+            }
           } else {
             d match {
               case DefType.Str => json match {
