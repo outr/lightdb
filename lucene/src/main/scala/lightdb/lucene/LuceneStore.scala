@@ -90,13 +90,6 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                               json: Json,
                               add: LuceneField => Unit): Unit = {
     field.className match {
-      case Some("lightdb.spatial.Geo.Point") =>
-        val p = json.as[Geo.Point]
-        try {
-          add(new LatLonPoint(field.name, p.latitude, p.longitude))
-        } catch {
-          case t: Throwable => throw new RuntimeException(s"Failed to add LatLonPoint(${field.name}, ${p.latitude}, ${p.longitude}): ${JsonFormatter.Default(json)}", t)
-        }
       case _ =>
         def indexPoint(p: Geo.Point): Unit = try {
           LatLonShape.createIndexableFields(field.name, p.latitude, p.longitude)
@@ -159,7 +152,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
             if (json != Null) try {
               createGeoFields(field, json, add)
             } catch {
-              case t: Throwable => throw new RuntimeException(s"Failure to populate geo field '$name.${field.name}' for $doc (json: $json)", t)
+              case t: Throwable => throw new RuntimeException(s"Failure to populate geo field '$name.${field.name}' for $doc (json: $json, className: ${field.className})", t)
             }
           } else {
             d match {
