@@ -13,17 +13,17 @@ object ScarangoImplementation extends BenchmarkImplementation {
   override type TitleBasics = TitleBasicsADB
 
   private lazy val backlogAka = new FlushingBacklog[Id[TitleAkaADB], TitleAkaADB](1000, 10000) {
-    override protected def write(list: List[TitleAkaADB]): IO[Unit] = db.titleAka.batch.insert(list).map(_ => ())
+    override protected def write(list: List[TitleAkaADB]): Task[Unit] = db.titleAka.batch.insert(list).map(_ => ())
   }
 
   private lazy val backlogBasics = new FlushingBacklog[Id[TitleBasicsADB], TitleBasicsADB](1000, 10000) {
-    override protected def write(list: List[TitleBasicsADB]): IO[Unit] =
+    override protected def write(list: List[TitleBasicsADB]): Task[Unit] =
       db.titleBasics.batch.insert(list).map(_ => ())
   }
 
   override def name: String = "Scarango"
 
-  override def init(): IO[Unit] = db.init()
+  override def init(): Task[Unit] = db.init()
 
   override def map2TitleAka(map: Map[String, String]): TitleAkaADB = {
     val title = map.value("title")
@@ -52,11 +52,11 @@ object ScarangoImplementation extends BenchmarkImplementation {
     genres = map.list("genres")
   )
 
-  override def persistTitleAka(t: TitleAkaADB): IO[Unit] = backlogAka.enqueue(t._id, t).map(_ => ())
+  override def persistTitleAka(t: TitleAkaADB): Task[Unit] = backlogAka.enqueue(t._id, t).map(_ => ())
 
-  override def persistTitleBasics(t: TitleBasicsADB): IO[Unit] = backlogBasics.enqueue(t._id, t).map(_ => ())
+  override def persistTitleBasics(t: TitleBasicsADB): Task[Unit] = backlogBasics.enqueue(t._id, t).map(_ => ())
 
-  override def flush(): IO[Unit] = for {
+  override def flush(): Task[Unit] = for {
     _ <- backlogAka.flush()
     _ <- backlogBasics.flush()
   } yield {
@@ -67,9 +67,9 @@ object ScarangoImplementation extends BenchmarkImplementation {
 
   override def titleIdFor(t: TitleAkaADB): String = t.titleId
 
-  override def streamTitleAka(): fs2.Stream[IO, TitleAkaADB] = db.titleAka.query.stream()
+  override def streamTitleAka(): rapid.Stream[TitleAkaADB] = db.titleAka.query.stream()
 
-  override def verifyTitleAka(): IO[Unit] = db.titleAka
+  override def verifyTitleAka(): Task[Unit] = db.titleAka
     .query(aql"FOR d IN titleAka COLLECT WITH COUNT INTO length RETURN length")
     .as[Int]
     .one
@@ -77,7 +77,7 @@ object ScarangoImplementation extends BenchmarkImplementation {
       scribe.info(s"TitleAka counts -- $count")
     }
 
-  override def verifyTitleBasics(): IO[Unit] = db.titleAka
+  override def verifyTitleBasics(): Task[Unit] = db.titleAka
     .query(aql"FOR d IN titleBasics COLLECT WITH COUNT INTO length RETURN length")
     .as[Int]
     .one
@@ -85,9 +85,9 @@ object ScarangoImplementation extends BenchmarkImplementation {
       scribe.info(s"TitleBasics counts -- $count")
     }
 
-  override def get(id: String): IO[TitleAkaADB] = db.titleAka(TitleAkaADB.id(id))
+  override def get(id: String): Task[TitleAkaADB] = db.titleAka(TitleAkaADB.id(id))
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaADB]] = db.titleAka
+  override def findByTitleId(titleId: String): Task[List[TitleAkaADB]] = db.titleAka
     .query
     .byFilter(ref => ref.titleId === titleId)
     .toList

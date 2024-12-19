@@ -20,7 +20,7 @@
 //
 //  override def name: String = "LightDB"
 //
-//  override def init(): IO[Unit] = IO(DB.init())
+//  override def init(): Task[Unit] = IO(DB.init())
 //
 //  override def map2TitleAka(map: Map[String, String]): TitleAkaLDB = TitleAkaLDB(
 //    titleId = map.value("titleId"),
@@ -50,25 +50,25 @@
 //  private implicit var akaTransaction: Transaction[TitleAkaLDB] = _
 //  private implicit var basicsTransaction: Transaction[TitleBasicsLDB] = _
 //
-//  override def persistTitleAka(t: TitleAkaLDB): IO[Unit] = IO.blocking {
+//  override def persistTitleAka(t: TitleAkaLDB): Task[Unit] = Task {
 //    if (akaTransaction == null) akaTransaction = DB.titleAka.transaction.create()
 //    DB.titleAka.set(t)
 //  }
 //
-//  override def persistTitleBasics(t: TitleBasicsLDB): IO[Unit] = IO.blocking {
+//  override def persistTitleBasics(t: TitleBasicsLDB): Task[Unit] = Task {
 //    if (basicsTransaction == null) basicsTransaction = DB.titleBasics.transaction.create()
 //    DB.titleBasics.set(t)
 //  }
 //
-//  override def streamTitleAka(): fs2.Stream[IO, TitleAkaLDB] = fs2.Stream.fromBlockingIterator[IO](DB.titleAka.iterator, 100)
+//  override def streamTitleAka(): rapid.Stream[TitleAkaLDB] = fs2.Stream.fromBlockingIterator[IO](DB.titleAka.iterator, 100)
 //
 //  override def idFor(t: TitleAkaLDB): String = t._id.value
 //
 //  override def titleIdFor(t: TitleAkaLDB): String = t.titleId
 //
-//  override def get(id: String): IO[TitleAkaLDB] = IO(DB.titleAka(Id[TitleAkaLDB](id)))
+//  override def get(id: String): Task[TitleAkaLDB] = IO(DB.titleAka(Id[TitleAkaLDB](id)))
 //
-//  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = IO.blocking {
+//  override def findByTitleId(titleId: String): Task[List[TitleAkaLDB]] = Task {
 //    DB.titleAka
 //      .query
 //      .filter(_.titleId === titleId)
@@ -77,20 +77,20 @@
 //      .list
 //      .map(_.json.as[TitleAkaLDB])
 //  }
-//  //  override def findByTitleId(titleId: String): IO[List[TitleAkaLDB]] = TitleAkaLDB.titleId.query(titleId).compile.toList
+//  //  override def findByTitleId(titleId: String): Task[List[TitleAkaLDB]] = TitleAkaLDB.titleId.query(titleId).compile.toList
 //
-//  override def flush(): IO[Unit] = IO.blocking {
+//  override def flush(): Task[Unit] = Task {
 //    akaTransaction.commit()
 //    basicsTransaction.commit()
 //  }
 //
-//  override def verifyTitleAka(): IO[Unit] = IO.blocking {
+//  override def verifyTitleAka(): Task[Unit] = Task {
 //    val haloCount = DB.titleAka.count
 //    val luceneCount = DB.titleAka.indexer.count
 //    scribe.info(s"TitleAka counts -- Halo: $haloCount, Lucene: $luceneCount")
 //  }
 //
-//  override def verifyTitleBasics(): IO[Unit] = IO.blocking {
+//  override def verifyTitleBasics(): Task[Unit] = Task {
 //    val haloCount = DB.titleBasics.count
 //    //    luceneCount <- DB.titleBasics.indexer.count()
 //    scribe.info(s"TitleBasic counts -- Halo: $haloCount") //, Lucene: $luceneCount")

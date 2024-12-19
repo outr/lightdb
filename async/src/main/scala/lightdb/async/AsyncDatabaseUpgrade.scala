@@ -1,6 +1,6 @@
 package lightdb.async
 
-import cats.effect.IO
+import rapid.Task
 
 trait AsyncDatabaseUpgrade {
   def label: String = getClass.getSimpleName.replace("$", "")
@@ -8,5 +8,5 @@ trait AsyncDatabaseUpgrade {
   def blockStartup: Boolean
   def alwaysRun: Boolean
 
-  def upgrade(db: AsyncLightDB): IO[Unit]
+  def upgrade(db: AsyncLightDB): Task[Unit]
 }
