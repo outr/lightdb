@@ -8,25 +8,25 @@ trait BenchmarkImplementation {
 
   def name: String
 
-  def init(): IO[Unit] = IO.unit
+  def init(): Task[Unit] = Task.unit
 
   def map2TitleAka(map: Map[String, String]): TitleAka
   def map2TitleBasics(map: Map[String, String]): TitleBasics
 
-  def persistTitleAka(t: TitleAka): IO[Unit]
-  def persistTitleBasics(t: TitleBasics): IO[Unit]
+  def persistTitleAka(t: TitleAka): Task[Unit]
+  def persistTitleBasics(t: TitleBasics): Task[Unit]
 
-  def flush(): IO[Unit]
+  def flush(): Task[Unit]
 
   def idFor(t: TitleAka): String
   def titleIdFor(t: TitleAka): String
 
-  def streamTitleAka(): fs2.Stream[IO, TitleAka]
-  def verifyTitleAka(): IO[Unit]
-  def verifyTitleBasics(): IO[Unit]
+  def streamTitleAka(): rapid.Stream[TitleAka]
+  def verifyTitleAka(): Task[Unit]
+  def verifyTitleBasics(): Task[Unit]
 
-  def get(id: String): IO[TitleAka]
-  def findByTitleId(titleId: String): IO[List[TitleAka]]
+  def get(id: String): Task[TitleAka]
+  def findByTitleId(titleId: String): Task[List[TitleAka]]
 
   private val excludeChars = Set(2.toChar)
 

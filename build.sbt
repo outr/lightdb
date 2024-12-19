@@ -82,13 +82,9 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
-val catsVersion: String = "3.5.7"
-
-val fs2Version: String = "3.11.0"
+val rapidVersion: String = "0.3.1-SNAPSHOT"
 
 val scalaTestVersion: String = "3.2.19"
-
-val catsEffectTestingVersion: String = "1.6.0"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, async, all)
@@ -253,8 +249,7 @@ lazy val async = project.in(file("async"))
 		name := s"$projectName-async",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"org.typelevel" %% "cats-effect" % catsVersion,
-			"co.fs2" %% "fs2-core" % fs2Version
+			"com.outr" %% "rapid-core" % rapidVersion
 		)
 	)
 
@@ -264,8 +259,7 @@ lazy val all = project.in(file("all"))
 		name := s"$projectName-all",
 		fork := true,
 		libraryDependencies ++= Seq(
-			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"org.typelevel" %% "cats-effect-testing-scalatest" % catsEffectTestingVersion % Test
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
 
