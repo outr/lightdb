@@ -1,7 +1,5 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb.async.{AsyncCollection, AsyncDatabaseUpgrade, AsyncLightDB, AsyncStoredValue}
 import lightdb.collection.Collection
@@ -13,10 +11,11 @@ import lightdb.{Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import perfolation.double2Implicits
+import rapid.Task
 
 import java.nio.file.Path
 
-abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Matchers { spec =>
+abstract class AbstractAsyncSpec extends AnyWordSpec with Matchers { spec =>
   protected def aggregationSupported: Boolean = true
 
   private val adam = Person("Adam", 21, Person.id("adam"))
@@ -61,46 +60,46 @@ abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Mat
 
   specName should {
     "initialize the database" in {
-      db.init().map(b => b should be(true))
+      db.init().map(b => b should be(true)).sync()
     }
     "verify the database is empty" in {
       db.people.transaction { implicit transaction =>
         db.people.count.map(c => c should be(0))
-      }
+      }.sync()
     }
     "insert the records" in {
       db.people.transaction { implicit transaction =>
         db.people.insert(names).map(_ should not be None)
-      }
+      }.sync()
     }
     "retrieve the first record by _id -> id" in {
       db.people.transaction { implicit transaction =>
         db.people(_._id -> adam._id).map(_ should be(adam))
-      }
+      }.sync()
     }
     "retrieve the first record by id" in {
       db.people.transaction { implicit transaction =>
         db.people(adam._id).map(_ should be(adam))
-      }
+      }.sync()
     }
     "count the records in the database" in {
       db.people.transaction { implicit transaction =>
         db.people.count.map(_ should be(26))
-      }
+      }.sync()
     }
     "stream the ids in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.search.id.flatMap(_.stream.compile.toList).map(_.toSet).map { ids =>
+        db.people.query.search.id.flatMap(_.stream.toList).map(_.toSet).map { ids =>
           ids should be(names.map(_._id).toSet)
         }
-      }
+      }.sync()
     }
     "stream the records in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.stream.compile.toList.map(_.map(_.age).toSet).map { ages =>
+        db.people.stream.toList.map(_.map(_.age).toSet).map { ages =>
           ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
         }
-      }
+      }.sync()
     }
     "query with aggregate functions" in {
       if (aggregationSupported) {
@@ -119,28 +118,28 @@ abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Mat
               list.map(m => m(_.age.avg).f(f = 6)).toSet should be(Set("41.807692"))
               list.map(m => m(_.age.sum)).toSet should be(Set(1087))
             }
-        }
+        }.sync()
       } else {
         succeed
       }
     }
     "search by age range" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.filter(_.age BETWEEN 19 -> 22).search.id.flatMap(_.stream.compile.toList).map { ids =>
+        db.people.query.filter(_.age BETWEEN 19 -> 22).search.id.flatMap(_.stream.toList).map { ids =>
           ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
         }
-      }
+      }.sync()
     }
     "sort by age" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.sort(Sort.ByField(Person.age).descending).search.docs.flatMap(_.stream.compile.toList).map { people =>
+        db.people.query.sort(Sort.ByField(Person.age).descending).search.docs.flatMap(_.stream.toList).map { people =>
           people.map(_.name).take(3) should be(List("Ruth", "Zoey", "Quintin"))
         }
-      }
+      }.sync()
     }
     "group by age" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.grouped(_.age).compile.toList.map { list =>
+        db.people.query.grouped(_.age).toList.map { list =>
           list.map(_._1) should be(List(2, 4, 11, 12, 13, 15, 21, 22, 23, 30, 33, 35, 42, 53, 62, 63, 72, 81, 89, 99, 101, 102))
           list.map(_._2.map(_.name).toSet) should be(List(
             Set("Penny"), Set("Jenna"), Set("Brenda"), Set("Greg"), Set("Veronica"), Set("Diana"),
@@ -149,7 +148,7 @@ abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Mat
             Set("Quintin"), Set("Zoey"), Set("Ruth")
           ))
         }
-      }
+      }.sync()
     }
     "delete some records" in {
       db.people.transaction { implicit transaction =>
@@ -157,59 +156,59 @@ abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Mat
           b1 <- db.people.delete(_._id -> linda._id)
           b2 <- db.people.delete(_._id -> yuri._id)
         } yield (b1, b2) should be((true, true))
-      }
+      }.sync()
     }
     "verify the records were deleted" in {
       db.people.transaction { implicit transaction =>
         db.people.count.map(_ should be(24))
-      }
+      }.sync()
     }
     "modify a record" in {
       db.people.transaction { implicit transaction =>
         db.people.modify(adam._id) {
-          case Some(p) => IO(Some(p.copy(name = "Allan")))
+          case Some(p) => Task(Some(p.copy(name = "Allan")))
           case None => fail("Adam was not found!")
         }
       }.map {
         case Some(p) => p.name should be("Allan")
         case None => fail("Allan was not returned!")
-      }
+      }.sync()
     }
     "verify the record has been renamed" in {
       db.people.transaction { implicit transaction =>
         db.people(_._id -> adam._id).map(_.name should be("Allan"))
-      }
+      }.sync()
     }
     "verify start time has been set" in {
-      db.startTime.get.map(_ should be > 0L)
+      db.startTime.get.map(_ should be > 0L).sync()
     }
     "dispose the database before creating a new instance" in {
-      db.dispose().map(_ should be(true))
+      db.dispose().map(_ should be(true)).sync()
     }
     "prepare a new instance" in {
       db = new DB
-      db.init().map(_ should be(true))
+      db.init().map(_ should be(true)).sync()
     }
     "query the database to verify records were persisted properly" in {
       db.people.transaction { implicit transaction =>
-        db.people.stream.compile.toList.map(_.map(_.name).toSet).map(_ should be(Set(
+        db.people.stream.toList.map(_.map(_.name).toSet).map(_ should be(Set(
           "Tori", "Ruth", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin",
           "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg", "Veronica"
         )))
-      }
+      }.sync()
     }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
         db.people.truncate().map(_ should be(24))
-      }
+      }.sync()
     }
     "verify the collection is empty" in {
       db.people.transaction { implicit transaction =>
         db.people.count.map(_ should be(0))
-      }
+      }.sync()
     }
     "dispose the database" in {
-      db.dispose().map(_ should be(true))
+      db.dispose().map(_ should be(true)).sync()
     }
   }
 
@@ -248,8 +247,8 @@ abstract class AbstractAsyncSpec extends AsyncWordSpec with AsyncIOSpec with Mat
 
     override def alwaysRun: Boolean = false
 
-    override def upgrade(ldb: AsyncLightDB): IO[Unit] = {
-      db.startTime.set(System.currentTimeMillis()).void
+    override def upgrade(ldb: AsyncLightDB): Task[Unit] = {
+      db.startTime.set(System.currentTimeMillis()).unit
     }
   }
 }

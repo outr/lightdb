@@ -1,7 +1,5 @@
 package spec
 
-import cats.effect.IO
-import cats.effect.testing.scalatest.AsyncIOSpec
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}

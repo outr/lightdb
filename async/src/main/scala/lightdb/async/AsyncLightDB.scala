@@ -1,7 +1,5 @@
 package lightdb.async
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import fabric.rw.RW
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
@@ -9,6 +7,7 @@ import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.{KeyValue, LightDB, Persistence, StoredValue}
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
+import rapid.Task
 
 import java.nio.file.Path
 
@@ -32,7 +31,7 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
 
         override def alwaysRun: Boolean = u.alwaysRun
 
-        override def upgrade(ldb: LightDB): Unit = u.upgrade(db).unsafeRunSync()
+        override def upgrade(ldb: LightDB): Unit = u.upgrade(db).sync()
       }
     }
   }
@@ -72,13 +71,11 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
                                                                     storeManager: Option[StoreManager] = None): AsyncCollection[Doc, Model] =
     AsyncCollection(underlying.collection[Doc, Model](model, name, storeManager))
 
-  def reIndex(): IO[Int] = fs2.Stream(underlying.collections: _*)
-    .covary[IO]
-    .parEvalMap(32)(c => AsyncCollection[KeyValue, KeyValue.type](c.asInstanceOf[Collection[KeyValue, KeyValue.type]]).reIndex())
-    .filter(identity)
-    .compile
+  def reIndex(): Task[Int] = rapid.Stream.emits(underlying.collections)
+    .par(maxThreads = 32) { collection =>
+      AsyncCollection[KeyValue, KeyValue.type](collection.asInstanceOf[Collection[KeyValue, KeyValue.type]]).reIndex()
+    }
     .count
-    .map(_.toInt)
 
   object stored {
     def apply[T](key: String,
@@ -102,14 +99,14 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
     ))
   }
 
-  final def init(): IO[Boolean] = IO.blocking(underlying.init()).flatMap {
+  final def init(): Task[Boolean] = Task(underlying.init()).flatMap {
     case true => initialize().map(_ => true)
-    case false => IO.pure(false)
+    case false => Task.pure(false)
   }
 
-  protected def initialize(): IO[Unit] = IO.unit
+  protected def initialize(): Task[Unit] = Task.unit
 
-  def dispose(): IO[Boolean] = IO.blocking {
+  def dispose(): Task[Boolean] = Task {
     if (underlying.disposed) {
       false
     } else {

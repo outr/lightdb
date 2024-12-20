@@ -25,15 +25,15 @@
 //
 //  type TitleAka = implementation.TitleAka
 //
-//  implicit class ElapsedIO[Return](io: IO[Return]) {
-//    def elapsed: IO[Elapsed[Return]] = {
+//  implicit class ElapsedTask[Return](io: Task[Return]) {
+//    def elapsed: Task[Elapsed[Return]] = {
 //      val start = System.currentTimeMillis()
 //      io.map { r =>
 //        Elapsed(r, (System.currentTimeMillis() - start) / 1000.0)
 //      }
 //    }
 //
-//    def elapsedValue: IO[Double] = elapsed.map(_.elapsed)
+//    def elapsedValue: Task[Double] = elapsed.map(_.elapsed)
 //  }
 //
 //  case class Elapsed[Return](value: Return, elapsed: Double)
@@ -78,7 +78,7 @@
 //    sys.exit(0)
 //  }
 //
-//  private def process[T](file: File, map2t: Map[String, String] => T, persist: T => IO[Unit]): IO[Int] = IO.blocking {
+//  private def process[T](file: File, map2t: Map[String, String] => T, persist: T => Task[Unit]): Task[Int] = Task {
 //    val reader = new BufferedReader(new FileReader(file))
 //    val counter = new AtomicInteger(0)
 //    val concurrency = 32
@@ -99,7 +99,7 @@
 //      }
 //
 //      val iterator = new IOIterator[T] {
-//        override def next(): IO[Option[T]] = IO.blocking {
+//        override def next(): Task[Option[T]] = Task {
 //          nextLine()
 //        }.map(_.map { line =>
 //          val values = line.split('\t').toList
@@ -140,7 +140,7 @@
 //
 //  private val counter = new AtomicInteger(0)
 //
-//  def cycleThroughEntireCollection(idEvery: Int): IO[Unit] = implementation.streamTitleAka().map { titleAka =>
+//  def cycleThroughEntireCollection(idEvery: Int): Task[Unit] = implementation.streamTitleAka().map { titleAka =>
 //    val v = counter.incrementAndGet()
 //    if (v % idEvery == 0) {
 //      ids = Ids(implementation.idFor(titleAka), implementation.titleIdFor(titleAka)) :: ids
@@ -149,8 +149,8 @@
 //    scribe.info(s"Counter for entire collection: ${counter.get()}")
 //  }
 //
-//  def validateIds(idsList: List[Ids]): IO[Unit] = if (idsList.isEmpty) {
-//    IO.unit
+//  def validateIds(idsList: List[Ids]): Task[Unit] = if (idsList.isEmpty) {
+//    Task.unit
 //  } else {
 //    val ids = idsList.head
 //    implementation.get(ids.id).flatMap { titleAka =>
@@ -161,8 +161,8 @@
 //    }
 //  }
 //
-//  def validateTitleIds(idsList: List[Ids]): IO[Unit] = if (idsList.isEmpty) {
-//    IO.unit
+//  def validateTitleIds(idsList: List[Ids]): Task[Unit] = if (idsList.isEmpty) {
+//    Task.unit
 //  } else {
 //    val ids = idsList.head
 //    implementation.findByTitleId(ids.titleId).flatMap { titleAkas =>
@@ -176,8 +176,8 @@
 //    }
 //  }
 //
-////  def validateTitleIds(idsList: List[Ids]): IO[Unit] = {
-////    fs2.Stream[IO, Ids](idsList: _*)
+////  def validateTitleIds(idsList: List[Ids]): Task[Unit] = {
+////    rapid.Stream[Ids](idsList: _*)
 ////      .parEvalMap(8) { ids =>
 ////        implementation.findByTitleId(ids.titleId).map { titleAkas =>
 ////          val results = titleAkas.map(ta => implementation.titleIdFor(ta))
@@ -192,7 +192,7 @@
 ////      .drain
 ////  }
 //
-////  override def run(args: List[String]): IO[ExitCode] = {
+////  override def run(args: List[String]): Task[ExitCode] = {
 ////    val baseDirectory = new File("data")
 ////    val start = System.currentTimeMillis()
 ////    for {
@@ -210,9 +210,9 @@
 ////              isOriginalTitle = map.boolOption("isOriginalTitle")
 ////            )
 //////            db.titleAka.put(t)
-////            IO.unit
+////            Task.unit
 ////          } else {
-////            IO.unit
+////            Task.unit
 ////          }
 ////        }.foldMap(_ => 1L).compile.lastOrError
 ////      }
@@ -225,10 +225,10 @@
 ////    }
 ////  }
 //
-//  private def downloadFile(file: File, limit: Limit): IO[File] = (if (file.exists()) {
-//    IO.pure(file)
+//  private def downloadFile(file: File, limit: Limit): Task[File] = (if (file.exists()) {
+//    Task.pure(file)
 //  } else {
-//    IO.blocking {
+//    Task {
 //      scribe.info(s"File doesn't exist, downloading ${file.getName}...")
 //      file.getParentFile.mkdirs()
 //      val fileName = s"${file.getName}.gz"
@@ -265,8 +265,8 @@
 //    }
 //  }).flatMap { file =>
 //    limit match {
-//      case Limit.Unlimited => IO.pure(file)
-//      case _ => IO.blocking {
+//      case Limit.Unlimited => Task.pure(file)
+//      case _ => Task {
 //        val source = Source.fromFile(file)
 //        try {
 //          val (pre, post) = file.getName.splitAt(file.getName.lastIndexOf("."))

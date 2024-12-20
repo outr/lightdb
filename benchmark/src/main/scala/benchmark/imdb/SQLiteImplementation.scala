@@ -20,7 +20,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogAka = new FlushingBacklog[String, TitleAka](1000, 10000) {
-    override protected def write(list: List[TitleAkaPG]): IO[Unit] = IO.blocking {
+    override protected def write(list: List[TitleAkaPG]): Task[Unit] = Task {
       val ps = connection.prepareStatement("INSERT INTO title_aka(id, titleId, ordering, title, region, language, types, attributes, isOriginalTitle) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
         list.foreach { t =>
@@ -43,7 +43,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogBasics = new FlushingBacklog[String, TitleBasics](1000, 10000) {
-    override protected def write(list: List[TitleBasicsPG]): IO[Unit] = IO.blocking {
+    override protected def write(list: List[TitleBasicsPG]): Task[Unit] = Task {
       val ps = connection.prepareStatement("INSERT INTO title_basics(id, tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genres) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       try {
         list.foreach { t =>
@@ -68,7 +68,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
 
   override def name: String = "SQLite"
 
-  override def init(): IO[Unit] = IO.blocking {
+  override def init(): Task[Unit] = Task {
     executeUpdate("DROP TABLE IF EXISTS title_aka")
     executeUpdate("DROP TABLE IF EXISTS title_basics")
     executeUpdate("CREATE TABLE title_aka(id VARCHAR NOT NULL, titleId TEXT, ordering INTEGER, title TEXT, region TEXT, language TEXT, types TEXT, attributes TEXT, isOriginalTitle SMALLINT, PRIMARY KEY (id))")
@@ -101,9 +101,9 @@ object SQLiteImplementation extends BenchmarkImplementation {
     genres = map.value("genres")
   )
 
-  override def persistTitleAka(t: TitleAka): IO[Unit] = backlogAka.enqueue(t.id, t).map(_ => ())
+  override def persistTitleAka(t: TitleAka): Task[Unit] = backlogAka.enqueue(t.id, t).map(_ => ())
 
-  override def persistTitleBasics(t: TitleBasicsPG): IO[Unit] = backlogBasics.enqueue(t.id, t).map(_ => ())
+  override def persistTitleBasics(t: TitleBasicsPG): Task[Unit] = backlogBasics.enqueue(t.id, t).map(_ => ())
 
   private def fromRS(rs: ResultSet): TitleAkaPG = TitleAkaPG(
     id = rs.getString("id"),
@@ -117,7 +117,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
     isOriginalTitle = rs.getInt("isOriginalTitle")
   )
 
-  override def streamTitleAka(): fs2.Stream[IO, TitleAkaPG] = {
+  override def streamTitleAka(): rapid.Stream[TitleAkaPG] = {
     val s = connection.createStatement()
     try {
       val rs = s.executeQuery("SELECT * FROM title_aka")
@@ -138,7 +138,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
 
   override def titleIdFor(t: TitleAkaPG): String = t.titleId
 
-  override def get(id: String): IO[TitleAkaPG] = IO.blocking {
+  override def get(id: String): Task[TitleAkaPG] = Task {
     val s = connection.prepareStatement("SELECT * FROM title_aka WHERE id = ?")
     try {
       s.setString(1, id)
@@ -154,7 +154,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def findByTitleId(titleId: String): IO[List[TitleAkaPG]] = IO.blocking {
+  override def findByTitleId(titleId: String): Task[List[TitleAkaPG]] = Task {
     val s = connection.prepareStatement("SELECT * FROM title_aka WHERE titleId = ?")
     try {
       s.setString(1, titleId)
@@ -173,14 +173,14 @@ object SQLiteImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def flush(): IO[Unit] = for {
+  override def flush(): Task[Unit] = for {
     _ <- backlogAka.flush()
     _ <- IO(commit())
   } yield {
     ()
   }
 
-  override def verifyTitleAka(): IO[Unit] = IO.blocking {
+  override def verifyTitleAka(): Task[Unit] = Task {
     val s = connection.createStatement()
     val rs = s.executeQuery("SELECT COUNT(1) FROM title_aka")
     rs.next()
@@ -188,7 +188,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
     scribe.info(s"Counted $count records in title_aka table")
   }
 
-  override def verifyTitleBasics(): IO[Unit] = IO.blocking {
+  override def verifyTitleBasics(): Task[Unit] = Task {
     val s = connection.createStatement()
     val rs = s.executeQuery("SELECT COUNT(1) FROM title_basics")
     rs.next()
