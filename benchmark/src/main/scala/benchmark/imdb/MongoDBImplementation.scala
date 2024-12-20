@@ -54,7 +54,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogAka = new FlushingBacklog[String, Document](1000, 10000) {
-    override protected def write(list: List[Document]): IO[Unit] = IO.blocking {
+    override protected def write(list: List[Document]): Task[Unit] = Task {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)
       titleAka.insertMany(javaList)
@@ -63,7 +63,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
   }
 
   private lazy val backlogBasics = new FlushingBacklog[String, Document](1000, 10000) {
-    override protected def write(list: List[Document]): IO[Unit] = IO.blocking {
+    override protected def write(list: List[Document]): Task[Unit] = Task {
       val javaList = new util.ArrayList[Document](batchSize)
       list.foreach(javaList.add)
       titleBasics.insertMany(javaList)
@@ -71,15 +71,15 @@ object MongoDBImplementation extends BenchmarkImplementation {
     }
   }
 
-  override def init(): IO[Unit] = IO.blocking {
+  override def init(): Task[Unit] = Task {
     titleAka.createIndex(Indexes.ascending("titleId"))
   }
 
-  override def persistTitleAka(t: Document): IO[Unit] = backlogAka.enqueue(t.getString("_id"), t).map(_ => ())
+  override def persistTitleAka(t: Document): Task[Unit] = backlogAka.enqueue(t.getString("_id"), t).map(_ => ())
 
-  override def persistTitleBasics(t: Document): IO[Unit] = backlogBasics.enqueue(t.getString("_id"), t).map(_ => ())
+  override def persistTitleBasics(t: Document): Task[Unit] = backlogBasics.enqueue(t.getString("_id"), t).map(_ => ())
 
-  override def streamTitleAka(): fs2.Stream[IO, Document] = {
+  override def streamTitleAka(): rapid.Stream[Document] = {
     val iterator: Iterator[Document] = titleAka.find().iterator().asScala
     fs2.Stream.fromBlockingIterator[IO](iterator, 512)
   }
@@ -90,27 +90,27 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   import com.mongodb.client.model.Filters
 
-  override def get(id: String): IO[Document] = IO.blocking {
+  override def get(id: String): Task[Document] = Task {
     titleAka.find(Filters.eq("_id", id)).first()
   }
 
-  override def findByTitleId(titleId: String): IO[List[Document]] = IO.blocking {
+  override def findByTitleId(titleId: String): Task[List[Document]] = Task {
     titleAka.find(Filters.eq("titleId", titleId)).iterator().asScala.toList
   }
 
-  override def flush(): IO[Unit] = for {
+  override def flush(): Task[Unit] = for {
     _ <- backlogAka.flush()
     _ <- backlogBasics.flush()
   } yield {
     ()
   }
 
-  override def verifyTitleAka(): IO[Unit] = IO.blocking {
+  override def verifyTitleAka(): Task[Unit] = Task {
     val docs = titleAka.countDocuments()
     scribe.info(s"TitleAka counts -- $docs")
   }
 
-  override def verifyTitleBasics(): IO[Unit] = IO.blocking {
+  override def verifyTitleBasics(): Task[Unit] = Task {
     val docs = titleBasics.countDocuments()
     scribe.info(s"TitleBasics counts -- $docs")
   }

@@ -1,11 +1,11 @@
 package lightdb.async
 
-import cats.effect.IO
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.{Query, SortDirection}
+import rapid.Task
 
 case class AsyncAggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],
                                                                  functions: List[AggregateFunction[_, _, Doc]],
@@ -45,13 +45,11 @@ case class AsyncAggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     sort = sort
   )
 
-  def count(implicit transaction: Transaction[Doc]): IO[Int] =
-    IO.blocking(query.store.aggregateCount(aggregateQuery))
+  def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(query.store.aggregateCount(aggregateQuery))
 
-  def stream(implicit transaction: Transaction[Doc]): fs2.Stream[IO, MaterializedAggregate[Doc, Model]] = {
-    val iterator = query.store.aggregate(aggregateQuery)
-    fs2.Stream.fromBlockingIterator[IO](iterator, 100)
+  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
+    rapid.Stream.fromIterator(Task(query.store.aggregate(aggregateQuery)))
   }
 
-  def toList(implicit transaction: Transaction[Doc]): IO[List[MaterializedAggregate[Doc, Model]]] = stream.compile.toList
+  def toList(implicit transaction: Transaction[Doc]): Task[List[MaterializedAggregate[Doc, Model]]] = stream.toList
 }

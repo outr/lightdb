@@ -12,7 +12,7 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
   private val size = new AtomicInteger(0)
   private val flushing = new AtomicBoolean(false)
 
-  def enqueue(key: Key, value: Value): IO[Value] = IO.blocking {
+  def enqueue(key: Key, value: Value): Task[Value] = Task {
     val exists = map.put(key, value) != null
     var doFlush = false
     if (!exists) {
@@ -35,10 +35,10 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
     b
   }
 
-  private def waitForBuffer(): IO[Unit] = if (size.get() > maxSize) {
+  private def waitForBuffer(): Task[Unit] = if (size.get() > maxSize) {
     IO.sleep(1.second).flatMap(_ => waitForBuffer())
   } else {
-    IO.unit
+    Task.unit
   }
 
   private def shouldFlush(): Boolean = synchronized {
@@ -50,7 +50,7 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
     }
   }
 
-  private def pollingStream: fs2.Stream[IO, Value] = fs2.Stream
+  private def pollingStream: rapid.Stream[Value] = fs2.Stream
     .fromBlockingIterator[IO](map.keys().asIterator().asScala, 512)
     .map { key =>
       val o = Option(map.remove(key))
@@ -65,7 +65,7 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
     }
     .unNone
 
-  private def prepareWrite(): IO[Unit] = pollingStream
+  private def prepareWrite(): Task[Unit] = pollingStream
     .compile
     .toList
     .flatMap { list =>
@@ -75,7 +75,7 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
       flushing.set(false)
     }
 
-  private def writeBatched(list: List[Value]): IO[Unit] = {
+  private def writeBatched(list: List[Value]): Task[Unit] = {
     val (current, more) = list.splitAt(batchSize)
     val w = write(current)
     if (more.nonEmpty) {
@@ -85,10 +85,10 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
     }
   }
 
-  protected def write(list: List[Value]): IO[Unit]
+  protected def write(list: List[Value]): Task[Unit]
 
-  def flush(): IO[Unit] = if (map.isEmpty) {
-    IO.unit
+  def flush(): Task[Unit] = if (map.isEmpty) {
+    Task.unit
   } else {
     prepareWrite()
   }
