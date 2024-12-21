@@ -54,10 +54,19 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
   def collections: List[Collection[_, _]] = _collections
 
   /**
-   * Offers each collection the ability to re-index data if supported. Only stores that separate storage and indexing
-   * (like SplitStore) will do any work. Returns the number of stores that were re-indexed.
+   * Returns a list of matching collection names based on the provided names
    */
-  def reIndex(): Int = collections.map(_.reIndex()).count(identity)
+  def collectionsByNames(collectionNames: String*): List[Collection[_, _]] = {
+    val set = collectionNames.toSet
+    collections.filter(c => set.contains(c.name))
+  }
+
+  /**
+   * Offers each collection the ability to re-index data if supported. Only stores that separate storage and indexing
+   * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
+   * collections to re-index or all collections will be invoked.
+   */
+  def reIndex(collections: List[Collection[_, _]] = collections): Int = collections.map(_.reIndex()).count(identity)
 
   /**
    * True if this database has been disposed.
