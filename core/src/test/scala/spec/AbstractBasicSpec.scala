@@ -327,6 +327,12 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
         people.map(_.name) should be(List("Oscar"))
       }
     }
+    "materialize empty nicknames" in {
+      db.people.transaction { implicit transaction =>
+        val people = db.people.query.filter(_.name === "Ian").search.materialized(p => List(p.nicknames)).list
+        people.map(m => m(_.nicknames)) should be(List(Set.empty))
+      }
+    }
     "query with single-value, multiple nicknames" in {
       db.people.transaction { implicit transaction =>
         val people = db.people.query
