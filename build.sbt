@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "1.2.1"
+ThisBuild / version := "1.2.2"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -64,7 +64,7 @@ val mapdbVersion: String = "3.1.0"
 
 val jedisVersion: String = "5.2.0"
 
-val fabricVersion: String = "1.15.5"
+val fabricVersion: String = "1.15.6"
 
 val scribeVersion: String = "3.15.3"
 
