@@ -71,7 +71,7 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
                                                                     storeManager: Option[StoreManager] = None): AsyncCollection[Doc, Model] =
     AsyncCollection(underlying.collection[Doc, Model](model, name, storeManager))
 
-  def reIndex(): Task[Int] = rapid.Stream.emits(underlying.collections)
+  def reIndex(collections: List[Collection[_, _]] = underlying.collections): Task[Int] = rapid.Stream.emits(collections)
     .par(maxThreads = 32) { collection =>
       AsyncCollection[KeyValue, KeyValue.type](collection.asInstanceOf[Collection[KeyValue, KeyValue.type]]).reIndex()
     }
@@ -105,6 +105,9 @@ trait AsyncLightDB extends FeatureSupport[DBFeatureKey] { db =>
   }
 
   protected def initialize(): Task[Unit] = Task.unit
+
+  def collectionsByNames(collectionNames: String*): Task[List[Collection[_, _]]] =
+    Task(underlying.collectionsByNames(collectionNames: _*))
 
   def dispose(): Task[Boolean] = Task {
     if (underlying.disposed) {
