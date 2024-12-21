@@ -81,7 +81,7 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
   override def verify(): Boolean = transaction { implicit transaction =>
     val storageCount = storage.count
     val searchCount = searching.count
-    if (storageCount != searchCount) {
+    if (storageCount != searchCount && model.fields.count(_.indexed) > 1) {
       scribe.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
       reIndexInternal()
       scribe.info(s"$name re-indexed successfully!")
