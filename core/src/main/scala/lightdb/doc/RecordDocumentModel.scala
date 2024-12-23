@@ -1,9 +1,9 @@
 package lightdb.doc
 
 import fabric.rw._
-import lightdb.field.Field
+import lightdb.Timestamp
 
 trait RecordDocumentModel[Doc <: RecordDocument[Doc]] extends DocumentModel[Doc] {
-  val created: I[Long] = field.index("created", (doc: Doc) => doc.created)
-  val modified: I[Long] = field.index("modified", (doc: Doc) => doc.modified)
+  val created: I[Timestamp] = field.index("created", (doc: Doc) => doc.created)
+  val modified: I[Timestamp] = field.index("modified", (doc: Doc) => doc.modified)
 }

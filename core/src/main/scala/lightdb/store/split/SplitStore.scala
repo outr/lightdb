@@ -97,6 +97,7 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
   }
 
   private def reIndexInternal()(implicit transaction: Transaction[Doc]): Unit = {
+    // TODO: Process concurrently
     searching.truncate()
     storage.iterator.foreach { doc =>
       searching.insert(doc)

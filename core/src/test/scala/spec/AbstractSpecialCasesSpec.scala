@@ -6,7 +6,7 @@ import lightdb.collection.Collection
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB, Sort}
+import lightdb.{Id, LightDB, Sort, Timestamp}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -32,6 +32,12 @@ trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers { spec =>
         list.map(_.wrappedString).toSet should be(Set(WrappedString("Apple"), WrappedString("Banana")))
         list.map(_.person).toSet should be(Set(Person("Andrew", 1), Person("Bianca", 2)))
         list.map(_._id).toSet should be(Set(SpecialOne.id("first"), SpecialOne.id("second")))
+      }
+    }
+    "verify filtering by created works" in {
+      DB.specialOne.transaction { implicit transaction =>
+        DB.specialOne.query.filter(_.created < Timestamp()).toList.map(_.name).toSet should be(Set("First", "Second"))
+        DB.specialOne.query.filter(_.created > Timestamp()).toList.map(_.name).toSet should be(Set.empty)
       }
     }
     "verify the storage of data is correct" in {
@@ -68,8 +74,8 @@ trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers { spec =>
   case class SpecialOne(name: String,
                         wrappedString: WrappedString,
                         person: Person,
-                        created: Long = System.currentTimeMillis(),
-                        modified: Long = System.currentTimeMillis(),
+                        created: Timestamp = Timestamp(),
+                        modified: Timestamp = Timestamp(),
                         _id: Id[SpecialOne] = SpecialOne.id()) extends RecordDocument[SpecialOne]
 
   object SpecialOne extends RecordDocumentModel[SpecialOne] with JsonConversion[SpecialOne] {
