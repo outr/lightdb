@@ -498,7 +498,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   private def sort2SortField(sort: Sort): SortField = {
     sort match {
-      case Sort.BestMatch => SortField.FIELD_SCORE
+      case Sort.BestMatch(direction) => direction match {
+        case SortDirection.Descending => SortField.FIELD_SCORE
+        case SortDirection.Ascending => new SortField(null, SortField.Type.SCORE, true)
+      }
       case Sort.IndexOrder => SortField.FIELD_DOC
       case Sort.ByField(field, dir) =>
         val fieldSortName = s"${field.name}Sort"
