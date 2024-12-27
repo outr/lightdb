@@ -1,6 +1,6 @@
 package benchmark.imdb
 
-import cats.effect.IO
+import rapid.Task
 
 trait BenchmarkImplementation {
   type TitleAka

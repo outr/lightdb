@@ -16,7 +16,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 ThisBuild / version := "1.3.0-SNAPSHOT"
-ThisBuild / scalaVersion := scala3
+ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
 
@@ -82,7 +82,7 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
-val rapidVersion: String = "0.3.2"
+val rapidVersion: String = "0.3.3-SNAPSHOT"
 
 val scalaTestVersion: String = "3.2.19"
 

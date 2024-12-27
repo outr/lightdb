@@ -3,6 +3,7 @@ package benchmark.imdb
 import benchmark.FlushingBacklog
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import rapid.Task
 
 import java.sql.{Connection, DriverManager, ResultSet}
 
@@ -127,7 +128,7 @@ object MariaDBImplementation extends BenchmarkImplementation {
           None
         }
       }
-      fs2.Stream.fromBlockingIterator[IO](iterator, 512)
+      rapid.Stream.fromIterator(Task(iterator))
     } finally {
       s.closeOnCompletion()
     }
@@ -174,7 +175,7 @@ object MariaDBImplementation extends BenchmarkImplementation {
 
   override def flush(): Task[Unit] = for {
     _ <- backlogAka.flush()
-    _ <- IO(commit())
+    _ <- Task(commit())
   } yield {
     ()
   }
