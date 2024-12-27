@@ -1,10 +1,9 @@
 package benchmark
 
-import cats.effect.IO
 import cats.implicits._
+import rapid.Task
 
 import java.util.concurrent.atomic.AtomicInteger
-import scala.concurrent.{ExecutionContext, Future}
 
 trait IOIterator[T] {
   val running = new AtomicInteger(0)
@@ -16,7 +15,7 @@ trait IOIterator[T] {
       running.incrementAndGet()
       recursiveStream(f)
     }
-    ios.sequence.map(_ => ())
+    ios.tasks.map(_ => ())
   }
 
   private def recursiveStream(f: T => Task[Unit]): Task[Unit] = next().flatMap {

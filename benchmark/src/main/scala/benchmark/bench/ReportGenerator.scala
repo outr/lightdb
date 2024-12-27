@@ -4,6 +4,7 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import io.quickchart.QuickChart
 import org.apache.commons.io.FileUtils
+import perfolation.double2Implicits
 
 import java.io.File
 
@@ -79,6 +80,11 @@ object ReportGenerator {
         ))
       ))
     )
+    /*scribe.info(s"$name Total Time:")
+    nameAndReports.foreach {
+      case (name, reports) => scribe.info(s"\t$name: ${reports.logs.last.elapsed.f(f = 3)} seconds")
+    }
+    scribe.info("-------------------------")*/
     quickChart.setConfig(chart.config)
     quickChart.toFile(s"${outputDirectory.getName}/$name-total-time.png")
   }
