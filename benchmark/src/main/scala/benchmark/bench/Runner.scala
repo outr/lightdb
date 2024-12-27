@@ -1,6 +1,6 @@
 package benchmark.bench
 
-import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBBench, MongoDBBench, PostgreSQLBench, SQLiteBench}
+import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBAsyncBench, LightDBBench, MongoDBBench, PostgreSQLBench, SQLiteBench}
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.h2.H2Store
@@ -29,10 +29,11 @@ object Runner {
     "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore)),
     "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
     "LightDB-Lucene" -> LightDBBench(LuceneStore),
-    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore, searchingMode = StoreMode.Indexes)),
-    "LightDB-RocksDB-Lucene" -> LightDBBench(SplitStoreManager(RocksDBStore, LuceneStore, searchingMode = StoreMode.Indexes)),
+    "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore)),
+    "LightDB-RocksDB-Lucene" -> LightDBBench(SplitStoreManager(RocksDBStore, LuceneStore)),
     "LightDB-H2" -> LightDBBench(H2Store),
-    "LightDB-HaloDB-H2" -> LightDBBench(SplitStoreManager(HaloDBStore, H2Store, searchingMode = StoreMode.Indexes)),
+    "LightDB-HaloDB-H2" -> LightDBBench(SplitStoreManager(HaloDBStore, H2Store)),
+    "LightDB-Async-HaloDB-Lucene" -> LightDBAsyncBench(SplitStoreManager(HaloDBStore, LuceneStore)),
 //    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
 //      jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
 //      username = Some("postgres"),

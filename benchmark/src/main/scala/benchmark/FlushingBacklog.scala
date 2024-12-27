@@ -1,6 +1,7 @@
 package benchmark
 
 import cats.effect.IO
+import rapid._
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
@@ -36,7 +37,7 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
   }
 
   private def waitForBuffer(): Task[Unit] = if (size.get() > maxSize) {
-    IO.sleep(1.second).flatMap(_ => waitForBuffer())
+    Task.sleep(1.second).flatMap(_ => waitForBuffer())
   } else {
     Task.unit
   }
@@ -50,8 +51,8 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
     }
   }
 
-  private def pollingStream: rapid.Stream[Value] = fs2.Stream
-    .fromBlockingIterator[IO](map.keys().asIterator().asScala, 512)
+  private def pollingStream: rapid.Stream[Value] = rapid.Stream
+    .fromIterator(Task(map.keys().asIterator().asScala))
     .map { key =>
       val o = Option(map.remove(key))
       if (o.nonEmpty) {
@@ -66,7 +67,6 @@ abstract class FlushingBacklog[Key, Value](val batchSize: Int, val maxSize: Int)
     .unNone
 
   private def prepareWrite(): Task[Unit] = pollingStream
-    .compile
     .toList
     .flatMap { list =>
       writeBatched(list)

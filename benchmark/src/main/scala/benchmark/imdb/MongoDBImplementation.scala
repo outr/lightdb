@@ -7,6 +7,7 @@ import com.mongodb.client.MongoClients
 import com.mongodb.client.model.Indexes
 import lightdb.Unique
 import org.bson.Document
+import rapid.Task
 
 import java.{lang, util}
 import scala.jdk.CollectionConverters._
@@ -81,7 +82,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def streamTitleAka(): rapid.Stream[Document] = {
     val iterator: Iterator[Document] = titleAka.find().iterator().asScala
-    fs2.Stream.fromBlockingIterator[IO](iterator, 512)
+    rapid.Stream.fromIterator(Task(iterator))
   }
 
   override def idFor(t: Document): String = t.getString("_id")
