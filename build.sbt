@@ -104,6 +104,7 @@ lazy val core = crossProject(JVMPlatform)
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,
+			"com.outr" %% "rapid-core" % rapidVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
 		),
 		libraryDependencies ++= (
