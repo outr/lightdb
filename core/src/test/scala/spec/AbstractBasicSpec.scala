@@ -13,13 +13,14 @@ import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import perfolation.double2Implicits
+import rapid.AsyncTaskSpec
 
 import java.io.File
 import java.nio.file.Path
 
-abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
+abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   val CreateRecords = 10_000
 
   protected def aggregationSupported: Boolean = true
@@ -68,52 +69,54 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
 
   specName should {
     "initialize the database" in {
-      db.init() should be(true)
+      db.init().map(_ should be(true))
     }
     "verify the database is empty" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(0)
+        db.people.count.map(_ should be(0))
       }
     }
     "insert the records" in {
       db.people.transaction { implicit transaction =>
-        db.people.insert(names) should not be None
+        db.people.insert(names).map(_ should not be None)
       }
     }
     "retrieve the first record by _id -> id" in {
       db.people.transaction { implicit transaction =>
-        db.people(_._id -> adam._id) should be(adam)
+        db.people(_._id -> adam._id).map(_ should be(adam))
       }
     }
     "retrieve the first record by id" in {
       db.people.transaction { implicit transaction =>
-        db.people(adam._id) should be(adam)
+        db.people(adam._id).map(_ should be(adam))
       }
     }
     "count the records in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(26)
+        db.people.count.map(_ should be(26))
       }
     }
     "stream the ids in the database" in {
       db.people.transaction { implicit transaction =>
-        val ids = db.people.query.search.id.iterator.toList.toSet
-        ids should be(names.map(_._id).toSet)
+        db.people.query.stream.id.toList.map(_.toSet).map { ids =>
+          ids should be(names.map(_._id).toSet)
+        }
       }
     }
     "stream the records in the database" in {
       db.people.transaction { implicit transaction =>
-        val ages = db.people.iterator.map(_.age).toSet
-        ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
+        db.people.stream.map(_.age).toList.map(_.toSet).map { ages =>
+          ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
+        }
       }
     }
     "verify the AgeLinks is properly updated" in {
-      db.ageLinks.t.get(AgeLinks.id(30)).map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori"))))
+      db.ageLinks.t.get(AgeLinks.id(30)).map(_.map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori")))))
     }
     "query with aggregate functions" in {
       if (aggregationSupported) {
         db.people.transaction { implicit transaction =>
-          val list = db.people.query
+          db.people.query
             .aggregate(p => List(
               p.age.min,
               p.age.max,
@@ -121,10 +124,12 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
               p.age.sum
             ))
             .toList
-          list.map(m => m(_.age.min)).toSet should be(Set(2))
-          list.map(m => m(_.age.max)).toSet should be(Set(102))
-          list.map(m => m(_.age.avg).f(f = 6)).toSet should be(Set("41.807692"))
-          list.map(m => m(_.age.sum)).toSet should be(Set(1087))
+            .map { list =>
+              list.map(m => m(_.age.min)).toSet should be(Set(2))
+              list.map(m => m(_.age.max)).toSet should be(Set(102))
+              list.map(m => m(_.age.avg).f(f = 6)).toSet should be(Set("41.807692"))
+              list.map(m => m(_.age.sum)).toSet should be(Set(1087))
+            }
         }
       } else {
         succeed
@@ -132,14 +137,16 @@ abstract class AbstractBasicSpec extends AnyWordSpec with Matchers { spec =>
     }
     "search by age range" in {
       db.people.transaction { implicit transaction =>
-        val ids = db.people.query.filter(_.age BETWEEN 19 -> 22).search.value(_._id).list
-        ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
+        db.people.query.filter(_.age BETWEEN 19 -> 22).stream.value(_._id).toList.map { ids =>
+          ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
+        }
       }
     }
     "search excluding age 30" in {
       db.people.transaction { implicit transaction =>
-        val names = db.people.query.filter(_.age !== 30).toList.map(_.name).toSet
-        names should be(Set("Linda", "Ruth", "Nancy", "Jenna", "Hanna", "Diana", "Ian", "Zoey", "Quintin", "Uba", "Oscar", "Kevin", "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Adam", "Xena", "Fiona", "Greg", "Veronica"))
+        db.people.query.filter(_.age !== 30).toList.map(_.map(_.name).toSet).map { names =>
+          names should be(Set("Linda", "Ruth", "Nancy", "Jenna", "Hanna", "Diana", "Ian", "Zoey", "Quintin", "Uba", "Oscar", "Kevin", "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Adam", "Xena", "Fiona", "Greg", "Veronica"))
+        }
       }
     }
     "sort by age" in {

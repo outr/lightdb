@@ -24,7 +24,7 @@ trait BasicCollectionTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] 
     }
 
   override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Unit] = {
-    collection.query.filter(_ => index === value).stream.foreach(removing).drain
+    collection.query.filter(_ => index === value).stream.docs.foreach(removing).drain
   }
 
   override final def truncate(): Task[Unit] = collection.transaction { implicit transaction =>
