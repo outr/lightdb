@@ -7,6 +7,7 @@ import lightdb.filter.FilterBuilder
 import lightdb._
 import lightdb.field.{Field, FieldGetter}
 import lightdb.field.Field._
+import rapid.Task
 
 import scala.language.implicitConversions
 
@@ -19,7 +20,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   def id(value: String = Unique()): Id[Doc] = Id(value)
 
-  def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Unit = {}
+  def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Task[Unit] = Task.unit
 
   type F[V] = Field[Doc, V]
   type I[V] = Indexed[Doc, V]

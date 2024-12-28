@@ -4,6 +4,7 @@ import lightdb.{Query, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
+import rapid.Task
 
 case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],
                                                                              functions: List[AggregateFunction[_, _, Doc]],
@@ -36,11 +37,11 @@ case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](que
     sort = sort ::: List((f(query.model), direction))
   )
 
-  def count(implicit transaction: Transaction[Doc]): Int =
+  def count(implicit transaction: Transaction[Doc]): Task[Int] =
     query.store.aggregateCount(this)
 
-  def iterator(implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
+  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     query.store.aggregate(this)
 
-  def toList(implicit transaction: Transaction[Doc]): List[MaterializedAggregate[Doc, Model]] = iterator.toList
+  def toList(implicit transaction: Transaction[Doc]): Task[List[MaterializedAggregate[Doc, Model]]] = stream.toList
 }

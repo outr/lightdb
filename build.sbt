@@ -82,7 +82,7 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
-val rapidVersion: String = "0.3.3-SNAPSHOT"
+val rapidVersion: String = "0.4.0-SNAPSHOT"
 
 val scalaTestVersion: String = "3.2.19"
 
@@ -100,6 +100,7 @@ lazy val core = crossProject(JVMPlatform)
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
+			"com.outr" %%% "scribe-rapid" % scribeVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,

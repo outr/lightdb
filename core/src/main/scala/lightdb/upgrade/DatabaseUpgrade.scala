@@ -1,6 +1,7 @@
 package lightdb.upgrade
 
 import lightdb.LightDB
+import rapid.Task
 
 trait DatabaseUpgrade {
   def label: String = getClass.getSimpleName.replace("$", "")
@@ -8,5 +9,5 @@ trait DatabaseUpgrade {
   def blockStartup: Boolean
   def alwaysRun: Boolean
 
-  def upgrade(db: LightDB): Unit
+  def upgrade(db: LightDB): Task[Unit]
 }

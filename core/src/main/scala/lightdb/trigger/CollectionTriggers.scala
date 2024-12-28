@@ -3,6 +3,7 @@ package lightdb.trigger
 import lightdb.field.Field.UniqueIndex
 import lightdb.doc.Document
 import lightdb.transaction.Transaction
+import rapid.Task
 
 class CollectionTriggers[Doc <: Document[Doc]] extends CollectionTrigger[Doc] {
   private var list = List.empty[CollectionTrigger[Doc]]
@@ -15,24 +16,24 @@ class CollectionTriggers[Doc <: Document[Doc]] extends CollectionTrigger[Doc] {
     list = list.filterNot(_ eq trigger)
   }
 
-  override def transactionStart(transaction: Transaction[Doc]): Unit =
-    list.foreach(_.transactionStart(transaction))
+  override def transactionStart(transaction: Transaction[Doc]): Task[Unit] =
+    list.map(_.transactionStart(transaction)).tasks.unit
 
-  override def transactionEnd(transaction: Transaction[Doc]): Unit =
-    list.foreach(_.transactionEnd(transaction))
+  override def transactionEnd(transaction: Transaction[Doc]): Task[Unit] =
+    list.map(_.transactionEnd(transaction)).tasks.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit =
-    list.foreach(_.insert(doc))
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] =
+    list.map(_.insert(doc)).tasks.unit
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit =
-    list.foreach(_.upsert(doc))
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] =
+    list.map(_.upsert(doc)).tasks.unit
 
-  override def delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Unit =
-    list.foreach(_.delete(index, value))
+  override def delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Unit] =
+    list.map(_.delete(index, value)).tasks.unit
 
-  override def truncate(): Unit =
-    list.foreach(_.truncate())
+  override def truncate(): Task[Unit] =
+    list.map(_.truncate()).tasks.unit
 
-  override def dispose(): Unit =
-    list.foreach(_.dispose())
+  override def dispose(): Task[Unit] =
+    list.map(_.dispose()).tasks.unit
 }
