@@ -175,7 +175,93 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
     }
     .drain
 
-  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.force(search.docs.map(_.stream))
+  object stream {
+    object scored {
+      def apply[V](conversion: Conversion[Doc, V])
+                  (implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] = {
+        val task = search(conversion)
+          .map(_.streamWithScore)
+        rapid.Stream.force(task)
+      }
+
+      def docs(implicit transaction: Transaction[Doc]): rapid.Stream[(Doc, Double)] = apply(Conversion.Doc())
+
+      def value[F](f: Model => Field[Doc, F])
+                  (implicit transaction: Transaction[Doc]): rapid.Stream[(F, Double)] =
+        apply(Conversion.Value(f(model)))
+
+      def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): rapid.Stream[(Id[Doc], Double)] =
+        value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
+
+      def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): rapid.Stream[(Json, Double)] =
+        apply(Conversion.Json(f(model)))
+
+      def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): rapid.Stream[(T, Double)] =
+        apply(Conversion.Converted(f))
+
+      def materialized(f: Model => List[Field[Doc, _]])
+                      (implicit transaction: Transaction[Doc]): rapid.Stream[(MaterializedIndex[Doc, Model], Double)] =
+        apply(Conversion.Materialized[Doc, Model](f(model)))
+
+      def indexes()(implicit transaction: Transaction[Doc]): rapid.Stream[(MaterializedIndex[Doc, Model], Double)] = {
+        val fields = model.fields.filter(_.indexed)
+        apply(Conversion.Materialized[Doc, Model](fields))
+      }
+
+      def docAndIndexes()(implicit transaction: Transaction[Doc]): rapid.Stream[(MaterializedAndDoc[Doc, Model], Double)] = {
+        apply(Conversion.DocAndIndexes[Doc, Model]())
+      }
+
+      def distance[G <: Geo](f: Model => Field[Doc, List[G]],
+                             from: Geo.Point,
+                             sort: Boolean = true,
+                             radius: Option[Distance] = None)
+                            (implicit transaction: Transaction[Doc]): rapid.Stream[(DistanceAndDoc[Doc], Double)] =
+        apply(Conversion.Distance(f(model), from, sort, radius))
+    }
+
+    def apply[V](conversion: Conversion[Doc, V])
+                (implicit transaction: Transaction[Doc]): rapid.Stream[V] = {
+      val task = search(conversion)
+        .map(_.stream)
+      rapid.Stream.force(task)
+    }
+
+    def docs(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = apply(Conversion.Doc())
+
+    def value[F](f: Model => Field[Doc, F])
+                (implicit transaction: Transaction[Doc]): rapid.Stream[F] =
+      apply(Conversion.Value(f(model)))
+
+    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): rapid.Stream[Id[Doc]] =
+      value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
+
+    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): rapid.Stream[Json] =
+      apply(Conversion.Json(f(model)))
+
+    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): rapid.Stream[T] =
+      apply(Conversion.Converted(f))
+
+    def materialized(f: Model => List[Field[Doc, _]])
+                    (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedIndex[Doc, Model]] =
+      apply(Conversion.Materialized[Doc, Model](f(model)))
+
+    def indexes()(implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedIndex[Doc, Model]] = {
+      val fields = model.fields.filter(_.indexed)
+      apply(Conversion.Materialized[Doc, Model](fields))
+    }
+
+    def docAndIndexes()(implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAndDoc[Doc, Model]] = {
+      apply(Conversion.DocAndIndexes[Doc, Model]())
+    }
+
+    def distance[G <: Geo](f: Model => Field[Doc, List[G]],
+                           from: Geo.Point,
+                           sort: Boolean = true,
+                           radius: Option[Distance] = None)
+                          (implicit transaction: Transaction[Doc]): rapid.Stream[DistanceAndDoc[Doc]] =
+      apply(Conversion.Distance(f(model), from, sort, radius))
+  }
 
   def toList(implicit transaction: Transaction[Doc]): Task[List[Doc]] = search.docs.flatMap(_.list)
 

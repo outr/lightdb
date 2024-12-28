@@ -106,7 +106,8 @@ lazy val core = crossProject(JVMPlatform)
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,
 			"com.outr" %% "rapid-core" % rapidVersion,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test
+			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
+			"com.outr" %%% "rapid-test" % rapidVersion % Test
 		),
 		libraryDependencies ++= (
 			if (scalaVersion.value.startsWith("2.")) {
