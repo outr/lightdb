@@ -15,6 +15,7 @@ import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.GroupedIterator
+import rapid.{Forge, Task}
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
                                                                     store: Store[Doc, Model],
@@ -76,7 +77,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
 
   object search {
     def apply[V](conversion: Conversion[Doc, V])
-                (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
+                (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
       val storeMode = store.storeMode
       if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
         val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
@@ -96,33 +97,33 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
       )
     }
 
-    def docs(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Doc] = apply(Conversion.Doc())
+    def docs(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, Doc]] = apply(Conversion.Doc())
 
     def value[F](f: Model => Field[Doc, F])
-                (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, F] =
+                (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, F]] =
       apply(Conversion.Value(f(model)))
 
-    def id(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Id[Doc]] =
+    def id(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, Id[Doc]]] =
       value(m => m._id)
 
-    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, Json] =
+    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, Json]] =
       apply(Conversion.Json(f(model)))
 
-    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, T] =
+    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, T]] =
       apply(Conversion.Converted(f))
 
     def materialized(f: Model => List[Field[Doc, _]])
-                    (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedIndex[Doc, Model]] = {
+                    (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, MaterializedIndex[Doc, Model]]] = {
       val fields = f(model)
       apply(Conversion.Materialized(fields))
     }
 
-    def indexes()(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedIndex[Doc, Model]] = {
+    def indexes()(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, MaterializedIndex[Doc, Model]]] = {
       val fields = model.fields.filter(_.indexed)
       apply(Conversion.Materialized(fields))
     }
 
-    def docAndIndexes()(implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, MaterializedAndDoc[Doc, Model]] = {
+    def docAndIndexes()(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, MaterializedAndDoc[Doc, Model]]] = {
       apply(Conversion.DocAndIndexes())
     }
 
@@ -130,7 +131,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
                            from: Geo.Point,
                            sort: Boolean = true,
                            radius: Option[Distance] = None)
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
+                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, DistanceAndDoc[Doc]]] = {
       val field = f(model)
       var q = Query.this
       if (sort) {
@@ -155,47 +156,49 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
   def process(establishLock: Boolean = true,
               deleteOnNone: Boolean = true,
               safeModify: Boolean = true)
-             (f: Doc => Option[Doc])
-             (implicit transaction: Transaction[Doc]): Unit = search.docs.iterator.foreach { doc =>
-    if (safeModify) {
-      store.modify(doc._id, establishLock, deleteOnNone) { existing =>
-        existing.flatMap(f)
-      }
-    } else {
-      store.lock(doc._id, Some(doc)) { current =>
-        val result = f(current.getOrElse(doc))
-        result match {
-          case Some(modified) => if (!current.contains(modified)) store.upsert(modified)
-          case None => if (deleteOnNone) store.delete(store.idField, doc._id)
+             (f: Forge[Doc, Option[Doc]])
+             (implicit transaction: Transaction[Doc]): Unit = rapid.Stream.force(search.docs.map(_.stream))
+    .evalMap { doc =>
+      if (safeModify) {
+        store.modify(doc._id, establishLock, deleteOnNone) {
+          case Some(doc) => f(doc)
+          case None => Task.pure(None)
         }
-        result
+      } else {
+        store.lock(doc._id, Some(doc), establishLock) { current =>
+          f(current.getOrElse(doc)).flatMap {
+            case Some(modified) => store.upsert(modified).when(!current.contains(modified))
+            case None => store.delete(store.idField, doc._id).when(deleteOnNone)
+          }.map(_ => None)
+        }
       }
     }
-  }
+    .drain
 
-  def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = search.docs.iterator
+  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.force(search.docs.map(_.stream))
 
-  def toList(implicit transaction: Transaction[Doc]): List[Doc] = search.docs.list
+  def toList(implicit transaction: Transaction[Doc]): Task[List[Doc]] = search.docs.flatMap(_.list)
 
-  def first(implicit transaction: Transaction[Doc]): Option[Doc] = search.docs.iterator.nextOption()
+  def first(implicit transaction: Transaction[Doc]): Task[Doc] = search.docs.flatMap(_.stream.first)
 
-  def one(implicit transaction: Transaction[Doc]): Doc = first.getOrElse(throw new NullPointerException("No results"))
+  def firstOption(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = search.docs.flatMap(_.stream.firstOption)
 
-  def count(implicit transaction: Transaction[Doc]): Int = copy(limit = Some(1), countTotal = true)
-    .search.docs.total.get
+  def count(implicit transaction: Transaction[Doc]): Task[Int] = copy(limit = Some(1), countTotal = true)
+    .search.docs.map(_.total.get)
 
   protected def distanceSearch[G <: Geo](field: Field[Doc, List[G]],
                                          from: Geo.Point,
                                          sort: Boolean,
                                          radius: Option[Distance])
-                                        (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, DistanceAndDoc[Doc]] = {
+                                        (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, DistanceAndDoc[Doc]]] = {
     search(Conversion.Distance(field, from, sort, radius))
   }
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
     AggregateQuery(this, f(model))
 
-  def grouped[F](f: Model => Field[Doc, F],
+  // TODO: Support this via stream
+  /*def grouped[F](f: Model => Field[Doc, F],
                  direction: SortDirection = SortDirection.Ascending)
                 (implicit transaction: Transaction[Doc]): GroupedIterator[Doc, F] = {
     val field = f(model)
@@ -205,7 +208,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
       .docs
       .iterator
     GroupedIterator[Doc, F](iterator, doc => field.get(doc, field, state))
-  }
+  }*/
 }
 
 object Query {

@@ -1,5 +1,7 @@
 package lightdb.util
 
+import rapid.Task
+
 trait Disposable {
-  def dispose(): Unit
+  def dispose(): Task[Unit]
 }

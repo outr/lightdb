@@ -1,28 +1,23 @@
 package lightdb.lock
 
+import rapid.{Forge, Task}
+
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.locks.ReentrantLock
 
 class LockManager[K, V] {
   private val locks = new ConcurrentHashMap[K, Lock[V]]()
 
   def apply(key: K, value: => Option[V], establishLock: Boolean = true)
-           (f: Option[V] => Option[V]): Option[V] = if (establishLock) {
-    val v = acquire(key, value)
-    try {
-      val modified = f(v)
-      release(key, modified)
-    } catch {
-      case t: Throwable =>
-        release(key, v)
-        throw t
+           (f: Forge[Option[V], Option[V]]): Task[Option[V]] = if (establishLock) {
+    acquire(key, value).flatMap { v =>
+      f(v).guarantee(release(key, v).unit)
     }
   } else {
     f(value)
   }
 
   // Attempts to acquire a lock for a given K and V.
-  def acquire(key: K, value: => Option[V]): Option[V] = {
+  def acquire(key: K, value: => Option[V]): Task[Option[V]] = Task {
     // Get or create the Lock object with the ReentrantLock.
     val lock = locks.computeIfAbsent(key, _ => new Lock(value))
 
@@ -32,7 +27,7 @@ class LockManager[K, V] {
   }
 
   // Releases the lock for the given K and supplies the latest V.
-  def release(key: K, newValue: => Option[V]): Option[V] = {
+  def release(key: K, newValue: => Option[V]): Task[Option[V]] = Task {
     val v: Option[V] = newValue
     locks.compute(key, (_, existingLock) => {
       // Update the value associated with the lock.

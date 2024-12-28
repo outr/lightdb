@@ -7,6 +7,8 @@ import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
+import rapid.Task
+import scribe.{rapid => logger}
 
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
@@ -66,7 +68,7 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
    * collections to re-index or all collections will be invoked.
    */
-  def reIndex(collections: List[Collection[_, _]] = collections): Int = collections.map(_.reIndex()).count(identity)
+  def reIndex(collections: List[Collection[_, _]] = collections): Task[Int] = collections.map(_.reIndex()).tasks.map(_.count(identity))
 
   /**
    * True if this database has been disposed.
@@ -78,29 +80,28 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
    */
   lazy val backingStore: Collection[KeyValue, KeyValue.type] = collection(KeyValue, name = Some("_backingStore"))
 
-  override protected def initialize(): Unit = {
-    scribe.info(s"$name database initializing...")
-    backingStore
-    collections.foreach(_.init())
+  override protected def initialize(): Task[Unit] = for {
+    _ <- logger.info(s"$name database initializing...")
+    _ = backingStore
+    _ <- collections.map(_.init()).tasks
     // Truncate the database before we do anything if specified
-    if (truncateOnInit) truncate()
+    _ <- truncate().when(truncateOnInit)
     // Determine if this is an uninitialized database
-    val dbInitialized = databaseInitialized.get()
+    dbInitialized <- databaseInitialized.get()
     // Get applied database upgrades
-    val applied = appliedUpgrades.get()
+    applied <- appliedUpgrades.get()
     // Determine upgrades that need to be applied
-    val upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label))
-    if (upgrades.nonEmpty) {
-      scribe.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
-      doUpgrades(upgrades, dbInitialized = dbInitialized, stillBlocking = true)
-    }
+    upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label))
+    _ <- logger.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
+      .when(upgrades.nonEmpty)
+    _ <- doUpgrades(upgrades, dbInitialized = dbInitialized, stillBlocking = true).when(upgrades.nonEmpty)
     // Setup shutdown hook
-    Runtime.getRuntime.addShutdownHook(new Thread(() => {
-      dispose()
+    _ = Runtime.getRuntime.addShutdownHook(new Thread(() => {
+      dispose().sync()
     }))
     // Set initialized
-    databaseInitialized.set(true)
-  }
+    _ = databaseInitialized.set(true)
+  } yield ()
 
   /**
    * Create a new Collection and associate it with this database. It is preferable that all collections be created
@@ -151,44 +152,44 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
     )
   }
 
-  def truncate(): Unit = collections.foreach { c =>
+  def truncate(): Task[Unit] = collections.map { c =>
     val collection = c.asInstanceOf[Collection[KeyValue, KeyValue.type]]
     collection.transaction { implicit transaction =>
       collection.truncate()(transaction)
     }
-  }
+  }.tasks.unit
 
   private def doUpgrades(upgrades: List[DatabaseUpgrade],
                          dbInitialized: Boolean,
-                         stillBlocking: Boolean): Unit = upgrades.headOption match {
+                         stillBlocking: Boolean): Task[Unit] = upgrades.headOption match {
     case Some(upgrade) =>
       val runUpgrade = dbInitialized || upgrade.applyToNew
       val continueBlocking = upgrades.exists(u => u.blockStartup && (dbInitialized || u.applyToNew))
-      if (stillBlocking && !continueBlocking) {
-        scribe.Platform.executionContext.execute(() => {
-          if (runUpgrade) upgrade.upgrade(this)
-          appliedUpgrades.modify { set =>
-            set + upgrade.label
-          }
-          doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
-        })
-      } else {
-        if (runUpgrade) upgrade.upgrade(this)
+
+      upgrade.upgrade(this).when(runUpgrade).flatMap { _ =>
         appliedUpgrades.modify { set =>
           set + upgrade.label
         }
-        doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
+        val next = doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
+        if (stillBlocking && !continueBlocking) {
+          next.start()
+        } else {
+          next
+        }
       }
-    case None => scribe.info("Upgrades completed successfully")
+    case None => logger.info("Upgrades completed successfully")
   }
 
-  def dispose(): Unit = if (_disposed.compareAndSet(false, true)) {
-    collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).foreach { collection =>
+  def dispose(): Task[Unit] = if (_disposed.compareAndSet(false, true)) {
+    collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).map { collection =>
       collection.dispose()
-    }
-    features.foreach {
-      case d: Disposable => d.dispose()
-      case _ => // Ignore
-    }
+    }.tasks.flatMap { _ =>
+      features.toList.map {
+        case d: Disposable => d.dispose()
+        case _ => Task.unit // Ignore
+      }.tasks
+    }.unit
+  } else {
+    Task.unit
   }
 }

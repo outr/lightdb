@@ -9,19 +9,19 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
+import rapid.Task
 
 /**
  * Convenience class to stream aggregation for Stores that don't directly support aggregation
  */
 object Aggregator {
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: AggregateQuery[Doc, Model], model: Model)
-                                                              (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
+                                                              (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
     val fields = query.functions.map(_.field).distinct
     val groupFields = query.functions.filter(_.`type` == AggregateType.Group).map(_.field)
-    val results = query.query.search.materialized(_ => fields)
+    val stream = rapid.Stream.force(query.query.search.materialized(_ => fields).map(_.stream))
     var groups = Map.empty[List[Any], Map[String, Json]]
-    results
-      .iterator
+    stream
       .foreach { m =>
         val group = groupFields.map(f => m(_ => f.asInstanceOf[Field[Doc, Any]]))
         var map = groups.getOrElse(group, Map.empty)
@@ -117,7 +117,7 @@ object Aggregator {
       case (f, direction) =>
         list = list.sortBy(_.json(f.name))(if (direction == Ascending) JsonOrdering else JsonOrdering.reverse)
     }
-    list.iterator
+    rapid.Stream.fromIterator(Task(list.iterator))
   }
 }
 

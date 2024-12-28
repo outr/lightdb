@@ -14,7 +14,7 @@ import lightdb.field.Field
 import lightdb.field.Field._
 import lightdb.lock.LockManager
 import lightdb.trigger.CollectionTriggers
-import rapid.Task
+import rapid.{Forge, Task}
 
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -48,9 +48,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     transaction.commit()
   }
 
-  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit]
+  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc]
 
-  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit]
+  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc]
 
   def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean]
 
@@ -85,16 +85,14 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   def modify(id: Id[Doc],
              establishLock: Boolean = true,
              deleteOnNone: Boolean = false)
-            (f: Option[Doc] => Option[Doc])
-            (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = this.lock(id, get(idField, id), establishLock) { existing =>
-    f(existing) match {
-      case Some(doc) =>
-        upsert(doc)
-        Some(doc)
-      case None if deleteOnNone =>
-        delete(idField, id)
-        None
-      case None => None
+            (f: Forge[Option[Doc], Option[Doc]])
+            (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
+    lock(id, get(idField, id).sync(), establishLock) { existing =>
+      f(existing).flatMap {
+        case Some(doc) => upsert(doc).map(_ => Some(doc))
+        case None if deleteOnNone => delete(idField, id).map(_ => None)
+        case None => Task.pure(None)
+      }
     }
   }
 

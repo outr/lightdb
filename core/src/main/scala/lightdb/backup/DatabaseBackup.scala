@@ -4,6 +4,7 @@ import fabric.Json
 import fabric.io.JsonFormatter
 import lightdb.collection.Collection
 import lightdb.{KeyValue, LightDB}
+import rapid.Task
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -17,25 +18,22 @@ object DatabaseBackup {
    * @return the number of records backed up
    */
   def archive(db: LightDB,
-              archive: File = new File("backup.zip")): Int = {
+              archive: File = new File("backup.zip")): Task[Int] = {
     Option(archive.getParentFile).foreach(_.mkdirs())
     if (archive.exists()) archive.delete()
     val out = new ZipOutputStream(new FileOutputStream(archive))
     try {
       process(db) {
-        case (collection, iterator) =>
+        case (collection, stream) => Task {
           val fileName = s"${collection.name}.jsonl"
           val entry = new ZipEntry(s"backup/$fileName")
           out.putNextEntry(entry)
-          try {
-            iterator.map { json =>
-              val line = JsonFormatter.Compact(json)
-              val bytes = s"$line\n".getBytes("UTF-8")
-              out.write(bytes)
-            }.length
-          } finally {
-            out.closeEntry()
-          }
+          stream.map { json =>
+            val line = JsonFormatter.Compact(json)
+            val bytes = s"$line\n".getBytes("UTF-8")
+            out.write(bytes)
+          }.count.guarantee(Task(out.closeEntry()))
+        }.flatten
       }
     } finally {
       out.flush()
@@ -46,30 +44,31 @@ object DatabaseBackup {
   /**
    * Does a full backup of the supplied database to the directory specified
    */
-  def apply(db: LightDB, directory: File): Int = {
+  def apply(db: LightDB, directory: File): Task[Int] = {
     directory.mkdirs()
     process(db) {
-      case (collection, iterator) =>
+      case (collection, stream) => Task {
         val fileName = s"${collection.name}.jsonl"
         val file = new File(directory, fileName)
         val writer = new PrintWriter(file)
-        try {
-          iterator.map { json =>
+        stream.evalMap { json =>
+          Task {
             val jsonString = JsonFormatter.Compact(json)
             writer.println(jsonString)
-          }.length
-        } finally {
+          }
+        }.count.guarantee(Task {
           writer.flush()
           writer.close()
-        }
+        })
+      }.flatten
     }
   }
 
-  private def process(db: LightDB)(f: (Collection[_, _], Iterator[Json]) => Int): Int = {
+  private def process(db: LightDB)(f: (Collection[_, _], rapid.Stream[Json]) => Task[Int]): Task[Int] = {
     db.collections.map { collection =>
-      collection.t.json.iterator { iterator =>
-        f(collection, iterator)
+      collection.t.json.stream { stream =>
+        f(collection, stream)
       }
-    }.sum
+    }.tasks.map(_.sum)
   }
 }
