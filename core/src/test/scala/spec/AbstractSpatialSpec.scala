@@ -11,11 +11,12 @@ import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
+import rapid.AsyncTaskSpec
 
 import java.nio.file.Path
 
-abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
+abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
 
   private val id1 = Id[Person]("john")
@@ -66,50 +67,52 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
 
   specName should {
     "initialize the database" in {
-      DB.init() should be(true)
+      DB.init().succeed
     }
     "store three people" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.insert(List(p1, p2, p3)).length should be(3)
+        DB.people.insert(List(p1, p2, p3)).map(_.length should be(3))
       }
     }
     "verify exactly three people exist" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.count should be(3)
+        DB.people.count.map(_ should be(3))
       }
     }
     "sort by distance from Oklahoma City" in {
       DB.people.transaction { implicit transaction =>
-        val list = DB.people.query.search.distance(
+        DB.people.query.stream.distance(
           _.point.list,
           from = oklahomaCity,
           radius = Some(1320.miles)
-        ).iterator.toList
-        val people = list.map(_.doc)
-        val distances = list.map(_.distance.map(_.mi.toInt))
-        people.zip(distances).map {
-          case (p, d) => p.name -> d
-        } should be(List(
-          "Jane Doe" -> List(28),
-          "John Doe" -> List(1316)
-        ))
+        ).toList.map { list =>
+          val people = list.map(_.doc)
+          val distances = list.map(_.distance.map(_.mi.toInt))
+          people.zip(distances).map {
+            case (p, d) => p.name -> d
+          } should be(List(
+            "Jane Doe" -> List(28),
+            "John Doe" -> List(1316)
+          ))
+        }
       }
     }
     "sort by distance from Noble using geo" in {
       DB.people.transaction { implicit transaction =>
-        val list = DB.people.query.search.distance(
+        DB.people.query.stream.distance(
           _.geo,
           from = noble,
           radius = Some(10_000.miles)
-        ).iterator.toList
-        val people = list.map(_.doc)
-        val distances = list.map(_.distance.map(_.mi))
-        people.zip(distances).map {
-          case (p, d) => p.name -> d
-        } should be(List(
-          "Jane Doe" -> List(16.01508397712445),
-          "Bob Dole" -> List(695.6419047674393, 1334.038796028706)
-        ))
+        ).toList.map { list =>
+          val people = list.map(_.doc)
+          val distances = list.map(_.distance.map(_.mi))
+          people.zip(distances).map {
+            case (p, d) => p.name -> d
+          } should be(List(
+            "Jane Doe" -> List(16.01508397712445),
+            "Bob Dole" -> List(695.6419047674393, 1334.038796028706)
+          ))
+        }
       }
     }
     "parse and insert from a GeometryCollection" in {
@@ -121,14 +124,14 @@ abstract class AbstractSpatialSpec extends AnyWordSpec with Matchers { spec =>
           age = 2,
           point = yonkers,
           geo = geo
-        ))
+        )).succeed
       }
     }
     "truncate the database" in {
-      DB.truncate()
+      DB.truncate().succeed
     }
     "dispose the database" in {
-      DB.dispose()
+      DB.dispose().succeed
     }
   }
 

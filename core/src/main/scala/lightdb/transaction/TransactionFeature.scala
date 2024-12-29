@@ -1,9 +1,11 @@
 package lightdb.transaction
 
+import rapid.Task
+
 trait TransactionFeature {
-  def commit(): Unit = {}
+  def commit(): Task[Unit] = Task.unit
 
-  def rollback(): Unit = {}
+  def rollback(): Task[Unit] = Task.unit
 
-  def close(): Unit = {}
+  def close(): Task[Unit] = Task.unit
 }

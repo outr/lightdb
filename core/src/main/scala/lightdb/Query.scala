@@ -14,8 +14,7 @@ import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.Transaction
-import lightdb.util.GroupedIterator
-import rapid.{Forge, Task}
+import rapid.{Forge, Grouped, Task}
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
                                                                     store: Store[Doc, Model],
@@ -283,18 +282,16 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
     AggregateQuery(this, f(model))
 
-  // TODO: Support this via stream
-  /*def grouped[F](f: Model => Field[Doc, F],
+  def grouped[F](f: Model => Field[Doc, F],
                  direction: SortDirection = SortDirection.Ascending)
-                (implicit transaction: Transaction[Doc]): GroupedIterator[Doc, F] = {
+                (implicit transaction: Transaction[Doc]): rapid.Stream[Grouped[F, Doc]] = {
     val field = f(model)
     val state = new IndexingState
-    val iterator = sort(Sort.ByField(field, direction))
-      .search
+    sort(Sort.ByField(field, direction))
+      .stream
       .docs
-      .iterator
-    GroupedIterator[Doc, F](iterator, doc => field.get(doc, field, state))
-  }*/
+      .groupSequential(doc => field.get(doc, field, state))
+  }
 }
 
 object Query {

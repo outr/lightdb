@@ -15,7 +15,7 @@ import lightdb.{Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
 import perfolation.double2Implicits
-import rapid.AsyncTaskSpec
+import rapid.{AsyncTaskSpec, Task}
 
 import java.io.File
 import java.nio.file.Path
@@ -69,7 +69,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
   specName should {
     "initialize the database" in {
-      db.init().map(_ should be(true))
+      db.init().succeed
     }
     "verify the database is empty" in {
       db.people.transaction { implicit transaction =>
@@ -151,26 +151,29 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "sort by age" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.sort(Sort.ByField(Person.age).descending).search.docs.list
-        people.map(_.name).take(3) should be(List("Ruth", "Zoey", "Quintin"))
+        db.people.query.sort(Sort.ByField(Person.age).descending).stream.docs.toList.map { people =>
+          people.map(_.name).take(3) should be(List("Ruth", "Zoey", "Quintin"))
+        }
       }
     }
     "group by age" in {
       db.people.transaction { implicit transaction =>
-        val list = db.people.query.grouped(_.age).toList
-        list.map(_._1) should be(List(2, 4, 11, 12, 13, 15, 21, 22, 23, 30, 33, 35, 42, 53, 62, 63, 72, 81, 89, 99, 101, 102))
-        list.map(_._2.map(_.name).toSet) should be(List(
-          Set("Penny"), Set("Jenna"), Set("Brenda"), Set("Greg"), Set("Veronica"), Set("Diana"),
-          Set("Adam", "Uba", "Oscar"), Set("Nancy"), Set("Fiona"), Set("Tori", "Yuri", "Wyatt"), Set("Kevin"),
-          Set("Charlie"), Set("Mike"), Set("Evan"), Set("Hanna"), Set("Xena"), Set("Linda"), Set("Sam"), Set("Ian"),
-          Set("Quintin"), Set("Zoey"), Set("Ruth")
-        ))
+        db.people.query.grouped(_.age).toList.map { list =>
+          list.map(_.group) should be(List(2, 4, 11, 12, 13, 15, 21, 22, 23, 30, 33, 35, 42, 53, 62, 63, 72, 81, 89, 99, 101, 102))
+          list.map(_.results.map(_.name).toSet) should be(List(
+            Set("Penny"), Set("Jenna"), Set("Brenda"), Set("Greg"), Set("Veronica"), Set("Diana"),
+            Set("Adam", "Uba", "Oscar"), Set("Nancy"), Set("Fiona"), Set("Tori", "Yuri", "Wyatt"), Set("Kevin"),
+            Set("Charlie"), Set("Mike"), Set("Evan"), Set("Hanna"), Set("Xena"), Set("Linda"), Set("Sam"), Set("Ian"),
+            Set("Quintin"), Set("Zoey"), Set("Ruth")
+          ))
+        }
       }
     }
     "delete some records" in {
       db.people.transaction { implicit transaction =>
-        db.people.delete(_._id -> linda._id) should be(true)
-        db.people.delete(_._id -> yuri._id) should be(true)
+        db.people.delete(_._id -> linda._id).and(db.people.delete(_._id -> yuri._id)).map { t =>
+          t should be(true -> true)
+        }
       }
     }
     "query with multiple nots" in {
@@ -180,143 +183,165 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             .mustNot(_.age < 30)
             .mustNot(_.age > 35)
         }
-        val list = query.toList
-        list.map(_.name).toSet should be(Set("Charlie", "Kevin", "Tori", "Wyatt"))
+        query.toList.map { list =>
+          list.map(_.name).toSet should be(Set("Charlie", "Kevin", "Tori", "Wyatt"))
+        }
       }
     }
     "verify the records were deleted" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(24)
+        db.people.count.map(_ should be(24))
       }
     }
     // TODO: Fix same transaction modifying the same record concurrently
     "modify a record" in {
       db.people.transaction { implicit transaction =>
         db.people.modify(adam._id) {
-          case Some(p) => Some(p.copy(name = "Allan"))
+          case Some(p) => Task.pure(Some(p.copy(name = "Allan")))
           case None => fail("Adam was not found!")
         }
-      } match {
+      }.map {
         case Some(p) => p.name should be("Allan")
         case None => fail("Allan was not returned!")
       }
     }
     "verify the record has been renamed" in {
       db.people.transaction { implicit transaction =>
-        db.people(_._id -> adam._id).name should be("Allan")
+        db.people(_._id -> adam._id).map(_.name should be("Allan"))
       }
     }
     "verify start time has been set" in {
-      db.startTime.get() should be > 0L
+      db.startTime.get().map(_ should be > 0L)
     }
     "dispose the database and prepare new instance" in {
       if (memoryOnly) {
         // Don't dispose
+        Task.unit.succeed
       } else {
-        db.dispose()
-        db = new DB
-        db.init()
+        db.dispose().flatMap { _ =>
+          db = new DB
+          db.init()
+        }.succeed
       }
     }
     "query the database to verify records were persisted properly" in {
       db.people.transaction { implicit transaction =>
-        db.people.iterator.toList.map(_.name).toSet should be(Set(
-          "Tori", "Ruth", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin",
-          "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg", "Veronica"
-        ))
+        db.people.stream.toList.map(_.map(_.name).toSet).map { set =>
+          set should be(Set(
+            "Tori", "Ruth", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin",
+            "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg", "Veronica"
+          ))
+        }
       }
     }
     "search using tokenized data and a parsed query" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.search.words("nica 13", matchEndsWith = true)).toList
-        people.map(_.name) should be(List("Veronica"))
+        db.people.query.filter(_.search.words("nica 13", matchEndsWith = true)).toList.map { people =>
+          people.map(_.name) should be(List("Veronica"))
+        }
       }
     }
     "search using Filter.Builder and scoring" in {
       if (filterBuilderSupported) {
         db.people.transaction { implicit transaction =>
-          val results = db.people.query.scored.filter(_
+          db.people.query.scored.filter(_
             .builder
             .minShould(0)
             .should(_.search.words("nica 13", matchEndsWith = true), boost = Some(2.0))
             .should(_.age <=> (10, 15))
-          ).search.docs
-          val people = results.list
-          people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
-          results.scores should be(List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+          ).search.docs.flatMap { results =>
+            results.list.map { people =>
+              people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
+              results.scores should be(List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+            }
+          }
         }
+      } else {
+        Task.unit.succeed
       }
     }
     "search where city is not set" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.city === None).toList
-        people.map(_.name).toSet should be(Set("Tori", "Ruth", "Sam", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin", "Penny", "Charlie", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg", "Veronica"))
+        db.people.query.filter(_.city === None).toList.map { people =>
+          people.map(_.name).toSet should be(Set("Tori", "Ruth", "Sam", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin", "Penny", "Charlie", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg", "Veronica"))
+        }
       }
     }
     "search where city is set" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.builder.mustNot(_.city === None)).toList
-        people.map(_.name) should be(List("Evan"))
+        db.people.query.filter(_.builder.mustNot(_.city === None)).toList.map { people =>
+          people.map(_.name) should be(List("Evan"))
+        }
       }
     }
     "update the city for a user" in {
       db.people.transaction { implicit transaction =>
-        val p = db.people(zoey._id)
-        db.people.upsert(p.copy(city = Some(City("Los Angeles"))))
-      }
+        db.people(zoey._id).flatMap { p =>
+          db.people.upsert(p.copy(city = Some(City("Los Angeles"))))
+        }
+      }.succeed
     }
     "modify a record within a transaction and see it post-commit" in {
       db.people.transaction { implicit transaction =>
-        val original = db.people.query.filter(_.name === "Ruth").toList.head
-        db.people.upsert(original.copy(
-          name = "Not Ruth"
-        ))
-        transaction.commit()
-        val people = db.people.query.filter(_.name === "Not Ruth").toList
-        people.map(_.name) should be(List("Not Ruth"))
+        for {
+          original <- db.people.query.filter(_.name === "Ruth").first
+          _ <- db.people.upsert(original.copy(
+            name = "Not Ruth"
+          ))
+          _ <- transaction.commit()
+          people <- db.people.query.filter(_.name === "Not Ruth").toList
+        } yield people.map(_.name) should be(List("Not Ruth"))
       }
     }
     "query with single-value nicknames" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.nicknames has "Grouchy").toList
-        people.map(_.name) should be(List("Oscar"))
+        db.people.query.filter(_.nicknames has "Grouchy").toList.map { people =>
+          people.map(_.name) should be(List("Oscar"))
+        }
       }
     }
     "query with indexes" in {
       db.people.transaction { implicit transaction =>
-        val results = db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).search.indexes().list
-        results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
-        results.map(_(_.doc).name).toSet should be(Set("Allan", "Brenda", "Charlie"))
+        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).search.indexes().flatMap(_.list).map { results =>
+          results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
+          results.map(_(_.doc).name).toSet should be(Set("Allan", "Brenda", "Charlie"))
+        }
       }
     }
     "query with doc and indexes" in {
       db.people.transaction { implicit transaction =>
-        val results = db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).search.docAndIndexes().list
-        results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
-        results.map(_.doc.name).toSet should be(Set("Allan", "Brenda", "Charlie"))
+        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).stream.docAndIndexes().toList.map { results =>
+          results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
+          results.map(_.doc.name).toSet should be(Set("Allan", "Brenda", "Charlie"))
+        }
       }
     }
     "query with multi-value nicknames" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query
+        db.people.query
           .filter(_.nicknames has "Nica")
           .filter(_.nicknames has "Vera")
           .toList
-        people.map(_.name) should be(List("Veronica"))
+          .map { people =>
+            people.map(_.name) should be(List("Veronica"))
+          }
       }
     }
     "query name with regex match" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.name ~* "Han.+").toList
-        people.map(_.name) should be(List("Hanna"))
+        db.people.query.filter(_.name ~* "Han.+").toList.map { people =>
+          people.map(_.name) should be(List("Hanna"))
+        }
       }
     }
     "query nicknames that contain ica" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query
+        db.people.query
           .filter(_.nicknames.contains("ica"))
           .toList
-        people.map(_.name).toSet should be(Set("Tori", "Veronica"))
+          .map { people =>
+            people.map(_.name).toSet should be(Set("Tori", "Veronica"))
+          }
       }
     }
     // TODO: Fix support in SQL
@@ -328,32 +353,43 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }*/
     "query nicknames with regex match" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query
+        db.people.query
           .filter(_.nicknames ~* ".+chy")
           .toList
-        people.map(_.name) should be(List("Oscar"))
+          .map { people =>
+            people.map(_.name) should be(List("Oscar"))
+          }
       }
     }
     "materialize empty nicknames" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query.filter(_.name === "Ian").search.materialized(p => List(p.nicknames)).list
-        people.map(m => m(_.nicknames)) should be(List(Set.empty))
+        db.people.query.filter(_.name === "Ian").stream.materialized(p => List(p.nicknames)).toList.map { people =>
+          people.map(m => m(_.nicknames)) should be(List(Set.empty))
+        }
       }
     }
     "query with single-value, multiple nicknames" in {
       db.people.transaction { implicit transaction =>
-        val people = db.people.query
+        db.people.query
           .filter(_.nicknames has "Nica")
           .toList
-        people.map(_.name).toSet should be(Set("Veronica", "Tori"))
+          .map { people =>
+            people.map(_.name).toSet should be(Set("Veronica", "Tori"))
+          }
       }
     }
     "sort by name and page through results" in {
       db.people.transaction { implicit transaction =>
         val q = db.people.query.sort(Sort.ByField(Person.name)).limit(10)
-        q.offset(0).search.docs.list.map(_.name) should be(List("Allan", "Brenda", "Charlie", "Diana", "Evan", "Fiona", "Greg", "Hanna", "Ian", "Jenna"))
-        q.offset(10).search.docs.list.map(_.name) should be(List("Kevin", "Mike", "Nancy", "Not Ruth", "Oscar", "Penny", "Quintin", "Sam", "Tori", "Uba"))
-        q.offset(20).search.docs.list.map(_.name) should be(List("Veronica", "Wyatt", "Xena", "Zoey"))
+        for {
+          l1 <- q.offset(0).search.docs.flatMap(_.list).map(_.map(_.name))
+          l2 <- q.offset(10).search.docs.flatMap(_.list).map(_.map(_.name))
+          l3 <- q.offset(20).search.docs.flatMap(_.list).map(_.map(_.name))
+        } yield {
+          l1 should be(List("Allan", "Brenda", "Charlie", "Diana", "Evan", "Fiona", "Greg", "Hanna", "Ian", "Jenna"))
+          l2 should be(List("Kevin", "Mike", "Nancy", "Not Ruth", "Oscar", "Penny", "Quintin", "Sam", "Tori", "Uba"))
+          l3 should be(List("Veronica", "Wyatt", "Xena", "Zoey"))
+        }
       }
     }
     "filter by list of friend ids" in {
@@ -362,11 +398,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .builder
           .should(_.friends has fiona._id)
         )
-        q.toList.map(_.name).toSet should be(Set("Sam"))
+        q.toList.map { list =>
+          list.map(_.name).toSet should be(Set("Same"))
+        }
       }
     }
     "do a database backup" in {
-      DatabaseBackup.archive(db, new File(s"backups/$specName.zip")) should be(49)
+      DatabaseBackup.archive(db, new File(s"backups/$specName.zip")).map(_ should be(49))
     }
     "insert a lot more names" in {
       db.people.transaction { implicit transaction =>
@@ -378,65 +416,76 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             nicknames = Set("robot", s"sf$index")
           )
         }
-        db.people.insert(p)
+        db.people.insert(p).succeed
       }
     }
     "verify the correct number of people exist in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(CreateRecords + 24)
+        db.people.count.map(_ should be(CreateRecords + 24))
       }
     }
     "verify id count matches total count" in {
       db.people.transaction { implicit transaction =>
-        val results = db.people.query.countTotal(true).search.id
-        results.total should be(Some(CreateRecords + 24))
-        results.list.length should be(CreateRecords + 24)
+        db.people.query.countTotal(true).search.id.flatMap { results =>
+          results.list.map { list =>
+            results.total should be(Some(CreateRecords + 24))
+            list.length should be(CreateRecords + 24)
+          }
+        }
       }
     }
     "verify the correct count in query total" in {
       db.people.transaction { implicit transaction =>
-        val results = db.people.query
+        db.people.query
           .filter(_.nicknames.has("robot"))
           .sort(Sort.ByField(Person.age).descending)
           .limit(100)
           .countTotal(true)
           .search
           .docs
-        results.list.length should be(100)
-        results.total should be(Some(CreateRecords))
-        results.remaining should be(Some(CreateRecords))
+          .flatMap { results =>
+            results.list.map { list =>
+              list.length should be(100)
+              results.total should be(Some(CreateRecords))
+              results.remaining should be(Some(CreateRecords))
+            }
+          }
       }
     }
     "verify the correct count in query total with offset" in {
       db.people.transaction { implicit transaction =>
-        val results = db.people.query
+        db.people.query
           .filter(_.nicknames has "robot")
           .limit(100)
           .offset(100)
           .countTotal(true)
           .search
           .docs
-        results.list.length should be(100)
-        results.total should be(Some(CreateRecords))
-        results.remaining should be(Some(CreateRecords - 100))
+          .flatMap { results =>
+            results.list.map { list =>
+              list.length should be(100)
+              results.total should be(Some(CreateRecords))
+              results.remaining should be(Some(CreateRecords - 100))
+            }
+          }
       }
     }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
-        db.people.truncate() should be(CreateRecords + 24)
+        db.people.truncate().map(_ should be(CreateRecords + 24))
       }
     }
     "verify the collection is empty" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(0)
+        db.people.count.map(_ should be(0))
       }
     }
     "restore from database backup" in {
-      DatabaseRestore.archive(db, new File(s"backups/$specName.zip")) should be(49)
+      DatabaseRestore.archive(db, new File(s"backups/$specName.zip")).map(_ should be(49))
     }
     "verify the correct number of records exist" in {
       db.people.transaction { implicit transaction =>
-        db.people.count should be(24)
+        db.people.count.map(_ should be(24))
       }
     }
     /*"insert an invalid record via JSON" in {
@@ -461,11 +510,11 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }*/
     "truncate the collection again" in {
       db.people.transaction { implicit transaction =>
-        db.people.truncate() should be(24)
+        db.people.truncate().map(_ should be(24))
       }
     }
     "dispose the database" in {
-      db.dispose()
+      db.dispose().succeed
     }
   }
 
@@ -530,28 +579,30 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     def id(age: Int): Id[AgeLinks] = Id(age.toString)
 
-    override protected def process(list: List[List[DocState[Person]]]): Unit = db.ageLinks.transaction { implicit transaction =>
-      list.groupBy(_.head.doc.age).foreach {
-        case (age, states) =>
-          val firsts = states.map(_.head)
-          val add = firsts.collect {
-            case DocState.Added(doc) => doc._id
-            case DocState.Modified(doc) => doc._id
-          }
-          val remove = firsts.collect {
-            case DocState.Removed(doc) => doc._id
-          }.toSet
-          db.ageLinks.modify(AgeLinks.id(age)) { existing =>
-            val current = existing.getOrElse(AgeLinks(age, Nil))
-            val modified = current.copy(
-              people = (current.people ::: add).filterNot(remove.contains)
-            )
-            if (modified.people.isEmpty) {
-              None
-            } else {
-              Some(modified)
+    override protected def process(list: List[List[DocState[Person]]]): Task[Unit] = db.ageLinks.transaction { implicit transaction =>
+      Task {
+        list.groupBy(_.head.doc.age).foreach {
+          case (age, states) =>
+            val firsts = states.map(_.head)
+            val add = firsts.collect {
+              case DocState.Added(doc) => doc._id
+              case DocState.Modified(doc) => doc._id
             }
-          }
+            val remove = firsts.collect {
+              case DocState.Removed(doc) => doc._id
+            }.toSet
+            db.ageLinks.modify(AgeLinks.id(age)) { existing =>
+              val current = existing.getOrElse(AgeLinks(age, Nil))
+              val modified = current.copy(
+                people = (current.people ::: add).filterNot(remove.contains)
+              )
+              if (modified.people.isEmpty) {
+                Task.pure(None)
+              } else {
+                Task.pure(Some(modified))
+              }
+            }.sync()
+        }
       }
     }
   }
@@ -563,6 +614,6 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     override def alwaysRun: Boolean = false
 
-    override def upgrade(ldb: LightDB): Unit = db.startTime.set(System.currentTimeMillis())
+    override def upgrade(ldb: LightDB): Task[Unit] = db.startTime.set(System.currentTimeMillis()).unit
   }
 }
