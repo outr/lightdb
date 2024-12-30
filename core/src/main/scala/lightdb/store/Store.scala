@@ -15,6 +15,7 @@ import lightdb.field.Field._
 import lightdb.lock.LockManager
 import lightdb.trigger.CollectionTriggers
 import rapid.{Forge, Task}
+import scribe.{rapid => logger}
 
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -105,22 +106,21 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       f(transaction).guarantee(release(transaction))
     }
 
-    def create(): Task[Transaction[Doc]] = Task {
-      if (Collection.LogTransactions) scribe.info(s"Creating new Transaction for $name")
-      val transaction = new Transaction[Doc]
-      prepareTransaction(transaction)
-      set.add(transaction)
-      trigger.transactionStart(transaction)
-      transaction
-    }
+    def create(): Task[Transaction[Doc]] = for {
+      _ <- logger.info(s"Creating new Transaction for $name").when(Collection.LogTransactions)
+      transaction = new Transaction[Doc]
+      _ <- prepareTransaction(transaction)
+      _ = set.add(transaction)
+      _ <- trigger.transactionStart(transaction)
+    } yield transaction
 
-    def release(transaction: Transaction[Doc]): Task[Unit] = Task {
-      if (Collection.LogTransactions) scribe.info(s"Releasing Transaction for $name")
-      trigger.transactionEnd(transaction)
-      releaseTransaction(transaction)
-      transaction.close()
-      set.remove(transaction)
-    }
+    def release(transaction: Transaction[Doc]): Task[Unit] = for {
+      _ <- logger.info(s"Releasing Transaction for $name").when(Collection.LogTransactions)
+      _ <- trigger.transactionEnd(transaction)
+      _ <- releaseTransaction(transaction)
+      _ <- transaction.close()
+      _ = set.remove(transaction)
+    } yield ()
 
     def releaseAll(): Task[Int] = Task {
       val list = set.iterator().asScala.toList

@@ -28,6 +28,7 @@ import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.util.{BytesRef, Version}
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager, FacetsConfig, FacetField => LuceneFacetField}
 import org.apache.lucene.store.FSDirectory
+import rapid.Task
 
 import java.nio.file.{Files, Path}
 import scala.language.implicitConversions
@@ -73,18 +74,18 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Unit = transaction.put(
-    key = StateKey[Doc],
-    value = LuceneState[Doc](index, hasFacets)
-  )
+  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
+    transaction.put(
+      key = StateKey[Doc],
+      value = LuceneState[Doc](index, hasFacets)
+    )
+  }
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] =
     addDoc(doc, upsert = false)
-  }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] =
     addDoc(doc, upsert = true)
-  }
 
   private def createGeoFields(field: Field[Doc, _],
                               json: Json,
@@ -201,45 +202,48 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }
 
-  private def addDoc(doc: Doc, upsert: Boolean): Unit = if (fields.tail.nonEmpty) {
-    val id = this.id(doc)
-    val state = new IndexingState
-    val luceneFields = fields.flatMap { field =>
-      createLuceneFields(field, doc, state)
-    }
-    val document = new LuceneDocument
-    luceneFields.foreach(document.add)
+  private def addDoc(doc: Doc, upsert: Boolean): Task[Doc] = Task {
+    if (fields.tail.nonEmpty) {
+      val id = this.id(doc)
+      val state = new IndexingState
+      val luceneFields = fields.flatMap { field =>
+        createLuceneFields(field, doc, state)
+      }
+      val document = new LuceneDocument
+      luceneFields.foreach(document.add)
 
-    if (upsert) {
-      index.indexWriter.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document))
-    } else {
-      index.indexWriter.addDocument(facetsPrepareDoc(document))
+      if (upsert) {
+        index.indexWriter.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document))
+      } else {
+        index.indexWriter.addDocument(facetsPrepareDoc(document))
+      }
     }
+    doc
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = get(idField, id).nonEmpty
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(idField, id).map(_.nonEmpty)
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Option[Doc] = {
+                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
     val filter = Filter.Equals(field, value)
     val query = Query[Doc, Model](model, this, filter = Some(filter), limit = Some(1))
-    doSearch[Doc](query, Conversion.Doc()).list.headOption
+    doSearch[Doc](query, Conversion.Doc()).flatMap(_.list).map(_.headOption)
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     val query = filter2Lucene(Some(field === value))
     index.indexWriter.deleteDocuments(query)
     true
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Int =
-    state.indexSearcher.count(new MatchAllDocsQuery)
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] =
+    Task(state.indexSearcher.count(new MatchAllDocsQuery))
 
-  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] =
-    doSearch[Doc](Query[Doc, Model](model, this), Conversion.Doc()).iterator
+  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
+    rapid.Stream.force(doSearch[Doc](Query[Doc, Model](model, this), Conversion.Doc()).map(_.stream))
 
   override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
+                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
     val q: LuceneQuery = filter2Lucene(query.filter)
     val sortFields = query.sort match {
       case Nil => List(SortField.FIELD_SCORE)
@@ -352,7 +356,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         val docId = scoreDoc.doc
         val id = Id[Doc](storedFields.document(docId).get("_id"))
         val score = scoreDoc.score.toDouble
-        storage(id) -> score
+        storage(id).sync() -> score
     }
     def docIterator(): Iterator[(Doc, Double)] = scoreDocs.iterator.map(loadScoreDoc)
     def jsonIterator(fields: List[Field[Doc, _]]): Iterator[(ScoreDoc, Json, Double)] = {
@@ -364,7 +368,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         (scoreDoc, json, score)
       }
     }
-    val iterator: Iterator[(V, Double)] = conversion match {
+    def iterator: Iterator[(V, Double)] = conversion match {
       case Conversion.Value(field) => scoreDocs.iterator.map { scoreDoc =>
         value(scoreDoc, field) -> scoreDoc.score.toDouble
       }
@@ -382,7 +386,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
         case (id, score) =>
           val state = new IndexingState
-          val doc = apply(id)(transaction)
+          val doc = apply(id)(transaction).sync()
           val distance = field.get(doc, field, state).map(d => Spatial.distance(from, d))
           DistanceAndDoc(doc, distance) -> score
       }
@@ -392,7 +396,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       offset = query.offset,
       limit = query.limit,
       total = Some(total),
-      iteratorWithScore = iterator,
+      streamWithScore = rapid.Stream.fromIterator(Task(iterator)),
       facetResults = facetResults,
       transaction = transaction
     )
@@ -529,19 +533,18 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   }
 
   override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
+                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     Aggregator(query, model)
 
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int =
-    aggregate(query).length
+  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
+    aggregate(query).count
 
-  override def truncate()(implicit transaction: Transaction[Doc]): Int = {
-    val count = this.count
-    index.indexWriter.deleteAll()
-    count
-  }
+  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = for {
+    count <- this.count
+    _ <- Task(index.indexWriter.deleteAll())
+  } yield count
 
-  override def dispose(): Unit = Try {
+  override def dispose(): Task[Unit] = Task {
     index.dispose()
   }
 }
