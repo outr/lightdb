@@ -258,17 +258,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
                            from: Geo.Point,
                            sort: Boolean = true,
                            radius: Option[Distance] = None)
-                          (implicit transaction: Transaction[Doc]): rapid.Stream[DistanceAndDoc[Doc]] = {
-      val field = f(model)
-      var q = Query.this
-      if (sort) {
-        q = q.clearSort.sort(Sort.ByDistance(field, from))
-      }
-      radius.foreach { r =>
-        q = q.filter(_ => field.distance(from, r))
-      }
-      rapid.Stream.force(q.distanceSearch(field, from, sort, radius).map(_.stream))
-    }
+                          (implicit transaction: Transaction[Doc]): rapid.Stream[DistanceAndDoc[Doc]] = rapid.Stream
+      .force(search.distance(f, from, sort, radius).map(_.stream))
   }
 
   def toList(implicit transaction: Transaction[Doc]): Task[List[Doc]] = search.docs.flatMap(_.list)
