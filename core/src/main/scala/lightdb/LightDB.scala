@@ -100,7 +100,7 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
       dispose().sync()
     }))
     // Set initialized
-    _ = databaseInitialized.set(true)
+    _ <- databaseInitialized.set(true)
   } yield ()
 
   /**
