@@ -1,6 +1,7 @@
 package lightdb.sql.connect
 
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
+import rapid.Task
 
 case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnectionManager {
   protected lazy val dataSource: HikariDataSource = {
@@ -17,5 +18,5 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     new HikariDataSource(hc)
   }
 
-  override def dispose(): Unit = dataSource.close()
+  override def dispose(): Task[Unit] = Task(dataSource.close())
 }

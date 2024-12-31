@@ -21,15 +21,16 @@ import java.io.File
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.sql.Connection
 import java.util.regex.Pattern
+import rapid._
 
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,
                                                                      val connectionManager: ConnectionManager,
                                                                      val connectionShared: Boolean,
                                                                      val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
-  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
+  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = Task {
     val c = connectionManager.getConnection
-    if (hasSpatial) {
+    if (hasSpatial.sync()) {
       scribe.info(s"$name has spatial features. Enabling...")
       org.sqlite.Function.create(c, "DISTANCE", new org.sqlite.Function() {
         override def xFunc(): Unit = {
@@ -84,7 +85,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       }
     })
     super.initTransaction()
-  }
+  }.flatten
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 

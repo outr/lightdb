@@ -12,7 +12,7 @@ import lightdb.util.Initializable
 import lightdb._
 import lightdb.field.Field._
 import lightdb.lock.LockManager
-import rapid.{Forge, Task}
+import rapid._
 import scribe.{rapid => logger}
 
 import java.util.concurrent.ConcurrentHashMap

@@ -4,7 +4,7 @@ import fabric.Json
 import fabric.io.JsonFormatter
 import lightdb.collection.Collection
 import lightdb.{KeyValue, LightDB}
-import rapid.Task
+import rapid._
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.util.zip.{ZipEntry, ZipOutputStream}

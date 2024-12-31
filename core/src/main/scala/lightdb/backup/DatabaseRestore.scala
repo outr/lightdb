@@ -4,7 +4,7 @@ import fabric.io.JsonParser
 import lightdb.LightDB
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
-import rapid.Task
+import rapid._
 import scribe.{rapid => logger}
 
 import java.io.File

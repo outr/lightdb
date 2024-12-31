@@ -2,7 +2,7 @@ package lightdb.transaction
 
 import lightdb.doc.Document
 import lightdb.feature.FeatureSupport
-import rapid.Task
+import rapid._
 
 final class Transaction[Doc <: Document[Doc]] extends FeatureSupport[TransactionKey] { transaction =>
   def commit(): Task[Unit] = features.map {

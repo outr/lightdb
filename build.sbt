@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "1.3.0-SNAPSHOT"
+ThisBuild / version := "2.0.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -82,12 +82,12 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
-val rapidVersion: String = "0.4.0-SNAPSHOT"
+val rapidVersion: String = "0.4.0"
 
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, async, all)
+	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -105,7 +105,7 @@ lazy val core = crossProject(JVMPlatform)
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,
-			"com.outr" %% "rapid-core" % rapidVersion,
+			"com.outr" %%% "rapid-core" % rapidVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
 			"com.outr" %%% "rapid-test" % rapidVersion % Test
 		),
@@ -246,18 +246,8 @@ lazy val redis = project.in(file("redis"))
 		fork := true
 	)
 
-lazy val async = project.in(file("async"))
-	.dependsOn(core.jvm)
-	.settings(
-		name := s"$projectName-async",
-		fork := true,
-		libraryDependencies ++= Seq(
-			"com.outr" %% "rapid-core" % rapidVersion
-		)
-	)
-
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, async)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

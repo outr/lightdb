@@ -3,7 +3,7 @@ package lightdb.trigger
 import lightdb.field.Field.UniqueIndex
 import lightdb.doc.Document
 import lightdb.transaction.Transaction
-import rapid.Task
+import rapid._
 
 class CollectionTriggers[Doc <: Document[Doc]] extends CollectionTrigger[Doc] {
   private var list = List.empty[CollectionTrigger[Doc]]
