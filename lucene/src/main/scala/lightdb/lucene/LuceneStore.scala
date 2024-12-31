@@ -368,35 +368,37 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         (scoreDoc, json, score)
       }
     }
-    def iterator: Iterator[(V, Double)] = conversion match {
-      case Conversion.Value(field) => scoreDocs.iterator.map { scoreDoc =>
-        value(scoreDoc, field) -> scoreDoc.score.toDouble
+    val stream = rapid.Stream.fromIterator[(V, Double)](Task {
+      conversion match {
+        case Conversion.Value(field) => scoreDocs.iterator.map { scoreDoc =>
+          value(scoreDoc, field) -> scoreDoc.score.toDouble
+        }
+        case Conversion.Doc() => docIterator().asInstanceOf[Iterator[(V, Double)]]
+        case Conversion.Converted(c) => docIterator().map {
+          case (doc, score) => c(doc) -> score
+        }
+        case Conversion.Materialized(fields) => jsonIterator(fields).map {
+          case (_, json, score) => MaterializedIndex[Doc, Model](json, model).asInstanceOf[V] -> score
+        }
+        case Conversion.DocAndIndexes() => jsonIterator(fields.filter(_.indexed)).map {
+          case (scoreDoc, json, score) => MaterializedAndDoc[Doc, Model](json, model, loadScoreDoc(scoreDoc)._1).asInstanceOf[V] -> score
+        }
+        case Conversion.Json(fields) => jsonIterator(fields).map(t => t._2 -> t._3).asInstanceOf[Iterator[(V, Double)]]
+        case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
+          case (id, score) =>
+            val state = new IndexingState
+            val doc = apply(id)(transaction).sync()
+            val distance = field.get(doc, field, state).map(d => Spatial.distance(from, d))
+            DistanceAndDoc(doc, distance) -> score
+        }
       }
-      case Conversion.Doc() => docIterator().asInstanceOf[Iterator[(V, Double)]]
-      case Conversion.Converted(c) => docIterator().map {
-        case (doc, score) => c(doc) -> score
-      }
-      case Conversion.Materialized(fields) => jsonIterator(fields).map {
-        case (_, json, score) => MaterializedIndex[Doc, Model](json, model).asInstanceOf[V] -> score
-      }
-      case Conversion.DocAndIndexes() => jsonIterator(fields.filter(_.indexed)).map {
-        case (scoreDoc, json, score) => MaterializedAndDoc[Doc, Model](json, model, loadScoreDoc(scoreDoc)._1).asInstanceOf[V] -> score
-      }
-      case Conversion.Json(fields) => jsonIterator(fields).map(t => t._2 -> t._3).asInstanceOf[Iterator[(V, Double)]]
-      case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
-        case (id, score) =>
-          val state = new IndexingState
-          val doc = apply(id)(transaction).sync()
-          val distance = field.get(doc, field, state).map(d => Spatial.distance(from, d))
-          DistanceAndDoc(doc, distance) -> score
-      }
-    }
+    })
     SearchResults(
       model = model,
       offset = query.offset,
       limit = query.limit,
       total = Some(total),
-      streamWithScore = rapid.Stream.fromIterator(Task(iterator)),
+      streamWithScore = stream,
       facetResults = facetResults,
       transaction = transaction
     )
