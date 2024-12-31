@@ -16,7 +16,7 @@ import java.sql.ResultSet
 case class LightDBAsyncBench(storeManager: StoreManager) extends Bench { bench =>
   override def name: String = s"LightDB Async ${storeManager.name}"
 
-  override def init(): Unit = DB.init().sync()
+  override def init(): Unit = db.init.sync()
 
   implicit def p2Person(p: P): Person = Person(p.name, p.age, Id(p.id))
 

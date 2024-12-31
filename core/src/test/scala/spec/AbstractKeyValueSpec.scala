@@ -53,7 +53,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
 
   specName should {
     "initialize the database" in {
-      db.init().succeed
+      db.init.succeed
     }
     "verify the database is empty" in {
       db.users.transaction { implicit transaction =>

@@ -22,7 +22,7 @@ import scala.io.Source
 class AirportSpec extends AnyWordSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
-      DB.init()
+      db.init
     }
     "have two collections" in {
       DB.collections.map(_.name).toSet should be(Set("_backingStore", "Flight", "Airport"))

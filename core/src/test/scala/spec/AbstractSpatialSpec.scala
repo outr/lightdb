@@ -67,7 +67,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
 
   specName should {
     "initialize the database" in {
-      DB.init().succeed
+      DB.init.succeed
     }
     "store three people" in {
       DB.people.transaction { implicit transaction =>

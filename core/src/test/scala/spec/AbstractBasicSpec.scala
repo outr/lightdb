@@ -69,7 +69,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
   specName should {
     "initialize the database" in {
-      db.init().succeed
+      db.init.succeed
     }
     "verify the database is empty" in {
       db.people.transaction { implicit transaction =>
@@ -220,7 +220,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       } else {
         db.dispose().flatMap { _ =>
           db = new DB
-          db.init()
+          db.init
         }.succeed
       }
     }
@@ -250,9 +250,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             .should(_.search.words("nica 13", matchEndsWith = true), boost = Some(2.0))
             .should(_.age <=> (10, 15))
           ).search.docs.flatMap { results =>
-            results.list.map { people =>
+            for {
+              people <- results.list
+              scores <- results.scores
+            } yield {
               people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
-              results.scores should be(List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+              scores should be(List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
             }
           }
         }
@@ -399,11 +402,11 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .should(_.friends has fiona._id)
         )
         q.toList.map { list =>
-          list.map(_.name).toSet should be(Set("Same"))
+          list.map(_.name).toSet should be(Set("Sam"))
         }
       }
     }
-    /*"do a database backup" in {
+    "do a database backup" in {
       DatabaseBackup.archive(db, new File(s"backups/$specName.zip")).map(_ should be(49))
     }
     "insert a lot more names" in {
@@ -469,7 +472,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             }
           }
       }
-    }*/
+    }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
         db.people.truncate().map(_ should be(CreateRecords + 24))

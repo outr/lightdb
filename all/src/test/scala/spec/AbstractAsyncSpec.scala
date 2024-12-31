@@ -60,7 +60,7 @@ abstract class AbstractAsyncSpec extends AnyWordSpec with Matchers { spec =>
 
   specName should {
     "initialize the database" in {
-      db.init().map(b => b should be(true)).sync()
+      db.init.map(b => b should be(true)).sync()
     }
     "verify the database is empty" in {
       db.people.transaction { implicit transaction =>
@@ -187,7 +187,7 @@ abstract class AbstractAsyncSpec extends AnyWordSpec with Matchers { spec =>
     }
     "prepare a new instance" in {
       db = new DB
-      db.init().map(_ should be(true)).sync()
+      db.init.map(_ should be(true)).sync()
     }
     "query the database to verify records were persisted properly" in {
       db.people.transaction { implicit transaction =>

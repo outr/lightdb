@@ -18,7 +18,7 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
 
   specName should {
     "initialize the database" in {
-      DB.init().succeed
+      DB.init.succeed
     }
     "insert a couple SpecialOne instances" in {
       DB.specialOne.t.insert(List(

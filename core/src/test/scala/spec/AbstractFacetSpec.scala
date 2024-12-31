@@ -29,7 +29,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
   specName should {
     "initialize the database" in {
-      db.init().succeed
+      db.init.succeed
     }
     "verify the database is empty" in {
       db.entries.transaction { implicit transaction =>

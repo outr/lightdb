@@ -18,28 +18,26 @@ object DatabaseBackup {
    * @return the number of records backed up
    */
   def archive(db: LightDB,
-              archive: File = new File("backup.zip")): Task[Int] = {
+              archive: File = new File("backup.zip")): Task[Int] = Task {
     Option(archive.getParentFile).foreach(_.mkdirs())
     if (archive.exists()) archive.delete()
     val out = new ZipOutputStream(new FileOutputStream(archive))
-    try {
-      process(db) {
-        case (collection, stream) => Task {
-          val fileName = s"${collection.name}.jsonl"
-          val entry = new ZipEntry(s"backup/$fileName")
-          out.putNextEntry(entry)
-          stream.map { json =>
-            val line = JsonFormatter.Compact(json)
-            val bytes = s"$line\n".getBytes("UTF-8")
-            out.write(bytes)
-          }.count.guarantee(Task(out.closeEntry()))
-        }.flatten
-      }
-    } finally {
+    process(db) {
+      case (collection, stream) => Task {
+        val fileName = s"${collection.name}.jsonl"
+        val entry = new ZipEntry(s"backup/$fileName")
+        out.putNextEntry(entry)
+        stream.map { json =>
+          val line = JsonFormatter.Compact(json)
+          val bytes = s"$line\n".getBytes("UTF-8")
+          out.write(bytes)
+        }.count.guarantee(Task(out.closeEntry()))
+      }.flatten
+    }.guarantee(Task {
       out.flush()
       out.close()
-    }
-  }
+    })
+  }.flatten
 
   /**
    * Does a full backup of the supplied database to the directory specified
