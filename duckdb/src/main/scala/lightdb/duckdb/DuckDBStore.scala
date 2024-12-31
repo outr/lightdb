@@ -2,11 +2,9 @@ package lightdb.duckdb
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.sql.{SQLDatabase, SQLStore}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
+import lightdb.sql.{SQLDatabase, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
-import lightdb.transaction.Transaction
-import org.duckdb.DuckDBConnection
 
 import java.nio.file.Path
 import java.sql.Connection

@@ -1,12 +1,10 @@
 package benchmark.bench.impl
 
-import benchmark.bench.{Bench, StatusCallback}
-import benchmark.imdb.MariaDBImplementation.{TitleAkaPG, fromRS}
+import benchmark.bench.Bench
 import lightdb.Unique
 
 import java.io.File
 import java.sql.{Connection, DriverManager}
-import scala.collection.parallel.CollectionConverters._
 
 object DerbyBench extends Bench {
   private lazy val connection: Connection = {

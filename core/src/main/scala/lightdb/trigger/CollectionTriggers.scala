@@ -1,7 +1,7 @@
 package lightdb.trigger
 
-import lightdb.field.Field.UniqueIndex
 import lightdb.doc.Document
+import lightdb.field.Field.UniqueIndex
 import lightdb.transaction.Transaction
 import rapid._
 

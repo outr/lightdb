@@ -1,7 +1,6 @@
 package benchmark.imdb
 
 import benchmark.FlushingBacklog
-import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import lightdb.Unique
 import rapid.Task

@@ -1,9 +1,8 @@
 package lightdb.sql
 
-import lightdb.collection.Collection
 import lightdb.doc.Document
 
-import java.sql.{PreparedStatement, ResultSet, SQLException}
+import java.sql.SQLException
 
 case class SQLQueryBuilder[Doc <: Document[Doc]](store: SQLStore[Doc, _],
                                                  state: SQLState[Doc],

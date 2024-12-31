@@ -1,8 +1,8 @@
 package lightdb
 
-import lightdb.field.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.FacetResult
+import lightdb.field.Field._
 import lightdb.transaction.Transaction
 import rapid.Task
 

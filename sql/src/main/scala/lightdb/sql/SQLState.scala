@@ -2,12 +2,12 @@ package lightdb.sql
 
 import lightdb.doc.Document
 import lightdb.sql.connect.ConnectionManager
-import lightdb.transaction.{Transaction, TransactionFeature, TransactionKey}
+import lightdb.transaction.{Transaction, TransactionFeature}
 import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import scala.util.Try
 
 case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,

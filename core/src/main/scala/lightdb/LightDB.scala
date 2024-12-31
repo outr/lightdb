@@ -4,7 +4,7 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
 import rapid._

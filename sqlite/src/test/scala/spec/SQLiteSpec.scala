@@ -1,8 +1,6 @@
 package spec
-import lightdb.sql.{SQLDatabase, SQLQueryBuilder, SQLiteStore}
+import lightdb.sql.SQLiteStore
 import lightdb.store.StoreManager
-
-import java.nio.file.Path
 
 @EmbeddedTest
 class SQLiteSpec extends AbstractBasicSpec {

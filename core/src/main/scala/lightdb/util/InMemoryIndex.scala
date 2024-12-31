@@ -1,8 +1,8 @@
 package lightdb.util
 
 import lightdb._
-import lightdb.field.Field._
 import lightdb.doc.Document
+import lightdb.field.Field._
 import lightdb.field.IndexingState
 
 import java.util.Comparator

@@ -1,27 +1,23 @@
 package lightdb.sql
 
 import fabric._
-import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
-import lightdb.collection.Collection
 import lightdb.distance.Distance
-import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.{LightDB, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
+import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import org.sqlite.{Collation, SQLiteConfig, SQLiteOpenMode}
-import org.sqlite.SQLiteConfig.{JournalMode, LockingMode, SynchronousMode, TransactionMode}
+import lightdb.{LightDB, SortDirection}
+import org.sqlite.Collation
+import rapid._
 
-import java.io.File
-import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.Path
 import java.sql.Connection
 import java.util.regex.Pattern
-import rapid._
 
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,

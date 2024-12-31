@@ -1,6 +1,5 @@
 package benchmark
 
-import cats.implicits._
 import rapid.Task
 
 import java.util.concurrent.atomic.AtomicInteger

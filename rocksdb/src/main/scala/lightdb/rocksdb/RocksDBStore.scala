@@ -2,11 +2,10 @@ package lightdb.rocksdb
 
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
-import lightdb.aggregate.AggregateQuery
-import lightdb.collection.Collection
 import lightdb._
-import lightdb.field.Field._
+import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction

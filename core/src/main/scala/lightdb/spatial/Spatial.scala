@@ -1,12 +1,10 @@
 package lightdb.spatial
 
 import lightdb.distance._
-import org.locationtech.jts.geom.{Coordinate, Geometry, GeometryFactory, LineString, Polygon}
-import org.locationtech.spatial4j.context.SpatialContext
+import org.locationtech.jts.geom._
 import org.locationtech.spatial4j.context.jts.JtsSpatialContext
 import org.locationtech.spatial4j.distance.DistanceUtils
 import org.locationtech.spatial4j.shape
-import org.locationtech.spatial4j.shape.Shape
 import org.locationtech.spatial4j.shape.ShapeFactory.{LineStringBuilder, PolygonBuilder}
 import org.locationtech.spatial4j.shape.jts.JtsGeometry
 

@@ -2,12 +2,12 @@ package spec
 
 import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.{Id, LightDB}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
+import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path

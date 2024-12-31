@@ -1,14 +1,13 @@
 package benchmark.bench.impl
 
-import benchmark.bench.{Bench, StatusCallback}
+import benchmark.bench.Bench
+import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
-import fabric.rw._
-import lightdb.field.Field
 
 import java.nio.file.Path
 import java.sql.ResultSet
