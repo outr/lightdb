@@ -1,6 +1,7 @@
 package lightdb.sql.connect
 
 import org.apache.commons.dbcp2.BasicDataSource
+import rapid.Task
 
 case class DBCPConnectionManager(config: SQLConfig) extends DataSourceConnectionManager {
   protected lazy val dataSource: BasicDataSource = {
@@ -17,6 +18,6 @@ case class DBCPConnectionManager(config: SQLConfig) extends DataSourceConnection
     ds
   }
 
-  override def dispose(): Unit = dataSource.close()
+  override def dispose(): Task[Unit] = Task(dataSource.close())
 }
 

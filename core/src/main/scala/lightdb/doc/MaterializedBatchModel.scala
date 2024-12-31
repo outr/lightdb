@@ -2,7 +2,7 @@ package lightdb.doc
 
 import lightdb.Id
 import lightdb.transaction.Transaction
-import rapid.Task
+import rapid._
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
