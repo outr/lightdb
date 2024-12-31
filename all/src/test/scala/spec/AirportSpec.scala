@@ -3,22 +3,21 @@ package spec
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.field.Field
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
-import lightdb.{Id, LightDB, Persistence, StoredValue, Unique}
+import lightdb.store.StoreManager
 import lightdb.store.split.SplitStoreManager
-import lightdb.store.{StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{Id, LightDB, Unique}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
+import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
+import scribe.{rapid => logger}
 
-import java.nio.file.{Path, Paths}
+import java.nio.file.Path
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
-import scribe.{rapid => logger}
 
 @EmbeddedTest
 class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {

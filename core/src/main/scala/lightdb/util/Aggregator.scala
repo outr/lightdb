@@ -4,7 +4,6 @@ import fabric.rw._
 import fabric.{Json, Null, Num, NumDec, NumInt, Obj, Str, num}
 import lightdb.SortDirection.Ascending
 import lightdb.aggregate.{AggregateQuery, AggregateType}
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.materialized.MaterializedAggregate

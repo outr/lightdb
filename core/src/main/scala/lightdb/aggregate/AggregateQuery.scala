@@ -1,9 +1,9 @@
 package lightdb.aggregate
 
-import lightdb.{Query, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
+import lightdb.{Query, SortDirection}
 import rapid.Task
 
 case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],

@@ -1,19 +1,16 @@
 package spec
 
-import fabric._
 import fabric.rw._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.collection.Collection
-import lightdb.doc.{DocState, Document, DocumentModel, JsonConversion, MaterializedBatchModel, MaterializedModel}
+import lightdb.doc._
 import lightdb.feature.DBFeatureKey
-import lightdb.field.Field
 import lightdb.filter._
 import lightdb.store.StoreManager
-import lightdb.transaction.Transaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, StoredValue}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
+import org.scalatest.wordspec.AsyncWordSpec
 import perfolation.double2Implicits
 import rapid.{AsyncTaskSpec, Task}
 

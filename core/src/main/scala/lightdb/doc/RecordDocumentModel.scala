@@ -1,6 +1,5 @@
 package lightdb.doc
 
-import fabric.rw._
 import lightdb.Timestamp
 
 trait RecordDocumentModel[Doc <: RecordDocument[Doc]] extends DocumentModel[Doc] {

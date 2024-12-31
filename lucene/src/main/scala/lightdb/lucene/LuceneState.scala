@@ -2,7 +2,7 @@ package lightdb.lucene
 
 import lightdb.doc.Document
 import lightdb.lucene.index.Index
-import lightdb.transaction.{Transaction, TransactionFeature}
+import lightdb.transaction.TransactionFeature
 import org.apache.lucene.facet.taxonomy.TaxonomyReader
 import org.apache.lucene.search.IndexSearcher
 import rapid.Task

@@ -1,12 +1,12 @@
 package lightdb.doc
 
 import fabric.rw._
+import lightdb._
 import lightdb.collection.Collection
 import lightdb.facet.{FacetConfig, FacetValue}
-import lightdb.filter.FilterBuilder
-import lightdb._
-import lightdb.field.{Field, FieldGetter}
 import lightdb.field.Field._
+import lightdb.field.{Field, FieldGetter}
+import lightdb.filter.FilterBuilder
 import rapid.Task
 
 import scala.language.implicitConversions

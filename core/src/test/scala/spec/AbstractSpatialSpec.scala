@@ -5,13 +5,12 @@ import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.field.Field
 import lightdb.spatial.Geo
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
+import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec
 
 import java.nio.file.Path

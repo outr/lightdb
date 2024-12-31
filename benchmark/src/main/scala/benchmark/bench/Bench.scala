@@ -1,7 +1,7 @@
 package benchmark.bench
 
 import benchmark.ActionIterator
-import lightdb.{Id, Unique}
+import lightdb.Unique
 
 import java.sql.ResultSet
 import scala.collection.parallel.CollectionConverters._

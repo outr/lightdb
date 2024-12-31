@@ -3,20 +3,16 @@ package lightdb.collection
 import fabric.Json
 import fabric.define.DefType
 import fabric.rw._
+import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
-import lightdb.store.Store
-import lightdb.transaction.Transaction
-import lightdb.trigger.CollectionTriggers
-import lightdb.util.Initializable
-import lightdb._
 import lightdb.field.Field._
 import lightdb.lock.LockManager
+import lightdb.store.Store
+import lightdb.transaction.Transaction
+import lightdb.util.Initializable
 import rapid._
 import scribe.{rapid => logger}
-
-import java.util.concurrent.ConcurrentHashMap
-import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,

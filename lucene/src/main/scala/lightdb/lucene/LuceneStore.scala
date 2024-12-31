@@ -3,14 +3,12 @@ package lightdb.lucene
 import fabric._
 import fabric.define.DefType
 import fabric.io.JsonFormatter
-import fabric.rw.{Asable, Convertible}
-import lightdb.SortDirection.Ascending
-import lightdb.aggregate.{AggregateQuery, AggregateType}
-import lightdb.collection.Collection
+import fabric.rw.Asable
 import lightdb._
-import lightdb.field.Field._
+import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
+import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.lucene.index.Index
@@ -19,20 +17,19 @@ import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
-import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, SortedNumericDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
-import org.apache.lucene.geo.{Line, Polygon}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, FieldExistsQuery, IndexSearcher, MatchAllDocsQuery, MultiCollectorManager, PrefixQuery, RegexpQuery, ScoreDoc, SearcherFactory, SearcherManager, SortField, SortedNumericSortField, TermQuery, TopFieldCollector, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollector, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
-import org.apache.lucene.index.{DirectoryReader, SegmentInfos, SegmentReader, StoredFields, Term}
-import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.util.{BytesRef, Version}
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager, FacetsConfig, FacetField => LuceneFacetField}
+import org.apache.lucene.geo.{Line, Polygon}
+import org.apache.lucene.index.{DirectoryReader, SegmentReader, StoredFields, Term}
+import org.apache.lucene.queryparser.classic.QueryParser
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, IndexSearcher, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.store.FSDirectory
+import org.apache.lucene.util.{BytesRef, Version}
 import rapid.Task
 
 import java.nio.file.{Files, Path}
 import scala.language.implicitConversions
-import scala.util.Try
 
 class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,

@@ -1,8 +1,8 @@
 package spec
 
 import lightdb.sql.SQLiteStore
-import lightdb.store.{MapStore, StoreManager}
 import lightdb.store.split.SplitStoreManager
+import lightdb.store.{MapStore, StoreManager}
 
 @EmbeddedTest
 class SQLiteAndMapSplitSpec extends AbstractBasicSpec {

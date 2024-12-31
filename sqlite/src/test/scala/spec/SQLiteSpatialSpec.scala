@@ -1,6 +1,6 @@
 package spec
 
-import lightdb.sql.{SQLQueryBuilder, SQLiteStore}
+import lightdb.sql.SQLiteStore
 import lightdb.store.StoreManager
 
 @EmbeddedTest

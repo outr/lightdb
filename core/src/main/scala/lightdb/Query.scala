@@ -1,18 +1,17 @@
 package lightdb
 
 import fabric.Json
-import lightdb.field.Field._
 import lightdb.aggregate.{AggregateFunction, AggregateQuery}
-import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.FacetQuery
+import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
-import lightdb.store.{Conversion, Store, StoreMode}
+import lightdb.store.{Conversion, Store}
 import lightdb.transaction.Transaction
 import rapid.{Forge, Grouped, Task}
 

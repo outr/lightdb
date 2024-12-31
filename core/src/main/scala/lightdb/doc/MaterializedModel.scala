@@ -1,6 +1,5 @@
 package lightdb.doc
 
-import lightdb.Id
 import lightdb.collection.Collection
 import lightdb.transaction.Transaction
 import lightdb.trigger.BasicCollectionTrigger

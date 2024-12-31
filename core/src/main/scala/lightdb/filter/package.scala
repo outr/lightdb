@@ -1,6 +1,6 @@
 package lightdb
 
-import lightdb.doc.{Document, DocumentModel}
+import lightdb.doc.Document
 
 import scala.language.implicitConversions
 

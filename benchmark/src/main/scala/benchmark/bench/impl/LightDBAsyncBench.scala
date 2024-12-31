@@ -3,11 +3,10 @@ package benchmark.bench.impl
 import benchmark.bench.Bench
 import fabric.rw.RW
 import lightdb.Id
-import lightdb.async.{AsyncCollection, AsyncDatabaseUpgrade, AsyncLightDB}
 import lightdb.collection.Collection
-import lightdb.store.StoreManager
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
+import lightdb.store.StoreManager
 import rapid.Task
 
 import java.nio.file.Path

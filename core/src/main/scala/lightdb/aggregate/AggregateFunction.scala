@@ -4,7 +4,7 @@ import fabric.rw._
 import lightdb.distance.Distance
 import lightdb.doc.Document
 import lightdb.field.Field
-import lightdb.filter.{Condition, Filter, FilterClause, FilterSupport}
+import lightdb.filter.FilterSupport
 import lightdb.materialized.Materializable
 import lightdb.spatial.Geo
 

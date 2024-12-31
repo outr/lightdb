@@ -3,16 +3,16 @@ package lightdb.store
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
+import lightdb._
 import lightdb.aggregate.AggregateQuery
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.materialized.MaterializedAggregate
-import lightdb.transaction.Transaction
-import lightdb._
 import lightdb.error.DocNotFoundException
 import lightdb.field.Field
 import lightdb.field.Field._
 import lightdb.lock.LockManager
+import lightdb.materialized.MaterializedAggregate
+import lightdb.transaction.Transaction
 import lightdb.trigger.CollectionTriggers
 import rapid.{Forge, Task}
 import scribe.{rapid => logger}

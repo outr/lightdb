@@ -1,14 +1,13 @@
 package lightdb.store.split
 
 import fabric.Json
+import lightdb._
 import lightdb.aggregate.AggregateQuery
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
-import lightdb._
-import lightdb.field.Field._
 import rapid.Task
 
 import scala.language.implicitConversions

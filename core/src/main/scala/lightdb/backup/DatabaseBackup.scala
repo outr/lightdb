@@ -2,8 +2,8 @@ package lightdb.backup
 
 import fabric.Json
 import fabric.io.JsonFormatter
+import lightdb.LightDB
 import lightdb.collection.Collection
-import lightdb.{KeyValue, LightDB}
 import rapid._
 
 import java.io.{File, FileOutputStream, PrintWriter}

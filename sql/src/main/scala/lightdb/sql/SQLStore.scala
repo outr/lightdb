@@ -4,20 +4,20 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
+import lightdb._
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.field.Field._
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
-import lightdb.transaction.{Transaction, TransactionKey}
+import lightdb.transaction.Transaction
 import lightdb.util.ActionIterator
-import lightdb._
-import lightdb.field.{Field, IndexingState}
-import lightdb.field.Field._
 import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
