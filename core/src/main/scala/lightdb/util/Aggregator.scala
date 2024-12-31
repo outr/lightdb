@@ -92,6 +92,8 @@ object Aggregator {
         }
         groups += group -> map
       }
+      .drain
+      .sync()
     groups = groups.map {
       case (key, jsonMap) =>
         var map = jsonMap

@@ -83,7 +83,7 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
   override protected def initialize(): Task[Unit] = for {
     _ <- logger.info(s"$name database initializing...")
     _ = backingStore
-    _ <- collections.map(_.init()).tasks
+    _ <- collections.map(_.init).tasks
     // Truncate the database before we do anything if specified
     _ <- truncate().when(truncateOnInit)
     // Determine if this is an uninitialized database
@@ -124,7 +124,7 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
       _collections = c :: _collections
     }
     if (isInitialized) { // Already initialized database, init collection immediately
-      c.init()
+      c.init.sync()
     }
     c
   }
@@ -169,12 +169,13 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
       upgrade.upgrade(this).when(runUpgrade).flatMap { _ =>
         appliedUpgrades.modify { set =>
           set + upgrade.label
-        }
-        val next = doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
-        if (stillBlocking && !continueBlocking) {
-          next.start()
-        } else {
-          next
+        }.flatMap { _ =>
+          val next = doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
+          if (stillBlocking && !continueBlocking) {
+            next.start()
+          } else {
+            next
+          }
         }
       }
     case None => logger.info("Upgrades completed successfully")

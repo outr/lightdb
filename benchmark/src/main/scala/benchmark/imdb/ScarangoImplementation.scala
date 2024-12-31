@@ -24,7 +24,7 @@
 //
 //  override def name: String = "Scarango"
 //
-//  override def init(): Task[Unit] = db.init()
+//  override def init(): Task[Unit] = db.init
 //
 //  override def map2TitleAka(map: Map[String, String]): TitleAkaADB = {
 //    val title = map.value("title")

@@ -46,11 +46,11 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
 
     // Give the Model a chance to initialize
-    model.init(this)
-
-    // Verify the data is in-sync
-    verify()
-  }
+    model.init(this).flatMap { _ =>
+      // Verify the data is in-sync
+      verify()
+    }
+  }.flatten.unit
 
   def verify(): Task[Boolean] = store.verify()
 

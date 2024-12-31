@@ -20,7 +20,7 @@
 //
 //  override def name: String = "LightDB"
 //
-//  override def init(): Task[Unit] = IO(DB.init())
+//  override def init(): Task[Unit] = IO(db.init)
 //
 //  override def map2TitleAka(map: Map[String, String]): TitleAkaLDB = TitleAkaLDB(
 //    titleId = map.value("titleId"),

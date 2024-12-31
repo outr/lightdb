@@ -8,16 +8,15 @@ import rapid._
  */
 trait Initializable {
   @volatile private var initialized = false
-  private lazy val singleton = initialize().map { _ =>
-    initialized = true
-  }.singleton
-
-  def isInitialized: Boolean = initialized
 
   /**
    * Calls initialize() exactly one time. Safe to call multiple times.
    */
-  final def init(): Task[Unit] = singleton
+  lazy val init: Task[Unit] = initialize().map { _ =>
+    initialized = true
+  }.singleton
+
+  def isInitialized: Boolean = initialized
 
   /**
    * Define initialization functionality here, but never call directly.
