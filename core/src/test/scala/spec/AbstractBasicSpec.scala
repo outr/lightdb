@@ -406,6 +406,17 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         }
       }
     }
+    "verify the correct number of records in the database" in {
+      for {
+        people <- db.people.t.count
+        ageLinks <- db.ageLinks.t.count
+        backingStore <- db.backingStore.t.count
+      } yield {
+        people should be(24)
+        ageLinks should be(22)
+        backingStore should be(3)
+      }
+    }
     "do a database backup" in {
       DatabaseBackup.archive(db, new File(s"backups/$specName.zip")).map(_ should be(49))
     }
