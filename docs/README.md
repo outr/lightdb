@@ -34,6 +34,10 @@ Watch this [Java User Group demonstration of LightDB](https://www.youtube.com/li
 
 This guide will walk you through setting up and using **LightDB**, a high-performance computational database. We'll use a sample application to explore its key features.
 
+*NOTE*: This project uses Rapid (https://github.com/outr/rapid) for effects. It's somewhat similar to cats-effect, but
+with a focus on virtual threads and simplicity. In a normal project, you likely wouldn't be using `.sync()` to invoke
+each task, but for the purposes of this documentation, this is used to make the code execute blocking.
+
 ---
 
 ## Prerequisites
@@ -108,7 +112,7 @@ import lightdb.upgrade._
 import java.nio.file.Path
 
 class DB extends LightDB {
-  lazy val directory: Option[Path] = Some(Path.of(s"db/example"))
+  lazy val directory: Option[Path] = Some(Path.of(s"docs/db/example"))
    
   lazy val people: Collection[Person, Person.type] = collection(Person)
 
@@ -128,7 +132,7 @@ Instantiate and initialize the database:
 
 ```scala mdoc
 val db = new DB
-db.init()
+db.init.sync()
 ```
 
 ### Step 2: Insert Data
@@ -139,7 +143,7 @@ Add records to the database:
 val adam = Person(name = "Adam", age = 21)
 db.people.transaction { implicit transaction =>
   db.people.insert(adam)
-}
+}.sync()
 ```
 
 ### Step 3: Query Data
@@ -148,9 +152,10 @@ Retrieve records using filters:
 
 ```scala mdoc
 db.people.transaction { implicit transaction =>
-  val peopleIn20s = db.people.query.filter(_.age BETWEEN 20 -> 29).toList
-  println(peopleIn20s)
-}
+  db.people.query.filter(_.age BETWEEN 20 -> 29).toList.map { peopleIn20s =>
+    println(s"People in their 20s: $peopleIn20s")
+  }
+}.sync()
 ```
 
 ---
@@ -180,20 +185,23 @@ db.people.transaction { implicit transaction =>
 
 ```scala mdoc
 db.people.transaction { implicit transaction =>
-  val results = db.people.query
+  db.people.query
     .aggregate(p => List(p.age.min, p.age.max, p.age.avg, p.age.sum))
     .toList
-  println(results)
-}
+    .map { results =>
+      println(s"Results: $results")
+    }
+}.sync()
 ```
 
 ### Grouping
 
 ```scala mdoc
 db.people.transaction { implicit transaction =>
-  val grouped = db.people.query.grouped(_.age).toList
-  println(grouped)
-}
+  db.people.query.grouped(_.age).toList.map { grouped =>
+    println(s"Grouped: $grouped")
+  }
+}.sync()
 ```
 
 ---
@@ -206,13 +214,13 @@ Backup your database:
 import lightdb.backup._
 import java.io.File
 
-DatabaseBackup.archive(db, new File("backup.zip"))
+DatabaseBackup.archive(db, new File("backup.zip")).sync()
 ```
 
 Restore from a backup:
 
 ```scala mdoc
-DatabaseRestore.archive(db, new File("backup.zip"))
+DatabaseRestore.archive(db, new File("backup.zip")).sync()
 ```
 
 ---
@@ -222,7 +230,7 @@ DatabaseRestore.archive(db, new File("backup.zip"))
 Dispose of the database when done:
 
 ```scala mdoc
-db.dispose()
+db.dispose().sync()
 ```
 
 ---

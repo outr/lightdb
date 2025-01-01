@@ -16,7 +16,7 @@
 //object LightDB011Bench extends Bench {
 //  override def name: String = "LightDB 0.11"
 //
-//  override def init(): Unit = DB.init().unsafeRunSync()
+//  override def init(): Unit = db.init.unsafeRunSync()
 //
 //  override protected def insertRecords(iterator: Iterator[LightDB011Bench.P]): Unit = {
 //    fs2.Stream.fromBlockingIterator[IO](iterator.map { p =>

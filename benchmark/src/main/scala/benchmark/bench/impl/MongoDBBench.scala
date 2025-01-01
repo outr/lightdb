@@ -2,7 +2,7 @@ package benchmark.bench.impl
 
 import benchmark.bench.Bench
 import com.mongodb.client.MongoClients
-import com.mongodb.client.model.{Aggregates, Filters, Indexes}
+import com.mongodb.client.model.{Filters, Indexes}
 import org.bson.Document
 
 import scala.jdk.CollectionConverters._

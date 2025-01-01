@@ -1,24 +1,21 @@
 package lightdb.sql
 
 import fabric._
-import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
-import lightdb.collection.Collection
 import lightdb.distance.Distance
-import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.{LightDB, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
+import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import org.sqlite.{Collation, SQLiteConfig, SQLiteOpenMode}
-import org.sqlite.SQLiteConfig.{JournalMode, LockingMode, SynchronousMode, TransactionMode}
+import lightdb.{LightDB, SortDirection}
+import org.sqlite.Collation
+import rapid._
 
-import java.io.File
-import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.Path
 import java.sql.Connection
 import java.util.regex.Pattern
 
@@ -27,9 +24,9 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      val connectionManager: ConnectionManager,
                                                                      val connectionShared: Boolean,
                                                                      val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
-  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
+  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = Task {
     val c = connectionManager.getConnection
-    if (hasSpatial) {
+    if (hasSpatial.sync()) {
       scribe.info(s"$name has spatial features. Enabling...")
       org.sqlite.Function.create(c, "DISTANCE", new org.sqlite.Function() {
         override def xFunc(): Unit = {
@@ -84,7 +81,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       }
     })
     super.initTransaction()
-  }
+  }.flatten
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 

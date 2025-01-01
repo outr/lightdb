@@ -2,11 +2,12 @@ package lightdb.sql
 
 import lightdb.doc.Document
 import lightdb.sql.connect.ConnectionManager
-import lightdb.transaction.{Transaction, TransactionFeature, TransactionKey}
+import lightdb.transaction.{Transaction, TransactionFeature}
+import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import scala.util.Try
 
 case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
@@ -77,28 +78,32 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     resultSets = rs :: resultSets
   }
 
-  override def commit(): Unit = if (dirty) {
-    // TODO: SingleConnection shares
-    if (batchInsert.get() > 0) {
-      psInsert.executeBatch()
-    }
-    if (batchUpsert.get() > 0) {
-      psUpsert.executeBatch()
-    }
-    dirty = false
-    Try(connectionManager.getConnection(transaction).commit()).failed.foreach { t =>
-      scribe.warn(s"Commit failed: ${t.getMessage}")
-    }
-  }
-
-  override def rollback(): Unit = if (dirty) {
-    dirty = false
-    Try(connectionManager.getConnection(transaction).rollback()).failed.foreach { t =>
-      scribe.warn(s"Rollback failed: ${t.getMessage}")
+  override def commit(): Task[Unit] = Task {
+    if (dirty) {
+      // TODO: SingleConnection shares
+      if (batchInsert.get() > 0) {
+        psInsert.executeBatch()
+      }
+      if (batchUpsert.get() > 0) {
+        psUpsert.executeBatch()
+      }
+      dirty = false
+      Try(connectionManager.getConnection(transaction).commit()).failed.foreach { t =>
+        scribe.warn(s"Commit failed: ${t.getMessage}")
+      }
     }
   }
 
-  override def close(): Unit = {
+  override def rollback(): Task[Unit] = Task {
+    if (dirty) {
+      dirty = false
+      Try(connectionManager.getConnection(transaction).rollback()).failed.foreach { t =>
+        scribe.warn(s"Rollback failed: ${t.getMessage}")
+      }
+    }
+  }
+
+  override def close(): Task[Unit] = Task {
     super.close()
     if (batchInsert.get() > 0) {
       psInsert.executeBatch()

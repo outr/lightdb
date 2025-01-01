@@ -49,7 +49,7 @@
 //      FileUtils.deleteDirectory(dbDir)
 //      dbDir.mkdirs()
 //
-//      DB.init()
+//      db.init
 //      DB.people.transaction { implicit transaction =>
 //        val insertTime = elapsed(insertRecords())
 //        scribe.info(s"Inserted in $insertTime")

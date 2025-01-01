@@ -1,12 +1,13 @@
 package lightdb.doc
 
 import fabric.rw._
+import lightdb._
 import lightdb.collection.Collection
 import lightdb.facet.{FacetConfig, FacetValue}
-import lightdb.filter.FilterBuilder
-import lightdb._
-import lightdb.field.{Field, FieldGetter}
 import lightdb.field.Field._
+import lightdb.field.{Field, FieldGetter}
+import lightdb.filter.FilterBuilder
+import rapid.Task
 
 import scala.language.implicitConversions
 
@@ -19,7 +20,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   def id(value: String = Unique()): Id[Doc] = Id(value)
 
-  def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Unit = {}
+  def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Task[Unit] = Task.unit
 
   type F[V] = Field[Doc, V]
   type I[V] = Indexed[Doc, V]
@@ -30,6 +31,8 @@ trait DocumentModel[Doc <: Document[Doc]] {
   def map2Doc(map: Map[String, Any]): Doc
 
   def fields: List[Field[Doc, _]] = _fields
+
+  def indexedFields: List[Field[Doc, _]] = fields.filter(_.indexed)
 
   def facetFields: List[FF] = fields.collect {
     case ff: FF => ff

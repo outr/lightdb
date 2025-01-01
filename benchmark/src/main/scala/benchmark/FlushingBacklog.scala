@@ -1,6 +1,5 @@
 package benchmark
 
-import cats.effect.IO
 import rapid._
 
 import java.util.concurrent.ConcurrentHashMap

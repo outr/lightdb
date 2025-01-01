@@ -4,7 +4,6 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import io.quickchart.QuickChart
 import org.apache.commons.io.FileUtils
-import perfolation.double2Implicits
 
 import java.io.File
 

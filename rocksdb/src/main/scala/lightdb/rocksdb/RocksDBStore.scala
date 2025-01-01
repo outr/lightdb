@@ -2,15 +2,15 @@ package lightdb.rocksdb
 
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
-import lightdb.aggregate.AggregateQuery
-import lightdb.collection.Collection
 import lightdb._
-import lightdb.field.Field._
+import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.rocksdb.{FlushOptions, Options, RocksDB, RocksIterator}
+import rapid.Task
 
 import java.nio.file.{Files, Path}
 
@@ -26,19 +26,20 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     RocksDB.open(options, directory.toAbsolutePath.toString)
   }
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
+  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val json = doc.json(model.rw)
     db.put(doc._id.bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
+    doc
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = db.keyExists(id.bytes)
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task(db.keyExists(id.bytes))
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Option[Doc] = {
+                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       Option(db.get(value.asInstanceOf[Id[Doc]].bytes)).map(bytes2Doc)
     } else {
@@ -53,33 +54,35 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)
-                        (implicit transaction: Transaction[Doc]): Boolean = {
+                        (implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     db.delete(value.asInstanceOf[Id[Doc]].bytes)
     true
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Int = iterator(db.newIterator()).size
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(iterator(db.newIterator()).size)
 
-  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = iterator(db.newIterator())
+  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream
+    .fromIterator(Task(iterator(db.newIterator())))
     .map(bytes2Doc)
 
-  override def doSearch[V](query: Query[Doc, Model],
-                           conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] =
+  override def doSearch[V](query: Query[Doc, Model, V])
+                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
     throw new UnsupportedOperationException("RocksDBStore does not support searching")
 
   override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
+                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     throw new UnsupportedOperationException("RocksDBStore does not support aggregation")
 
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int =
+  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
     throw new UnsupportedOperationException("RocksDBStore does not support aggregation")
 
-  override def truncate()(implicit transaction: Transaction[Doc]): Int = iterator(db.newIterator(), value = false)
-    .map(db.delete)
-    .size
+  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task {
+    iterator(db.newIterator(), value = false)
+      .map(db.delete)
+      .size
+  }
 
-  override def dispose(): Unit = {
+  override protected def doDispose(): Task[Unit] = Task {
     db.flush(new FlushOptions)
     db.close()
   }

@@ -1,7 +1,7 @@
 package lightdb.doc
 
 import fabric.Json
-import fabric.rw.{Asable, RW}
+import fabric.rw.Asable
 
 trait JsonConversion[Doc <: Document[Doc]] extends DocumentModel[Doc] {
   def convertFromJson(json: Json): Doc = json.as[Doc]

@@ -4,14 +4,14 @@ import com.oath.halodb.{HaloDB, HaloDBOptions}
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
-import lightdb.aggregate.AggregateQuery
-import lightdb.collection.Collection
 import lightdb._
-import lightdb.field.Field._
+import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import rapid.Task
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters._
@@ -38,18 +38,19 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     HaloDB.open(directory.toAbsolutePath.toString, opts)
   }
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
+  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val json = doc.json(model.rw)
     instance.put(id(doc).bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
+    doc
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = get(idField, id).nonEmpty
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(idField, id).map(_.nonEmpty)
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Option[Doc] = {
+  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       Option(instance.get(value.asInstanceOf[Id[Doc]].bytes)).map(bytes2Doc)
     } else {
@@ -67,41 +68,41 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     JsonParser(jsonString)
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Boolean = {
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     instance.delete(value.asInstanceOf[Id[Doc]].bytes)
     true
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Int = instance.size().toInt
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(instance.size().toInt)
 
-  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = instance.newIterator().asScala
-    .map(_.getValue).map(bytes2Doc)
+  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream
+    .fromIterator(Task(instance.newIterator().asScala.map(_.getValue).map(bytes2Doc)))
 
-  override def jsonIterator(implicit transaction: Transaction[Doc]): Iterator[Json] = instance.newIterator().asScala
-    .map(_.getValue).map(bytes2Json)
+  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream
+    .fromIterator(Task(instance.newIterator().asScala.map(_.getValue).map(bytes2Json)))
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] =
-    throw new UnsupportedOperationException("HaloDBStore does not support searching")
+  override def doSearch[V](query: Query[Doc, Model, V])
+                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
+    Task.error(new UnsupportedOperationException("HaloDBStore does not support searching"))
 
   override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
+                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     throw new UnsupportedOperationException("HaloDBStore does not support aggregation")
 
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int =
-    throw new UnsupportedOperationException("HaloDBStore does not support aggregation")
+  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
+    Task.error(new UnsupportedOperationException("HaloDBStore does not support aggregation"))
 
-  override def truncate()(implicit transaction: Transaction[Doc]): Int = {
-    val size = count
+  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task {
+    val size = instance.size().toInt
     if (size == 0) {
       0
     } else {
       instance.newIterator().asScala.foreach(r => instance.delete(r.getKey))
-      size + truncate()
+      size + truncate().sync()
     }
   }
 
-  override def dispose(): Unit = {
+  override protected def doDispose(): Task[Unit] = Task {
     instance.pauseCompaction()
     instance.close()
   }

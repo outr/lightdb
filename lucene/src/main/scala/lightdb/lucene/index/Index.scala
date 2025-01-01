@@ -2,9 +2,9 @@ package lightdb.lucene.index
 
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
-import org.apache.lucene.facet.taxonomy.{TaxonomyReader, TaxonomyWriter}
+import org.apache.lucene.facet.taxonomy.TaxonomyReader
 import org.apache.lucene.facet.taxonomy.directory.{DirectoryTaxonomyReader, DirectoryTaxonomyWriter}
-import org.apache.lucene.index.{IndexWriter, IndexWriterConfig, memory}
+import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.search.{IndexSearcher, SearcherFactory, SearcherManager}
 import org.apache.lucene.store.{BaseDirectory, ByteBuffersDirectory, FSDirectory}

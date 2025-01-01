@@ -1,8 +1,8 @@
 package lightdb.lucene
 
-import org.apache.lucene.search._
 import org.apache.lucene.document._
 import org.apache.lucene.index.StoredFields
+import org.apache.lucene.search._
 
 case class LucenePaginatedIterator(searcher: IndexSearcher,
                                    query: Query,
@@ -33,7 +33,7 @@ case class LucenePaginatedIterator(searcher: IndexSearcher,
     val threshold = if (totalHits == -1) Int.MaxValue else 0
 
     val after = currentDocs.lastOption.map(_.asInstanceOf[FieldDoc]).orNull
-    val collectorManager = new TopFieldCollectorManager(sort, pageSize, after, threshold, false)
+    val collectorManager = new TopFieldCollectorManager(sort, pageSize, after, threshold)
     val topDocs = searcher.search(query, collectorManager)
 
     if (currentPageIndex == 0) totalHits = topDocs.totalHits.value.toInt

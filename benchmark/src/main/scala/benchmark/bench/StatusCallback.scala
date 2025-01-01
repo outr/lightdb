@@ -3,7 +3,7 @@ package benchmark.bench
 import com.sun.management.OperatingSystemMXBean
 
 import java.lang.management.ManagementFactory
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.AtomicInteger
 
 case class StatusCallback(every: Long = 30_000L) {
   private val _progress = new AtomicInteger(0)

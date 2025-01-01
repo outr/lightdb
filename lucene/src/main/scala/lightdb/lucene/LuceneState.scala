@@ -2,9 +2,10 @@ package lightdb.lucene
 
 import lightdb.doc.Document
 import lightdb.lucene.index.Index
-import lightdb.transaction.{Transaction, TransactionFeature}
+import lightdb.transaction.TransactionFeature
 import org.apache.lucene.facet.taxonomy.TaxonomyReader
 import org.apache.lucene.search.IndexSearcher
+import rapid.Task
 
 case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) extends TransactionFeature {
   private var oldIndexSearchers = List.empty[IndexSearcher]
@@ -35,17 +36,17 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) e
 
   def taxonomyReader: TaxonomyReader = _taxonomyReader
 
-  override def commit(): Unit = {
+  override def commit(): Task[Unit] = Task {
     index.commit()
     releaseIndexSearcher()
   }
 
-  override def rollback(): Unit = {
+  override def rollback(): Task[Unit] = Task {
     index.rollback()
     releaseIndexSearcher()
   }
 
-  override def close(): Unit = {
+  override def close(): Task[Unit] = Task {
     commit()
     oldIndexSearchers.foreach(index.releaseIndexSearch)
     oldTaxonomyReaders.foreach(index.releaseTaxonomyReader)

@@ -1,16 +1,14 @@
 package benchmark.bench
 
-import benchmark.bench.impl.{DerbyBench, H2Bench, LightDBAsyncBench, LightDBBench, MongoDBBench, PostgreSQLBench, SQLiteBench}
+import benchmark.bench.impl._
 import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.h2.H2Store
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
-import lightdb.postgresql.PostgreSQLStoreManager
 import lightdb.rocksdb.RocksDBStore
 import lightdb.sql.SQLiteStore
-import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
-import lightdb.store.{MapStore, StoreMode}
+import lightdb.store.MapStore
 import lightdb.store.split.SplitStoreManager
 import org.apache.commons.io.FileUtils
 
