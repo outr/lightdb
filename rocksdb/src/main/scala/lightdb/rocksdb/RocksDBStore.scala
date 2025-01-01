@@ -7,7 +7,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.rocksdb.{FlushOptions, Options, RocksDB, RocksIterator}
 import rapid.Task
