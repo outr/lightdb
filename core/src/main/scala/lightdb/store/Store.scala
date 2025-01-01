@@ -14,6 +14,7 @@ import lightdb.lock.LockManager
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.trigger.CollectionTriggers
+import lightdb.util.Disposable
 import rapid.{Forge, Task}
 import scribe.{rapid => logger}
 
@@ -22,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
-                                                                        model: Model) {
+                                                                        model: Model) extends Disposable {
   protected def id(doc: Doc): Id[Doc] = doc.asInstanceOf[Document[_]]._id.asInstanceOf[Id[Doc]]
   lazy val idField: UniqueIndex[Doc, Id[Doc]] = model._id
 
@@ -130,8 +131,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       list.size
     }
   }
-
-  def dispose(): Task[Unit]
 }
 
 object Store {

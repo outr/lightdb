@@ -18,5 +18,5 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     new HikariDataSource(hc)
   }
 
-  override def dispose(): Task[Unit] = Task(dataSource.close())
+  override protected def doDispose(): Task[Unit] = Task(dataSource.close())
 }

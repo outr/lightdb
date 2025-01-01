@@ -18,6 +18,6 @@ case class DBCPConnectionManager(config: SQLConfig) extends DataSourceConnection
     ds
   }
 
-  override def dispose(): Task[Unit] = Task(dataSource.close())
+  override protected def doDispose(): Task[Unit] = Task(dataSource.close())
 }
 

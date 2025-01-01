@@ -19,12 +19,12 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "1.2.2"
+libraryDependencies += "com.outr" %% "lightdb-all" % "2.0.0-SNAPSHOT"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "1.2.2"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "2.0.0-SNAPSHOT"
 ```
 
 ## Videos
@@ -33,6 +33,10 @@ Watch this [Java User Group demonstration of LightDB](https://www.youtube.com/li
 ## Getting Started
 
 This guide will walk you through setting up and using **LightDB**, a high-performance computational database. We'll use a sample application to explore its key features.
+
+*NOTE*: This project uses Rapid (https://github.com/outr/rapid) for effects. It's somewhat similar to cats-effect, but
+with a focus on virtual threads and simplicity. In a normal project, you likely wouldn't be using `.sync()` to invoke
+each task, but for the purposes of this documentation, this is used to make the code execute blocking.
 
 ---
 
@@ -52,7 +56,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "1.2.2"
+libraryDependencies += "com.outr" %% "lightdb-all" % "2.0.0-SNAPSHOT"
 ```
 
 ---
@@ -108,7 +112,7 @@ import lightdb.upgrade._
 import java.nio.file.Path
 
 class DB extends LightDB {
-  lazy val directory: Option[Path] = Some(Path.of(s"db/example"))
+  lazy val directory: Option[Path] = Some(Path.of(s"docs/db/example"))
    
   lazy val people: Collection[Person, Person.type] = collection(Person)
 
@@ -128,9 +132,8 @@ Instantiate and initialize the database:
 
 ```scala
 val db = new DB
-// db: DB = repl.MdocSession$MdocApp$DB@6e580455
-db.init()
-// res0: Boolean = true
+// db: DB = repl.MdocSession$MdocApp$DB@370c1f13
+db.init.sync()
 ```
 
 ### Step 2: Insert Data
@@ -145,18 +148,18 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = Id(value = "RgelUWnuRJLktKoZMOwivwanvRhRWSoT")
+//   _id = Id(value = "jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2")
 // )
 db.people.transaction { implicit transaction =>
   db.people.insert(adam)
-}
+}.sync()
 // res1: Person = Person(
 //   name = "Adam",
 //   age = 21,
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = Id(value = "RgelUWnuRJLktKoZMOwivwanvRhRWSoT")
+//   _id = Id(value = "jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2")
 // )
 ```
 
@@ -166,10 +169,11 @@ Retrieve records using filters:
 
 ```scala
 db.people.transaction { implicit transaction =>
-  val peopleIn20s = db.people.query.filter(_.age BETWEEN 20 -> 29).toList
-  println(peopleIn20s)
-}
-// List(Person(Adam,21,None,Set(),List(),Id(V4HuAlFgFWP0bARChPFtCx5eqMCvtX7l)), Person(Adam,21,None,Set(),List(),Id(xxVmia6PxlkFL1nWWDNFKiO2KccbDrhv)), Person(Adam,21,None,Set(),List(),Id(eaQIHd0ZiDHjxWa9VXzhybMHWtH80C47)), Person(Adam,21,None,Set(),List(),Id(Mg3nibsB1wstqK1xEIiGNeU4Q5iw7Kfc)), Person(Adam,21,None,Set(),List(),Id(bKaLE07r8AzMoAjBotiP0dDfo9n96I1q)), Person(Adam,21,None,Set(),List(),Id(Kq2SaCpZ7spHyMnYT2IvmpbynonZEBR2)), Person(Adam,21,None,Set(),List(),Id(lWJ5yg8AquThmEQ5yoRVOTrVzpfAP4II)), Person(Adam,21,None,Set(),List(),Id(mF9hZfb8wM4meAcQeUKfAdZ75dELpE81)), Person(Adam,21,None,Set(),List(),Id(KX7pnHxh7qet74BmcULK6XK9lkcxnTCc)), Person(Adam,21,None,Set(),List(),Id(4dsT7zjp8OTm2i6RoKVCrYlsjXKvtXHe)), Person(Adam,21,None,Set(),List(),Id(BzUQdoR76YpFIwxdGpG3kR6WMLvNZxPr)), Person(Adam,21,None,Set(),List(),Id(RgelUWnuRJLktKoZMOwivwanvRhRWSoT)))
+  db.people.query.filter(_.age BETWEEN 20 -> 29).toList.map { peopleIn20s =>
+    println(s"People in their 20s: $peopleIn20s")
+  }
+}.sync()
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)))
 ```
 
 ---
@@ -199,22 +203,25 @@ db.people.transaction { implicit transaction =>
 
 ```scala
 db.people.transaction { implicit transaction =>
-  val results = db.people.query
+  db.people.query
     .aggregate(p => List(p.age.min, p.age.max, p.age.avg, p.age.sum))
     .toList
-  println(results)
-}
-// List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 252},repl.MdocSession$MdocApp$Person$@8caf39))
+    .map { results =>
+      println(s"Results: $results")
+    }
+}.sync()
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 21},repl.MdocSession$MdocApp$Person$@7b978e28))
 ```
 
 ### Grouping
 
 ```scala
 db.people.transaction { implicit transaction =>
-  val grouped = db.people.query.grouped(_.age).toList
-  println(grouped)
-}
-// List((21,List(Person(Adam,21,None,Set(),List(),Id(V4HuAlFgFWP0bARChPFtCx5eqMCvtX7l)), Person(Adam,21,None,Set(),List(),Id(xxVmia6PxlkFL1nWWDNFKiO2KccbDrhv)), Person(Adam,21,None,Set(),List(),Id(eaQIHd0ZiDHjxWa9VXzhybMHWtH80C47)), Person(Adam,21,None,Set(),List(),Id(Mg3nibsB1wstqK1xEIiGNeU4Q5iw7Kfc)), Person(Adam,21,None,Set(),List(),Id(bKaLE07r8AzMoAjBotiP0dDfo9n96I1q)), Person(Adam,21,None,Set(),List(),Id(Kq2SaCpZ7spHyMnYT2IvmpbynonZEBR2)), Person(Adam,21,None,Set(),List(),Id(lWJ5yg8AquThmEQ5yoRVOTrVzpfAP4II)), Person(Adam,21,None,Set(),List(),Id(mF9hZfb8wM4meAcQeUKfAdZ75dELpE81)), Person(Adam,21,None,Set(),List(),Id(KX7pnHxh7qet74BmcULK6XK9lkcxnTCc)), Person(Adam,21,None,Set(),List(),Id(4dsT7zjp8OTm2i6RoKVCrYlsjXKvtXHe)), Person(Adam,21,None,Set(),List(),Id(BzUQdoR76YpFIwxdGpG3kR6WMLvNZxPr)), Person(Adam,21,None,Set(),List(),Id(RgelUWnuRJLktKoZMOwivwanvRhRWSoT)))))
+  db.people.query.grouped(_.age).toList.map { grouped =>
+    println(s"Grouped: $grouped")
+  }
+}.sync()
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)))))
 ```
 
 ---
@@ -227,15 +234,15 @@ Backup your database:
 import lightdb.backup._
 import java.io.File
 
-DatabaseBackup.archive(db, new File("backup.zip"))
-// res5: Int = 13
+DatabaseBackup.archive(db, new File("backup.zip")).sync()
+// res5: Int = 2
 ```
 
 Restore from a backup:
 
 ```scala
-DatabaseRestore.archive(db, new File("backup.zip"))
-// res6: Int = 13
+DatabaseRestore.archive(db, new File("backup.zip")).sync()
+// res6: Int = 2
 ```
 
 ---
@@ -245,7 +252,7 @@ DatabaseRestore.archive(db, new File("backup.zip"))
 Dispose of the database when done:
 
 ```scala
-db.dispose()
+db.dispose().sync()
 ```
 
 ---

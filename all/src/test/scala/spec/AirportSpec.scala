@@ -110,7 +110,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     // TODO: Test ValueStore
     // TODO: the other stuff
     "dispose" in {
-      DB.dispose().succeed
+      DB.dispose.succeed
     }
   }
 

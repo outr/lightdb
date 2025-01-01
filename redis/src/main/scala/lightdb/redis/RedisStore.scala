@@ -79,5 +79,5 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     size
   }
 
-  override def dispose(): Task[Unit] = Task(pool.close())
+  override protected def doDispose(): Task[Unit] = Task(pool.close())
 }

@@ -141,7 +141,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
       }
     }
     "dispose the database" in {
-      db.dispose().succeed
+      db.dispose.succeed
     }
   }
 

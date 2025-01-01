@@ -10,13 +10,13 @@ import lightdb.field.Field._
 import lightdb.lock.LockManager
 import lightdb.store.{Conversion, Store}
 import lightdb.transaction.Transaction
-import lightdb.util.Initializable
+import lightdb.util.{Disposable, Initializable}
 import rapid._
 import scribe.{rapid => logger}
 
 case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,
-                                                                         store: Store[Doc, Model]) extends Initializable { collection =>
+                                                                         store: Store[Doc, Model]) extends Initializable with Disposable { collection =>
   def lock: LockManager[Id[Doc], Doc] = store.lock
 
   def trigger: store.trigger.type = store.trigger
@@ -204,9 +204,9 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     trigger.truncate().flatMap(_ => store.truncate())
   }
 
-  def dispose(): Task[Unit] = transaction.releaseAll().flatMap { transactions =>
+  override protected def doDispose(): Task[Unit] = transaction.releaseAll().flatMap { transactions =>
     logger.warn(s"Released $transactions active transactions").when(transactions > 0)
-  }.guarantee(trigger.dispose().flatMap(_ => store.dispose()))
+  }.guarantee(trigger.dispose().flatMap(_ => store.dispose))
 }
 
 object Collection {

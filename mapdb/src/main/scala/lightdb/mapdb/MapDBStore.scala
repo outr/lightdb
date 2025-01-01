@@ -79,7 +79,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     size
   }
 
-  override def dispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = Task {
     db.commit()
     db.close()
   }

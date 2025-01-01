@@ -101,7 +101,7 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
       storage.stream.evalMap(searching.insert).drain
     }
 
-  override def dispose(): Task[Unit] = storage.dispose().and(searching.dispose()).unit
+  override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).unit
 }
 
 object SplitStore {

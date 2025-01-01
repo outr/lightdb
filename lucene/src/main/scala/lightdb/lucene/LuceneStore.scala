@@ -543,7 +543,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     _ <- Task(index.indexWriter.deleteAll())
   } yield count
 
-  override def dispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = Task {
     index.dispose()
   }
 }
