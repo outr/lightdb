@@ -95,12 +95,11 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
     reIndexInternal().map(_ => true)
   }
 
-  private def reIndexInternal()(implicit transaction: Transaction[Doc]): Task[Unit] = {
-    // TODO: Process concurrently
-    searching.truncate().flatMap { _ =>
+  private def reIndexInternal()(implicit transaction: Transaction[Doc]): Task[Unit] = searching
+    .truncate()
+    .flatMap { _ =>
       storage.stream.evalMap(searching.insert).drain
     }
-  }
 
   override def dispose(): Task[Unit] = storage.dispose().and(searching.dispose()).unit
 }
