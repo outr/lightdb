@@ -63,7 +63,7 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     getInstance.hgetAll(name).values().iterator().asScala.map(fromString)
   })
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+  override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
     throw new UnsupportedOperationException("Redis does not support searching")
 

@@ -15,27 +15,29 @@ import lightdb.store.{Conversion, Store}
 import lightdb.transaction.Transaction
 import rapid.{Forge, Grouped, Task}
 
-case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                                    store: Store[Doc, Model],
-                                                                    filter: Option[Filter[Doc]] = None,
-                                                                    sort: List[Sort] = Nil,
-                                                                    offset: Int = 0,
-                                                                    limit: Option[Int] = None,
-                                                                    countTotal: Boolean = false,
-                                                                    scoreDocs: Boolean = false,
-                                                                    minDocScore: Option[Double] = None,
-                                                                    facets: List[FacetQuery[Doc]] = Nil) {
-  query =>
-  def scored: Query[Doc, Model] = copy(scoreDocs = true)
+case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Model,
+                                                                       store: Store[Doc, Model],
+                                                                       conversion: Conversion[Doc, V],
+                                                                       filter: Option[Filter[Doc]] = None,
+                                                                       sort: List[Sort] = Nil,
+                                                                       offset: Int = 0,
+                                                                       limit: Option[Int] = None,
+                                                                       countTotal: Boolean = false,
+                                                                       scoreDocs: Boolean = false,
+                                                                       minDocScore: Option[Double] = None,
+                                                                       facets: List[FacetQuery[Doc]] = Nil) { query =>
+  type Q = Query[Doc, Model, V]
 
-  def minDocScore(min: Double): Query[Doc, Model] = copy(
+  def scored: Q = copy(scoreDocs = true)
+
+  def minDocScore(min: Double): Q = copy(
     scoreDocs = true,
     minDocScore = Some(min)
   )
 
-  def clearFilters: Query[Doc, Model] = copy(filter = None)
+  def clearFilters: Q = copy(filter = None)
 
-  def filter(f: Model => Filter[Doc]): Query[Doc, Model] = {
+  def filter(f: Model => Filter[Doc]): Q = {
     val filter = f(model)
     val combined = this.filter match {
       case Some(current) => current && filter
@@ -47,7 +49,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
   def facet(f: Model => FacetField[Doc],
             path: List[String] = Nil,
             childrenLimit: Option[Int] = Some(10),
-            dimsLimit: Option[Int] = Some(10)): Query[Doc, Model] = {
+            dimsLimit: Option[Int] = Some(10)): Q = {
     val facetField = f(model)
     val facetQuery = FacetQuery(facetField, path, childrenLimit, dimsLimit)
     copy(facets = facetQuery :: facets)
@@ -55,107 +57,96 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
 
   def facets(f: Model => List[FacetField[Doc]],
              childrenLimit: Option[Int] = Some(10),
-             dimsLimit: Option[Int] = Some(10)): Query[Doc, Model] = {
+             dimsLimit: Option[Int] = Some(10)): Q = {
     val facetFields = f(model)
     val facetQueries = facetFields.map(ff => FacetQuery(ff, Nil, childrenLimit, dimsLimit))
     copy(facets = facets ::: facetQueries)
   }
 
-  def clearSort: Query[Doc, Model] = copy(sort = Nil)
+  def clearSort: Q = copy(sort = Nil)
 
-  def sort(sort: Sort*): Query[Doc, Model] = copy(sort = this.sort ::: sort.toList)
+  def sort(sort: Sort*): Q = copy(sort = this.sort ::: sort.toList)
 
-  def offset(offset: Int): Query[Doc, Model] = copy(offset = offset)
+  def offset(offset: Int): Q = copy(offset = offset)
 
-  def limit(limit: Int): Query[Doc, Model] = copy(limit = Some(limit))
+  def limit(limit: Int): Q = copy(limit = Some(limit))
 
-  def clearLimit: Query[Doc, Model] = copy(limit = None)
+  def clearLimit: Q = copy(limit = None)
 
-  def countTotal(b: Boolean): Query[Doc, Model] = copy(countTotal = b)
+  def countTotal(b: Boolean): Q = copy(countTotal = b)
 
-  object search {
-    def apply[V](conversion: Conversion[Doc, V])
-                (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
-      val storeMode = store.storeMode
-      if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
-        val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
-        if (storeMode.isIndexes) {
-          if (notIndexed.nonEmpty) {
-            throw NonIndexedFieldException(query, notIndexed)
-          }
-        } else {
-          if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
-            scribe.warn(s"Inefficient query filtering on non-indexed field(s): ${notIndexed.map(_.name).mkString(", ")}")
-          }
+  def conversion[T](conversion: Conversion[Doc, T]): Query[Doc, Model, T] = {
+    var q: Query[Doc, Model, T] = copy[Doc, Model, T](conversion = conversion)
+    conversion match {
+      case Conversion.Distance(field, from, sort, radius) =>
+        if (sort) {
+          q = q.clearSort.sort(Sort.ByDistance(field, from))
+        }
+        radius.foreach { r =>
+          q = q.filter(_ => field.distance(from, r))
+        }
+      case _ => // Ignore others
+    }
+    q
+  }
+
+  def docs: Query[Doc, Model, Doc] = conversion(Conversion.Doc())
+  def value[F](f: Model => Field[Doc, F]): Query[Doc, Model, F] = conversion(Conversion.Value(f(model)))
+  def id: Query[Doc, Model, Id[Doc]] = value(_._id)
+  def json(f: Model => List[Field[Doc, _]] = _ => model.fields): Query[Doc, Model, Json] =
+    conversion(Conversion.Json(f(model)))
+  def converted[T](f: Doc => T): Query[Doc, Model, T] = conversion(Conversion.Converted(f))
+  def materialized(f: Model => List[Field[Doc, _]] = _ => model.indexedFields): Query[Doc, Model, MaterializedIndex[Doc, Model]] =
+    conversion(Conversion.Materialized(f(model)))
+  def indexes: Query[Doc, Model, MaterializedIndex[Doc, Model]] = materialized()
+  def docAndIndexes: Query[Doc, Model, MaterializedAndDoc[Doc, Model]] = conversion(Conversion.DocAndIndexes())
+  def distance[G <: Geo](f: Model => Field[Doc, List[G]],
+                         from: Geo.Point,
+                         sort: Boolean = true,
+                         radius: Option[Distance] = None): Query[Doc, Model, DistanceAndDoc[Doc]] =
+    conversion(Conversion.Distance(
+      field = f(model),
+      from = from,
+      sort = sort,
+      radius = radius
+    ))
+
+  def search(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
+    val storeMode = store.storeMode
+    if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
+      val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
+      if (storeMode.isIndexes) {
+        if (notIndexed.nonEmpty) {
+          throw NonIndexedFieldException(query, notIndexed)
+        }
+      } else {
+        if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
+          scribe.warn(s"Inefficient query filtering on non-indexed field(s): ${notIndexed.map(_.name).mkString(", ")}")
         }
       }
-      store.doSearch(
-        query = query,
-        conversion = conversion
-      )
     }
-
-    def docs(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, Doc]] = apply(Conversion.Doc())
-
-    def value[F](f: Model => Field[Doc, F])
-                (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, F]] =
-      apply(Conversion.Value(f(model)))
-
-    def id(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, Id[Doc]]] =
-      value(m => m._id)
-
-    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, Json]] =
-      apply(Conversion.Json(f(model)))
-
-    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, T]] =
-      apply(Conversion.Converted(f))
-
-    def materialized(f: Model => List[Field[Doc, _]])
-                    (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, MaterializedIndex[Doc, Model]]] = {
-      val fields = f(model)
-      apply(Conversion.Materialized(fields))
-    }
-
-    def indexes()(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, MaterializedIndex[Doc, Model]]] = {
-      val fields = model.fields.filter(_.indexed)
-      apply(Conversion.Materialized(fields))
-    }
-
-    def docAndIndexes()(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, MaterializedAndDoc[Doc, Model]]] = {
-      apply(Conversion.DocAndIndexes())
-    }
-
-    def distance[G <: Geo](f: Model => Field[Doc, List[G]],
-                           from: Geo.Point,
-                           sort: Boolean = true,
-                           radius: Option[Distance] = None)
-                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, DistanceAndDoc[Doc]]] = {
-      val field = f(model)
-      var q = Query.this
-      if (sort) {
-        q = q.clearSort.sort(Sort.ByDistance(field, from))
-      }
-      radius.foreach { r =>
-        q = q.filter(_ => field.distance(from, r))
-      }
-      q.distanceSearch(field, from, sort, radius)
-    }
+    store.doSearch(this)
   }
+
+  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
+
+  def streamScored(implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] =
+    rapid.Stream.force(search.map(_.streamWithScore))
 
   /**
    * Processes through each result record from the query modifying the data in the database.
    *
    * @param establishLock whether to establish an id lock to avoid concurrent modification (defaults to true)
-   * @param deleteOnNone whether to delete the record if the function returns None (defaults to true)
-   * @param safeModify whether to use safe modification. This results in loading the same object twice, but should never
-   *                   risk concurrent modification occurring. (defaults to true)
-   * @param f the processing function for records
+   * @param deleteOnNone  whether to delete the record if the function returns None (defaults to true)
+   * @param safeModify    whether to use safe modification. This results in loading the same object twice, but should never
+   *                      risk concurrent modification occurring. (defaults to true)
+   * @param f             the processing function for records
    */
   def process(establishLock: Boolean = true,
               deleteOnNone: Boolean = true,
               safeModify: Boolean = true)
              (f: Forge[Doc, Option[Doc]])
-             (implicit transaction: Transaction[Doc]): Unit = rapid.Stream.force(search.docs.map(_.stream))
+             (implicit transaction: Transaction[Doc]): Unit = docs.stream
     .evalMap { doc =>
       if (safeModify) {
         store.modify(doc._id, establishLock, deleteOnNone) {
@@ -173,110 +164,13 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
     }
     .drain
 
-  object stream {
-    object scored {
-      def apply[V](conversion: Conversion[Doc, V])
-                  (implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] = {
-        val task = search(conversion)
-          .map(_.streamWithScore)
-        rapid.Stream.force(task)
-      }
+  def toList(implicit transaction: Transaction[Doc]): Task[List[V]] = stream.toList
 
-      def docs(implicit transaction: Transaction[Doc]): rapid.Stream[(Doc, Double)] = apply(Conversion.Doc())
+  def first(implicit transaction: Transaction[Doc]): Task[V] = limit(1).stream.first
 
-      def value[F](f: Model => Field[Doc, F])
-                  (implicit transaction: Transaction[Doc]): rapid.Stream[(F, Double)] =
-        apply(Conversion.Value(f(model)))
+  def firstOption(implicit transaction: Transaction[Doc]): Task[Option[V]] = limit(1).stream.firstOption
 
-      def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): rapid.Stream[(Id[Doc], Double)] =
-        value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
-
-      def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): rapid.Stream[(Json, Double)] =
-        apply(Conversion.Json(f(model)))
-
-      def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): rapid.Stream[(T, Double)] =
-        apply(Conversion.Converted(f))
-
-      def materialized(f: Model => List[Field[Doc, _]])
-                      (implicit transaction: Transaction[Doc]): rapid.Stream[(MaterializedIndex[Doc, Model], Double)] =
-        apply(Conversion.Materialized[Doc, Model](f(model)))
-
-      def indexes()(implicit transaction: Transaction[Doc]): rapid.Stream[(MaterializedIndex[Doc, Model], Double)] = {
-        val fields = model.fields.filter(_.indexed)
-        apply(Conversion.Materialized[Doc, Model](fields))
-      }
-
-      def docAndIndexes()(implicit transaction: Transaction[Doc]): rapid.Stream[(MaterializedAndDoc[Doc, Model], Double)] = {
-        apply(Conversion.DocAndIndexes[Doc, Model]())
-      }
-
-      def distance[G <: Geo](f: Model => Field[Doc, List[G]],
-                             from: Geo.Point,
-                             sort: Boolean = true,
-                             radius: Option[Distance] = None)
-                            (implicit transaction: Transaction[Doc]): rapid.Stream[(DistanceAndDoc[Doc], Double)] =
-        apply(Conversion.Distance(f(model), from, sort, radius))
-    }
-
-    def apply[V](conversion: Conversion[Doc, V])
-                (implicit transaction: Transaction[Doc]): rapid.Stream[V] = {
-      val task = search(conversion)
-        .map(_.stream)
-      rapid.Stream.force(task)
-    }
-
-    def docs(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = apply(Conversion.Doc())
-
-    def value[F](f: Model => Field[Doc, F])
-                (implicit transaction: Transaction[Doc]): rapid.Stream[F] =
-      apply(Conversion.Value(f(model)))
-
-    def id(implicit transaction: Transaction[Doc], ev: Model <:< DocumentModel[_]): rapid.Stream[Id[Doc]] =
-      value(m => ev(m)._id.asInstanceOf[UniqueIndex[Doc, Id[Doc]]])
-
-    def json(f: Model => List[Field[Doc, _]])(implicit transaction: Transaction[Doc]): rapid.Stream[Json] =
-      apply(Conversion.Json(f(model)))
-
-    def converted[T](f: Doc => T)(implicit transaction: Transaction[Doc]): rapid.Stream[T] =
-      apply(Conversion.Converted(f))
-
-    def materialized(f: Model => List[Field[Doc, _]])
-                    (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedIndex[Doc, Model]] =
-      apply(Conversion.Materialized[Doc, Model](f(model)))
-
-    def indexes()(implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedIndex[Doc, Model]] = {
-      val fields = model.fields.filter(_.indexed)
-      apply(Conversion.Materialized[Doc, Model](fields))
-    }
-
-    def docAndIndexes()(implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAndDoc[Doc, Model]] = {
-      apply(Conversion.DocAndIndexes[Doc, Model]())
-    }
-
-    def distance[G <: Geo](f: Model => Field[Doc, List[G]],
-                           from: Geo.Point,
-                           sort: Boolean = true,
-                           radius: Option[Distance] = None)
-                          (implicit transaction: Transaction[Doc]): rapid.Stream[DistanceAndDoc[Doc]] = rapid.Stream
-      .force(search.distance(f, from, sort, radius).map(_.stream))
-  }
-
-  def toList(implicit transaction: Transaction[Doc]): Task[List[Doc]] = search.docs.flatMap(_.list)
-
-  def first(implicit transaction: Transaction[Doc]): Task[Doc] = search.docs.flatMap(_.stream.first)
-
-  def firstOption(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = search.docs.flatMap(_.stream.firstOption)
-
-  def count(implicit transaction: Transaction[Doc]): Task[Int] = copy(limit = Some(1), countTotal = true)
-    .search.docs.map(_.total.get)
-
-  protected def distanceSearch[G <: Geo](field: Field[Doc, List[G]],
-                                         from: Geo.Point,
-                                         sort: Boolean,
-                                         radius: Option[Distance])
-                                        (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, DistanceAndDoc[Doc]]] = {
-    search(Conversion.Distance(field, from, sort, radius))
-  }
+  def count(implicit transaction: Transaction[Doc]): Task[Int] = limit(1).countTotal(true).search.map(_.total.get)
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
     AggregateQuery(this, f(model))
@@ -286,10 +180,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model
                 (implicit transaction: Transaction[Doc]): rapid.Stream[Grouped[F, Doc]] = {
     val field = f(model)
     val state = new IndexingState
-    sort(Sort.ByField(field, direction))
-      .stream
-      .docs
-      .groupSequential(doc => field.get(doc, field, state))
+    sort(Sort.ByField(field, direction)).docs.stream.groupSequential(doc => field.get(doc, field, state))
   }
 }
 

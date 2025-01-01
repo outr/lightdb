@@ -81,7 +81,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream
     .fromIterator(Task(instance.newIterator().asScala.map(_.getValue).map(bytes2Json)))
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+  override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
     Task.error(new UnsupportedOperationException("HaloDBStore does not support searching"))
 

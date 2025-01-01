@@ -223,8 +223,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
     val filter = Filter.Equals(field, value)
-    val query = Query[Doc, Model](model, this, filter = Some(filter), limit = Some(1))
-    doSearch[Doc](query, Conversion.Doc()).flatMap(_.list).map(_.headOption)
+    val query = Query[Doc, Model, Doc](model, this, Conversion.Doc(), filter = Some(filter), limit = Some(1))
+    doSearch[Doc](query).flatMap(_.list).map(_.headOption)
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
@@ -237,9 +237,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     Task(state.indexSearcher.count(new MatchAllDocsQuery))
 
   override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
-    rapid.Stream.force(doSearch[Doc](Query[Doc, Model](model, this), Conversion.Doc()).map(_.stream))
+    rapid.Stream.force(doSearch[Doc](Query[Doc, Model, Doc](model, this, Conversion.Doc())).map(_.stream))
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+  override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
     val q: LuceneQuery = filter2Lucene(query.filter)
     val sortFields = query.sort match {
@@ -366,7 +366,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       }
     }
     val stream = rapid.Stream.fromIterator[(V, Double)](Task {
-      conversion match {
+      query.conversion match {
         case Conversion.Value(field) => scoreDocs.iterator.map { scoreDoc =>
           value(scoreDoc, field) -> scoreDoc.score.toDouble
         }

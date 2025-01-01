@@ -342,10 +342,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart(field.name)
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+  override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
     var extraFields = List.empty[SQLPart]
-    val fields = conversion match {
+    val fields = query.conversion match {
       case Conversion.Value(field) => List(field)
       case Conversion.Doc() | Conversion.Converted(_) => this.fields
       case Conversion.Materialized(fields) => fields
@@ -385,7 +385,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       None
     }
     val stream = rapid.Stream.fromIterator[(V, Double)](Task {
-      val iterator = rs2Iterator(rs, conversion)
+      val iterator = rs2Iterator(rs, query.conversion)
       val ps = rs.getStatement.asInstanceOf[PreparedStatement]
       ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
     })

@@ -8,7 +8,7 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.field.Field._
 import lightdb.lock.LockManager
-import lightdb.store.Store
+import lightdb.store.{Conversion, Store}
 import lightdb.transaction.Transaction
 import lightdb.util.Initializable
 import rapid._
@@ -198,7 +198,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = store.stream
 
-  lazy val query: Query[Doc, Model] = Query(model, store)
+  lazy val query: Query[Doc, Model, Doc] = Query(model, store, Conversion.Doc())
 
   def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = {
     trigger.truncate().flatMap(_ => store.truncate())

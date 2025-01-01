@@ -63,9 +63,9 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
 
   override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = storage.jsonStream
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+  override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
-    searching.doSearch[V](query, conversion)
+    searching.doSearch[V](query)
 
   override def aggregate(query: AggregateQuery[Doc, Model])
                         (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
