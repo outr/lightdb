@@ -32,6 +32,8 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   def fields: List[Field[Doc, _]] = _fields
 
+  def indexedFields: List[Field[Doc, _]] = fields.filter(_.indexed)
+
   def facetFields: List[FF] = fields.collect {
     case ff: FF => ff
   }

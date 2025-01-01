@@ -63,7 +63,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
       .map(fromString)
   })
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+  override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
     throw new UnsupportedOperationException("MapDBStore does not support searching")
 

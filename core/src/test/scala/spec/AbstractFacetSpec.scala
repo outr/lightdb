@@ -45,8 +45,8 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.entries.transaction { implicit transaction =>
         db.entries.query
           .facet(_.authorsFacet)
-          .search
           .docs
+          .search
           .map { results =>
             val authorsResult = results.facet(_.authorsFacet)
             authorsResult.childCount should be(6)
@@ -60,8 +60,8 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.entries.transaction { implicit transaction =>
         db.entries.query
           .facet(_.publishDateFacet)
-          .search
           .docs
+          .search
           .map { results =>
             val publishDateResult = results.facet(_.publishDateFacet)
             publishDateResult.values.map(_.value) should be(List("2010", "2012", "1999"))
@@ -76,8 +76,8 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
         db.entries.query
           .filter(_.keywords has "support@one.com")
           .facet(_.keywordsFacet)
-          .search
           .docs
+          .search
           .map { results =>
             val keywordsResult = results.facet(_.keywordsFacet)
             keywordsResult.childCount should be(2)
@@ -99,7 +99,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .facet(_.authorsFacet)
           .facet(_.publishDateFacet, path = List("2010"))
           .search
-          .docs
           .map { results =>
             val authorResult = results.facet(_.authorsFacet)
             authorResult.childCount should be(3)
@@ -121,7 +120,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .facet(_.publishDateFacet)
           .filter(_.builder.mustNot(_.publishDateFacet.drillDown("2010")))
           .search
-          .docs
           .map { results =>
             val authorResult = results.facet(_.authorsFacet)
             authorResult.childCount should be(5)
@@ -143,7 +141,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .facet(_.publishDateFacet, path = List("2010", "10"))
           .filter(_.publishDateFacet.drillDown("2010", "10"))
           .search
-          .docs
           .map { results =>
             val authorResult = results.facet(_.authorsFacet)
             authorResult.childCount should be(3)
@@ -165,7 +162,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .facet(_.publishDateFacet, path = List("2010", "10", "20"))
           .filter(_.publishDateFacet.drillDown("2010", "10", "20"))
           .search
-          .docs
           .map { results =>
             val authorResult = results.facet(_.authorsFacet)
             authorResult.childCount should be(1)
@@ -186,7 +182,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .facet(_.publishDateFacet, path = List("1999"))
           .filter(_.publishDateFacet.drillDown("1999").onlyThisLevel)
           .search
-          .docs
           .map { results =>
             val authorResult = results.facet(_.authorsFacet)
             authorResult.childCount should be(1)
@@ -205,7 +200,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
         db.entries.query
           .filter(_.keywordsFacet.drillDown("support@two.com"))
           .search
-          .docs
           .flatMap { results =>
             results.list.map(_.map(_.name).toSet should be(Set("One", "Three")))
           }
@@ -219,7 +213,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
             .should(_.keywordsFacet.drillDown("support"))
           )
           .stream
-          .docs
           .toList
           .map { list =>
             list.map(_.name).toSet should be(Set("Four", "Cinco"))
@@ -236,7 +229,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
         db.entries.query
           .filter(_.keywordsFacet.drillDown("support@two.com"))
           .stream
-          .docs
           .toList
           .map { results =>
             results.map(_.name).toSet should be(Set("Three"))
@@ -250,7 +242,6 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .facet(_.publishDateFacet)
           .filter(_.publishDateFacet.drillDown().onlyThisLevel)
           .search
-          .docs
           .map { results =>
             val authorResult = results.facet(_.authorsFacet)
             authorResult.totalCount should be(1)
@@ -270,7 +261,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "query all documents verifying deletion of Four" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query.facet(_.authorsFacet).search.docs.map { results =>
+        db.entries.query.facet(_.authorsFacet).search.map { results =>
           results.getFacet(_.publishDateFacet) should be(None)
           val authorResult = results.facet(_.authorsFacet)
           authorResult.values.map(_.value) should be(List("Bob", "Lisa", "James", "Frank", "George"))

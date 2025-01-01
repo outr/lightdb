@@ -65,7 +65,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = stream.map(_.json(model.rw))
 
-  def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
+  def doSearch[V](query: Query[Doc, Model, V])
                  (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]]
 
   def aggregate(query: AggregateQuery[Doc, Model])

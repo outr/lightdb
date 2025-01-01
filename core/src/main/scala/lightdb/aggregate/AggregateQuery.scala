@@ -6,7 +6,7 @@ import lightdb.transaction.Transaction
 import lightdb.{Query, SortDirection}
 import rapid.Task
 
-case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model],
+case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model, _],
                                                                              functions: List[AggregateFunction[_, _, Doc]],
                                                                              filter: Option[AggregateFilter[Doc]] = None,
                                                                              sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {

@@ -55,8 +55,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
     rapid.Stream.fromIterator(Task(map.valuesIterator))
 
-  override def doSearch[V](query: Query[Doc, Model],
-                           conversion: Conversion[Doc, V])
+  override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = throw new UnsupportedOperationException("MapStore does not support searching")
 
   override def aggregate(query: AggregateQuery[Doc, Model])

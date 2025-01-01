@@ -95,7 +95,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "stream the ids in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.stream.id.toList.map(_.toSet).map { ids =>
+        db.people.query.id.stream.toList.map(_.toSet).map { ids =>
           ids should be(names.map(_._id).toSet)
         }
       }
@@ -134,7 +134,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "search by age range" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.filter(_.age BETWEEN 19 -> 22).stream.value(_._id).toList.map { ids =>
+        db.people.query.filter(_.age BETWEEN 19 -> 22).value(_._id).stream.toList.map { ids =>
           ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
         }
       }
@@ -148,7 +148,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "sort by age" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.sort(Sort.ByField(Person.age).descending).stream.docs.toList.map { people =>
+        db.people.query.sort(Sort.ByField(Person.age).descending).toList.map { people =>
           people.map(_.name).take(3) should be(List("Ruth", "Zoey", "Quintin"))
         }
       }
@@ -246,7 +246,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             .minShould(0)
             .should(_.search.words("nica 13", matchEndsWith = true), boost = Some(2.0))
             .should(_.age <=> (10, 15))
-          ).search.docs.flatMap { results =>
+          ).docs.search.flatMap { results =>
             for {
               people <- results.list
               scores <- results.scores
@@ -302,7 +302,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "query with indexes" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).search.indexes().flatMap(_.list).map { results =>
+        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).indexes.search.flatMap(_.list).map { results =>
           results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
           results.map(_(_.doc).name).toSet should be(Set("Allan", "Brenda", "Charlie"))
         }
@@ -310,7 +310,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "query with doc and indexes" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).stream.docAndIndexes().toList.map { results =>
+        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).docAndIndexes.stream.toList.map { results =>
           results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
           results.map(_.doc.name).toSet should be(Set("Allan", "Brenda", "Charlie"))
         }
@@ -363,7 +363,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "materialize empty nicknames" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.filter(_.name === "Ian").stream.materialized(p => List(p.nicknames)).toList.map { people =>
+        db.people.query.filter(_.name === "Ian").materialized(p => List(p.nicknames)).toList.map { people =>
           people.map(m => m(_.nicknames)) should be(List(Set.empty))
         }
       }
@@ -382,9 +382,9 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.people.transaction { implicit transaction =>
         val q = db.people.query.sort(Sort.ByField(Person.name)).limit(10)
         for {
-          l1 <- q.offset(0).search.docs.flatMap(_.list).map(_.map(_.name))
-          l2 <- q.offset(10).search.docs.flatMap(_.list).map(_.map(_.name))
-          l3 <- q.offset(20).search.docs.flatMap(_.list).map(_.map(_.name))
+          l1 <- q.offset(0).docs.search.flatMap(_.list).map(_.map(_.name))
+          l2 <- q.offset(10).docs.search.flatMap(_.list).map(_.map(_.name))
+          l3 <- q.offset(20).docs.search.flatMap(_.list).map(_.map(_.name))
         } yield {
           l1 should be(List("Allan", "Brenda", "Charlie", "Diana", "Evan", "Fiona", "Greg", "Hanna", "Ian", "Jenna"))
           l2 should be(List("Kevin", "Mike", "Nancy", "Not Ruth", "Oscar", "Penny", "Quintin", "Sam", "Tori", "Uba"))
@@ -437,7 +437,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify id count matches total count" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.countTotal(true).search.id.flatMap { results =>
+        db.people.query.countTotal(true).id.search.flatMap { results =>
           results.list.map { list =>
             results.total should be(Some(CreateRecords + 24))
             list.length should be(CreateRecords + 24)
@@ -452,8 +452,8 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .sort(Sort.ByField(Person.age).descending)
           .limit(100)
           .countTotal(true)
-          .search
           .docs
+          .search
           .flatMap { results =>
             results.list.map { list =>
               list.length should be(100)
@@ -470,8 +470,8 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .limit(100)
           .offset(100)
           .countTotal(true)
-          .search
           .docs
+          .search
           .flatMap { results =>
             results.list.map { list =>
               list.length should be(100)

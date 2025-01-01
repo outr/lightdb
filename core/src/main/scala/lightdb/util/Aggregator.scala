@@ -18,7 +18,7 @@ object Aggregator {
                                                               (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
     val fields = query.functions.map(_.field).distinct
     val groupFields = query.functions.filter(_.`type` == AggregateType.Group).map(_.field)
-    val stream = rapid.Stream.force(query.query.search.materialized(_ => fields).map(_.stream))
+    val stream = query.query.materialized(_ => fields).stream
     var groups = Map.empty[List[Any], Map[String, Json]]
     stream
       .foreach { m =>
