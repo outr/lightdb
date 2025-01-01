@@ -82,7 +82,7 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
-val rapidVersion: String = "0.3.3-SNAPSHOT"
+val rapidVersion: String = "0.4.0"
 
 val scalaTestVersion: String = "3.2.19"
 
