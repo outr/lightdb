@@ -13,6 +13,4 @@ trait ConnectionManager extends Disposable {
   def currentConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Option[Connection]
 
   def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit
-
-  def dispose(): Task[Unit]
 }
