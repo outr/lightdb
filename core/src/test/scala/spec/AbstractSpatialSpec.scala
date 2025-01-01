@@ -130,7 +130,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
       DB.truncate().succeed
     }
     "dispose the database" in {
-      DB.dispose().succeed
+      DB.dispose.succeed
     }
   }
 

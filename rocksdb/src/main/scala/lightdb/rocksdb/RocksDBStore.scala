@@ -82,7 +82,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
       .size
   }
 
-  override def dispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = Task {
     db.flush(new FlushOptions)
     db.close()
   }

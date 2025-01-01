@@ -71,7 +71,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     }
   }
 
-  override def dispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = Task {
     store.synchronized {
       map = Map.empty
     }

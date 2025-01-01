@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The database to be implemented. Collections *may* be used without a LightDB instance, but with drastically diminished
  * functionality. It is always ideal for collections to be associated with a database.
  */
-trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
+trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatureKey] {
   /**
    * Identifiable name for this database. Defaults to using the class name.
    */
@@ -97,7 +97,7 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
     _ <- doUpgrades(upgrades, dbInitialized = dbInitialized, stillBlocking = true).when(upgrades.nonEmpty)
     // Setup shutdown hook
     _ = Runtime.getRuntime.addShutdownHook(new Thread(() => {
-      dispose().sync()
+      dispose.sync()
     }))
     // Set initialized
     _ <- databaseInitialized.set(true)
@@ -181,12 +181,12 @@ trait LightDB extends Initializable with FeatureSupport[DBFeatureKey] {
     case None => logger.info("Upgrades completed successfully")
   }
 
-  def dispose(): Task[Unit] = if (_disposed.compareAndSet(false, true)) {
+  override protected def doDispose(): Task[Unit] = if (_disposed.compareAndSet(false, true)) {
     collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).map { collection =>
-      collection.dispose()
+      collection.dispose
     }.tasks.flatMap { _ =>
       features.toList.map {
-        case d: Disposable => d.dispose()
+        case d: Disposable => d.dispose
         case _ => Task.unit // Ignore
       }.tasks
     }.unit

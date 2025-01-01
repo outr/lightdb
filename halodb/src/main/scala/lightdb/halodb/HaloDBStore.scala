@@ -102,7 +102,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }
 
-  override def dispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = Task {
     instance.pauseCompaction()
     instance.close()
   }

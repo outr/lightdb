@@ -635,5 +635,5 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override def dispose(): Task[Unit] = connectionManager.dispose().when(!connectionShared)
+  override protected def doDispose(): Task[Unit] = connectionManager.dispose.when(!connectionShared)
 }

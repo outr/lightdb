@@ -62,7 +62,7 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
       DB.truncate().succeed
     }
     "dispose the database" in {
-      DB.dispose().succeed
+      DB.dispose.succeed
     }
   }
 

@@ -275,7 +275,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "dispose the database" in {
-      db.dispose().succeed
+      db.dispose.succeed
     }
   }
 
