@@ -1,14 +1,14 @@
 package lightdb.mapdb
 
-import lightdb.aggregate.AggregateQuery
-import lightdb.collection.Collection
 import lightdb._
-import lightdb.field.Field._
+import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}
+import rapid.Task
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -28,16 +28,21 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
 
   map.verify()
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Unit = ()
+  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = upsert(doc)
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = map.put(doc._id.value, toString(doc))
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+    map.put(doc._id.value, toString(doc))
+    doc
+  }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = map.containsKey(id.value)
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
+    map.containsKey(id.value)
+  }
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Option[Doc] = {
+                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       Option(map.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
     } else {
@@ -46,34 +51,35 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)
-                        (implicit transaction: Transaction[Doc]): Boolean =
-    map.remove(value.asInstanceOf[Id[Doc]].value) != null
+                        (implicit transaction: Transaction[Doc]): Task[Boolean] =
+    Task(map.remove(value.asInstanceOf[Id[Doc]].value) != null)
 
-  override def count(implicit transaction: Transaction[Doc]): Int = map.size()
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(map.size())
 
-  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = map.values()
-    .iterator()
-    .asScala
-    .map(fromString)
+  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.fromIterator(Task {
+    map.values()
+      .iterator()
+      .asScala
+      .map(fromString)
+  })
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] =
+  override def doSearch[V](query: Query[Doc, Model, V])
+                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
     throw new UnsupportedOperationException("MapDBStore does not support searching")
 
   override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] =
+                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     throw new UnsupportedOperationException("MapDBStore does not support aggregation")
 
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Int =
+  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
     throw new UnsupportedOperationException("MapDBStore does not support aggregation")
 
-  override def truncate()(implicit transaction: Transaction[Doc]): Int = {
-    val size = count
+  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = count.map { size =>
     map.clear()
     size
   }
 
-  override def dispose(): Unit = {
+  override protected def doDispose(): Task[Unit] = Task {
     db.commit()
     db.close()
   }

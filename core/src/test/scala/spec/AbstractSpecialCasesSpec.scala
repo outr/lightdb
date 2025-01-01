@@ -8,55 +8,61 @@ import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, Timestamp}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.wordspec.AsyncWordSpec
+import rapid.AsyncTaskSpec
 
 import java.nio.file.Path
 
-trait AbstractSpecialCasesSpec extends AnyWordSpec with Matchers { spec =>
+trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   private lazy val specName: String = getClass.getSimpleName
 
   specName should {
     "initialize the database" in {
-      DB.init()
+      DB.init.succeed
     }
     "insert a couple SpecialOne instances" in {
       DB.specialOne.t.insert(List(
         SpecialOne("First", WrappedString("Apple"), Person("Andrew", 1), _id = Id("first")),
         SpecialOne("Second", WrappedString("Banana"), Person("Bianca", 2), _id = Id("second"))
-      ))
+      )).succeed
     }
     "verify the SpecialOne instances were stored properly" in {
       DB.specialOne.transaction { implicit transaction =>
-        val list = DB.specialOne.iterator.toList
-        list.map(_.name).toSet should be(Set("First", "Second"))
-        list.map(_.wrappedString).toSet should be(Set(WrappedString("Apple"), WrappedString("Banana")))
-        list.map(_.person).toSet should be(Set(Person("Andrew", 1), Person("Bianca", 2)))
-        list.map(_._id).toSet should be(Set(SpecialOne.id("first"), SpecialOne.id("second")))
+        DB.specialOne.stream.toList.map { list =>
+          list.map(_.name).toSet should be(Set("First", "Second"))
+          list.map(_.wrappedString).toSet should be(Set(WrappedString("Apple"), WrappedString("Banana")))
+          list.map(_.person).toSet should be(Set(Person("Andrew", 1), Person("Bianca", 2)))
+          list.map(_._id).toSet should be(Set(SpecialOne.id("first"), SpecialOne.id("second")))
+        }
       }
     }
     "verify filtering by created works" in {
       DB.specialOne.transaction { implicit transaction =>
-        DB.specialOne.query.filter(_.created < Timestamp()).toList.map(_.name).toSet should be(Set("First", "Second"))
-        DB.specialOne.query.filter(_.created > Timestamp()).toList.map(_.name).toSet should be(Set.empty)
+        for {
+          _ <- DB.specialOne.query.filter(_.created < Timestamp()).toList.map(_.map(_.name).toSet should be(Set("First", "Second")))
+          _ <- DB.specialOne.query.filter(_.created > Timestamp()).toList.map(_.map(_.name).toSet should be(Set.empty))
+        } yield succeed
       }
     }
     "verify the storage of data is correct" in {
       DB.specialOne.transaction { implicit transaction =>
-        val list = DB.specialOne.query.sort(Sort.ByField(SpecialOne.name).asc).search.json(ref => List(ref._id)).list
-        list should be(List(obj("_id" -> "first"), obj("_id" -> "second")))
+        DB.specialOne.query.sort(Sort.ByField(SpecialOne.name).asc).json(ref => List(ref._id)).toList.map { list =>
+          list should be(List(obj("_id" -> "first"), obj("_id" -> "second")))
+        }
       }
     }
     "group ids" in {
       DB.specialOne.transaction { implicit transaction =>
-        val list = DB.specialOne.query.aggregate(ref => List(ref._id.concat)).toList
-        list.map(_(_._id.concat)) should be(List(List(SpecialOne.id("first"), SpecialOne.id("second"))))
+        DB.specialOne.query.aggregate(ref => List(ref._id.concat)).toList.map { list =>
+          list.map(_(_._id.concat)) should be(List(List(SpecialOne.id("first"), SpecialOne.id("second"))))
+        }
       }
     }
     "truncate the database" in {
-      DB.truncate()
+      DB.truncate().succeed
     }
     "dispose the database" in {
-      DB.dispose()
+      DB.dispose.succeed
     }
   }
 

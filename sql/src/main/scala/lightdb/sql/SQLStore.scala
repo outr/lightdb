@@ -4,20 +4,21 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
+import lightdb._
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.field.Field._
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{Conversion, Store, StoreMode}
-import lightdb.transaction.{Transaction, TransactionKey}
+import lightdb.transaction.Transaction
 import lightdb.util.ActionIterator
-import lightdb._
-import lightdb.field.{Field, IndexingState}
-import lightdb.field.Field._
+import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
@@ -28,7 +29,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   transaction { implicit transaction =>
     initTransaction()
-  }
+  }.sync()
 
   protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
     val entries = fields.collect {
@@ -58,7 +59,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     executeUpdate(s"ALTER TABLE $name ADD COLUMN ${field.name} ${def2Type(field.name, field.rw.definition)}")
   }
 
-  protected def initTransaction()(implicit transaction: Transaction[Doc]): Unit = {
+  protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = Task {
     val connection = connectionManager.getConnection
     val existingTables = tables(connection)
     if (!existingTables.contains(name.toLowerCase)) {
@@ -109,10 +110,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Unit = transaction.put(
-    key = StateKey[Doc],
-    value = SQLState(connectionManager, transaction, this, Collection.CacheQueries)
-  )
+  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
+    transaction.put(
+      key = StateKey[Doc],
+      value = SQLState(connectionManager, transaction, this, Collection.CacheQueries)
+    )
+  }
 
   protected def field2Value(field: Field[Doc, _]): String = "?"
 
@@ -133,7 +136,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   private[sql] lazy val insertSQL: String = createInsertSQL()
   private[sql] lazy val upsertSQL: String = createUpsertSQL()
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val state = getState
     val indexingState = new IndexingState
     state.withInsertPreparedStatement { ps =>
@@ -147,9 +150,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
         state.batchInsert.set(0)
       }
     }
+    doc
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val state = getState
     val indexingState = new IndexingState
     state.withUpsertPreparedStatement { ps =>
@@ -163,12 +167,13 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
         state.batchUpsert.set(0)
       }
     }
+    doc
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Boolean = get(idField, id).nonEmpty
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(idField, id).map(_.nonEmpty)
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Option[Doc] = {
+                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     val state = getState
     val b = new SQLQueryBuilder[Doc](
       store = this,
@@ -196,7 +201,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)
-                        (implicit transaction: Transaction[Doc]): Boolean = {
+                        (implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     val connection = connectionManager.getConnection
     val ps = connection.prepareStatement(s"DELETE FROM $name WHERE ${field.name} = ?")
     try {
@@ -207,7 +212,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Int = {
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task {
     val rs = executeQuery(s"SELECT COUNT(*) FROM $name")
     try {
       rs.next()
@@ -217,7 +222,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override def iterator(implicit transaction: Transaction[Doc]): Iterator[Doc] = {
+  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.fromIterator(Task {
     val state = getState
     val connection = connectionManager.getConnection
     val s = connection.createStatement()
@@ -225,7 +230,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     val rs = s.executeQuery(s"SELECT * FROM $name")
     state.register(rs)
     rs2Iterator(rs, Conversion.Doc())
-  }
+  })
 
   private def getColumnNames(rs: ResultSet): List[String] = {
     val meta = rs.getMetaData
@@ -238,7 +243,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       storeMode match {
         case StoreMode.Indexes(storage) =>
           val id = Id[Doc](rs.getString("_id"))
-          storage(id)
+          storage(id).sync()
         case _ => throw new UnsupportedOperationException("This should not be possible")
       }
     case c: SQLConversion[Doc] => c.convertFromSQL(rs)
@@ -337,10 +342,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart(field.name)
 
-  override def doSearch[V](query: Query[Doc, Model], conversion: Conversion[Doc, V])
-                          (implicit transaction: Transaction[Doc]): SearchResults[Doc, Model, V] = {
+  override def doSearch[V](query: Query[Doc, Model, V])
+                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
     var extraFields = List.empty[SQLPart]
-    val fields = conversion match {
+    val fields = query.conversion match {
       case Conversion.Value(field) => List(field)
       case Conversion.Doc() | Conversion.Converted(_) => this.fields
       case Conversion.Materialized(fields) => fields
@@ -379,15 +384,17 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     } else {
       None
     }
-    val iterator = rs2Iterator(rs, conversion)
-    val ps = rs.getStatement.asInstanceOf[PreparedStatement]
-    val iteratorWithScore = ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
+    val stream = rapid.Stream.fromIterator[(V, Double)](Task {
+      val iterator = rs2Iterator(rs, query.conversion)
+      val ps = rs.getStatement.asInstanceOf[PreparedStatement]
+      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
+    })
     SearchResults(
       model = model,
       offset = query.offset,
       limit = query.limit,
       total = total,
-      iteratorWithScore = iteratorWithScore,
+      streamWithScore = stream,
       facetResults = Map.empty,
       transaction = transaction
     )
@@ -451,13 +458,13 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): Iterator[MaterializedAggregate[Doc, Model]] = {
+                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
     val b = aggregate2SQLQuery(query)
     val results = b.execute()
     val rs = results.rs
     val state = getState
     state.register(rs)
-    def createStream[R](f: ResultSet => R): Iterator[R] = {
+    def createStream[R](f: ResultSet => R): rapid.Stream[R] = rapid.Stream.fromIterator(Task {
       val iterator = new Iterator[R] {
         private var checkedNext = false
         private var nextValue = false
@@ -479,7 +486,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
         }
       }
       iterator
-    }
+    })
     createStream[MaterializedAggregate[Doc, Model]] { rs =>
       val json = obj(query.functions.map { f =>
         val o = rs.getObject(f.name)
@@ -497,7 +504,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   override def aggregateCount(query: AggregateQuery[Doc, Model])
-                             (implicit transaction: Transaction[Doc]): Int = {
+                             (implicit transaction: Transaction[Doc]): Task[Int] = Task {
     val b = aggregate2SQLQuery(query)
     b.queryTotal()
   }
@@ -618,7 +625,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def concatPrefix: String = "GROUP_CONCAT"
 
-  override def truncate()(implicit transaction: Transaction[Doc]): Int = {
+  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task {
     val connection = connectionManager.getConnection
     val ps = connection.prepareStatement(s"DELETE FROM $name")
     try {
@@ -628,5 +635,5 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override def dispose(): Unit = if (!connectionShared) connectionManager.dispose()
+  override protected def doDispose(): Task[Unit] = connectionManager.dispose.when(!connectionShared)
 }

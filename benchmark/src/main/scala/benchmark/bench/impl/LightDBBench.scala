@@ -1,14 +1,13 @@
 package benchmark.bench.impl
 
-import benchmark.bench.{Bench, StatusCallback}
+import benchmark.bench.Bench
+import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
-import fabric.rw._
-import lightdb.field.Field
 
 import java.nio.file.Path
 import java.sql.ResultSet
@@ -17,7 +16,7 @@ import scala.language.implicitConversions
 case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
   override def name: String = s"LightDB ${storeManager.name}"
 
-  override def init(): Unit = DB.init()
+  override def init(): Unit = db.init
 
   implicit def p2Person(p: P): Person = Person(p.name, p.age, Id(p.id))
 

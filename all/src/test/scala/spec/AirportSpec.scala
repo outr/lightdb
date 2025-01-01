@@ -3,29 +3,31 @@ package spec
 import fabric.rw._
 import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.field.Field
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
-import lightdb.{Id, LightDB, Persistence, StoredValue, Unique}
+import lightdb.store.StoreManager
 import lightdb.store.split.SplitStoreManager
-import lightdb.store.{StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{Id, LightDB, Unique}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.{AnyWordSpec, AsyncWordSpec}
+import org.scalatest.wordspec.AsyncWordSpec
+import rapid.{AsyncTaskSpec, Task}
+import scribe.{rapid => logger}
 
-import java.nio.file.{Path, Paths}
+import java.nio.file.Path
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
 @EmbeddedTest
-class AirportSpec extends AnyWordSpec with Matchers {
+class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
-      DB.init()
+      DB.init.succeed
     }
     "have two collections" in {
       DB.collections.map(_.name).toSet should be(Set("_backingStore", "Flight", "Airport"))
+      Task.unit.succeed
     }
 //    "query VIP airports" in {
 //      Airport.vipKeys.values.map { keys =>
@@ -34,28 +36,33 @@ class AirportSpec extends AnyWordSpec with Matchers {
 //    }
     "query JFK airport" in {
       val jfk = Airport.id("JFK")
-      val airport = DB.airports.t(jfk)
-      airport.name should be("John F Kennedy Intl")
+      DB.airports.t(jfk).map { airport =>
+        airport.name should be("John F Kennedy Intl")
+      }
     }
     "query the airports by id filter" in {
       val keys = List("JFK", "LAX")
       DB.airports.transaction { implicit transaction =>
-        val airports = DB.airports.query
+        DB.airports.query
           .filter(_._id IN keys.map(Airport.id))
           .toList
-        airports.map(_.name).toSet should be(Set("John F Kennedy Intl", "Los Angeles International"))
+          .map { airports =>
+            airports.map(_.name).toSet should be(Set("John F Kennedy Intl", "Los Angeles International"))
+          }
       }
     }
     "query by airport name" in {
       DB.airports.transaction { implicit transaction =>
-        val airport = DB.airports.query
+        DB.airports.query
           .filter(_.name === "John F Kennedy Intl")
-          .one
-        airport._id should be(Airport.id("JFK"))
+          .first
+          .map { airport =>
+            airport._id should be(Airport.id("JFK"))
+          }
       }
     }
     "count all the airports" in {
-      DB.airports.t.count should be(3375)
+      DB.airports.t.count.map(_ should be(3375))
     }
 //    "validate airport references" in {
 //      Flight.airportReferences.facet(Airport.id("JFK")).map { facet =>
@@ -103,7 +110,7 @@ class AirportSpec extends AnyWordSpec with Matchers {
     // TODO: Test ValueStore
     // TODO: the other stuff
     "dispose" in {
-      DB.dispose()
+      DB.dispose.succeed
     }
   }
 
@@ -198,56 +205,6 @@ class AirportSpec extends AnyWordSpec with Matchers {
     override def blockStartup: Boolean = true
     override def alwaysRun: Boolean = false
 
-    override def upgrade(db: LightDB): Unit = {
-      val airports = csv2Iterator("airports.csv").map { d =>
-        Airport(
-          name = d(1),
-          city = d(2),
-          state = d(3),
-          country = d(4),
-          lat = d(5).toDouble,
-          long = d(6).toDouble,
-          vip = d(7).toBoolean,
-          _id = Airport.id(d(0))
-        )
-      }
-      var insertedAirports = 0
-      DB.airports.transaction { implicit transaction =>
-        airports.foreach { airport =>
-          DB.airports.insert(airport)
-          insertedAirports += 1
-        }
-      }
-      insertedAirports should be(3375)
-
-      val flights = csv2Iterator("flights.csv").map { d =>
-        Flight(
-          from = Airport.id(d(0)),
-          to = Airport.id(d(1)),
-          year = d(2).toInt,
-          month = d(3).toInt,
-          day = d(4).toInt,
-          dayOfWeek = d(5).toInt,
-          depTime = d(6).toInt,
-          arrTime = d(7).toInt,
-          depTimeUTC = d(8),
-          arrTimeUTC = d(9),
-          uniqueCarrier = d(10),
-          flightNum = d(11).toInt,
-          tailNum = d(12),
-          distance = d(13).toInt
-        )
-      }
-      var insertedFlights = 0
-      DB.flights.transaction { implicit transaction =>
-        flights.foreach { flight =>
-          DB.flights.insert(flight)
-          insertedFlights += 1
-        }
-      }
-      insertedFlights should be(286463)
-    }
-
     def csv2Iterator(fileName: String): Iterator[Vector[String]] = {
       val source = Source.fromURL(getClass.getClassLoader.getResource(fileName))
       val iterator = source.getLines()
@@ -272,5 +229,55 @@ class AirportSpec extends AnyWordSpec with Matchers {
         entries.toVector
       }
     }
+
+    override def upgrade(db: LightDB): Task[Unit] = for {
+      _ <- logger.info("Data Importing...")
+      airports = rapid.Stream.fromIterator(Task(csv2Iterator("airports.csv").map { d =>
+        Airport(
+          name = d(1),
+          city = d(2),
+          state = d(3),
+          country = d(4),
+          lat = d(5).toDouble,
+          long = d(6).toDouble,
+          vip = d(7).toBoolean,
+          _id = Airport.id(d(0))
+        )
+      }))
+      insertedAirports <- DB.airports.transaction { implicit transaction =>
+        airports
+          .evalForeach { airport =>
+            DB.airports.insert(airport).unit
+          }
+          .count
+      }
+      _ = insertedAirports should be(3375)
+      flights = rapid.Stream.fromIterator(Task(csv2Iterator("flights.csv").map { d =>
+        Flight(
+          from = Airport.id(d(0)),
+          to = Airport.id(d(1)),
+          year = d(2).toInt,
+          month = d(3).toInt,
+          day = d(4).toInt,
+          dayOfWeek = d(5).toInt,
+          depTime = d(6).toInt,
+          arrTime = d(7).toInt,
+          depTimeUTC = d(8),
+          arrTimeUTC = d(9),
+          uniqueCarrier = d(10),
+          flightNum = d(11).toInt,
+          tailNum = d(12),
+          distance = d(13).toInt
+        )
+      }))
+      insertedFlights <- DB.flights.transaction { implicit transaction =>
+        flights
+          .evalForeach { flight =>
+            DB.flights.insert(flight).unit
+          }
+          .count
+      }
+      _ = insertedFlights should be(286463)
+    } yield ()
   }
 }

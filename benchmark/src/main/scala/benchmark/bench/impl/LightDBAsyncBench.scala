@@ -3,11 +3,10 @@ package benchmark.bench.impl
 import benchmark.bench.Bench
 import fabric.rw.RW
 import lightdb.Id
-import lightdb.async.{AsyncCollection, AsyncDatabaseUpgrade, AsyncLightDB}
 import lightdb.collection.Collection
-import lightdb.store.StoreManager
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
+import lightdb.store.StoreManager
 import rapid.Task
 
 import java.nio.file.Path
@@ -16,7 +15,7 @@ import java.sql.ResultSet
 case class LightDBAsyncBench(storeManager: StoreManager) extends Bench { bench =>
   override def name: String = s"LightDB Async ${storeManager.name}"
 
-  override def init(): Unit = DB.init().sync()
+  override def init(): Unit = db.init.sync()
 
   implicit def p2Person(p: P): Person = Person(p.name, p.age, Id(p.id))
 

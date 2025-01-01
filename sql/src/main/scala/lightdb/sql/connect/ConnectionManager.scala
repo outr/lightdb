@@ -3,6 +3,7 @@ package lightdb.sql.connect
 import lightdb.doc.Document
 import lightdb.transaction.Transaction
 import lightdb.util.Disposable
+import rapid.Task
 
 import java.sql.Connection
 
@@ -13,5 +14,5 @@ trait ConnectionManager extends Disposable {
 
   def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit
 
-  def dispose(): Unit
+  def dispose(): Task[Unit]
 }

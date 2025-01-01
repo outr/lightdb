@@ -1,29 +1,25 @@
 package lightdb.util
 
-import java.util.concurrent.atomic.AtomicInteger
+import rapid._
 
 /**
  * Provides simple initialization support to avoid initialization being invoked more
  * than once. FlatMap on `init` to safely guarantee initialization was successful.
  */
 trait Initializable {
-  private val status = new AtomicInteger(0)
-
-  def isInitialized: Boolean = status.get() == 2
+  @volatile private var initialized = false
 
   /**
    * Calls initialize() exactly one time. Safe to call multiple times.
    */
-  final def init(): Boolean = if (status.compareAndSet(0, 1)) {
-    initialize()
-    status.set(2)
-    true
-  } else {
-    false
-  }
+  lazy val init: Task[Unit] = initialize().map { _ =>
+    initialized = true
+  }.singleton
+
+  def isInitialized: Boolean = initialized
 
   /**
    * Define initialization functionality here, but never call directly.
    */
-  protected def initialize(): Unit
+  protected def initialize(): Task[Unit]
 }

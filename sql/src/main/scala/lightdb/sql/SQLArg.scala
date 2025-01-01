@@ -4,13 +4,13 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
-import lightdb.doc.Document
-import lightdb.spatial.Geo
 import lightdb._
-import lightdb.field.{Field, IndexingState}
+import lightdb.doc.Document
 import lightdb.field.Field._
+import lightdb.field.{Field, IndexingState}
+import lightdb.spatial.Geo
 
-import java.sql.{JDBCType, PreparedStatement, SQLType, Types}
+import java.sql.{PreparedStatement, Types}
 
 trait SQLArg {
   def set(ps: PreparedStatement, index: Int): Unit

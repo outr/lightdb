@@ -1,11 +1,9 @@
 package benchmark.bench.impl
 
-import benchmark.bench.{Bench, StatusCallback}
+import benchmark.bench.Bench
 import lightdb.Unique
 
-import java.io.File
 import java.sql.{Connection, DriverManager}
-import scala.collection.parallel.CollectionConverters._
 
 object PostgreSQLBench extends Bench {
   private lazy val connection: Connection = {

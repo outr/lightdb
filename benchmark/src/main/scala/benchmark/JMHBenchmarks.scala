@@ -34,7 +34,7 @@
 //    new File("benchmarks.json").delete()
 //    FileUtils.deleteDirectory(dbDir)
 //    dbDir.mkdirs()
-//    DB.init()
+//    db.init
 //
 //    val s = sqliteConnection.createStatement()
 //    s.executeUpdate("CREATE TABLE record(id VARCHAR NOT NULL, key TEXT, number INTEGER, PRIMARY KEY (id))")

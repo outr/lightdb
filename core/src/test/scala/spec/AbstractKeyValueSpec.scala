@@ -2,16 +2,17 @@ package spec
 
 import fabric.rw._
 import lightdb.collection.Collection
-import lightdb.{Id, LightDB}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.wordspec.AsyncWordSpec
+import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path
 
-abstract class AbstractKeyValueSpec extends AnyWordSpec with Matchers { spec =>
+abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   val CreateRecords = 100_000
 
   private val adam = User("Adam", 21, _id = User.id("adam"))
@@ -52,64 +53,70 @@ abstract class AbstractKeyValueSpec extends AnyWordSpec with Matchers { spec =>
 
   specName should {
     "initialize the database" in {
-      db.init() should be(true)
+      db.init.succeed
     }
     "verify the database is empty" in {
       db.users.transaction { implicit transaction =>
-        db.users.count should be(0)
+        db.users.count.map(_ should be(0))
       }
     }
     "insert the records" in {
       db.users.transaction { implicit transaction =>
-        db.users.insert(names) should not be None
+        db.users.insert(names).map(_ should not be None)
       }
     }
     "retrieve the first record by _id -> id" in {
       db.users.transaction { implicit transaction =>
-        db.users(_._id -> adam._id) should be(adam)
+        db.users(_._id -> adam._id).map(_ should be(adam))
       }
     }
     "retrieve the first record by id" in {
       db.users.transaction { implicit transaction =>
-        db.users(adam._id) should be(adam)
+        db.users(adam._id).map(_ should be(adam))
       }
     }
     "count the records in the database" in {
       db.users.transaction { implicit transaction =>
-        db.users.count should be(26)
+        db.users.count.map(_ should be(26))
       }
     }
     "stream the records in the database" in {
       db.users.transaction { implicit transaction =>
-        val ages = db.users.iterator.map(_.age).toSet
-        ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
+        db.users.stream.map(_.age).toList.map(_.toSet).map { ages =>
+          ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
+        }
       }
     }
     "delete some records" in {
       db.users.transaction { implicit transaction =>
-        db.users.delete(_._id -> linda._id) should be(true)
-        db.users.delete(_._id -> yuri._id) should be(true)
+        for {
+          d1 <- db.users.delete(_._id -> linda._id)
+          d2 <- db.users.delete(_._id -> yuri._id)
+        } yield {
+          d1 should be(true)
+          d2 should be(true)
+        }
       }
     }
     "verify the records were deleted" in {
       db.users.transaction { implicit transaction =>
-        db.users.count should be(24)
+        db.users.count.map(_ should be(24))
       }
     }
     "modify a record" in {
       db.users.transaction { implicit transaction =>
         db.users.modify(adam._id) {
-          case Some(p) => Some(p.copy(name = "Allan"))
+          case Some(p) => Task.pure(Some(p.copy(name = "Allan")))
           case None => fail("Adam was not found!")
         }
-      } match {
+      }.map {
         case Some(p) => p.name should be("Allan")
         case None => fail("Allan was not returned!")
       }
     }
     "verify the record has been renamed" in {
       db.users.transaction { implicit transaction =>
-        db.users(_._id -> adam._id).name should be("Allan")
+        db.users(_._id -> adam._id).map(_.name should be("Allan"))
       }
     }
     "insert a lot more names" in {
@@ -120,21 +127,21 @@ abstract class AbstractKeyValueSpec extends AnyWordSpec with Matchers { spec =>
             age = if (index > 100) 0 else index,
           )
         }
-        db.users.insert(p)
+        db.users.insert(p).succeed
       }
     }
     "verify the correct number of people exist in the database" in {
       db.users.transaction { implicit transaction =>
-        db.users.count should be(CreateRecords + 24)
+        db.users.count.map(_ should be(CreateRecords + 24))
       }
     }
     "truncate the collection again" in {
       db.users.transaction { implicit transaction =>
-        db.users.truncate() should be(CreateRecords + 24)
+        db.users.truncate().map(_ should be(CreateRecords + 24))
       }
     }
     "dispose the database" in {
-      db.dispose()
+      db.dispose.succeed
     }
   }
 

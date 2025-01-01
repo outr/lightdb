@@ -1,22 +1,23 @@
 package lightdb
 
-import lightdb.field.Field._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.FacetResult
+import lightdb.field.Field._
 import lightdb.transaction.Transaction
+import rapid.Task
 
 case class SearchResults[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Model,
                                                                                offset: Int,
                                                                                limit: Option[Int],
                                                                                total: Option[Int],
-                                                                               iteratorWithScore: Iterator[(V, Double)],
+                                                                               streamWithScore: rapid.Stream[(V, Double)],
                                                                                facetResults: Map[FacetField[Doc], FacetResult],
                                                                                transaction: Transaction[Doc]) {
-  def iterator: Iterator[V] = iteratorWithScore.map(_._1)
+  def stream: rapid.Stream[V] = streamWithScore.map(_._1)
 
-  lazy val listWithScore: List[(V, Double)] = iteratorWithScore.toList
-  lazy val list: List[V] = listWithScore.map(_._1)
-  lazy val scores: List[Double] = listWithScore.map(_._2)
+  lazy val listWithScore: Task[List[(V, Double)]] = streamWithScore.toList
+  lazy val list: Task[List[V]] = listWithScore.map(_.map(_._1))
+  lazy val scores: Task[List[Double]] = listWithScore.map(_.map(_._2))
   /**
    * Represents the total minus the current offset.
    *
