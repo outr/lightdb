@@ -230,7 +230,7 @@ DatabaseRestore.archive(db, new File("backup.zip")).sync()
 Dispose of the database when done:
 
 ```scala mdoc
-db.dispose().sync()
+db.dispose.sync()
 ```
 
 ---
