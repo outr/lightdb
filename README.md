@@ -19,12 +19,12 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "2.0.0-SNAPSHOT"
+libraryDependencies += "com.outr" %% "lightdb-all" % "2.0.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "2.0.0-SNAPSHOT"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "2.0.0"
 ```
 
 ## Videos
@@ -56,7 +56,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "2.0.0-SNAPSHOT"
+libraryDependencies += "com.outr" %% "lightdb-all" % "2.0.0"
 ```
 
 ---
@@ -132,7 +132,7 @@ Instantiate and initialize the database:
 
 ```scala
 val db = new DB
-// db: DB = repl.MdocSession$MdocApp$DB@370c1f13
+// db: DB = repl.MdocSession$MdocApp$DB@5d5ba31f
 db.init.sync()
 ```
 
@@ -148,7 +148,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = Id(value = "jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2")
+//   _id = Id(value = "HN5sRuc4kzsD117zfXWgik8cYiXgBnV5")
 // )
 db.people.transaction { implicit transaction =>
   db.people.insert(adam)
@@ -159,7 +159,7 @@ db.people.transaction { implicit transaction =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = Id(value = "jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2")
+//   _id = Id(value = "HN5sRuc4kzsD117zfXWgik8cYiXgBnV5")
 // )
 ```
 
@@ -173,7 +173,7 @@ db.people.transaction { implicit transaction =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)), Person(Adam,21,None,Set(),List(),Id(HN5sRuc4kzsD117zfXWgik8cYiXgBnV5)))
 ```
 
 ---
@@ -210,7 +210,7 @@ db.people.transaction { implicit transaction =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 21},repl.MdocSession$MdocApp$Person$@7b978e28))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 42},repl.MdocSession$MdocApp$Person$@4f01ef84))
 ```
 
 ### Grouping
@@ -221,7 +221,7 @@ db.people.transaction { implicit transaction =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)), Person(Adam,21,None,Set(),List(),Id(HN5sRuc4kzsD117zfXWgik8cYiXgBnV5)))))
 ```
 
 ---
@@ -235,14 +235,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db, new File("backup.zip")).sync()
-// res5: Int = 2
+// res5: Int = 3
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res6: Int = 2
+// res6: Int = 3
 ```
 
 ---
@@ -252,7 +252,7 @@ DatabaseRestore.archive(db, new File("backup.zip")).sync()
 Dispose of the database when done:
 
 ```scala
-db.dispose().sync()
+db.dispose.sync()
 ```
 
 ---
