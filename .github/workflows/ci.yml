@@ -13,7 +13,7 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
-          java-version: 22
+          java-version: 23
       - name: Coursier cache
         uses: coursier/cache-action@v6
       - name: Build and test
