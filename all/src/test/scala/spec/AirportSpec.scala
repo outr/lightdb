@@ -8,10 +8,10 @@ import lightdb.lucene.LuceneStore
 import lightdb.store.StoreManager
 import lightdb.store.split.SplitStoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB, Unique}
+import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import rapid.{AsyncTaskSpec, Task}
+import rapid.{AsyncTaskSpec, Task, Unique}
 import scribe.{rapid => logger}
 
 import java.nio.file.Path
@@ -146,7 +146,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val vip: I[Boolean] = field.index("vip", _.vip)
 //    val vipKeys: ValueStore[String, Airport] = ValueStore[String, Airport]("vipKeys", doc => if (doc.vip) List(doc._id.value) else Nil, this, persistence = Persistence.Cached)
 
-    override def id(value: String = Unique()): Id[Airport] = {
+    override def id(value: String = Unique().sync()): Id[Airport] = {
       val index = value.indexOf('/')
       val v = if (index != -1) {
         value.substring(index + 1)

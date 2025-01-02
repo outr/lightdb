@@ -7,7 +7,7 @@ import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.field.Field._
 import lightdb.field.{Field, FieldGetter}
 import lightdb.filter.FilterBuilder
-import rapid.Task
+import rapid.{Task, Unique}
 
 import scala.language.implicitConversions
 
@@ -18,7 +18,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", (doc: Doc) => doc._id)
 
-  def id(value: String = Unique()): Id[Doc] = Id(value)
+  def id(value: String = Unique().sync()): Id[Doc] = Id(value)
 
   def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Task[Unit] = Task.unit
 
