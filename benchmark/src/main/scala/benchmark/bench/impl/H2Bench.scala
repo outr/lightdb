@@ -1,7 +1,7 @@
 package benchmark.bench.impl
 
 import benchmark.bench.Bench
-import lightdb.Unique
+import rapid.Unique
 
 import java.io.File
 import java.sql.{Connection, DriverManager}
@@ -95,5 +95,5 @@ object H2Bench extends Bench {
     }
   }
 
-  case class Person(name: String, age: Int, id: String = Unique())
+  case class Person(name: String, age: Int, id: String = Unique().sync())
 }

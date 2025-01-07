@@ -8,6 +8,7 @@ import lightdb.sql.SQLConversion
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
+import rapid.Task
 
 import java.nio.file.Path
 import java.sql.ResultSet
@@ -16,25 +17,25 @@ import scala.language.implicitConversions
 case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
   override def name: String = s"LightDB ${storeManager.name}"
 
-  override def init(): Unit = db.init
+  override def init(): Unit = DB.init.sync()
 
   implicit def p2Person(p: P): Person = Person(p.name, p.age, Id(p.id))
 
   def toP(person: Person): P = P(person.name, person.age, person._id.value)
 
   override protected def insertRecords(iterator: Iterator[P]): Unit = DB.people.transaction { implicit transaction =>
-    iterator.foreach { p =>
-      val person: Person = p
-      DB.people.insert(person)
-    }
-  }
+    rapid.Stream.fromIterator(Task(iterator))
+      .evalMap(p => DB.people.insert(p))
+      .drain
+  }.sync()
 
   override protected def streamRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
-    f(DB.people.iterator.map(toP))
+//    f(DB.people.iterator.map(toP))
+    ???
   }
 
   override protected def getEachRecord(idIterator: Iterator[String]): Unit = DB.people.transaction { implicit transaction =>
-    idIterator.foreach { idString =>
+    /*idIterator.foreach { idString =>
       val id = Person.id(idString)
       DB.people.get(id) match {
         case Some(person) =>
@@ -43,11 +44,12 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
           }
         case None => scribe.warn(s"$id was not found!")
       }
-    }
+    }*/
+    ???
   }
 
   override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = DB.people.transaction { implicit transaction =>
-    ageIterator.foreach { age =>
+    /*ageIterator.foreach { age =>
       try {
         val list = DB.people.query.filter(_.age === age).search.docs.list
         val person = list.head
@@ -60,12 +62,14 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
       } catch {
         case t: Throwable => throw new RuntimeException(s"Error with $age", t)
       }
-    }
+    }*/
+    ???
   }
 
   override protected def searchAllRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
-    val iterator = DB.people.query.search.docs.iterator.map(toP)
-    f(iterator)
+//    val iterator = DB.people.query.search.docs.iterator.map(toP)
+//    f(iterator)
+    ???
   }
 
   override def size(): Long = -1L

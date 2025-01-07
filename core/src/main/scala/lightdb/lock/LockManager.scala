@@ -7,19 +7,19 @@ import java.util.concurrent.ConcurrentHashMap
 class LockManager[K, V] {
   private val locks = new ConcurrentHashMap[K, Lock[V]]()
 
-  def apply(key: K, value: => Option[V], establishLock: Boolean = true)
+  def apply(key: K, value: => Task[Option[V]], establishLock: Boolean = true)
            (f: Forge[Option[V], Option[V]]): Task[Option[V]] = if (establishLock) {
     acquire(key, value).flatMap { v =>
       f(v).guarantee(release(key, v).unit)
     }
   } else {
-    f(value)
+    value.flatMap(f(_))
   }
 
   // Attempts to acquire a lock for a given K and V.
-  def acquire(key: K, value: => Option[V]): Task[Option[V]] = Task {
+  def acquire(key: K, value: => Task[Option[V]]): Task[Option[V]] = Task {
     // Get or create the Lock object with the ReentrantLock.
-    val lock = locks.computeIfAbsent(key, _ => new Lock(value))
+    val lock = locks.computeIfAbsent(key, _ => new Lock(value.sync()))
 
     // Acquire the underlying ReentrantLock.
     lock.lock.acquire()

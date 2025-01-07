@@ -1,7 +1,7 @@
 package benchmark.bench.impl
 
 import benchmark.bench.Bench
-import lightdb.Unique
+import rapid.Unique
 
 import java.sql.{Connection, DriverManager}
 
@@ -93,5 +93,5 @@ object PostgreSQLBench extends Bench {
     }
   }
 
-  case class Person(name: String, age: Int, id: String = Unique())
+  case class Person(name: String, age: Int, id: String = Unique().sync())
 }

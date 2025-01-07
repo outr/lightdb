@@ -46,6 +46,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
         db.entries.query
           .facet(_.authorsFacet)
           .docs
+          .limit(1)
           .search
           .map { results =>
             val authorsResult = results.facet(_.authorsFacet)

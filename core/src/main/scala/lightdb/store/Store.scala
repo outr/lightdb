@@ -89,7 +89,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
              deleteOnNone: Boolean = false)
             (f: Forge[Option[Doc], Option[Doc]])
             (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
-    lock(id, get(idField, id).sync(), establishLock) { existing =>
+    lock(id, get(idField, id), establishLock) { existing =>
       f(existing).flatMap {
         case Some(doc) => upsert(doc).map(_ => Some(doc))
         case None if deleteOnNone => delete(idField, id).map(_ => None)

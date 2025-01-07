@@ -76,7 +76,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
-    id = map.option("id").getOrElse(lightdb.Unique()),
+    id = map.option("id").getOrElse(rapid.Unique().sync()),
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
     title = map.value("title"),
@@ -88,7 +88,7 @@ object PostgresImplementation extends BenchmarkImplementation {
   )
 
   override def map2TitleBasics(map: Map[String, String]): TitleBasicsPG = TitleBasicsPG(
-    id = map.option("id").getOrElse(lightdb.Unique()),
+    id = map.option("id").getOrElse(rapid.Unique().sync()),
     tconst = map.value("tconst"),
     titleType = map.value("titleType"),
     primaryTitle = map.value("primaryTitle"),
