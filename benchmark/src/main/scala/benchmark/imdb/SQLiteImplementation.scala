@@ -2,8 +2,7 @@ package benchmark.imdb
 
 import benchmark.FlushingBacklog
 import cats.effect.unsafe.IORuntime
-import lightdb.Unique
-import rapid.Task
+import rapid.{Task, Unique}
 
 import java.sql.{Connection, DriverManager, ResultSet}
 
@@ -77,7 +76,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   }
 
   override def map2TitleAka(map: Map[String, String]): TitleAka = TitleAkaPG(
-    id = map.option("id").getOrElse(Unique()),
+    id = map.option("id").getOrElse(Unique().sync()),
     titleId = map.value("titleId"),
     ordering = map.int("ordering"),
     title = map.value("title"),
@@ -89,7 +88,7 @@ object SQLiteImplementation extends BenchmarkImplementation {
   )
 
   override def map2TitleBasics(map: Map[String, String]): TitleBasicsPG = TitleBasicsPG(
-    id = map.option("id").getOrElse(Unique()),
+    id = map.option("id").getOrElse(Unique().sync()),
     tconst = map.value("tconst"),
     titleType = map.value("titleType"),
     primaryTitle = map.value("primaryTitle"),

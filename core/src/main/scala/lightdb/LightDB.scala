@@ -12,6 +12,7 @@ import scribe.{rapid => logger}
 
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
+import scala.util.{Failure, Success}
 
 /**
  * The database to be implemented. Collections *may* be used without a LightDB instance, but with drastically diminished
@@ -91,6 +92,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     // Get applied database upgrades
     applied <- appliedUpgrades.get()
     // Determine upgrades that need to be applied
+    // TODO: Test upgrades that run asynchronously!
     upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label))
     _ <- logger.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
       .when(upgrades.nonEmpty)
@@ -166,17 +168,24 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       val runUpgrade = dbInitialized || upgrade.applyToNew
       val continueBlocking = upgrades.exists(u => u.blockStartup && (dbInitialized || u.applyToNew))
 
-      upgrade.upgrade(this).when(runUpgrade).flatMap { _ =>
-        appliedUpgrades.modify { set =>
-          set + upgrade.label
-        }.flatMap { _ =>
-          val next = doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
-          if (stillBlocking && !continueBlocking) {
-            next.start()
-          } else {
-            next
-          }
+      val task = upgrade
+        .upgrade(this)
+        .flatMap { _ =>
+          appliedUpgrades.modify(_ + upgrade.label)
         }
+        .when(runUpgrade)
+        .attempt
+        .flatMap[Unit] {
+          case Success(_) => doUpgrades(upgrades.tail, dbInitialized, continueBlocking)
+          case Failure(throwable) => logger
+            .error(s"Database Upgrade: ${upgrade.label} failed", throwable)
+            .map(_ => throw throwable)
+        }
+      if (stillBlocking && !continueBlocking) {
+        task.start()
+        Task.unit
+      } else {
+        task
       }
     case None => logger.info("Upgrades completed successfully")
   }

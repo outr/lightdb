@@ -8,7 +8,7 @@ import lightdb.feature.DBFeatureKey
 import lightdb.filter._
 import lightdb.store.StoreManager
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB, Sort, StoredValue}
+import lightdb.{Id, LightDB, Sort, StoredValue, Timestamp}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import perfolation.double2Implicits
@@ -19,6 +19,8 @@ import java.nio.file.Path
 
 abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   val CreateRecords = 10_000
+
+  private val start = Timestamp()
 
   protected def aggregationSupported: Boolean = true
   protected def filterBuilderSupported: Boolean = false
@@ -392,6 +394,27 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         }
       }
     }
+    "sort by age and verify top results" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.sort(Sort.ByField(Person.age).desc).limit(5).toList.map { people =>
+          people.map(_.name) should be(List("Not Ruth", "Zoey", "Quintin", "Ian", "Sam"))
+        }
+      }
+    }
+    "sort by age double and verify top results" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.sort(Sort.ByField(Person.ageDouble).desc).limit(5).toList.map { people =>
+          people.map(_.name) should be(List("Not Ruth", "Zoey", "Quintin", "Ian", "Sam"))
+        }
+      }
+    }
+    "filter by created after" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.filter(_.created >= start).toList.map { people =>
+          people.map(_.name).toSet should be(Set("Brenda", "Charlie", "Diana", "Evan", "Fiona", "Greg", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Sam", "Tori", "Uba", "Veronica", "Wyatt", "Xena", "Allan", "Zoey", "Not Ruth"))
+        }
+      }
+    }
     "filter by list of friend ids" in {
       db.people.transaction { implicit transaction =>
         val q = db.people.query.filter(_
@@ -555,9 +578,11 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
                     city: Option[City] = None,
                     nicknames: Set[String] = Set.empty,
                     friends: List[Id[Person]] = Nil,
-                    _id: Id[Person] = Person.id()) extends Document[Person]
+                    created: Timestamp = Timestamp(),
+                    modified: Timestamp = Timestamp(),
+                    _id: Id[Person] = Person.id()) extends RecordDocument[Person]
 
-  object Person extends DocumentModel[Person] with JsonConversion[Person] {
+  object Person extends RecordDocumentModel[Person] with JsonConversion[Person] {
     override implicit val rw: RW[Person] = RW.gen
 
     val name: I[String] = field.index("name", (p: Person) => p.name)
@@ -568,6 +593,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val allNames: I[List[String]] = field.index("allNames", p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized("search", (doc: Person) => s"${doc.name} ${doc.age}")
     val doc: I[Person] = field.index("doc", (p: Person) => p)
+    val ageDouble: I[Double] = field.index("ageDouble", _.age.toDouble)
   }
 
   case class City(name: String)

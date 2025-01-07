@@ -17,7 +17,7 @@ import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
-import org.apache.lucene.document.{DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager, FacetsConfig, FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line, Polygon}
@@ -185,6 +185,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
             val sorted = new SortedDocValuesField(fieldSortName, bytes)
             add(sorted)
           case NumInt(l, _) => add(new NumericDocValuesField(fieldSortName, l))
+          case NumDec(d, _) => add(new DoubleDocValuesField(fieldSortName, d.toDouble))
           case j if field.isSpatial && j != Null =>
             val list = j match {
               case Arr(values, _) => values.toList.map(_.as[Geo])

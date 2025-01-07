@@ -4,9 +4,8 @@ import benchmark.FlushingBacklog
 import cats.effect.unsafe.IORuntime
 import com.mongodb.client.MongoClients
 import com.mongodb.client.model.Indexes
-import lightdb.Unique
 import org.bson.Document
-import rapid.Task
+import rapid.{Task, Unique}
 
 import java.{lang, util}
 import scala.jdk.CollectionConverters._
@@ -26,7 +25,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def map2TitleAka(map: Map[String, String]): Document = {
     new Document(Map[String, AnyRef](
-      "_id" -> Unique(),
+      "_id" -> Unique().sync(),
       "titleId" -> map.value("titleId"),
       "ordering" -> Integer.valueOf(map.int("ordering")),
       "title" -> map.value("title"),
@@ -40,7 +39,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def map2TitleBasics(map: Map[String, String]): Document = {
     new Document(Map[String, AnyRef](
-      "_id" -> Unique(),
+      "_id" -> Unique().sync(),
       "tconst" -> map.value("tconst"),
       "titleType" -> map.value("titleType"),
       "primaryTitle" -> map.value("primaryTitle"),

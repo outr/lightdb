@@ -1,7 +1,7 @@
 package benchmark.bench
 
 import benchmark.ActionIterator
-import lightdb.Unique
+import rapid.Unique
 
 import java.sql.ResultSet
 import scala.collection.parallel.CollectionConverters._
@@ -33,7 +33,7 @@ trait Bench {
 
   private def insertRecordsTask(status: StatusCallback): Int = {
     val iterator = ActionIterator(
-      (0 until RecordCount).iterator.map(index => P(Unique(), index, s"id$index")),
+      (0 until RecordCount).iterator.map(index => P(Unique().sync(), index, s"id$index")),
       b => if (b) status.progress()
     )
     insertRecords(iterator)
