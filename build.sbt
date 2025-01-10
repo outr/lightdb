@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "2.1.0-SNAPSHOT"
+ThisBuild / version := "2.1.0"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -45,7 +45,7 @@ ThisBuild / javaOptions ++= Seq(
 )
 
 ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
-
+ThisBuild / Test / parallelExecution := false
 ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.12.0"
@@ -66,7 +66,7 @@ val jedisVersion: String = "5.2.0"
 
 val fabricVersion: String = "1.15.6"
 
-val scribeVersion: String = "3.15.3"
+val scribeVersion: String = "3.16.0"
 
 val luceneVersion: String = "10.1.0"
 
@@ -82,7 +82,7 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.3"
 
-val rapidVersion: String = "0.5.0"
+val rapidVersion: String = "0.7.0"
 
 val scalaTestVersion: String = "3.2.19"
 
