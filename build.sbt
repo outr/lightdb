@@ -80,7 +80,7 @@ val duckdbVersion: String = "1.1.3"
 
 val h2Version: String = "2.3.232"
 
-val postgresqlVersion: String = "42.7.3"
+val postgresqlVersion: String = "42.7.5"
 
 val rapidVersion: String = "0.8.0"
 
