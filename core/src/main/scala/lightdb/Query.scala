@@ -46,6 +46,10 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     copy(filter = Some(combined))
   }
 
+  def filterOption(f: Model => Option[Filter[Doc]]): Q = f(model)
+    .map(f => filter(_ => f))
+    .getOrElse(this)
+
   def facet(f: Model => FacetField[Doc],
             path: List[String] = Nil,
             childrenLimit: Option[Int] = Some(10),
