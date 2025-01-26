@@ -532,6 +532,17 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }
 
+  override def optimize(): Task[Unit] = Task {
+    val s = index.createIndexSearcher()
+    val currentSegments = try {
+      s.getIndexReader.leaves().size()
+    } finally {
+      index.releaseIndexSearch(s)
+    }
+    scribe.info(s"Optimizing Lucene Index. Current segment count: $currentSegments")
+    index.indexWriter.forceMerge(1)
+  }
+
   override def aggregate(query: AggregateQuery[Doc, Model])
                         (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     Aggregator(query, model)
