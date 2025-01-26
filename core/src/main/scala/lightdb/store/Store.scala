@@ -80,6 +80,12 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def reIndex(): Task[Boolean] = Task.pure(false)
 
+  /**
+   * Optimizes this store. This allows the implementation an opportunity to clean up, optimize, etc. to improve the
+   * performance of the store.
+   */
+  def optimize(): Task[Unit] = Task.unit
+
   def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Doc] = get(model._id, id).map(_.getOrElse {
     throw DocNotFoundException(name, "_id", id)
   })
