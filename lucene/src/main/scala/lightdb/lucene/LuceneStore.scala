@@ -539,7 +539,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     } finally {
       index.releaseIndexSearch(s)
     }
-    scribe.info(s"Optimizing Lucene Index. Current segment count: $currentSegments")
+    scribe.info(s"Optimizing Lucene Index for $name. Current segment count: $currentSegments")
     index.indexWriter.forceMerge(1)
   }
 

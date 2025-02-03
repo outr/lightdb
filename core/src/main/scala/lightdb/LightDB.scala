@@ -72,6 +72,11 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   def reIndex(collections: List[Collection[_, _]] = collections): Task[Int] = collections.map(_.reIndex()).tasks.map(_.count(identity))
 
   /**
+   * Offers each collection the ability to optimize the store.
+   */
+  def optimize(collections: List[Collection[_, _]] = collections): Task[Unit] = collections.map(_.store.optimize()).tasks.unit
+
+  /**
    * True if this database has been disposed.
    */
   def disposed: Boolean = _disposed.get()
@@ -123,7 +128,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     val store = storeManager.getOrElse(this.storeManager).create[Doc, Model](this, model, n, StoreMode.All())
     val c = Collection[Doc, Model](n, model, store)
     synchronized {
-      _collections = c :: _collections
+      _collections = _collections ::: List(c)
     }
     if (isInitialized) { // Already initialized database, init collection immediately
       c.init.sync()
