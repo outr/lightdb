@@ -64,7 +64,7 @@ object DatabaseRestore {
             stream = rapid.Stream.fromIterator(Task(source.getLines().map(JsonParser.apply)))
             count <- collection.t.json.insert(stream, disableSearchUpdates = true)
             _ <- logger.info(s"Restored $count documents to ${collection.name}")
-          } yield Some(collection -> count)
+          } yield Some((collection, count))
           task.guarantee(Task(source.close()))
         case None => Task.pure(None)
       }
