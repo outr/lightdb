@@ -4,7 +4,7 @@ import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.facet.taxonomy.TaxonomyReader
 import org.apache.lucene.facet.taxonomy.directory.{DirectoryTaxonomyReader, DirectoryTaxonomyWriter}
-import org.apache.lucene.index.{IndexWriter, IndexWriterConfig}
+import org.apache.lucene.index.{ConcurrentMergeScheduler, IndexWriter, IndexWriterConfig, TieredMergePolicy}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.search.{IndexSearcher, SearcherFactory, SearcherManager}
 import org.apache.lucene.store.{BaseDirectory, ByteBuffersDirectory, FSDirectory}
@@ -19,7 +19,11 @@ case class Index(path: Option[Path]) {
   private lazy val config = {
     val c = new IndexWriterConfig(analyzer)
     c.setCommitOnClose(true)
-    c.setRAMBufferSizeMB(1_000)
+    c.setRAMBufferSizeMB(2_000)
+    c.setMaxBufferedDocs(10_000)
+    c.setMergePolicy(new TieredMergePolicy)
+    c.setMergeScheduler(new ConcurrentMergeScheduler)
+    c.setUseCompoundFile(false)
     c
   }
   lazy val indexWriter = new IndexWriter(indexDirectory, config)

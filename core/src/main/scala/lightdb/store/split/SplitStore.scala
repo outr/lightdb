@@ -95,6 +95,8 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
     reIndexInternal().map(_ => true)
   }
 
+  override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
+
   private def reIndexInternal()(implicit transaction: Transaction[Doc]): Task[Unit] = searching
     .truncate()
     .flatMap { _ =>

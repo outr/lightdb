@@ -48,7 +48,7 @@ object DatabaseRestore {
       val stream = rapid.Stream.fromIterator(Task(source
         .getLines()
         .map(s => JsonParser(s))))
-      collection.t.json.insert(stream).guarantee(Task(source.close()))
+      collection.t.json.insert(stream, disableSearchUpdates = false).guarantee(Task(source.close()))
     } else {
       throw new RuntimeException(s"${file.getAbsolutePath} doesn't exist")
     }
@@ -62,14 +62,20 @@ object DatabaseRestore {
             _ <- logger.info(s"Restoring ${collection.name}...")
             _ <- collection.t.truncate().when(truncate)
             stream = rapid.Stream.fromIterator(Task(source.getLines().map(JsonParser.apply)))
-            count <- collection.t.json.insert(stream)
-            _ <- logger.info(s"Re-Indexing ${collection.name}...")
-            _ <- collection.reIndex()
+            count <- collection.t.json.insert(stream, disableSearchUpdates = true)
             _ <- logger.info(s"Restored $count documents to ${collection.name}")
-          } yield count
+          } yield Some(collection -> count)
           task.guarantee(Task(source.close()))
-        case None => Task.pure(0)
+        case None => Task.pure(None)
       }
-    }.tasks.map(_.sum)
+    }.tasks.map(_.flatten).flatMap { list =>
+      for {
+        _ <- logger.info("Finished Restoring. Re-Indexing...")
+        counts <- list.map {
+          case (collection, count) => collection.reIndex().map(_ => count)
+        }.tasks
+        _ <- logger.info(s"Finished Re-Sync")
+      } yield counts.sum
+    }
   }
 }

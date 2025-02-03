@@ -8,6 +8,7 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.field.Field._
 import lightdb.lock.LockManager
+import lightdb.store.split.SplitStore
 import lightdb.store.{Conversion, Store}
 import lightdb.transaction.Transaction
 import lightdb.util.{Disposable, Initializable}
@@ -95,7 +96,11 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
 
     object json {
-      def insert(stream: rapid.Stream[Json]): Task[Int] = transaction { implicit transaction =>
+      def insert(stream: rapid.Stream[Json],
+                 disableSearchUpdates: Boolean): Task[Int] = transaction { implicit transaction =>
+        if (disableSearchUpdates) {
+          transaction.put(SplitStore.NoSearchUpdates, true)
+        }
         stream
           .map(_.as[Doc](model.rw))
           .evalMap(collection.insert)
