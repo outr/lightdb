@@ -18,7 +18,7 @@ object Id {
 
   implicit def rw[T]: RW[Id[T]] = _rw.asInstanceOf[RW[Id[T]]]
 
-  def apply[T](value: String = Unique().sync()): Id[T] = new Id[T](value)
+  def apply[T](value: String = Unique.sync()): Id[T] = new Id[T](value)
 
   def toString[T](id: Id[T]): String = id.value
 }

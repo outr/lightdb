@@ -39,7 +39,7 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
 
 object H2Store extends StoreManager {
   def config(file: Option[Path]): SQLConfig = SQLConfig(
-    jdbcUrl = s"jdbc:h2:${file.map(_.toFile.getCanonicalPath).map(p => s"file:$p").getOrElse(s"test:${Unique().sync()}")};NON_KEYWORDS=VALUE,USER,SEARCH"
+    jdbcUrl = s"jdbc:h2:${file.map(_.toFile.getCanonicalPath).map(p => s"file:$p").getOrElse(s"test:${Unique.sync()}")};NON_KEYWORDS=VALUE,USER,SEARCH"
   )
 
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
