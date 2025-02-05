@@ -18,7 +18,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", (doc: Doc) => doc._id)
 
-  def id(value: String = Unique().sync()): Id[Doc] = Id(value)
+  def id(value: String = Unique.sync()): Id[Doc] = Id(value)
 
   def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Task[Unit] = Task.unit
 

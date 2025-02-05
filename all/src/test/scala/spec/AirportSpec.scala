@@ -146,7 +146,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val vip: I[Boolean] = field.index("vip", _.vip)
 //    val vipKeys: ValueStore[String, Airport] = ValueStore[String, Airport]("vipKeys", doc => if (doc.vip) List(doc._id.value) else Nil, this, persistence = Persistence.Cached)
 
-    override def id(value: String = Unique().sync()): Id[Airport] = {
+    override def id(value: String = Unique.sync()): Id[Airport] = {
       val index = value.indexOf('/')
       val v = if (index != -1) {
         value.substring(index + 1)
