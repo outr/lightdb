@@ -22,7 +22,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      indexThreads: Int = Runtime.getRuntime.availableProcessors(),
                                                                      maxFileSize: Int = 1024 * 1024 * 1024) extends Store[Doc, Model](name, model) {
-  private val instance: HaloDB = {
+  private lazy val instance: HaloDB = {
     val opts = new HaloDBOptions
     opts.setBuildIndexThreads(indexThreads)
     opts.setMaxFileSize(maxFileSize)
