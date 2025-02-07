@@ -1,10 +1,10 @@
 package lightdb.h2
 
+import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.sql.{SQLDatabase, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
-import lightdb.LightDB
 import rapid.Unique
 
 import java.nio.file.Path

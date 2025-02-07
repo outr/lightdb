@@ -3,22 +3,22 @@ package lightdb.lucene
 import fabric.define.DefType
 import fabric.rw.Asable
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str, obj}
-import lightdb.{Id, Query, SearchResults, Sort, SortDirection}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
-import lightdb.field.{Field, IndexingState}
 import lightdb.field.Field.Tokenized
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Spatial}
 import lightdb.store.{Conversion, StoreMode}
 import lightdb.transaction.Transaction
-import org.apache.lucene.document.{DoubleField, DoublePoint, IntPoint, LatLonDocValuesField, LatLonPoint, LongField, LongPoint}
+import lightdb.{Id, Query, SearchResults, Sort, SortDirection}
+import org.apache.lucene.document._
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, IndexSearcher, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
 import rapid.Task
 
 class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],

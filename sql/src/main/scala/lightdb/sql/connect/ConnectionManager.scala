@@ -3,7 +3,6 @@ package lightdb.sql.connect
 import lightdb.doc.Document
 import lightdb.transaction.Transaction
 import lightdb.util.Disposable
-import rapid.Task
 
 import java.sql.Connection
 
