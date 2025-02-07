@@ -21,7 +21,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
                                                                        filter: Option[Filter[Doc]] = None,
                                                                        sort: List[Sort] = Nil,
                                                                        offset: Int = 0,
-                                                                       limit: Option[Int] = None,
+                                                                       limit: Int = 100,
                                                                        countTotal: Boolean = false,
                                                                        scoreDocs: Boolean = false,
                                                                        minDocScore: Option[Double] = None,
@@ -73,9 +73,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
 
   def offset(offset: Int): Q = copy(offset = offset)
 
-  def limit(limit: Int): Q = copy(limit = Some(limit))
-
-  def clearLimit: Q = copy(limit = None)
+  def limit(limit: Int): Q = copy(limit = limit)
 
   def countTotal(b: Boolean): Q = copy(countTotal = b)
 
