@@ -6,24 +6,21 @@ import fabric.io.JsonFormatter
 import fabric.rw.Asable
 import lightdb._
 import lightdb.aggregate.AggregateQuery
-import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.facet.{FacetResult, FacetResultValue}
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}
-import lightdb.filter.{Condition, Filter}
+import lightdb.filter.Filter
 import lightdb.lucene.index.Index
-import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
-import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
+import lightdb.materialized.MaterializedAggregate
+import lightdb.spatial.Geo
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.Aggregator
-import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, DoublePoint, IntField, IntPoint, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, LongPoint, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
-import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
-import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager, FacetsConfig, FacetField => LuceneFacetField}
+import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.facet.{FacetsConfig, FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line, Polygon}
-import org.apache.lucene.index.{DirectoryReader, SegmentReader, StoredFields, Term}
-import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, IndexSearcher, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.index.{DirectoryReader, SegmentReader, Term}
+import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery}
 import org.apache.lucene.store.FSDirectory
 import org.apache.lucene.util.{BytesRef, Version}
 import rapid._
