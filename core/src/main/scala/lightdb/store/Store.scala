@@ -33,7 +33,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def storeMode: StoreMode[Doc, Model]
 
-  protected lazy val fields: List[Field[Doc, _]] = if (storeMode.isIndexes) {
+  lazy val fields: List[Field[Doc, _]] = if (storeMode.isIndexes) {
     model.fields.filter(_.isInstanceOf[Indexed[_, _]])
   } else {
     model.fields

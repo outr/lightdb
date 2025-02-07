@@ -373,7 +373,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
           SQLPart(s"${index.name} $dir")
         case Sort.ByDistance(field, _, direction) => sortByDistance(field, direction)
       },
-      limit = query.limit,
+      limit = Some(query.limit),
       offset = query.offset
     )
     val results = b.execute()
@@ -452,7 +452,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       group = group,
       having = having,
       sort = sort,
-      limit = query.query.limit,
+      limit = Some(query.query.limit),
       offset = query.query.offset
     )
   }
