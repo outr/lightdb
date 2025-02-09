@@ -5,6 +5,7 @@ import fabric.rw._
 import perfolation.long2Implicits
 
 import java.util.Calendar
+import scala.concurrent.duration.FiniteDuration
 
 case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
   def year: Int = value.t.year
@@ -14,6 +15,11 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
   def minute: Int = value.t.minuteOfHour
   def second: Int = value.t.secondOfMinute
   def millisecond: Int = value.t.milliOfSecond
+
+  def isExpired(timeout: FiniteDuration): Boolean = {
+    val now = System.currentTimeMillis()
+    value + timeout.toMillis < now
+  }
 }
 
 object Timestamp {
