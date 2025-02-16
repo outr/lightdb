@@ -97,7 +97,6 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     // Get applied database upgrades
     applied <- appliedUpgrades.get()
     // Determine upgrades that need to be applied
-    // TODO: Test upgrades that run asynchronously!
     upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label))
     _ <- logger.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
       .when(upgrades.nonEmpty)
