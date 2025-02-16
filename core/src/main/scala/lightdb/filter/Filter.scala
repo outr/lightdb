@@ -101,6 +101,10 @@ object Filter {
   case class DrillDownFacetFilter[Doc <: Document[Doc]](fieldName: String, path: List[String], showOnlyThisLevel: Boolean = false) extends Filter[Doc] {
     override lazy val fieldNames: List[String] = List(fieldName)
 
-    def onlyThisLevel: DrillDownFacetFilter[Doc] = copy(showOnlyThisLevel = true)
+    /**
+     * Only returns facets that represent this as the lowest level. If there's another level below this, it will be
+     * excluded from the result set.
+     */
+    lazy val onlyThisLevel: DrillDownFacetFilter[Doc] = copy(showOnlyThisLevel = true)
   }
 }
