@@ -21,6 +21,8 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      instance: HaloDBInstance) extends Store[Doc, Model](name, model) {
   private implicit def rw: RW[Doc] = model.rw
 
+  override protected def initialize(): Task[Unit] = Task.unit
+
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)

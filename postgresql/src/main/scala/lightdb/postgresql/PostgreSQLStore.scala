@@ -10,7 +10,6 @@ import java.sql.Connection
 class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,
                                                                          val connectionManager: ConnectionManager,
-                                                                         val connectionShared: Boolean,
                                                                          val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
   protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT * FROM information_schema.tables;")

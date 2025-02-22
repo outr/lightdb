@@ -14,7 +14,6 @@ import java.sql.Connection
 class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                  model: Model,
                                                                  val connectionManager: ConnectionManager,
-                                                                 val connectionShared: Boolean,
                                                                  val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
   override protected def upsertPrefix: String = "MERGE"
 
@@ -50,7 +49,6 @@ object H2Store extends StoreManager {
       name = name,
       model = model,
       connectionManager = SingleConnectionManager(config(file)),
-      connectionShared = false,
       storeMode = storeMode
     )
 
@@ -63,7 +61,6 @@ object H2Store extends StoreManager {
         name = name,
         model = model,
         connectionManager = sqlDB.connectionManager,
-        connectionShared = true,
         storeMode
       )
       case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.h2")), storeMode)

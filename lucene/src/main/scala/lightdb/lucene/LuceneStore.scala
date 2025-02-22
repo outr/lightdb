@@ -53,16 +53,18 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     doc
   }
 
-  directory.foreach { path =>
-    if (Files.exists(path)) {
-      val directory = FSDirectory.open(path)
-      val reader = DirectoryReader.open(directory)
-      reader.leaves().forEach { leaf =>
-        val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
-        val latest = Version.LATEST
-        if (latest != dataVersion) {
-          // TODO: Support re-indexing
-          scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
+  override protected def initialize(): Task[Unit] = Task {
+    directory.foreach { path =>
+      if (Files.exists(path)) {
+        val directory = FSDirectory.open(path)
+        val reader = DirectoryReader.open(directory)
+        reader.leaves().forEach { leaf =>
+          val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
+          val latest = Version.LATEST
+          if (latest != dataVersion) {
+            // TODO: Support re-indexing
+            scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
+          }
         }
       }
     }

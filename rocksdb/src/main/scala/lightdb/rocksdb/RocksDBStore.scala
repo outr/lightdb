@@ -28,6 +28,8 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     }
   }
 
+  override protected def initialize(): Task[Unit] = Task.unit
+
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
@@ -151,6 +153,7 @@ object RocksDBStore extends StoreManager {
     Files.createDirectories(directory.getParent)
     val path = directory.toAbsolutePath.toString
     val columnFamilies = new util.ArrayList[ColumnFamilyDescriptor]
+    columnFamilies.add(new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY))
     RocksDB.listColumnFamilies(new Options(), path)
       .asScala
       .foreach { name =>

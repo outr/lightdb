@@ -22,7 +22,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def trigger: store.trigger.type = store.trigger
 
-  override protected def initialize(): Task[Unit] = Task {
+  override protected def initialize(): Task[Unit] = store.init.next {
     model match {
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet
@@ -47,7 +47,7 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       // Verify the data is in-sync
       verify()
     }
-  }.flatten.unit
+  }.unit
 
   def verify(): Task[Boolean] = store.verify()
 

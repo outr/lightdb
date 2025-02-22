@@ -26,7 +26,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
   }
   private lazy val map: HTreeMap[String, String] = db.hashMap("map", Serializer.STRING, Serializer.STRING).createOrOpen()
 
-  map.verify()
+  override protected def initialize(): Task[Unit] = Task(map.verify())
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
