@@ -14,7 +14,7 @@ import lightdb.lock.LockManager
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.trigger.CollectionTriggers
-import lightdb.util.Disposable
+import lightdb.util.{Disposable, Initializable}
 import rapid.{Forge, Task}
 import scribe.{rapid => logger}
 
@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
                                                                         model: Model) extends Disposable {
-  protected def id(doc: Doc): Id[Doc] = doc.asInstanceOf[Document[_]]._id.asInstanceOf[Id[Doc]]
+  protected def id(doc: Doc): Id[Doc] = doc._id
   lazy val idField: UniqueIndex[Doc, Id[Doc]] = model._id
 
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
