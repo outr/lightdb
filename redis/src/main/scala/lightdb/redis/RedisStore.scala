@@ -22,7 +22,7 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
   private lazy val config = new JedisPoolConfig
   private lazy val pool = new JedisPool(config, hostname, port)
 
-  pool.preparePool()
+  override protected def initialize(): Task[Unit] = Task(pool.preparePool())
 
   private def getInstance(implicit transaction: Transaction[Doc]): Jedis =
     transaction.getOrCreate(InstanceKey, pool.getResource)

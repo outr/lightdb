@@ -24,12 +24,13 @@ import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
 abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model) extends Store[Doc, Model](name, model) {
-  protected def connectionShared: Boolean
   protected def connectionManager: ConnectionManager
 
-  transaction { implicit transaction =>
-    initTransaction()
-  }.sync()
+  override protected def initialize(): Task[Unit] = Task.next {
+    transaction { implicit transaction =>
+      initTransaction()
+    }
+  }
 
   protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
     val entries = fields.collect {
@@ -41,7 +42,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
           s"${field.name} $t"
         }
     }.mkString(", ")
-    executeUpdate(s"CREATE TABLE $name($entries)")
+    executeUpdate(s"CREATE TABLE IF NOT EXISTS $name($entries)")
   }
 
   private def def2Type(name: String, d: DefType): String = d match {
@@ -60,6 +61,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = Task {
+    connectionManager.active()
     val connection = connectionManager.getConnection
     val existingTables = tables(connection)
     if (!existingTables.contains(name.toLowerCase)) {
@@ -635,5 +637,5 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override protected def doDispose(): Task[Unit] = connectionManager.dispose.when(!connectionShared)
+  override protected def doDispose(): Task[Unit] = connectionManager.release()
 }

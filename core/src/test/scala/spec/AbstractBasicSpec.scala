@@ -217,7 +217,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         // Don't dispose
         Task.unit.succeed
       } else {
-        db.dispose.flatMap { _ =>
+        db.dispose.next {
           db = new DB
           db.init
         }.succeed

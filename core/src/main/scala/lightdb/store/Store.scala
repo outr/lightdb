@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
-                                                                        model: Model) extends Disposable {
+                                                                        model: Model) extends Initializable with Disposable {
   protected def id(doc: Doc): Id[Doc] = doc._id
   lazy val idField: UniqueIndex[Doc, Id[Doc]] = model._id
 

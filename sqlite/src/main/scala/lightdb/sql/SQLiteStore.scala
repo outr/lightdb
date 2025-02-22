@@ -22,9 +22,8 @@ import java.util.regex.Pattern
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,
                                                                      val connectionManager: ConnectionManager,
-                                                                     val connectionShared: Boolean,
                                                                      val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
-  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = Task {
+  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = super.initTransaction().map { _ =>
     val c = connectionManager.getConnection
     if (hasSpatial.sync()) {
       scribe.info(s"$name has spatial features. Enabling...")
@@ -80,8 +79,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         result(if (pattern.matcher(value).find()) 1 else 0)
       }
     })
-    super.initTransaction()
-  }.flatten
+  }
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 
@@ -120,7 +118,6 @@ object SQLiteStore extends StoreManager {
       name = name,
       model = model,
       connectionManager = singleConnectionManager(file),
-      connectionShared = false,
       storeMode = storeMode
     )
   }
@@ -135,7 +132,6 @@ object SQLiteStore extends StoreManager {
           name = name,
           model = model,
           connectionManager = sqlDB.connectionManager,
-          connectionShared = true,
           storeMode = storeMode
         )
       case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.sqlite")), storeMode)

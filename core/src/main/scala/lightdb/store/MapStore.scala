@@ -13,6 +13,8 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                   val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) { store =>
   private var map = Map.empty[Id[Doc], Doc]
 
+  override protected def initialize(): Task[Unit] = Task.unit
+
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
