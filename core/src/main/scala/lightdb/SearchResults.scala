@@ -18,6 +18,7 @@ case class SearchResults[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](m
   lazy val listWithScore: Task[List[(V, Double)]] = streamWithScore.toList
   lazy val list: Task[List[V]] = listWithScore.map(_.map(_._1))
   lazy val scores: Task[List[Double]] = listWithScore.map(_.map(_._2))
+
   /**
    * Represents the total minus the current offset.
    *

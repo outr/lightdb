@@ -9,21 +9,23 @@ import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import org.rocksdb.{FlushOptions, Options, RocksDB, RocksIterator}
+import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, ColumnFamilyOptions, DBOptions, FlushOptions, Options, RocksDB, RocksIterator}
 import rapid.Task
 
 import java.nio.file.{Files, Path}
+import java.util
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                       model: Model,
-                                                                      directory: Path,
+                                                                      rocksDB: RocksDB,
+                                                                      sharedStore: Option[RocksDBSharedStoreInstance],
                                                                       val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
-  RocksDB.loadLibrary()
-  private val db: RocksDB = {
-    Files.createDirectories(directory.getParent)
-    val options = new Options()
-      .setCreateIfMissing(true)
-    RocksDB.open(options, directory.toAbsolutePath.toString)
+  private val handle: Option[ColumnFamilyHandle] = sharedStore.map { ss =>
+    ss.existingHandle match {
+      case Some(handle) => handle
+      case None => rocksDB.createColumnFamily(new ColumnFamilyDescriptor(ss.handle.getBytes("UTF-8")))
+    }
   }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
@@ -32,16 +34,29 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val json = doc.json(model.rw)
-    db.put(doc._id.bytes, JsonFormatter.Compact(json).getBytes("UTF-8"))
+    val bytes = JsonFormatter.Compact(json).getBytes("UTF-8")
+    handle match {
+      case Some(h) => rocksDB.put(h, doc._id.bytes, bytes)
+      case None => rocksDB.put(doc._id.bytes, bytes)
+    }
     doc
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task(db.keyExists(id.bytes))
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
+    handle match {
+      case Some(h) => rocksDB.keyExists(h, id.bytes)
+      case None => rocksDB.keyExists(id.bytes)
+    }
+  }
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
-      Option(db.get(value.asInstanceOf[Id[Doc]].bytes)).map(bytes2Doc)
+      val bytes = value.asInstanceOf[Id[Doc]].bytes
+      Option(handle match {
+        case Some(h) => rocksDB.get(h, bytes)
+        case None => rocksDB.get(bytes)
+      }).map(bytes2Doc)
     } else {
       throw new UnsupportedOperationException(s"RocksDBStore can only get on _id, but ${field.name} was attempted")
     }
@@ -55,15 +70,28 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
-    db.delete(value.asInstanceOf[Id[Doc]].bytes)
+    val bytes = value.asInstanceOf[Id[Doc]].bytes
+    handle match {
+      case Some(h) => rocksDB.delete(h, bytes)
+      case None => rocksDB.delete(bytes)
+    }
     true
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(iterator(db.newIterator()).size)
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task {
+    iterator(handle match {
+      case Some(h) => rocksDB.newIterator(h)
+      case None => rocksDB.newIterator()
+    }).size
+  }
 
   override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream
-    .fromIterator(Task(iterator(db.newIterator())))
-    .map(bytes2Doc)
+    .fromIterator(Task(iterator {
+      handle match {
+        case Some(h) => rocksDB.newIterator(h)
+        case None => rocksDB.newIterator()
+      }
+    })).map(bytes2Doc)
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
@@ -77,14 +105,21 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     throw new UnsupportedOperationException("RocksDBStore does not support aggregation")
 
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task {
-    iterator(db.newIterator(), value = false)
-      .map(db.delete)
-      .size
+    (handle match {
+      case Some(h) => iterator(rocksDB.newIterator(h), value = false).map(a => rocksDB.delete(h, a))
+      case None => iterator(rocksDB.newIterator(), value = false).map(rocksDB.delete)
+    }).size
   }
 
   override protected def doDispose(): Task[Unit] = Task {
-    db.flush(new FlushOptions)
-    db.close()
+    val o = new FlushOptions
+    handle match {
+      case Some(h) =>
+        rocksDB.flush(o, h)
+      case None =>
+        rocksDB.flush(o)
+        rocksDB.closeE()
+    }
   }
 
   private def iterator(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
@@ -110,9 +145,32 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 }
 
 object RocksDBStore extends StoreManager {
+  def createRocksDB(directory: Path): (RocksDB, List[ColumnFamilyHandle]) = {
+    RocksDB.loadLibrary()
+
+    Files.createDirectories(directory.getParent)
+    val path = directory.toAbsolutePath.toString
+    val columnFamilies = new util.ArrayList[ColumnFamilyDescriptor]
+    RocksDB.listColumnFamilies(new Options(), path)
+      .asScala
+      .foreach { name =>
+        columnFamilies.add(new ColumnFamilyDescriptor(name))
+      }
+    val handles = new util.ArrayList[ColumnFamilyHandle]()
+    val options = new DBOptions()
+      .setCreateIfMissing(true)
+    RocksDB.open(options, path, columnFamilies, handles) -> handles.asScala.toList
+  }
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new RocksDBStore[Doc, Model](name, model, db.directory.get.resolve(name), storeMode)
+    new RocksDBStore[Doc, Model](
+      name = name,
+      model = model,
+      rocksDB = createRocksDB(db.directory.get.resolve(name))._1,
+      sharedStore = None,
+      storeMode = storeMode
+    )
 }

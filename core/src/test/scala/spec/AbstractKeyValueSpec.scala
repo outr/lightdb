@@ -42,9 +42,17 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
   private val yuri = User("Yuri", 30, _id = User.id("yuri"))
   private val zoey = User("Zoey", 101, _id = User.id("zoey"))
 
+  private val adamAddress1 = Address(adam._id, "123 Eden Rd.")
+  private val adamAddress2 = Address(adam._id, "321 Whipped St.")
+  private val charlieAddress = Address(charlie._id, "Super Spins Blvd")
+
   private val names = List(
     adam, brenda, charlie, diana, evan, fiona, greg, hanna, ian, jenna, kevin, linda, mike, nancy, oscar, penny,
     quintin, ruth, sam, tori, uba, veronica, wyatt, xena, yuri, zoey
+  )
+
+  private val addresses = List(
+    adamAddress1, adamAddress2, charlieAddress
   )
 
   protected lazy val specName: String = getClass.getSimpleName
@@ -60,9 +68,14 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
         db.users.count.map(_ should be(0))
       }
     }
-    "insert the records" in {
+    "insert the user records" in {
       db.users.transaction { implicit transaction =>
         db.users.insert(names).map(_ should not be None)
+      }
+    }
+    "insert the address records" in {
+      db.addresses.transaction { implicit transaction =>
+        db.addresses.insert(addresses).map(_ should not be None)
       }
     }
     "retrieve the first record by _id -> id" in {
@@ -84,6 +97,13 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
       db.users.transaction { implicit transaction =>
         db.users.stream.map(_.age).toList.map(_.toSet).map { ages =>
           ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
+        }
+      }
+    }
+    "verify the correct addresses" in {
+      db.addresses.transaction { implicit transaction =>
+        db.addresses.stream.map(_.userId).toList.map { ids =>
+          ids.sorted should be(addresses.map(_.userId).sorted)
         }
       }
     }
@@ -140,10 +160,17 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
         db.users.truncate().map(_ should be(CreateRecords + 24))
       }
     }
+    "truncate the addresses collection" in {
+      db.addresses.transaction { implicit transaction =>
+        db.addresses.truncate().map(_ should be(3))
+      }
+    }
     "dispose the database" in {
-      db.dispose.succeed
+      db.dispose.next(dispose()).succeed
     }
   }
+
+  def dispose(): Task[Unit] = Task.unit
 
   def storeManager: StoreManager
 
@@ -151,6 +178,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val users: Collection[User, User.type] = collection(User)
+    val addresses: Collection[Address, Address.type] = collection(Address)
 
     override def storeManager: StoreManager = spec.storeManager
 
@@ -164,5 +192,14 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
 
     val name: I[String] = field.index("name", _.name)
     val age: F[Int] = field("age", _.age)
+  }
+
+  case class Address(userId: Id[User], value: String, _id: Id[Address] = Address.id()) extends Document[Address]
+
+  object Address extends DocumentModel[Address] with JsonConversion[Address] {
+    override implicit val rw: RW[Address] = RW.gen
+
+    val userId: I[Id[User]] = field.index("userId", _.userId)
+    val value: F[String] = field("value", _.value)
   }
 }
