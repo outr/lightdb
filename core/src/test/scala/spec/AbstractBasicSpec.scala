@@ -565,7 +565,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
     val people: Collection[Person, Person.type] = collection(Person)
-    // TODO: Revisit this - performance is currently awful and transaction state causes overlapping dirty data
+
     val ageLinks: Collection[AgeLinks, AgeLinks.type] = collection(AgeLinks)
 
     override def storeManager: StoreManager = spec.storeManager
