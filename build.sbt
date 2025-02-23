@@ -41,6 +41,8 @@ ThisBuild / outputStrategy := Some(StdoutOutput)
 
 ThisBuild / javaOptions ++= Seq(
 	"--enable-native-access=ALL-UNNAMED",
+	"--add-opens=java.base/java.nio=ALL-UNNAMED",
+	"--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
 	"--add-modules", "jdk.incubator.vector"
 )
 
@@ -61,6 +63,8 @@ val haloDBVersion: String = "0.5.7"
 val rocksDBVersion: String = "9.10.0"
 
 val mapdbVersion: String = "3.1.0"
+
+val lmdbVersion: String = "0.9.1"
 
 val jedisVersion: String = "5.2.0"
 
@@ -87,7 +91,7 @@ val rapidVersion: String = "0.10.0"
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, redis, all)
+	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, redis, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -230,6 +234,17 @@ lazy val mapdb = project.in(file("mapdb"))
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
 			"org.mapdb" % "mapdb" % mapdbVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		),
+		fork := true
+	)
+
+lazy val lmdb = project.in(file("lmdb"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-lmdb",
+		libraryDependencies ++= Seq(
+			"org.lmdbjava" % "lmdbjava" % lmdbVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
 		fork := true

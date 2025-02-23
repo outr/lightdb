@@ -7,6 +7,7 @@ Computationally focused database using pluggable stores
 - Yahoo's HaloDB (https://github.com/yahoo/HaloDB)
 - MapDB (https://mapdb.org)
 - Facebook's RocksDB (https://rocksdb.org)
+- LMDB (https://www.symas.com/mdb)
 - Redis (https://redis.io)
 - Apache Lucene (https://lucene.apache.org)
 - SQLite (https://www.sqlite.org)
