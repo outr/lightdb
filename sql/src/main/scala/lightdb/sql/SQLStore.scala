@@ -26,6 +26,8 @@ import scala.language.implicitConversions
 abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model) extends Store[Doc, Model](name, model) {
   protected def connectionManager: ConnectionManager
 
+  override def supportsArbitraryQuery: Boolean = true
+
   override protected def initialize(): Task[Unit] = Task.next {
     transaction { implicit transaction =>
       initTransaction()
@@ -346,60 +348,66 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
-    var extraFields = List.empty[SQLPart]
-    val fields = query.conversion match {
-      case Conversion.Value(field) => List(field)
-      case Conversion.Doc() | Conversion.Converted(_) => this.fields
-      case Conversion.Materialized(fields) => fields
-      case Conversion.DocAndIndexes() => if (storeMode.isIndexes) {
-        this.fields.filter(_.indexed)
-      } else {
-        this.fields
-      }
-      case Conversion.Json(fields) => fields
-      case d: Conversion.Distance[Doc, _] =>
-        extraFields = extraFields ::: extraFieldsForDistance(d)
-        this.fields
+    query.arbitraryQuery match {
+      case Some(aq) =>
+        // TODO: Support arbitrary query
+        ???
+      case None =>
+        var extraFields = List.empty[SQLPart]
+        val fields = query.conversion match {
+          case Conversion.Value(field) => List(field)
+          case Conversion.Doc() | Conversion.Converted(_) => this.fields
+          case Conversion.Materialized(fields) => fields
+          case Conversion.DocAndIndexes() => if (storeMode.isIndexes) {
+            this.fields.filter(_.indexed)
+          } else {
+            this.fields
+          }
+          case Conversion.Json(fields) => fields
+          case d: Conversion.Distance[Doc, _] =>
+            extraFields = extraFields ::: extraFieldsForDistance(d)
+            this.fields
+        }
+        val state = getState
+        val b = SQLQueryBuilder(
+          store = this,
+          state = state,
+          fields = fields.map(f => fieldPart(f)) ::: extraFields,
+          filters = query.filter.map(filter2Part).toList,
+          group = Nil,
+          having = Nil,
+          sort = query.sort.collect {
+            case Sort.ByField(index, direction) =>
+              val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+              SQLPart(s"${index.name} $dir")
+            case Sort.ByDistance(field, _, direction) => sortByDistance(field, direction)
+          },
+          limit = Some(query.limit),
+          offset = query.offset
+        )
+        val results = b.execute()
+        val rs = results.rs
+        state.register(rs)
+        val total = if (query.countTotal) {
+          Some(b.queryTotal())
+        } else {
+          None
+        }
+        val stream = rapid.Stream.fromIterator[(V, Double)](Task {
+          val iterator = rs2Iterator(rs, query.conversion)
+          val ps = rs.getStatement.asInstanceOf[PreparedStatement]
+          ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
+        })
+        SearchResults(
+          model = model,
+          offset = query.offset,
+          limit = query.limit,
+          total = total,
+          streamWithScore = stream,
+          facetResults = Map.empty,
+          transaction = transaction
+        )
     }
-    val state = getState
-    val b = SQLQueryBuilder(
-      store = this,
-      state = state,
-      fields = fields.map(f => fieldPart(f)) ::: extraFields,
-      filters = query.filter.map(filter2Part).toList,
-      group = Nil,
-      having = Nil,
-      sort = query.sort.collect {
-        case Sort.ByField(index, direction) =>
-          val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-          SQLPart(s"${index.name} $dir")
-        case Sort.ByDistance(field, _, direction) => sortByDistance(field, direction)
-      },
-      limit = Some(query.limit),
-      offset = query.offset
-    )
-    val results = b.execute()
-    val rs = results.rs
-    state.register(rs)
-    val total = if (query.countTotal) {
-      Some(b.queryTotal())
-    } else {
-      None
-    }
-    val stream = rapid.Stream.fromIterator[(V, Double)](Task {
-      val iterator = rs2Iterator(rs, query.conversion)
-      val ps = rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
-    })
-    SearchResults(
-      model = model,
-      offset = query.offset,
-      limit = query.limit,
-      total = total,
-      streamWithScore = stream,
-      facetResults = Map.empty,
-      transaction = transaction
-    )
   }
 
   protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {

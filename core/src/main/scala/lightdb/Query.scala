@@ -25,7 +25,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
                                                                        countTotal: Boolean = false,
                                                                        scoreDocs: Boolean = false,
                                                                        minDocScore: Option[Double] = None,
-                                                                       facets: List[FacetQuery[Doc]] = Nil) { query =>
+                                                                       facets: List[FacetQuery[Doc]] = Nil,
+                                                                       arbitraryQuery: Option[ArbitraryQuery] = None) { query =>
   private type Q = Query[Doc, Model, V]
 
   def scored: Q = copy(scoreDocs = true)
@@ -34,6 +35,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     scoreDocs = true,
     minDocScore = Some(min)
   )
+
+  def withArbitraryQuery(query: ArbitraryQuery): Q = copy(arbitraryQuery = Some(query))
 
   def clearFilters: Q = copy(filter = None)
 
@@ -114,6 +117,9 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     ))
 
   def search(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
+    if (arbitraryQuery.nonEmpty && !store.supportsArbitraryQuery) {
+      throw new UnsupportedOperationException(s"Arbitrary query is set, but not allowed with this store (${store.getClass.getSimpleName})")
+    }
     val storeMode = store.storeMode
     if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
       val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
