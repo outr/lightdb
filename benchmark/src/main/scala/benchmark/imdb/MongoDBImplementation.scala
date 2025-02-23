@@ -25,7 +25,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def map2TitleAka(map: Map[String, String]): Document = {
     new Document(Map[String, AnyRef](
-      "_id" -> Unique().sync(),
+      "_id" -> Unique(),
       "titleId" -> map.value("titleId"),
       "ordering" -> Integer.valueOf(map.int("ordering")),
       "title" -> map.value("title"),
@@ -39,7 +39,7 @@ object MongoDBImplementation extends BenchmarkImplementation {
 
   override def map2TitleBasics(map: Map[String, String]): Document = {
     new Document(Map[String, AnyRef](
-      "_id" -> Unique().sync(),
+      "_id" -> Unique(),
       "tconst" -> map.value("tconst"),
       "titleType" -> map.value("titleType"),
       "primaryTitle" -> map.value("primaryTitle"),

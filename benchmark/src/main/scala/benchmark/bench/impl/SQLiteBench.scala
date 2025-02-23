@@ -94,5 +94,5 @@ object SQLiteBench extends Bench {
     }
   }
 
-  case class Person(name: String, age: Int, id: String = Unique().sync())
+  case class Person(name: String, age: Int, id: String = Unique())
 }

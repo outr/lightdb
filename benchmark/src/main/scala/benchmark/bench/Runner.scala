@@ -5,6 +5,7 @@ import fabric.io.JsonFormatter
 import fabric.rw._
 import lightdb.h2.H2Store
 import lightdb.halodb.HaloDBStore
+import lightdb.lmdb.LMDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.sql.SQLiteStore
@@ -31,6 +32,7 @@ object Runner {
     "LightDB-RocksDB-Lucene" -> LightDBBench(SplitStoreManager(RocksDBStore, LuceneStore)),
     "LightDB-H2" -> LightDBBench(H2Store),
     "LightDB-HaloDB-H2" -> LightDBBench(SplitStoreManager(HaloDBStore, H2Store)),
+    "LightDB-LMDB-Lucene" -> LightDBBench(SplitStoreManager(LMDBStore, H2Store)),
 //    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
 //      jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
 //      username = Some("postgres"),

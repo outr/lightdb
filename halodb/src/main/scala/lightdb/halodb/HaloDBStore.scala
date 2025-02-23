@@ -1,8 +1,6 @@
 package lightdb.halodb
 
-import com.oath.halodb.{HaloDB, HaloDBOptions}
 import fabric._
-import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible, RW}
 import lightdb._
 import lightdb.aggregate.AggregateQuery
@@ -11,7 +9,7 @@ import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import rapid.Task
+import rapid._
 
 import scala.language.implicitConversions
 

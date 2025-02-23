@@ -1,6 +1,6 @@
 package lightdb.halodb
 
-import fabric.{Json, obj}
+import fabric._
 import lightdb.Id
 import rapid.Task
 
