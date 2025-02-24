@@ -8,7 +8,7 @@ import rapid.Task
 
 case class SearchResults[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Model,
                                                                                offset: Int,
-                                                                               limit: Int,
+                                                                               limit: Option[Int],
                                                                                total: Option[Int],
                                                                                streamWithScore: rapid.Stream[(V, Double)],
                                                                                facetResults: Map[FacetField[Doc], FacetResult],

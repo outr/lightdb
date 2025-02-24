@@ -26,7 +26,7 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
       key = StateKey,
-      value = instance.createTransaction()
+      value = LMDBTransaction(instance)
     )
   }
 
@@ -44,26 +44,34 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     bb.flip()
   }
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
-    val key = this.key(doc._id)
-    val value = this.value(doc)
-    dbi.put(getState.txn, key, value, PutFlags.MDB_NOOVERWRITE)
-    doc
+  private def withWrite[Return](f: Txn[ByteBuffer] => Task[Return]): Task[Return] =
+    instance.transactionManager.withWrite(f)
+
+  private def withRead[Return](f: Txn[ByteBuffer] => Task[Return]): Task[Return] =
+    instance.transactionManager.withRead(f)
+
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
+    Task {
+      dbi.put(txn, key(doc._id), value(doc), PutFlags.MDB_NOOVERWRITE)
+      doc
+    }
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
-    val key = this.key(doc._id)
-    val value = this.value(doc)
-    dbi.put(getState.txn, key, value)
-    doc
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
+    Task {
+      dbi.put(txn, key(doc._id), value(doc))
+      doc
+    }
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
-    val cursor = dbi.openCursor(getState.txn) // ✅ Open a cursor for efficient key lookup
-    try {
-      cursor.get(key(id), GetOp.MDB_SET_KEY)
-    } finally {
-      cursor.close()
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = withRead { txn =>
+    Task {
+      val cursor = dbi.openCursor(txn) // ✅ Open a cursor for efficient key lookup
+      try {
+        cursor.get(key(id), GetOp.MDB_SET_KEY)
+      } finally {
+        cursor.close()
+      }
     }
   }
 
@@ -76,29 +84,37 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   }
 
   override def get[V](field: Field.UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
-    if (field == idField) {
-      Option(dbi.get(getState.txn, key(value.asInstanceOf[Id[Doc]]))).filterNot(_.remaining() == 0).map(b2d)
-    } else {
-      throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
+                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = withRead { txn =>
+    Task {
+      if (field == idField) {
+        Option(dbi.get(txn, key(value.asInstanceOf[Id[Doc]]))).filterNot(_.remaining() == 0).map(b2d)
+      } else {
+        throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
+      }
     }
   }
 
   override def delete[V](field: Field.UniqueIndex[Doc, V], value: V)
-                        (implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
-    if (field == idField) {
-      dbi.delete(getState.txn, key(value.asInstanceOf[Id[Doc]]))
-    } else {
-      throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
+                        (implicit transaction: Transaction[Doc]): Task[Boolean] = withWrite { txn =>
+    Task {
+      if (field == idField) {
+        dbi.delete(txn, key(value.asInstanceOf[Id[Doc]]))
+      } else {
+        throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
+      }
     }
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task {
-    dbi.stat(getState.txn).entries.toInt
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] = withRead { txn =>
+    Task {
+      dbi.stat(txn).entries.toInt
+    }
   }
 
   override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
-    rapid.Stream.fromIterator(Task(new LMDBValueIterator(dbi, getState.txn).map(b2d)))
+    rapid.Stream.fromIterator(Task(instance.transactionManager.withReadIterator { txn =>
+      new LMDBValueIterator(dbi, txn).map(b2d)
+    }))
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
@@ -112,30 +128,53 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     throw new UnsupportedOperationException("LMDBStore does not support aggregation")
 
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = count.flatTap { _ =>
-    Task(dbi.drop(getState.txn))
+    withWrite { txn =>
+      Task(dbi.drop(txn))
+    }
   }
 
   override protected def doDispose(): Task[Unit] = instance.release(name)
 }
 
 object LMDBStore extends StoreManager {
+  /**
+   * Maximum number of collections. Defaults to 1,000
+   */
+  var MaxDbs: Int = 1_000
+
+  /**
+   * Map Size. Defaults to 100gig
+   */
+  var MapSize: Long = 100L * 1024 * 1024 * 1024
+
+  /**
+   * Max Readers. Defaults to 128
+   */
+  var MaxReaders: Int = 128
+
   private val keyBufferPool = new ByteBufferPool(512)
   private val valueBufferPool = new ByteBufferPool(512)
 
-  def createInstance(directory: Path,
-                maxDbs: Int = 1_000,                          // 1,000 default
-                mapSize: Long = 100L * 1024 * 1024 * 1024,    // 100 gig
-                maxReaders: Int = 128): LMDBInstance = {
-    if (!Files.exists(directory)) {
-      Files.createDirectories(directory)
+  private var instances = Map.empty[LightDB, LMDBInstance]
+
+  def instance(db: LightDB): LMDBInstance = synchronized {
+    instances.get(db) match {
+      case Some(instance) => instance
+      case None =>
+        val directory = db.directory.get
+        if (!Files.exists(directory)) {
+          Files.createDirectories(directory)
+        }
+        val env = Env
+          .create()
+          .setMaxDbs(MaxDbs)
+          .setMapSize(MapSize)
+          .setMaxReaders(MaxReaders)
+          .open(directory.toFile)
+        val instance = LMDBInstance(env)
+        instances += db -> instance
+        instance
     }
-    val env = Env
-      .create()
-      .setMaxDbs(maxDbs)
-      .setMapSize(mapSize)
-      .setMaxReaders(maxReaders)
-      .open(directory.toFile)
-    LMDBInstance(env)
   }
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
@@ -145,7 +184,7 @@ object LMDBStore extends StoreManager {
     new LMDBStore[Doc, Model](
       name = name,
       model = model,
-      instance = createInstance(db.directory.get.resolve(name)),
+      instance = instance(db),
       storeMode = storeMode
     )
   }
