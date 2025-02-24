@@ -21,7 +21,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
                                                                        filter: Option[Filter[Doc]] = None,
                                                                        sort: List[Sort] = Nil,
                                                                        offset: Int = 0,
-                                                                       limit: Int = 100,
+                                                                       limit: Option[Int] = None,
+                                                                       pageSize: Int = 1_000,
                                                                        countTotal: Boolean = false,
                                                                        scoreDocs: Boolean = false,
                                                                        minDocScore: Option[Double] = None,
@@ -76,7 +77,11 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
 
   def offset(offset: Int): Q = copy(offset = offset)
 
-  def limit(limit: Int): Q = copy(limit = limit)
+  def limit(limit: Int): Q = copy(limit = Some(limit))
+
+  def clearLimit: Q = copy(limit = None)
+
+  def pageSize(size: Int): Q = copy(pageSize = pageSize)
 
   def countTotal(b: Boolean): Q = copy(countTotal = b)
 
@@ -136,10 +141,39 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     store.doSearch(this)
   }
 
-  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
+  def streamPage(implicit transaction: Transaction[Doc]): rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
 
-  def streamScored(implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] =
+  def streamScoredPage(implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] =
     rapid.Stream.force(search.map(_.streamWithScore))
+
+  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[V] = streamScored.map(_._1)
+
+  def streamScored(implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] = {
+    def fetchPage(offset: Int): Task[SearchResults[Doc, Model, V]] = {
+      val pagedQuery = copy(offset = offset, countTotal = offset == 0)
+      pagedQuery.search
+    }
+
+    def fetchAllPages(total: Int, offset: Int): rapid.Stream[(V, Double)] = {
+      if (offset >= total) {
+        rapid.Stream.empty
+      } else {
+        rapid.Stream.force(fetchPage(offset).flatMap { searchResults =>
+          val nextPageStream = fetchAllPages(total, offset + pageSize)
+          Task.pure(searchResults.streamWithScore ++ nextPageStream)
+        })
+      }
+    }
+
+    rapid.Stream.force(fetchPage(0).flatMap { firstPageResults =>
+      val total = firstPageResults.total.get
+      val limit = this.limit match {
+        case Some(l) => math.min(l, total)
+        case None => total
+      }
+      Task.pure(fetchAllPages(limit, 0))
+    })
+  }
 
   /**
    * Processes through each result record from the query modifying the data in the database.

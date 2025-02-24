@@ -28,7 +28,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
     val q: LuceneQuery = filter2Lucene(query.filter)
     val s: LuceneSort = sort(query.sort)
     val indexSearcher = state.indexSearcher
-    val limit = query.limit
+    val limit = query.limit.getOrElse(query.pageSize)
     if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     val max = limit + query.offset
 

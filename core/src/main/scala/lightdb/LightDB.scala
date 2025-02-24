@@ -89,9 +89,10 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   override protected def initialize(): Task[Unit] = for {
     _ <- logger.info(s"$name database initializing...")
     _ = backingStore
+    _ <- logger.info(s"Initializing collections: ${collections.map(_.name).mkString(", ")}...")
     _ <- collections.map(_.init).tasks
     // Truncate the database before we do anything if specified
-    _ <- truncate().when(truncateOnInit)
+    _ <- truncate().next(logger.info("Truncating database...")).when(truncateOnInit)
     // Determine if this is an uninitialized database
     dbInitialized <- databaseInitialized.get()
     // Get applied database upgrades

@@ -463,8 +463,15 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         db.people.query.countTotal(true).id.search.flatMap { results =>
           results.list.map { list =>
             results.total should be(Some(CreateRecords + 24))
-            list.length should be(100)
+            list.length should be(1_000)
           }
+        }
+      }
+    }
+    "verify total ids returned is correct" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.countTotal(true).id.stream.toList.map { ids =>
+          ids.length should be(CreateRecords + 24)
         }
       }
     }

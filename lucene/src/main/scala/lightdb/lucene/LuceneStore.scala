@@ -223,7 +223,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   override def get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
     val filter = Filter.Equals(field, value)
-    val query = Query[Doc, Model, Doc](model, this, Conversion.Doc(), filter = Some(filter), limit = 1)
+    val query = Query[Doc, Model, Doc](model, this, Conversion.Doc(), filter = Some(filter), limit = Some(1))
     doSearch[Doc](query).flatMap(_.list).map(_.headOption)
   }
 
