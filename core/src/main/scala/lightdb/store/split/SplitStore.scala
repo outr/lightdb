@@ -17,7 +17,9 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
                                                                          storage: Store[Doc, Model],
                                                                          searching: Store[Doc, Model],
                                                                          storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
-  override protected def initialize(): Task[Unit] = storage.init.next(searching.init)
+  override protected def initialize(): Task[Unit] = {
+    storage.init.and(searching.init).unit
+  }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] =
     storage.prepareTransaction(transaction).and(searching.prepareTransaction(transaction)).unit
