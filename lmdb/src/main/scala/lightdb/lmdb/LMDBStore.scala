@@ -21,7 +21,9 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
   private lazy val dbi: Dbi[ByteBuffer] = instance.get(name)
 
-  override protected def initialize(): Task[Unit] = Task(dbi)
+  override protected def initialize(): Task[Unit] = Task {
+    dbi
+  }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
@@ -47,9 +49,6 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   private def withWrite[Return](f: Txn[ByteBuffer] => Task[Return]): Task[Return] =
     instance.transactionManager.withWrite(f)
 
-  private def withRead[Return](f: Txn[ByteBuffer] => Task[Return]): Task[Return] =
-    instance.transactionManager.withRead(f)
-
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
     Task {
       dbi.put(txn, key(doc._id), value(doc), PutFlags.MDB_NOOVERWRITE)
@@ -64,16 +63,8 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     }
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = withRead { txn =>
-    Task {
-      val cursor = dbi.openCursor(txn) // ✅ Open a cursor for efficient key lookup
-      try {
-        cursor.get(key(id), GetOp.MDB_SET_KEY)
-      } finally {
-        cursor.close()
-      }
-    }
-  }
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] =
+    instance.transactionManager.exists(dbi, key(id))
 
   private def b2d(bb: ByteBuffer): Doc = {
     val bytes = new Array[Byte](bb.remaining())
@@ -84,14 +75,10 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   }
 
   override def get[V](field: Field.UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = withRead { txn =>
-    Task {
-      if (field == idField) {
-        Option(dbi.get(txn, key(value.asInstanceOf[Id[Doc]]))).filterNot(_.remaining() == 0).map(b2d)
-      } else {
-        throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
-      }
-    }
+                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = if (field == idField) {
+    instance.transactionManager.get(dbi, key(value.asInstanceOf[Id[Doc]])).map(_.map(b2d))
+  } else {
+    throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
   }
 
   override def delete[V](field: Field.UniqueIndex[Doc, V], value: V)
@@ -105,16 +92,11 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     }
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Task[Int] = withRead { txn =>
-    Task {
-      dbi.stat(txn).entries.toInt
-    }
-  }
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] =
+    instance.transactionManager.count(dbi)
 
   override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
-    rapid.Stream.fromIterator(Task(instance.transactionManager.withReadIterator { txn =>
-      new LMDBValueIterator(dbi, txn).map(b2d)
-    }))
+    rapid.Stream.fromIterator(instance.transactionManager.withReadIterator(txn => new LMDBValueIterator(dbi, txn).map(b2d)))
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
