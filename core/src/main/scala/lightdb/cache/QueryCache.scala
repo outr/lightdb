@@ -1,6 +1,6 @@
 package lightdb.cache
 
-import lightdb.{Query, SearchResults, Timestamp}
+import lightdb.{Id, Query, SearchResults, Timestamp}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction
 import rapid.{Fiber, Task}
@@ -11,29 +11,48 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 /**
  * QueryCache system to cache frequently used queries.
- *
- * @param timeout defaults to 30 minutes
- * @param maxEntries defaults to 100
- * @param onlyFirstPage defaults to true
- * @param enabled defaults to true. If set to false, acts as just a pass-through
  */
-case class QueryCache[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](timeout: Option[FiniteDuration] = Some(30.minutes),
-                                                                            maxEntries: Option[Int] = Some(100),
-                                                                            onlyFirstPage: Boolean = true,
-                                                                            enabled: Boolean = true) {
-  private val map = new ConcurrentHashMap[Query[Doc, Model, V], Cached]
+trait QueryCache {
+  type Key
+  type Doc <: Document[Doc]
+  type Model <: DocumentModel[Doc]
+  type V
+
+  protected def id(v: V): Id[Doc]
+
+  /**
+   * Cached results timeout. Defaults to 30 minutes.
+   */
+  protected def timeout: Option[FiniteDuration] = Some(30.minutes)
+
+  /**
+   * Maximum number of entries able to be cached before releasing. Defaults to 100.
+   */
+  protected def maxEntries: Option[Int] = Some(100)
+
+  /**
+   * Whether to only cache the first page of queries. Defaults to true.
+   */
+  protected def onlyFirstPage: Boolean = true
+
+  /**
+   * If set to false, acts as just a pass-through. Defaults to true.
+   */
+  protected def enabled: Boolean = true
+
+  private val map = new ConcurrentHashMap[(Key, Query[Doc, Model, V]), Cached]
 
   /**
    * Retrieve or start the search for `query`. If it's already in the map,
    * we update its usage (increment reference count, update timestamp).
    */
-  def apply(query: Query[Doc, Model, V])
+  def apply(key: Key, query: Query[Doc, Model, V])
            (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = if (!enabled) {
     query.search
   } else if (onlyFirstPage && query.offset > 0) {
     query.search
   } else {
-    map.computeIfAbsent(query, _ => {
+    map.computeIfAbsent(key -> query, _ => {
       val fiber = query.search.flatMap { results =>
         results.streamWithScore.toList.map { list =>
           results.copy(streamWithScore = rapid.Stream.emits(list))
