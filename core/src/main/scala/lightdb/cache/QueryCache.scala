@@ -62,6 +62,32 @@ trait QueryCache {
     }).incrementUsage().fiber
   }
 
+  /**
+   * Updates all cached entries that contain the document with the same Key and Id as the provided value.
+   * The updated value replaces the old one while maintaining the original score.
+   *
+   * @param key The key associated with the cache entries
+   * @param v The new value to update with
+   */
+  def modify(key: Key, v: V): Task[Unit] = Task {
+    val docId = id(v)
+    map.entrySet().asScala.filter(_.getKey._1 == key).foreach { entry =>
+      val fiber = entry.getValue.fiber.flatMap { results =>
+        results.streamWithScore.toList.map { list =>
+          if (list.exists { case (value, _) => id(value) == docId }) {
+            val updatedList = list.map { case (value, score) =>
+              if (id(value) == docId) (v, score) else (value, score)
+            }
+            results.copy(streamWithScore = rapid.Stream.emits(updatedList))
+          } else {
+            results
+          }
+        }
+      }.start()
+      entry.setValue(new Cached(fiber))
+    }
+  }
+
   def clear(): Task[Unit] = Task {
     map.clear()
   }
