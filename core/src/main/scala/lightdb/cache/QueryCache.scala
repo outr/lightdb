@@ -15,10 +15,12 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
  * @param timeout defaults to 30 minutes
  * @param maxEntries defaults to 100
  * @param onlyFirstPage defaults to true
+ * @param enabled defaults to true. If set to false, acts as just a pass-through
  */
 case class QueryCache[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](timeout: Option[FiniteDuration] = Some(30.minutes),
                                                                             maxEntries: Option[Int] = Some(100),
-                                                                            onlyFirstPage: Boolean = true) {
+                                                                            onlyFirstPage: Boolean = true,
+                                                                            enabled: Boolean = true) {
   private val map = new ConcurrentHashMap[Query[Doc, Model, V], Cached]
 
   /**
@@ -26,7 +28,9 @@ case class QueryCache[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](time
    * we update its usage (increment reference count, update timestamp).
    */
   def apply(query: Query[Doc, Model, V])
-           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = if (onlyFirstPage && query.offset > 0) {
+           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = if (!enabled) {
+    query.search
+  } else if (onlyFirstPage && query.offset > 0) {
     query.search
   } else {
     map.computeIfAbsent(query, _ => {

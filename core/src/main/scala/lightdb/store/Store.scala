@@ -82,6 +82,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def reIndex(): Task[Boolean] = Task.pure(false)
 
+  def reIndex(doc: Doc): Task[Boolean] = Task.pure(false)
+
   /**
    * Optimizes this store. This allows the implementation an opportunity to clean up, optimize, etc. to improve the
    * performance of the store.

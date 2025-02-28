@@ -53,6 +53,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def reIndex(): Task[Boolean] = store.reIndex()
 
+  def reIndex(doc: Doc): Task[Boolean] = store.reIndex(doc)
+
   def transaction: store.transaction.type = store.transaction
 
   /**
