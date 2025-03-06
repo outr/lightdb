@@ -27,7 +27,8 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
                                                                        scoreDocs: Boolean = false,
                                                                        minDocScore: Option[Double] = None,
                                                                        facets: List[FacetQuery[Doc]] = Nil,
-                                                                       arbitraryQuery: Option[ArbitraryQuery] = None) { query =>
+                                                                       arbitraryQuery: Option[ArbitraryQuery] = None,
+                                                                       optimize: Boolean = true) { query =>
   private type Q = Query[Doc, Model, V]
 
   def scored: Q = copy(scoreDocs = true)
@@ -36,6 +37,9 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     scoreDocs = true,
     minDocScore = Some(min)
   )
+
+  def optimized: Q = copy(optimize = true)
+  def unOptimized: Q = copy(optimize = false)
 
   def withArbitraryQuery(query: ArbitraryQuery): Q = copy(arbitraryQuery = Some(query))
 
@@ -138,7 +142,12 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
         }
       }
     }
-    store.doSearch(this)
+    val q = if (optimize) {
+      copy(filter = filter.map(QueryOptimizer.optimize))
+    } else {
+      this
+    }
+    store.doSearch(q)
   }
 
   def streamPage(implicit transaction: Transaction[Doc]): rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))

@@ -19,15 +19,16 @@ import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollector
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.util.automaton.RegExp
 import rapid.Task
 
 class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
                                                                              model: Model) {
   def apply[V](query: Query[Doc, Model, V])
               (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
-    val q: LuceneQuery = filter2Lucene(query.filter)
-    val s: LuceneSort = sort(query.sort)
     val indexSearcher = state.indexSearcher
+    val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
+    val s: LuceneSort = sort(query.sort)
     val limit = query.limit.getOrElse(query.pageSize)
     if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     val max = limit + query.offset
@@ -214,13 +215,6 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
 
   def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = filter match {
     case Some(f) =>
-      val fields = f.fields(model)
-      def parsed(q: String, allowLeading: Boolean = false): LuceneQuery = {
-        val parser = new QueryParser(f.fieldNames.head, store.index.analyzer)
-        parser.setAllowLeadingWildcard(allowLeading)
-        parser.setSplitOnWhitespace(true)
-        parser.parse(q)
-      }
       f match {
         case f: Filter.Equals[Doc, _] => exactQuery(f.field(model), f.getJson(model))
         case f: Filter.NotEquals[Doc, _] =>
@@ -228,7 +222,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
           b.add(exactQuery(f.field(model), f.getJson(model)), BooleanClause.Occur.MUST_NOT)
           b.build()
-        case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression))
+        case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression), RegExp.ALL, 10_000_000)
         case f: Filter.In[Doc, _] =>
           val queries = f.getJson(model).map(json => exactQuery(f.field(model), json))
           val b = new BooleanQuery.Builder
@@ -239,14 +233,10 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.build()
         case Filter.RangeLong(fieldName, from, to) => LongField.newRangeQuery(fieldName, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
         case Filter.RangeDouble(fieldName, from, to) => DoubleField.newRangeQuery(fieldName, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
-        case Filter.StartsWith(_, query) if fields.head.isTokenized => parsed(s"$query*")
-        case Filter.EndsWith(_, query) if fields.head.isTokenized => parsed(s"*$query", allowLeading = true)
-        case Filter.Contains(_, query) if fields.head.isTokenized => parsed(s"*$query*", allowLeading = true)
-        case Filter.Exact(_, query) if fields.head.isTokenized => parsed(query)
-        case Filter.StartsWith(fieldName, query) => new WildcardQuery(new Term(fieldName, s"$query*"))
-        case Filter.EndsWith(fieldName, query) => new WildcardQuery(new Term(fieldName, s"*$query"))
-        case Filter.Contains(fieldName, query) => new WildcardQuery(new Term(fieldName, s"*$query*"))
-        case Filter.Exact(fieldName, query) => new WildcardQuery(new Term(fieldName, query))
+        case Filter.StartsWith(fieldName, query) => new RegexpQuery(new Term(fieldName, s"${LuceneStore.escapeRegexLiteral(query)}.*"))
+        case Filter.EndsWith(fieldName, query) => new RegexpQuery(new Term(fieldName, s".*${LuceneStore.escapeRegexLiteral(query)}"))
+        case Filter.Contains(fieldName, query) => new RegexpQuery(new Term(fieldName, s".*${LuceneStore.escapeRegexLiteral(query)}.*"))
+        case Filter.Exact(fieldName, query) => new TermQuery(new Term(fieldName, query))
         case Filter.Distance(fieldName, from, radius) =>
           val b = new BooleanQuery.Builder
           b.add(LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
