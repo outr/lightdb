@@ -109,6 +109,34 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         }
       }
     }
+    "verify starts with matches" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.filter(_.name.startsWith("Ver")).toList.map { list =>
+          list.map(_.name) should be(List("Veronica"))
+        }
+      }
+    }
+    "verify ends with matches" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.filter(_.name.endsWith("nica")).toList.map { list =>
+          list.map(_.name) should be(List("Veronica"))
+        }
+      }
+    }
+    "verify exactly matches" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.filter(_.name.exactly("Veronica")).toList.map { list =>
+          list.map(_.name) should be(List("Veronica"))
+        }
+      }
+    }
+    "verify regex matches" in {
+      db.people.transaction { implicit transaction =>
+        db.people.query.filter(_.name.regex(".*ron.*")).toList.map { list =>
+          list.map(_.name) should be(List("Veronica"))
+        }
+      }
+    }
     "verify the AgeLinks is properly updated" in {
       db.ageLinks.t.get(AgeLinks.id(30)).map(_.map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori")))))
     }
@@ -549,6 +577,22 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         ))
       }
     }*/
+    "optimize an inefficient query" in {
+      val query = Filter.Multi[Person](1, List(
+        FilterClause(Filter.Multi[Person](1, List(
+          FilterClause(Filter.Multi[Person](1, List(
+            FilterClause(Filter.Contains(Person.name.name, "Adam"), Condition.Should, None),
+            FilterClause(Filter.Contains(Person.name.name, "Zoe"), Condition.Should, None)
+          )), Condition.Must, None)
+        )), Condition.Must, None)
+      ))
+      val optimized = Filter.Multi[Person](1, List(
+        FilterClause(Filter.Contains(Person.name.name, "Adam"), Condition.Should, None),
+        FilterClause(Filter.Contains(Person.name.name, "Zoe"), Condition.Should, None)
+      ))
+
+      QueryOptimizer.optimize(query) should be(optimized)
+    }
     "truncate the collection again" in {
       db.people.transaction { implicit transaction =>
         db.people.truncate().map(_ should be(24))

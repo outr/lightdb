@@ -13,7 +13,6 @@ import java.nio.file.{Files, Path}
 
 case class Index(path: Option[Path]) {
   lazy val analyzer: Analyzer = new StandardAnalyzer
-  lazy val parser = new QueryParser("_id", analyzer)
 
   private lazy val indexDirectory: BaseDirectory = path.map(FSDirectory.open).getOrElse(new ByteBuffersDirectory)
   private lazy val config = {
