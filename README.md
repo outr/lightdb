@@ -5,6 +5,8 @@ Computationally focused database using pluggable stores
 
 ## Provided Stores
 - Yahoo's HaloDB (https://github.com/yahoo/HaloDB)
+- Chronicle Map (https://github.com/OpenHFT/Chronicle-Map)
+- LMDB (https://www.symas.com/mdb)
 - MapDB (https://mapdb.org)
 - Facebook's RocksDB (https://rocksdb.org)
 - Redis (https://redis.io)
