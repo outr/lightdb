@@ -8,9 +8,9 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
-import lightdb.transaction.Transaction
+import lightdb.transaction.{Transaction, TransactionKey}
 import org.lmdbjava._
-import rapid.Task
+import rapid.{Task, Unique}
 
 import java.nio.ByteBuffer
 import java.nio.file.{Files, Path}
@@ -19,6 +19,9 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    model: Model,
                                                                    instance: LMDBInstance,
                                                                    val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+  private val id = Unique()
+  private val transactionKey: TransactionKey[LMDBTransaction] = TransactionKey(id)
+
   private lazy val dbi: Dbi[ByteBuffer] = instance.get(name)
 
   override protected def initialize(): Task[Unit] = Task {
@@ -27,7 +30,7 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
-      key = StateKey,
+      key = transactionKey,
       value = LMDBTransaction(instance)
     )
   }

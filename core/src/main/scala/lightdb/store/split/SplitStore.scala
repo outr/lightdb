@@ -8,7 +8,7 @@ import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
-import rapid.Task
+import rapid.{Task, logger}
 
 import scala.language.implicitConversions
 
@@ -82,17 +82,15 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
     storage.truncate().and(searching.truncate()).map(_._1)
 
   override def verify(): Task[Boolean] = transaction { implicit transaction =>
-    storage.count.and(searching.count).flatMap {
-      case (storageCount, searchCount) => if (storageCount != searchCount && model.fields.count(_.indexed) > 1) {
-        scribe.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
-        reIndexInternal().map { _ =>
-          scribe.info(s"$name re-indexed successfully!")
-          true
-        }
-      } else {
-        Task.pure(false)
-      }
-    }
+    for {
+      storageCount <- storage.count
+      searchCount <- searching.count
+      shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1
+      _ <- logger.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
+        .next(reIndexInternal())
+        .next(logger.info(s"$name re-indexed successfully!"))
+        .when(shouldReIndex)
+    } yield shouldReIndex
   }
 
   override def reIndex(): Task[Boolean] = transaction { implicit transaction =>
