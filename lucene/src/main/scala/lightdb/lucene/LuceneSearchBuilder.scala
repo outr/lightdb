@@ -26,7 +26,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
                                                                              model: Model) {
   def apply[V](query: Query[Doc, Model, V])
               (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
-    val indexSearcher = state.indexSearcher
+    val indexSearcher = store.state.indexSearcher
     val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
     val s: LuceneSort = sort(query.sort)
     val limit = query.limit.getOrElse(query.pageSize)
@@ -50,7 +50,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case fc: FacetsCollector => fc
     }
     val facetResults = facetsCollector.map { fc =>
-      val facets = new FastTaxonomyFacetCounts(state.taxonomyReader, store.facetsConfig, fc)
+      val facets = new FastTaxonomyFacetCounts(store.state.taxonomyReader, store.facetsConfig, fc)
       query.facets.map { fq =>
         Option(fq.childrenLimit match {
           case Some(l) => facets.getTopChildren(l, fq.field.name, fq.path: _*)
