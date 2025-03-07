@@ -16,8 +16,6 @@ case class Id[Doc](value: String) extends AnyVal with Ordered[Id[Doc]] {
 }
 
 object Id {
-
-
   private lazy val _rw: RW[Id[_]] = RW.string(_.value, Id.apply)
 
   implicit def rw[T]: RW[Id[T]] = _rw.asInstanceOf[RW[Id[T]]]

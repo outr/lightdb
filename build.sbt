@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "2.2.1-SNAPSHOT"
+ThisBuild / version := "2.3.0-SNAPSHOT"
 ThisBuild / scalaVersion := scala213
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -43,7 +43,16 @@ ThisBuild / javaOptions ++= Seq(
 	"--enable-native-access=ALL-UNNAMED",
 	"--add-opens=java.base/java.nio=ALL-UNNAMED",
 	"--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-	"--add-modules", "jdk.incubator.vector"
+	"--add-modules", "jdk.incubator.vector",
+	"--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+	"--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+	"--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+	"--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+	"--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+	"--add-opens=java.base/java.lang=ALL-UNNAMED",
+	"--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+	"--add-opens=java.base/java.io=ALL-UNNAMED",
+	"--add-opens=java.base/java.util=ALL-UNNAMED"
 )
 
 ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
@@ -86,12 +95,14 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.5"
 
+val chronicleMapVersion: String = "3.27ea0"
+
 val rapidVersion: String = "0.10.0"
 
 val scalaTestVersion: String = "3.2.19"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, redis, all)
+	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -251,6 +262,17 @@ lazy val lmdb = project.in(file("lmdb"))
 		fork := true
 	)
 
+lazy val chronicleMap = project.in(file("chronicleMap"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-chroniclemap",
+		libraryDependencies ++= Seq(
+			"net.openhft" % "chronicle-map" % chronicleMapVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		),
+		fork := true
+	)
+
 lazy val redis = project.in(file("redis"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
@@ -263,7 +285,7 @@ lazy val redis = project.in(file("redis"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, redis)
+	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
