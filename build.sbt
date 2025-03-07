@@ -110,6 +110,7 @@ lazy val core = crossProject(JVMPlatform)
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,
 			"com.outr" %%% "rapid-core" % rapidVersion,
+			"com.outr" %%% "rapid-scribe" % rapidVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
 			"com.outr" %%% "rapid-test" % rapidVersion % Test
 		),
