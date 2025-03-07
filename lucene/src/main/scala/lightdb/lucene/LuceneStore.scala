@@ -14,7 +14,7 @@ import lightdb.lucene.index.Index
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.Geo
 import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
-import lightdb.transaction.Transaction
+import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetsConfig, FacetField => LuceneFacetField}
@@ -32,6 +32,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      model: Model,
                                                                      directory: Option[Path],
                                                                      val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+  private val id = Unique()
+  private val transactionKey: TransactionKey[LuceneState[Doc]] = TransactionKey(id)
+
   IndexSearcher.setMaxClauseCount(10_000_000)
 
   lazy val index = Index(directory)
@@ -53,6 +56,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     doc
   }
 
+  def state(implicit transaction: Transaction[Doc]): LuceneState[Doc] = transaction(transactionKey)
+
   override protected def initialize(): Task[Unit] = Task {
     directory.foreach { path =>
       if (Files.exists(path)) {
@@ -72,7 +77,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
-      key = StateKey[Doc],
+      key = transactionKey,
       value = LuceneState[Doc](index, hasFacets)
     )
   }
