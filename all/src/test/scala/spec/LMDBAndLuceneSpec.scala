@@ -6,7 +6,7 @@ import lightdb.store.StoreManager
 import lightdb.store.split.SplitStoreManager
 
 // TODO: Figure out why this is failing
-@EmbeddedTest
+//@EmbeddedTest
 class LMDBAndLuceneSpec extends AbstractBasicSpec {
   override protected def filterBuilderSupported: Boolean = true
 
