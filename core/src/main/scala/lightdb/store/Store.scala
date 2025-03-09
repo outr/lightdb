@@ -15,7 +15,7 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.trigger.CollectionTriggers
 import lightdb.util.{Disposable, Initializable}
-import rapid.{Forge, Task}
+import rapid._
 import scribe.{rapid => logger}
 
 import java.io.File
