@@ -148,9 +148,15 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     store.upsert(doc)
   }
 
-  def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = docs.map(insert).tasks
+  def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = for {
+    _ <- docs.map(trigger.insert).tasks
+    _ <- store.insert(docs)
+  } yield docs
 
-  def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = docs.map(upsert).tasks
+  def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = for {
+    _ <- docs.map(trigger.upsert).tasks
+    _ <- store.upsert(docs)
+  } yield docs
 
   def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = store.exists(id)
 

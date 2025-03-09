@@ -56,6 +56,10 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc]
 
+  def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = docs.map(insert).tasks
+
+  def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = docs.map(upsert).tasks
+
   def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean]
 
   def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]]
