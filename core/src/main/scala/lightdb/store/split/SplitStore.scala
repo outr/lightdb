@@ -6,7 +6,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Store, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import rapid.{Task, logger}
 
@@ -16,7 +16,8 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
                                                                          model: Model,
                                                                          storage: Store[Doc, Model],
                                                                          searching: Store[Doc, Model],
-                                                                         storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+                                                                         storeMode: StoreMode[Doc, Model],
+                                                                         storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   override protected def initialize(): Task[Unit] = {
     storage.init.and(searching.init).unit
   }

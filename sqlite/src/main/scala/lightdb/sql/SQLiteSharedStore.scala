@@ -14,7 +14,8 @@ case class SQLiteSharedStore(connectionManager: ConnectionManager) extends Store
       name = name,
       model = model,
       connectionManager = connectionManager,
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
   }
 }

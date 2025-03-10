@@ -34,5 +34,5 @@ case class HaloDBSharedStore(directory: Path, useNameAsPrefix: Boolean = false) 
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new HaloDBStore[Doc, Model](name, model, storeMode, SharedHaloDBInstance(instance, prefixFor(db, name)))
+    new HaloDBStore[Doc, Model](name, model, storeMode, SharedHaloDBInstance(instance, prefixFor(db, name)), this)
 }

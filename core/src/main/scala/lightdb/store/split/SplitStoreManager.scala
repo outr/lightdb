@@ -19,7 +19,8 @@ case class SplitStoreManager(storage: StoreManager,
       model = model,
       storage = storage,
       searching = searching.create[Doc, Model](db, model, name, if (searchIndexAll) StoreMode.All() else StoreMode.Indexes(storage)),
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
   }
 }

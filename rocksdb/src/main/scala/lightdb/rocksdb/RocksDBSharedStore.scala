@@ -26,7 +26,8 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager {
       model = model,
       rocksDB = rocksDB,
       sharedStore = Some(RocksDBSharedStoreInstance(this, name)),
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
 
   def dispose(): Task[Unit] = Task(rocksDB.closeE())

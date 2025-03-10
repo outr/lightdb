@@ -12,7 +12,8 @@ import java.sql.Connection
 class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,
                                                                      val connectionManager: ConnectionManager,
-                                                                     val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
+                                                                     val storeMode: StoreMode[Doc, Model],
+                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, storeManager) {
   // TODO: Use DuckDB's Appender for better performance
   /*override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     fields.zipWithIndex.foreach {
@@ -60,7 +61,8 @@ object DuckDBStore extends StoreManager {
       name = name,
       model = model,
       connectionManager = singleConnectionManager(file),
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
   }
 
@@ -73,7 +75,8 @@ object DuckDBStore extends StoreManager {
         name = name,
         model = model,
         connectionManager = sqlDB.connectionManager,
-        storeMode
+        storeMode = storeMode,
+        storeManager = this
       )
       case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.duckdb")), storeMode)
     }

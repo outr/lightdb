@@ -31,7 +31,8 @@ import scala.language.implicitConversions
 class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,
                                                                      directory: Option[Path],
-                                                                     val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+                                                                     val storeMode: StoreMode[Doc, Model],
+                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   private val id = Unique()
   private val transactionKey: TransactionKey[LuceneState[Doc]] = TransactionKey(id)
 
@@ -285,5 +286,5 @@ object LuceneStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.lucene")), storeMode)
+    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.lucene")), storeMode, this)
 }

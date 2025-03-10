@@ -20,7 +20,8 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       model: Model,
                                                                       rocksDB: RocksDB,
                                                                       sharedStore: Option[RocksDBSharedStoreInstance],
-                                                                      val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+                                                                      val storeMode: StoreMode[Doc, Model],
+                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   private val handle: Option[ColumnFamilyHandle] = sharedStore.map { ss =>
     ss.existingHandle match {
       case Some(handle) => handle
@@ -174,6 +175,7 @@ object RocksDBStore extends StoreManager {
       model = model,
       rocksDB = createRocksDB(db.directory.get.resolve(name))._1,
       sharedStore = None,
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
 }

@@ -3,14 +3,15 @@ package lightdb.postgresql
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.SQLStore
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.StoreMode
+import lightdb.store.{StoreManager, StoreMode}
 
 import java.sql.Connection
 
 class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,
                                                                          val connectionManager: ConnectionManager,
-                                                                         val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
+                                                                         val storeMode: StoreMode[Doc, Model],
+                                                                         storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, storeManager) {
   protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT * FROM information_schema.tables;")
     try {
