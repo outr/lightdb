@@ -16,7 +16,8 @@ import scala.language.implicitConversions
 class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,
                                                                      val storeMode: StoreMode[Doc, Model],
-                                                                     instance: HaloDBInstance) extends Store[Doc, Model](name, model) {
+                                                                     instance: HaloDBInstance,
+                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   private implicit def rw: RW[Doc] = model.rw
 
   override protected def initialize(): Task[Unit] = Task.unit
@@ -71,6 +72,6 @@ object HaloDBStore extends StoreManager {
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
     val instance = new DirectHaloDBInstance(db.directory.get.resolve(name))
-    new HaloDBStore[Doc, Model](name, model, storeMode, instance)
+    new HaloDBStore[Doc, Model](name, model, storeMode, instance, this)
   }
 }

@@ -18,7 +18,8 @@ import java.nio.file.{Files, Path}
 class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    model: Model,
                                                                    instance: LMDBInstance,
-                                                                   val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+                                                                   val storeMode: StoreMode[Doc, Model],
+                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   private val id = Unique()
   private val transactionKey: TransactionKey[LMDBTransaction] = TransactionKey(id)
 
@@ -170,7 +171,8 @@ object LMDBStore extends StoreManager {
       name = name,
       model = model,
       instance = instance(db),
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
   }
 }

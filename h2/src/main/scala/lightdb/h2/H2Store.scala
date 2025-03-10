@@ -14,7 +14,8 @@ import java.sql.Connection
 class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                  model: Model,
                                                                  val connectionManager: ConnectionManager,
-                                                                 val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
+                                                                 val storeMode: StoreMode[Doc, Model],
+                                                                 storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, storeManager) {
   override protected def upsertPrefix: String = "MERGE"
 
   protected def tables(connection: Connection): Set[String] = {
@@ -49,7 +50,8 @@ object H2Store extends StoreManager {
       name = name,
       model = model,
       connectionManager = SingleConnectionManager(config(file)),
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
@@ -61,7 +63,8 @@ object H2Store extends StoreManager {
         name = name,
         model = model,
         connectionManager = sqlDB.connectionManager,
-        storeMode
+        storeMode,
+        this
       )
       case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.h2")), storeMode)
     }

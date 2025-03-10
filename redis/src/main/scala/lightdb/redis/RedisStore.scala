@@ -6,7 +6,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Store, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import rapid.Task
 
@@ -16,7 +16,8 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
                                                                     model: Model,
                                                                     val storeMode: StoreMode[Doc, Model],
                                                                     hostname: String = "localhost",
-                                                                    port: Int = 6379) extends Store[Doc, Model](name, model) {
+                                                                    port: Int = 6379,
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   private lazy val InstanceKey: TransactionKey[Jedis] = TransactionKey("redisInstance")
 
   private lazy val config = new JedisPoolConfig

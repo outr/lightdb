@@ -22,7 +22,8 @@ import java.util.regex.Pattern
 class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                      model: Model,
                                                                      val connectionManager: ConnectionManager,
-                                                                     val storeMode: StoreMode[Doc, Model]) extends SQLStore[Doc, Model](name, model) {
+                                                                     val storeMode: StoreMode[Doc, Model],
+                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, storeManager) {
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = super.initTransaction().map { _ =>
     val c = connectionManager.getConnection
     if (hasSpatial.sync()) {
@@ -118,7 +119,8 @@ object SQLiteStore extends StoreManager {
       name = name,
       model = model,
       connectionManager = singleConnectionManager(file),
-      storeMode = storeMode
+      storeMode = storeMode,
+      storeManager = this
     )
   }
 
@@ -132,7 +134,8 @@ object SQLiteStore extends StoreManager {
           name = name,
           model = model,
           connectionManager = sqlDB.connectionManager,
-          storeMode = storeMode
+          storeMode = storeMode,
+          storeManager = this
         )
       case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.sqlite")), storeMode)
     }

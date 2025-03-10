@@ -10,5 +10,5 @@ case class PostgreSQLStoreManager(connectionManager: ConnectionManager) extends 
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new PostgreSQLStore[Doc, Model](name, model, connectionManager, storeMode)
+    new PostgreSQLStore[Doc, Model](name, model, connectionManager, storeMode, this)
 }

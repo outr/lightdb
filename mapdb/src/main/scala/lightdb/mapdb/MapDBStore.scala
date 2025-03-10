@@ -16,7 +16,8 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                     model: Model,
                                                                     directory: Option[Path],
-                                                                    val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+                                                                    val storeMode: StoreMode[Doc, Model],
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   private lazy val db: DB = {
     val maker = directory.map { path =>
       Files.createDirectories(path.getParent)
@@ -90,5 +91,5 @@ object MapDBStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new MapDBStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode)
+    new MapDBStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, this)
 }

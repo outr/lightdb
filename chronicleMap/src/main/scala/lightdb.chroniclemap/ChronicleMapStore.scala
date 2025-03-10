@@ -16,15 +16,19 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                            model: Model,
                                                                            directory: Option[Path],
-                                                                           val storeMode: StoreMode[Doc, Model]) extends Store[Doc, Model](name, model) {
+                                                                           val storeMode: StoreMode[Doc, Model],
+                                                                           storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+  sys.props("net.openhft.chronicle.hash.impl.util.jna.PosixFallocate.fallocate") = "false"
+
   private lazy val db: ChronicleMap[String, String] = {
     val b = ChronicleMap
       .of(classOf[String], classOf[String])
       .name(name)
       .entries(1_000_000)
       .averageKeySize(32)
-      .averageValueSize(1024)
+      .averageValueSize(5 * 1024)
       .maxBloatFactor(2.0)
+      .sparseFile(true)
     directory match {
       case Some(d) =>
         Files.createDirectories(d.getParent)
@@ -106,5 +110,5 @@ object ChronicleMapStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new ChronicleMapStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode)
+    new ChronicleMapStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, this)
 }
