@@ -126,7 +126,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
                                                                     storeManager: Option[StoreManager] = None): Collection[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val store = storeManager.getOrElse(this.storeManager).create[Doc, Model](this, model, n, StoreMode.All())
-    val c = Collection[Doc, Model](n, model, store)
+    val c = Collection[Doc, Model](n, model, store, this)
     synchronized {
       _collections = _collections ::: List(c)
     }
