@@ -17,7 +17,8 @@ import scribe.{rapid => logger}
 
 case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          model: Model,
-                                                                         store: Store[Doc, Model]) extends Initializable with Disposable { collection =>
+                                                                         store: Store[Doc, Model],
+                                                                         db: LightDB) extends Initializable with Disposable { collection =>
   def lock: LockManager[Id[Doc], Doc] = store.lock
 
   def trigger: store.trigger.type = store.trigger

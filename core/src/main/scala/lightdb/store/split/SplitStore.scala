@@ -12,12 +12,12 @@ import rapid.{Task, logger}
 
 import scala.language.implicitConversions
 
-case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
-                                                                         model: Model,
-                                                                         storage: Store[Doc, Model],
-                                                                         searching: Store[Doc, Model],
-                                                                         storeMode: StoreMode[Doc, Model],
-                                                                         storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
+                                                                    model: Model,
+                                                                    storage: Store[Doc, Model],
+                                                                    searching: Store[Doc, Model],
+                                                                    val storeMode: StoreMode[Doc, Model],
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   override protected def initialize(): Task[Unit] = {
     storage.init.and(searching.init).unit
   }
@@ -59,8 +59,8 @@ case class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
         searching.delete(field, value)
       } else {
         Task.unit
+      }
     }
-  }
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] = storage.count
 

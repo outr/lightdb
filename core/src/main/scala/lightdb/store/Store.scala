@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
                                                                         model: Model,
-                                                                        storeManager: StoreManager) extends Initializable with Disposable {
+                                                                        val storeManager: StoreManager) extends Initializable with Disposable {
   def supportsArbitraryQuery: Boolean = false
 
   protected def id(doc: Doc): Id[Doc] = doc._id

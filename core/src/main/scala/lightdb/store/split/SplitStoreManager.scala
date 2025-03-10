@@ -14,7 +14,7 @@ case class SplitStoreManager(storage: StoreManager,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
     val storage = this.storage.create[Doc, Model](db, model, name, StoreMode.All())
-    SplitStore(
+    new SplitStore(
       name = name,
       model = model,
       storage = storage,
