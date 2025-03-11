@@ -1,10 +1,13 @@
 package spec
 
 import fabric.rw._
+import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.collection.Collection
+import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
+import lightdb.rocksdb.RocksDBStore
 import lightdb.store.StoreManager
 import lightdb.store.split.SplitStoreManager
 import lightdb.upgrade.DatabaseUpgrade
@@ -71,42 +74,43 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 //      }
 //    }
     // TODO: Support traversals
-    /*"get all airport names reachable directly from LAX following edges" in {
+    "get all airport names reachable directly from LAX following edges" in {
       val lax = Airport.id("LAX")
-      val query =
-        aql"""
-             FOR airport IN 1..1 OUTBOUND $lax ${database.flights}
-             RETURN DISTINCT airport.name
-           """
-      database.query[String](query).toList.map { response =>
-        response.length should be(82)
+      Flight.edgesFor(lax).map { airports =>
+        airports.size should be(82)
       }
     }
-    "traverse all airports reachable from LAX" in {
+    "get all airports reachable from LAX" in {
       val lax = Airport.id("LAX")
-      val query =
-        aql"""
-             FOR airport IN OUTBOUND $lax ${database.flights}
-             OPTIONS { bfs: true, uniqueVertices: 'global' }
-             RETURN airport
-           """
-      database.airports.query(query).toList.map { response =>
-        response.length should be(82)
+      Flight.reachableFrom(lax).map { airports =>
+        airports.size should be(286)
       }
     }
     "find the shortest path between BIS and JFK" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
-      val query =
-        aql"""
-             FOR v IN OUTBOUND
-             SHORTEST_PATH $bis TO $jfk ${database.flights}
-             RETURN v.${Airport.name}
-           """
-      database.query[String](query).toList.map { response =>
-        response should be(List("Bismarck Municipal", "Minneapolis-St Paul Intl", "John F Kennedy Intl"))
+      Flight.shortestPath(bis, jfk).map { path =>
+        path should be(List(bis, Airport.id("DEN"), jfk))
       }
-    }*/
+    }
+    "find all the shortest paths between BIS and JFK" in {
+      val bis = Airport.id("BIS")
+      val jfk = Airport.id("JFK")
+      Flight.shortestPaths(bis, jfk).map { paths =>
+        paths should be(List(
+          List(bis, Airport.id("DEN"), jfk),
+          List(bis, Airport.id("MSP"), jfk)
+        ))
+      }
+    }
+    "find all paths between BIS and JFK" in {
+      val bis = Airport.id("BIS")
+      val jfk = Airport.id("JFK")
+      val maxPaths = 1_000
+      Flight.allPaths(bis, jfk, maxPaths = maxPaths, maxDepth = 100).map { paths =>
+        paths.length should be(maxPaths)
+      }
+    }
     // TODO: Test ValueStore
     // TODO: the other stuff
     "dispose" in {
@@ -114,6 +118,9 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
   }
 
+  // HaloDB: 22s (full load: 100s)
+  // RocksDB: 22s (full load: 106s)
+  // ChronicleMap: 21s (full load: 98s)
   object DB extends LightDB {
     override def storeManager: StoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
 
@@ -157,8 +164,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
   }
 
-  case class Flight(from: Id[Airport],
-                    to: Id[Airport],
+  case class Flight(_from: Id[Airport],
+                    _to: Id[Airport],
                     year: Int,
                     month: Int,
                     day: Int,
@@ -171,13 +178,11 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
                     flightNum: Int,
                     tailNum: String,
                     distance: Int,
-                    _id: Id[Flight] = Flight.id()) extends Document[Flight]
+                    _id: Id[Flight] = Flight.id()) extends EdgeDocument[Flight, Airport, Airport]
 
-  object Flight extends DocumentModel[Flight] with JsonConversion[Flight] {
+  object Flight extends EdgeModel[Flight, Airport, Airport] with JsonConversion[Flight] {
     override implicit val rw: RW[Flight] = RW.gen
 
-    val from: F[Id[Airport]] = field("from", _.from)
-    val to: F[Id[Airport]] = field("to", _.to)
     val year: F[Int] = field("year", _.year)
     val month: F[Int] = field("month", _.month)
     val day: F[Int] = field("day", _.day)
@@ -254,8 +259,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       _ = insertedAirports should be(3375)
       flights = rapid.Stream.fromIterator(Task(csv2Iterator("flights.csv").map { d =>
         Flight(
-          from = Airport.id(d(0)),
-          to = Airport.id(d(1)),
+          _from = Airport.id(d(0)),
+          _to = Airport.id(d(1)),
           year = d(2).toInt,
           month = d(3).toInt,
           day = d(4).toInt,
