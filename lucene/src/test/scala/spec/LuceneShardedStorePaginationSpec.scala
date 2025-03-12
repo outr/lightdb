@@ -5,17 +5,18 @@ import lightdb._
 import lightdb.collection.Collection
 import lightdb.doc._
 import lightdb.field.Field
-import lightdb.store.{MapStore, StoreManager}
+import lightdb.lucene.LuceneStore
 import lightdb.store.sharded.ShardedStoreManager
+import lightdb.store.{MapStore, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import rapid.{AsyncTaskSpec, Task}
+import rapid.AsyncTaskSpec
 
 import java.nio.file.Path
 
 @EmbeddedTest
-class ShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
+class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   // Create a model for a simple document
   case class TestDoc(value: Int, _id: Id[TestDoc] = Id[TestDoc]()) extends Document[TestDoc]
 
@@ -31,7 +32,7 @@ class ShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     val docs: Collection[TestDoc, TestDoc.type] = collection(TestDoc)
 
-    override def storeManager: StoreManager = ShardedStoreManager(MapStore, 3)
+    override def storeManager: StoreManager = ShardedStoreManager(LuceneStore, 3)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

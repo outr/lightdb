@@ -28,7 +28,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
                                                                        minDocScore: Option[Double] = None,
                                                                        facets: List[FacetQuery[Doc]] = Nil,
                                                                        arbitraryQuery: Option[ArbitraryQuery] = None,
-                                                                       optimize: Boolean = true) { query =>
+                                                                       optimize: Boolean = false) { query =>
   private type Q = Query[Doc, Model, V]
 
   def scored: Q = copy(scoreDocs = true)
