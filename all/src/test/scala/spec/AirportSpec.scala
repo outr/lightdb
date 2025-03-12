@@ -73,7 +73,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 //        facet.ids.size should be(4826)
 //      }
 //    }
-    // TODO: Support traversals
+    // TODO: Support guides traversals
     "get all airport names reachable directly from LAX following edges" in {
       val lax = Airport.id("LAX")
       Flight.edgesFor(lax).map { airports =>
