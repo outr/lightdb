@@ -130,8 +130,8 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
           }
 
           val limitedList = query.limit match {
-            case Some(limit) => sortedList.slice(query.offset, query.offset + limit)
-            case None => sortedList.drop(query.offset)
+            case Some(limit) => sortedList.slice(query.offset, query.offset + limit).take(query.pageSize)
+            case None => sortedList.slice(query.offset, query.offset + query.pageSize)
           }
 
           // Create the final search results with the sorted and limited list
