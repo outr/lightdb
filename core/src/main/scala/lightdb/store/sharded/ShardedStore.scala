@@ -88,7 +88,11 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
-    val results = shardManager.shards.map(_.doSearch(query.copy(offset = 0, limit = query.limit.map(l => query.offset + l))))
+    // TODO: Optimize this to more efficiently query
+    val offset = 0
+    val limit = query.limit.map(l => query.offset + l)
+    val pageSize = query.pageSize * shardManager.shards.length
+    val results = shardManager.shards.map(_.doSearch(query.copy(offset = offset, limit = limit, pageSize = pageSize)))
 
     results.foldLeft(Task.pure(Option.empty[SearchResults[Doc, Model, V]])) { (task, resultTask) =>
       task.flatMap { optResult =>
