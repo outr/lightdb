@@ -97,7 +97,7 @@ val postgresqlVersion: String = "42.7.5"
 
 val chronicleMapVersion: String = "3.27ea0"
 
-val rapidVersion: String = "0.10.0"
+val rapidVersion: String = "0.11.0-SNAPSHOT"
 
 val scalaTestVersion: String = "3.2.19"
 
