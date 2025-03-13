@@ -6,7 +6,7 @@ import lightdb.collection.Collection
 import lightdb.doc._
 import lightdb.field.Field
 import lightdb.lucene.LuceneStore
-import lightdb.store.sharded.ShardedStoreManager
+import lightdb.store.sharded.{ShardedStore, ShardedStoreManager}
 import lightdb.store.{MapStore, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -17,33 +17,10 @@ import java.nio.file.Path
 
 @EmbeddedTest
 class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
-  // Create a model for a simple document
-  case class TestDoc(value: Int, _id: Id[TestDoc] = Id[TestDoc]()) extends Document[TestDoc]
-
-  object TestDoc extends DocumentModel[TestDoc] with JsonConversion[TestDoc] {
-    override implicit val rw: RW[TestDoc] = RW.gen
-
-    val value: Field.Indexed[TestDoc, Int] = field.index("value", (d: TestDoc) => d.value)
-  }
-
-  // Create a database with a collection of TestDocs
-  class DB extends LightDB {
-    override lazy val directory: Option[Path] = Some(Path.of(s"db/ShardedStorePaginationSpec"))
-
-    val docs: Collection[TestDoc, TestDoc.type] = collection(TestDoc)
-
-    override def storeManager: StoreManager = ShardedStoreManager(LuceneStore, 3)
-
-    override def upgrades: List[DatabaseUpgrade] = Nil
-  }
-
-  protected var db: DB = new DB
-
   "ShardedStore" should {
     "initialize the database" in {
       db.init.succeed
     }
-
     "properly handle pagination when merging results from multiple shards" in {
       // Create 300 documents (100 per shard)
       val docs = (1 to 300).map(i => TestDoc(value = i)).toList
@@ -67,7 +44,15 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
         }
       }
     }
-
+    "verify the proper counts per shard" in {
+      db.docs.transaction { implicit transaction =>
+        db.docs.store.asInstanceOf[ShardedStore[TestDoc, TestDoc.type]].shardCounts.map { counts =>
+          counts should be(Vector(
+            100, 100, 100
+          ))
+        }
+      }
+    }
     "properly handle offset when merging results from multiple shards" in {
       db.docs.transaction { implicit transaction =>
         // Query with an offset of 100 and a limit of 100
@@ -80,7 +65,6 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
         }
       }
     }
-
     "properly handle sorting when merging results from multiple shards" in {
       db.docs.transaction { implicit transaction =>
         // Query with descending sort
@@ -93,9 +77,35 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
         }
       }
     }
-
+    "truncate the database" in {
+      db.truncate().succeed
+    }
+    "verify the count is now empty" in {
+      db.docs.transaction { implicit transaction =>
+        db.docs.count.map(_ should be(0))
+      }
+    }
     "dispose the database" in {
       db.dispose.succeed
     }
+  }
+
+  case class TestDoc(value: Int, _id: Id[TestDoc] = Id[TestDoc]()) extends Document[TestDoc]
+
+  object TestDoc extends DocumentModel[TestDoc] with JsonConversion[TestDoc] {
+    override implicit val rw: RW[TestDoc] = RW.gen
+
+    val value: Field.Indexed[TestDoc, Int] = field.index("value", (d: TestDoc) => d.value)
+  }
+
+  // Create a database with a collection of TestDocs
+  object db extends LightDB {
+    override lazy val directory: Option[Path] = Some(Path.of(s"db/ShardedStorePaginationSpec"))
+
+    val docs: Collection[TestDoc, TestDoc.type] = collection(TestDoc)
+
+    override def storeManager: StoreManager = ShardedStoreManager(LuceneStore, 3)
+
+    override def upgrades: List[DatabaseUpgrade] = Nil
   }
 }
