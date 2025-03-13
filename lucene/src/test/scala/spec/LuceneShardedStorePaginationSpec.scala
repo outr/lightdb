@@ -23,7 +23,6 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
       db.init.succeed
     }
     "properly handle pagination when merging results from multiple shards" in {
-      // Create 300 documents (100 per shard)
       val docs = (1 to 300).map(i => TestDoc(value = i)).toList
 
       db.docs.transaction { implicit transaction =>
@@ -41,46 +40,32 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
     }
     "verify all docs were inserted" in {
       db.docs.transaction { implicit transaction =>
-        // Verify that all documents were inserted
         db.docs.count.flatMap { count =>
           count should be(300)
 
-          // Query with a limit of 100
           db.docs.query.sort(Sort.ByField(db.docs.model.value, SortDirection.Ascending)).limit(100).toList.map { results =>
-            // Verify that we got 100 results
             results.size should be(100)
-
-            // Verify that we got the first 100 documents (values 1-100)
-            results.map(_.value).sorted should be((1 to 100).toList)
+            results.map(_.value) should be((1 to 100).toList)
           }
         }
       }
     }
     "properly handle offset when merging results from multiple shards" in {
       db.docs.transaction { implicit transaction =>
-        // Query with an offset of 100 and a limit of 100
-        scribe.info("PRE-OFFSET:")
         db.docs.query.sort(Sort.ByField(db.docs.model.value, SortDirection.Ascending)).offset(100).limit(100).toList.map { results =>
-          // Verify that we got 100 results
           results.size should be(100)
-
-          // Verify that we got the second 100 documents (values 101-200)
-          results.map(_.value).sorted should be((101 to 200).toList)
+          results.map(_.value) should be((101 to 200).toList)
         }
       }
     }
-    /*"properly handle sorting when merging results from multiple shards" in {
+    "properly handle sorting when merging results from multiple shards" in {
       db.docs.transaction { implicit transaction =>
-        // Query with descending sort
         db.docs.query.sort(Sort.ByField(db.docs.model.value, SortDirection.Descending)).limit(100).toList.map { results =>
-          // Verify that we got 100 results
           results.size should be(100)
-
-          // Verify that we got the last 100 documents (values 201-300)
-          results.map(_.value).sorted.reverse should be((201 to 300).toList)
+          results.map(_.value) should be((300 to 201 by -1).toList)
         }
       }
-    }*/
+    }
     "truncate the database" in {
       db.truncate().succeed
     }
@@ -102,7 +87,6 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
     val value: Field.Indexed[TestDoc, Int] = field.index("value", (d: TestDoc) => d.value)
   }
 
-  // Create a database with a collection of TestDocs
   object db extends LightDB {
     override lazy val directory: Option[Path] = Some(Path.of(s"db/ShardedStorePaginationSpec"))
 

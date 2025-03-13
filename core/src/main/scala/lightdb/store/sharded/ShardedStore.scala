@@ -129,13 +129,10 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
             list.sortBy(-_._2)
           }
 
-          // Apply the limit if specified
-          scribe.info(s"SortedList: ${sortedList.length}, first: ${sortedList.headOption}, last: ${sortedList.lastOption}")
           val limitedList = query.limit match {
             case Some(limit) => sortedList.slice(query.offset, query.offset + limit)
             case None => sortedList.drop(query.offset)
           }
-          scribe.info(s"Limited: ${limitedList.size}")
 
           // Create the final search results with the sorted and limited list
           SearchResults(
