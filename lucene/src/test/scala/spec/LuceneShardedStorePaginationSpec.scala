@@ -56,9 +56,10 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
         }
       }
     }
-    /*"properly handle offset when merging results from multiple shards" in {
+    "properly handle offset when merging results from multiple shards" in {
       db.docs.transaction { implicit transaction =>
         // Query with an offset of 100 and a limit of 100
+        scribe.info("PRE-OFFSET:")
         db.docs.query.sort(Sort.ByField(db.docs.model.value, SortDirection.Ascending)).offset(100).limit(100).toList.map { results =>
           // Verify that we got 100 results
           results.size should be(100)
@@ -67,7 +68,7 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
           results.map(_.value).sorted should be((101 to 200).toList)
         }
       }
-    }*/
+    }
     /*"properly handle sorting when merging results from multiple shards" in {
       db.docs.transaction { implicit transaction =>
         // Query with descending sort
