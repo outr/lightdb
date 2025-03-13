@@ -163,12 +163,12 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
       pagedQuery.search
     }
 
-    def fetchAllPages(total: Int, offset: Int): rapid.Stream[(V, Double)] = {
-      if (offset >= total) {
+    def fetchAllPages(endOffset: Int, offset: Int): rapid.Stream[(V, Double)] = {
+      if (offset >= endOffset) {
         rapid.Stream.empty
       } else {
         rapid.Stream.force(fetchPage(offset).flatMap { searchResults =>
-          val nextPageStream = fetchAllPages(total, offset + pageSize)
+          val nextPageStream = fetchAllPages(endOffset, offset + pageSize)
           Task.pure(searchResults.streamWithScore ++ nextPageStream)
         })
       }
@@ -176,12 +176,11 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
 
     rapid.Stream.force(fetchPage(offset).flatMap { firstPageResults =>
       val total = firstPageResults.total.get
-      scribe.info(s"TOTAL: $total")
-      val limit = this.limit match {
-        case Some(l) => math.min(l, total)
+      val endOffset = this.limit match {
+        case Some(l) => offset + math.min(l, total - offset)
         case None => total
       }
-      Task.pure(fetchAllPages(limit, offset))
+      Task.pure(fetchAllPages(endOffset, offset))
     })
   }
 
