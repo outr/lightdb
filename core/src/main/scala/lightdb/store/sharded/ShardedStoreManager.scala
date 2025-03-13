@@ -10,7 +10,8 @@ import lightdb.store.{Store, StoreManager, StoreMode}
  * @param storeManager The StoreManager to use for creating the individual shard stores
  * @param shardCount The number of shards to create
  */
-case class ShardedStoreManager(storeManager: StoreManager, shardCount: Int) extends StoreManager {
+case class ShardedStoreManager(storeManager: StoreManager,
+                               shardCount: Int) extends StoreManager {
   override lazy val name: String = s"Sharded($storeManager, $shardCount)"
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

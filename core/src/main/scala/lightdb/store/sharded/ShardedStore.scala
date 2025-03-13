@@ -124,6 +124,10 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     }
   }
 
+  def shardCounts(implicit transaction: Transaction[Doc]): Task[Vector[Int]] = {
+    shards.map(_.count).tasks.map(_.toVector)
+  }
+
   override def stream(implicit transaction: Transaction[Doc]): Stream[Doc] = {
     // Concatenate streams from all shards
     Stream.fromIterator(Task.pure(shards.iterator)).flatMap(_.stream)
