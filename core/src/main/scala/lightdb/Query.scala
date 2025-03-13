@@ -159,7 +159,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
 
   def streamScored(implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] = {
     def fetchPage(offset: Int): Task[SearchResults[Doc, Model, V]] = {
-      val pagedQuery = copy(offset = offset, countTotal = offset == 0)
+      val pagedQuery = copy(offset = offset, countTotal = offset == this.offset)
       pagedQuery.search
     }
 
@@ -174,13 +174,14 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
       }
     }
 
-    rapid.Stream.force(fetchPage(0).flatMap { firstPageResults =>
+    rapid.Stream.force(fetchPage(offset).flatMap { firstPageResults =>
       val total = firstPageResults.total.get
+      scribe.info(s"TOTAL: $total")
       val limit = this.limit match {
         case Some(l) => math.min(l, total)
         case None => total
       }
-      Task.pure(fetchAllPages(limit, 0))
+      Task.pure(fetchAllPages(limit, offset))
     })
   }
 

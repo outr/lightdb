@@ -6,10 +6,12 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field._
+import lightdb.field.{Field, IndexingState}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.sharded.manager.{ShardManager, ShardManagerInstance}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.util.JsonOrdering
 import rapid.{Stream, Task, logger}
 
 import scala.language.implicitConversions
@@ -29,35 +31,25 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
   override protected def initialize(): Task[Unit] = {
-    // Initialize all shards
     shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.init)
     }
   }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = {
-    // Prepare transaction for all shards
     shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.prepareTransaction(transaction))
     }
   }
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
-    // Insert into the appropriate shard based on document ID
-    shardManager.insert(doc)
-  }
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.insert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
-    // Upsert into the appropriate shard based on document ID
-    shardManager.upsert(doc)
-  }
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.upsert(doc)
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = {
-    // Check if document exists in the appropriate shard
-    shardManager.exists(id)
-  }
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = shardManager.exists(id)
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
+  override def get[V](field: UniqueIndex[Doc, V], value: V)
+                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
     val findFirst = () => shardManager.shards.foldLeft(Task.pure(Option.empty[Doc])) { (task, shard) =>
       task.flatMap {
         case Some(doc) => Task.pure(Some(doc))
@@ -78,35 +70,26 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
   override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
     shardManager.delete(field, value).map(_.nonEmpty)
 
-  override def count(implicit transaction: Transaction[Doc]): Task[Int] = {
-    // Sum the counts from all shards
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] =
     shardManager.shards.foldLeft(Task.pure(0)) { (task, shard) =>
       task.flatMap { count =>
         shard.count.map(_ + count)
       }
     }
-  }
 
-  def shardCounts(implicit transaction: Transaction[Doc]): Task[Vector[Int]] = {
+  def shardCounts(implicit transaction: Transaction[Doc]): Task[Vector[Int]] =
     shardManager.shards.map(_.count).tasks.map(_.toVector)
-  }
 
-  override def stream(implicit transaction: Transaction[Doc]): Stream[Doc] = {
-    // Concatenate streams from all shards
+  override def stream(implicit transaction: Transaction[Doc]): Stream[Doc] =
     Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.stream)
-  }
 
-  override def jsonStream(implicit transaction: Transaction[Doc]): Stream[Json] = {
-    // Concatenate JSON streams from all shards
+  override def jsonStream(implicit transaction: Transaction[Doc]): Stream[Json] =
     Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.jsonStream)
-  }
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
-    // Execute the query on all shards
-    val results = shardManager.shards.map(_.doSearch(query))
+    val results = shardManager.shards.map(_.doSearch(query.copy(offset = 0, limit = query.limit.map(l => query.offset + l))))
 
-    // Merge the results
     results.foldLeft(Task.pure(Option.empty[SearchResults[Doc, Model, V]])) { (task, resultTask) =>
       task.flatMap { optResult =>
         resultTask.flatMap { result =>
@@ -116,62 +99,66 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
           }
         }
       }
-    }.flatMap { optResult =>
-      optResult match {
-        case Some(result) =>
-          // Apply sorting and limiting to the merged results
-          result.streamWithScore.toList.map { list =>
-            // Sort the list by score (descending by default)
-            val sortedList = if (query.sort.nonEmpty) {
-              // Sort by the first sort criterion
-              val sort = query.sort.head
-              sort match {
-                case Sort.BestMatch(direction) =>
-                  // Sort by score
-                  val sorted = list.sortBy(_._2)
-                  if (direction == SortDirection.Descending) sorted.reverse else sorted
-                case Sort.IndexOrder =>
-                  // No sorting needed
+    }.flatMap {
+      case Some(result) =>
+        result.streamWithScore.toList.map { list =>
+          val sortedList: List[(V, Double)] = if (query.sort.nonEmpty) {
+            val sort = query.sort.head
+            sort match {
+              case Sort.BestMatch(direction) =>
+                val sorted = list.sortBy(_._2)
+                if (direction == SortDirection.Descending) sorted.reverse else sorted
+              case Sort.IndexOrder => list
+              case Sort.ByField(field, direction) if list.nonEmpty =>
+                val indexingState = new IndexingState
+                val f = field.asInstanceOf[Field[Doc, _]]
+                if (list.head._1.isInstanceOf[Document[_]]) {
+                  val ordering = direction match {
+                    case SortDirection.Ascending => JsonOrdering
+                    case SortDirection.Descending => JsonOrdering.reverse
+                  }
+                  list.asInstanceOf[List[(Doc, Double)]].sortBy(t => f.getJson(t._1, indexingState))(ordering).asInstanceOf[List[(V, Double)]]
+                } else {
+                  scribe.info(s"Unknown type: ${list.head._1.getClass.getName}")
                   list
-                case _ =>
-                  // For other sort criteria, we can't sort here because we don't have access to the document fields
-                  // Just return the list as-is
-                  list
-              }
-            } else {
-              // Default to sorting by score (descending)
-              list.sortBy(-_._2)
+                }
+              case _ => list
             }
-
-            // Apply the limit if specified
-            val limitedList = query.limit match {
-              case Some(limit) => sortedList.take(limit)
-              case None => sortedList
-            }
-
-            // Create the final search results with the sorted and limited list
-            SearchResults(
-              model = result.model,
-              offset = query.offset,
-              limit = query.limit,
-              total = result.total,
-              streamWithScore = Stream.fromIterator(Task.pure(limitedList.iterator)),
-              facetResults = result.facetResults,
-              transaction = transaction
-            )
+          } else {
+            // Default to sorting by score (descending)
+            list.sortBy(-_._2)
           }
-        case None =>
-          // If there are no results, return empty results
-          Task.pure(SearchResults(
-            model = model,
+
+          // Apply the limit if specified
+          scribe.info(s"SortedList: ${sortedList.length}, first: ${sortedList.headOption}, last: ${sortedList.lastOption}")
+          val limitedList = query.limit match {
+            case Some(limit) => sortedList.slice(query.offset, query.offset + limit)
+            case None => sortedList.drop(query.offset)
+          }
+          scribe.info(s"Limited: ${limitedList.size}")
+
+          // Create the final search results with the sorted and limited list
+          SearchResults(
+            model = result.model,
             offset = query.offset,
             limit = query.limit,
-            total = Some(0),
-            streamWithScore = Stream.empty,
-            facetResults = Map.empty,
+            total = result.total,
+            streamWithScore = Stream.fromIterator(Task.pure(limitedList.iterator)),
+            facetResults = result.facetResults,
             transaction = transaction
-          ))
-      }
+          )
+        }
+      case None =>
+        // If there are no results, return empty results
+        Task.pure(SearchResults(
+          model = model,
+          offset = query.offset,
+          limit = query.limit,
+          total = Some(0),
+          streamWithScore = Stream.empty,
+          facetResults = Map.empty,
+          transaction = transaction
+        ))
     }
   }
 
