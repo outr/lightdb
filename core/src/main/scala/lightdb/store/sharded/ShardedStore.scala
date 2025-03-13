@@ -7,6 +7,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
+import lightdb.store.sharded.manager.{ShardManager, ShardManagerInstance}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid.{Stream, Task, logger}
@@ -24,100 +25,62 @@ import scala.language.implicitConversions
  */
 class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
                                                                       model: Model,
-                                                                      shards: Vector[Store[Doc, Model]],
+                                                                      shardManager: ShardManagerInstance[Doc, Model],
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
-
-  /**
-   * Determines which shard to use for a given document ID.
-   *
-   * @param id The document ID
-   * @return The shard index
-   */
-  private def shardIndex(id: Id[Doc]): Int = {
-    // Simple hash-based sharding
-    Math.abs(id.value.hashCode() % shards.size)
-  }
-
-  /**
-   * Gets the shard for a given document ID.
-   *
-   * @param id The document ID
-   * @return The shard
-   */
-  private def shardFor(id: Id[Doc]): Store[Doc, Model] = {
-    shards(shardIndex(id))
-  }
-
   override protected def initialize(): Task[Unit] = {
     // Initialize all shards
-    shards.foldLeft(Task.unit) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.init)
     }
   }
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = {
     // Prepare transaction for all shards
-    shards.foldLeft(Task.unit) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.prepareTransaction(transaction))
     }
   }
 
   override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
     // Insert into the appropriate shard based on document ID
-    shardFor(id(doc)).insert(doc)
+    shardManager.insert(doc)
   }
 
   override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
     // Upsert into the appropriate shard based on document ID
-    shardFor(id(doc)).upsert(doc)
+    shardManager.upsert(doc)
   }
 
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = {
     // Check if document exists in the appropriate shard
-    shardFor(id).exists(id)
+    shardManager.exists(id)
   }
 
   override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
-    if (field == idField) {
-      // If we're querying by ID, we can go directly to the appropriate shard
-      val id = value.asInstanceOf[Id[Doc]]
-      shardFor(id).get(field, value)
-    } else {
-      // Otherwise, we need to query all shards and take the first result
-      // We'll do this by folding over the shards and returning the first result we find
-      shards.foldLeft(Task.pure(Option.empty[Doc])) { (task, shard) =>
-        task.flatMap {
-          case Some(doc) => Task.pure(Some(doc))
-          case None => shard.get(field, value)
-        }
+    val findFirst = () => shardManager.shards.foldLeft(Task.pure(Option.empty[Doc])) { (task, shard) =>
+      task.flatMap {
+        case Some(doc) => Task.pure(Some(doc))
+        case None => shard.get(field, value)
       }
+    }
+    if (field == idField) {
+      val id = value.asInstanceOf[Id[Doc]]
+      shardManager.shardFor(id) match {
+        case Some(store) => store.get(field, value)
+        case None => findFirst()
+      }
+    } else {
+      findFirst()
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] = {
-    if (field == idField) {
-      // If we're deleting by ID, we can go directly to the appropriate shard
-      val id = value.asInstanceOf[Id[Doc]]
-      shardFor(id).delete(field, value)
-    } else {
-      // Otherwise, we need to delete from all shards and return true if any deletion succeeded
-      // We'll do this by folding over the shards and returning true if any deletion succeeded
-      shards.foldLeft(Task.pure(false)) { (task, shard) =>
-        task.flatMap { result =>
-          if (result) {
-            Task.pure(true)
-          } else {
-            shard.delete(field, value)
-          }
-        }
-      }
-    }
-  }
+  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
+    shardManager.delete(field, value).map(_.nonEmpty)
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] = {
     // Sum the counts from all shards
-    shards.foldLeft(Task.pure(0)) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.pure(0)) { (task, shard) =>
       task.flatMap { count =>
         shard.count.map(_ + count)
       }
@@ -125,23 +88,23 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
   }
 
   def shardCounts(implicit transaction: Transaction[Doc]): Task[Vector[Int]] = {
-    shards.map(_.count).tasks.map(_.toVector)
+    shardManager.shards.map(_.count).tasks.map(_.toVector)
   }
 
   override def stream(implicit transaction: Transaction[Doc]): Stream[Doc] = {
     // Concatenate streams from all shards
-    Stream.fromIterator(Task.pure(shards.iterator)).flatMap(_.stream)
+    Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.stream)
   }
 
   override def jsonStream(implicit transaction: Transaction[Doc]): Stream[Json] = {
     // Concatenate JSON streams from all shards
-    Stream.fromIterator(Task.pure(shards.iterator)).flatMap(_.jsonStream)
+    Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.jsonStream)
   }
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
     // Execute the query on all shards
-    val results = shards.map(_.doSearch(query))
+    val results = shardManager.shards.map(_.doSearch(query))
 
     // Merge the results
     results.foldLeft(Task.pure(Option.empty[SearchResults[Doc, Model, V]])) { (task, resultTask) =>
@@ -283,12 +246,12 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     // Aggregate across all shards
     // Note: This is a simplified implementation that concatenates the aggregation results from all shards
     // A more complete implementation would merge the aggregation results
-    Stream.fromIterator(Task.pure(shards.iterator)).flatMap(_.aggregate(query))
+    Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.aggregate(query))
   }
 
   override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] = {
     // Sum the aggregation counts from all shards
-    shards.foldLeft(Task.pure(0)) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.pure(0)) { (task, shard) =>
       task.flatMap { count =>
         shard.aggregateCount(query).map(_ + count)
       }
@@ -297,7 +260,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
 
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = {
     // Truncate all shards and sum the counts
-    shards.foldLeft(Task.pure(0)) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.pure(0)) { (task, shard) =>
       task.flatMap { count =>
         shard.truncate().map(_ + count)
       }
@@ -306,7 +269,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
 
   override def verify(): Task[Boolean] = {
     // Verify all shards and return true if all verifications succeed
-    shards.foldLeft(Task.pure(true)) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.pure(true)) { (task, shard) =>
       task.flatMap { result =>
         if (!result) {
           Task.pure(false)
@@ -317,34 +280,24 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     }
   }
 
-  override def reIndex(): Task[Boolean] = {
-    // Re-index all shards and return true if all re-indexings succeed
-    shards.foldLeft(Task.pure(true)) { (task, shard) =>
-      task.flatMap { result =>
-        if (!result) {
-          Task.pure(false)
-        } else {
-          shard.reIndex()
-        }
-      }
-    }
-  }
+  override def reIndex(): Task[Boolean] = shardManager.shards.map { store =>
+    store.reIndex()
+  }.tasks.map(_ => true)
 
-  override def reIndex(doc: Doc): Task[Boolean] = {
-    // Re-index the document in the appropriate shard
-    shardFor(id(doc)).reIndex(doc)
+  override def reIndex(doc: Doc): Task[Boolean] = transaction { implicit transaction =>
+    shardManager.reIndex(doc)
   }
 
   override def optimize(): Task[Unit] = {
     // Optimize all shards
-    shards.foldLeft(Task.unit) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.optimize())
     }
   }
 
   override protected def doDispose(): Task[Unit] = {
     // Dispose all shards
-    shards.foldLeft(Task.unit) { (task, shard) =>
+    shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.dispose)
     }
   }
