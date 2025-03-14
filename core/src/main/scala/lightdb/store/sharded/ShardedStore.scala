@@ -12,7 +12,7 @@ import lightdb.store.sharded.manager.{ShardManager, ShardManagerInstance}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.JsonOrdering
-import rapid.{Stream, Task, logger}
+import rapid._
 
 import scala.language.implicitConversions
 
@@ -21,7 +21,7 @@ import scala.language.implicitConversions
  *
  * @param name         The name of the store
  * @param model        The document model
- * @param shards       The shards to distribute data across
+ * @param shardManager The shard manager
  * @param storeMode    The store mode
  * @param storeManager The store manager
  */

@@ -5,7 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.store.Store
 import lightdb.transaction.Transaction
-import rapid.Task
+import rapid._
 
 import java.util.concurrent.atomic.AtomicInteger
 
