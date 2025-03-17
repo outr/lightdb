@@ -92,55 +92,75 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     val offset = 0
     val limit = query.limit.map(l => query.offset + l)
     val pageSize = query.pageSize * shardManager.shards.length
-    val results = shardManager.shards.map(_.doSearch(query.copy(offset = offset, limit = limit, pageSize = pageSize))).tasksPar
+    val results = shardManager.shards.map(_.doSearch(query.copy(offset = offset, limit = limit, pageSize = pageSize)))
 
-    results.map { v =>
-      v.foldLeft(v.head)((combined, results) => mergeSearchResults(combined, results))
-    }.flatMap { merged =>
-      merged.streamWithScore.toList.map { list =>
-        val sortedList: List[(V, Double)] = if (query.sort.nonEmpty) {
-          val sort = query.sort.head
-          sort match {
-            case Sort.BestMatch(direction) =>
-              val sorted = list.sortBy(_._2)
-              if (direction == SortDirection.Descending) sorted.reverse else sorted
-            case Sort.IndexOrder => list
-            case Sort.ByField(field, direction) if list.nonEmpty =>
-              val indexingState = new IndexingState
-              val f = field.asInstanceOf[Field[Doc, _]]
-              if (list.head._1.isInstanceOf[Document[_]]) {
-                val ordering = direction match {
-                  case SortDirection.Ascending => JsonOrdering
-                  case SortDirection.Descending => JsonOrdering.reverse
-                }
-                list.asInstanceOf[List[(Doc, Double)]].sortBy(t => f.getJson(t._1, indexingState))(ordering).asInstanceOf[List[(V, Double)]]
-              } else {
-                scribe.info(s"Unknown type: ${list.head._1.getClass.getName}")
-                list
-              }
-            case _ => list
+    // TODO: Concurrent!
+    results.foldLeft(Task.pure(Option.empty[SearchResults[Doc, Model, V]])) { (task, resultTask) =>
+      task.flatMap { optResult =>
+        resultTask.flatMap { result =>
+          optResult match {
+            case Some(existing) => mergeSearchResults(existing, result)
+            case None => Task.pure(Some(result))
           }
-        } else {
-          // Default to sorting by score (descending)
-          list.sortBy(-_._2)
         }
+      }
+    }.flatMap {
+      case Some(result) =>
+        result.streamWithScore.toList.map { list =>
+          val sortedList: List[(V, Double)] = if (query.sort.nonEmpty) {
+            val sort = query.sort.head
+            sort match {
+              case Sort.BestMatch(direction) =>
+                val sorted = list.sortBy(_._2)
+                if (direction == SortDirection.Descending) sorted.reverse else sorted
+              case Sort.IndexOrder => list
+              case Sort.ByField(field, direction) if list.nonEmpty =>
+                val indexingState = new IndexingState
+                val f = field.asInstanceOf[Field[Doc, _]]
+                if (list.head._1.isInstanceOf[Document[_]]) {
+                  val ordering = direction match {
+                    case SortDirection.Ascending => JsonOrdering
+                    case SortDirection.Descending => JsonOrdering.reverse
+                  }
+                  list.asInstanceOf[List[(Doc, Double)]].sortBy(t => f.getJson(t._1, indexingState))(ordering).asInstanceOf[List[(V, Double)]]
+                } else {
+                  scribe.info(s"Unknown type: ${list.head._1.getClass.getName}")
+                  list
+                }
+              case _ => list
+            }
+          } else {
+            // Default to sorting by score (descending)
+            list.sortBy(-_._2)
+          }
 
-        val limitedList = query.limit match {
-          case Some(limit) => sortedList.slice(query.offset, query.offset + limit).take(query.pageSize)
-          case None => sortedList.slice(query.offset, query.offset + query.pageSize)
+          val limitedList = query.limit match {
+            case Some(limit) => sortedList.slice(query.offset, query.offset + limit).take(query.pageSize)
+            case None => sortedList.slice(query.offset, query.offset + query.pageSize)
+          }
+
+          // Create the final search results with the sorted and limited list
+          SearchResults(
+            model = result.model,
+            offset = query.offset,
+            limit = query.limit,
+            total = result.total,
+            streamWithScore = Stream.fromIterator(Task.pure(limitedList.iterator)),
+            facetResults = result.facetResults,
+            transaction = transaction
+          )
         }
-
-        // Create the final search results with the sorted and limited list
-        SearchResults(
-          model = merged.model,
+      case None =>
+        // If there are no results, return empty results
+        Task.pure(SearchResults(
+          model = model,
           offset = query.offset,
           limit = query.limit,
-          total = merged.total,
-          streamWithScore = Stream.fromIterator(Task.pure(limitedList.iterator)),
-          facetResults = merged.facetResults,
+          total = Some(0),
+          streamWithScore = Stream.empty,
+          facetResults = Map.empty,
           transaction = transaction
-        )
-      }
+        ))
     }
   }
 
@@ -152,7 +172,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
    * @return The merged search result
    */
   private def mergeSearchResults[V](result1: SearchResults[Doc, Model, V],
-                                    result2: SearchResults[Doc, Model, V]): SearchResults[Doc, Model, V] = {
+                                    result2: SearchResults[Doc, Model, V]): Task[Option[SearchResults[Doc, Model, V]]] = {
     // Calculate the total count
     val total = (result1.total, result2.total) match {
       case (Some(t1), Some(t2)) => Some(t1 + t2)
@@ -166,7 +186,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     val mergedStream = result1.streamWithScore ++ result2.streamWithScore
 
     // Create the merged search results
-    SearchResults(
+    Task.pure(Some(SearchResults(
       model = model,
       offset = result1.offset,
       limit = result1.limit,
@@ -174,7 +194,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
       streamWithScore = mergedStream,
       facetResults = facetResults,
       transaction = result1.transaction
-    )
+    )))
   }
 
   /**
