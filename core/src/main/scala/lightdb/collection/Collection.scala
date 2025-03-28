@@ -212,6 +212,8 @@ case class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = store.stream
 
+  def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = store.jsonStream
+
   lazy val query: Query[Doc, Model, Doc] = Query(model, store, Conversion.Doc())
 
   def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = {

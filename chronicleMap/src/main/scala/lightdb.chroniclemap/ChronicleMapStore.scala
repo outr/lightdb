@@ -1,5 +1,6 @@
 package lightdb.chroniclemap
 
+import fabric.Json
 import lightdb.aggregate.AggregateQuery
 import lightdb.{Id, LightDB, Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
@@ -77,11 +78,11 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(db.size())
 
-  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.fromIterator(Task {
+  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     db.values()
       .iterator()
       .asScala
-      .map(fromString)
+      .map(toJson)
   })
 
   override def doSearch[V](query: Query[Doc, Model, V])

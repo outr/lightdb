@@ -242,8 +242,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   override def count(implicit transaction: Transaction[Doc]): Task[Int] =
     Task(state.indexSearcher.count(new MatchAllDocsQuery))
 
-  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
-    rapid.Stream.force(doSearch[Doc](Query[Doc, Model, Doc](model, this, Conversion.Doc())).map(_.stream))
+  override def jsonStream(implicit transaction: Transaction[Doc]): Stream[Json] =
+    rapid.Stream.force(doSearch[Json](Query[Doc, Model, Json](model, this, Conversion.Json(fields))).map(_.stream))
 
   private lazy val searchBuilder = new LuceneSearchBuilder[Doc, Model](this, model)
 

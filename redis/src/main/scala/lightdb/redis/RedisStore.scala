@@ -1,6 +1,7 @@
 package lightdb.redis
 
 import _root_.redis.clients.jedis.{Jedis, JedisPool, JedisPoolConfig}
+import fabric.Json
 import lightdb._
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
@@ -60,8 +61,8 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(getInstance.hlen(name).toInt)
 
-  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.fromIterator(Task {
-    getInstance.hgetAll(name).values().iterator().asScala.map(fromString)
+  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
+    getInstance.hgetAll(name).values().iterator().asScala.map(toJson)
   })
 
   override def doSearch[V](query: Query[Doc, Model, V])
