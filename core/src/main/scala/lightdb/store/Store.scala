@@ -42,7 +42,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   }
 
   protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(model.rw))
-  protected def fromString(string: String): Doc = JsonParser(string).as[Doc](model.rw)
+  protected def fromString(string: String): Doc = toJson(string).as[Doc](model.rw)
+  protected def toJson(string: String): Json = JsonParser(string)
 
   lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial))
 
@@ -68,9 +69,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def count(implicit transaction: Transaction[Doc]): Task[Int]
 
-  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc]
+  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = jsonStream.map(_.as[Doc](model.rw))
 
-  def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = stream.map(_.json(model.rw))
+  def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json]
 
   def doSearch[V](query: Query[Doc, Model, V])
                  (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]]

@@ -1,5 +1,6 @@
 package lightdb.lmdb
 
+import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
@@ -70,12 +71,13 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] =
     instance.transactionManager.exists(dbi, key(id))
 
-  private def b2d(bb: ByteBuffer): Doc = {
+  private def b2d(bb: ByteBuffer): Doc = b2j(bb).as[Doc](model.rw)
+
+  private def b2j(bb: ByteBuffer): Json = {
     val bytes = new Array[Byte](bb.remaining())
     bb.get(bytes)
     val jsonString = new String(bytes, "UTF-8")
-    val json = JsonParser(jsonString)
-    json.as[Doc](model.rw)
+    JsonParser(jsonString)
   }
 
   override def get[V](field: Field.UniqueIndex[Doc, V], value: V)
@@ -99,8 +101,8 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   override def count(implicit transaction: Transaction[Doc]): Task[Int] =
     instance.transactionManager.count(dbi)
 
-  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
-    rapid.Stream.fromIterator(instance.transactionManager.withReadIterator(txn => new LMDBValueIterator(dbi, txn).map(b2d)))
+  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] =
+    rapid.Stream.fromIterator(instance.transactionManager.withReadIterator(txn => new LMDBValueIterator(dbi, txn).map(b2j)))
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =

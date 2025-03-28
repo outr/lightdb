@@ -46,8 +46,6 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] = instance.count
 
-  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = instance.stream.map(_.as[Doc])
-
   override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = instance.stream
 
   override def doSearch[V](query: Query[Doc, Model, V])

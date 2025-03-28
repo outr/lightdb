@@ -1,5 +1,6 @@
 package lightdb.rocksdb
 
+import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb._
@@ -65,10 +66,11 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     }
   }
 
-  private def bytes2Doc(bytes: Array[Byte]): Doc = {
+  private def bytes2Doc(bytes: Array[Byte]): Doc = bytes2Json(bytes).as[Doc](model.rw)
+
+  private def bytes2Json(bytes: Array[Byte]): Json = {
     val jsonString = new String(bytes, "UTF-8")
-    val json = JsonParser(jsonString)
-    json.as[Doc](model.rw)
+    JsonParser(jsonString)
   }
 
   override def delete[V](field: UniqueIndex[Doc, V], value: V)
@@ -88,13 +90,13 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     }).size
   }
 
-  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream
+  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream
     .fromIterator(Task(iterator {
       handle match {
         case Some(h) => rocksDB.newIterator(h)
         case None => rocksDB.newIterator()
       }
-    })).map(bytes2Doc)
+    })).map(bytes2Json)
 
   override def doSearch[V](query: Query[Doc, Model, V])
                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =

@@ -226,6 +226,16 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
+  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
+    val state = getState
+    val connection = connectionManager.getConnection
+    val s = connection.createStatement()
+    state.register(s)
+    val rs = s.executeQuery(s"SELECT * FROM $name")
+    state.register(rs)
+    rs2Iterator(rs, Conversion.Json(fields))
+  })
+
   override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.fromIterator(Task {
     val state = getState
     val connection = connectionManager.getConnection

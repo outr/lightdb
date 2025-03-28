@@ -1,5 +1,6 @@
 package lightdb.mapdb
 
+import fabric.Json
 import lightdb._
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
@@ -57,11 +58,11 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(map.size())
 
-  override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream.fromIterator(Task {
+  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     map.values()
       .iterator()
       .asScala
-      .map(fromString)
+      .map(toJson)
   })
 
   override def doSearch[V](query: Query[Doc, Model, V])
