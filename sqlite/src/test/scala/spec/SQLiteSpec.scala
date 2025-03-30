@@ -7,5 +7,5 @@ class SQLiteSpec extends AbstractBasicSpec {
 //  SQLQueryBuilder.LogQueries = true
 //  addFeature(SQLDatabase.Key, SQLDatabase(SQLiteStore.singleConnectionManager(Some(Path.of("db", specName)))))
 
-  override def storeManager: StoreManager = SQLiteStore
+  override def storeManager: SQLiteStore.type = SQLiteStore
 }

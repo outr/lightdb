@@ -3,7 +3,7 @@ package spec
 import fabric._
 import fabric.rw._
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, Timestamp}
 import org.scalatest.matchers.should.Matchers
@@ -65,15 +65,15 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
   }
 
-  def storeManager: StoreManager
+  def storeManager: CollectionManager
 
   object DB extends LightDB {
-    override type SM = StoreManager
-    override val storeManager: StoreManager = spec.storeManager
+    override type SM = CollectionManager
+    override val storeManager: CollectionManager = spec.storeManager
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val specialOne: Store[SpecialOne, SpecialOne.type] = store(SpecialOne)
+    val specialOne: Collection[SpecialOne, SpecialOne.type] = store(SpecialOne)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

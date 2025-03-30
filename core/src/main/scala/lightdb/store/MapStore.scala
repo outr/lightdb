@@ -64,14 +64,6 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   override def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] =
     rapid.Stream.fromIterator(Task(_map.valuesIterator))
 
-  override def doSearch[V](query: Query[Doc, Model, V])
-                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = throw new UnsupportedOperationException("MapStore does not support searching")
-
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] = throw new UnsupportedOperationException("MapStore does not support aggregation")
-
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] = throw new UnsupportedOperationException("MapStore does not support aggregation")
-
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task {
     store.synchronized {
       val size = _map.size

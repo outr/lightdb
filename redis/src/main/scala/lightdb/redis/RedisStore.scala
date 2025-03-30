@@ -66,17 +66,6 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     getInstance.hgetAll(name).values().iterator().asScala.map(toJson)
   })
 
-  override def doSearch[V](query: Query[Doc, Model, V])
-                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
-    throw new UnsupportedOperationException("Redis does not support searching")
-
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    throw new UnsupportedOperationException("Redis does not support aggregation")
-
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
-    throw new UnsupportedOperationException("Redis does not support aggregation")
-
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = count.map { size =>
     getInstance.del(name)
     size

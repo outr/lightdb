@@ -3,9 +3,9 @@ package lightdb.sql
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 
-case class SQLiteSharedStore(connectionManager: ConnectionManager) extends StoreManager {
+case class SQLiteSharedStore(connectionManager: ConnectionManager) extends CollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SQLiteStore[Doc, Model]
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

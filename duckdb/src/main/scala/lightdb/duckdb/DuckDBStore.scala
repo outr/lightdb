@@ -4,7 +4,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.sql.{SQLDatabase, SQLStore}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 
 import java.nio.file.Path
 import java.sql.Connection
@@ -43,7 +43,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   }
 }
 
-object DuckDBStore extends StoreManager {
+object DuckDBStore extends CollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = DuckDBStore[Doc, Model]
 
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {

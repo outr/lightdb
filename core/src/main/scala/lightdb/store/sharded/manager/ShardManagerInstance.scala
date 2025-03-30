@@ -3,14 +3,14 @@ package lightdb.store.sharded.manager
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
-import lightdb.store.Store
+import lightdb.store.{Collection, Store}
 import lightdb.transaction.Transaction
 import rapid.Task
 
 trait ShardManagerInstance[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected def model: Model
 
-  def shards: Vector[Store[Doc, Model]]
+  def shards: Vector[Collection[Doc, Model]]
 
   def shardFor(id: Id[Doc]): Option[Store[Doc, Model]]
 

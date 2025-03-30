@@ -13,7 +13,7 @@ import lightdb.filter.Filter
 import lightdb.lucene.index.Index
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.Geo
-import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{Collection, CollectionManager, Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
@@ -33,7 +33,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      directory: Option[Path],
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      lightDB: LightDB,
-                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
+                                                                     storeManager: StoreManager) extends Collection[Doc, Model](name, model, lightDB, storeManager) {
   private val id = Unique()
   private val transactionKey: TransactionKey[LuceneState[Doc]] = TransactionKey(id)
 
@@ -279,7 +279,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   })
 }
 
-object LuceneStore extends StoreManager {
+object LuceneStore extends CollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = LuceneStore[Doc, Model]
 
   private val regexChars = ".?+*|{}[]()\"\\#".toSet

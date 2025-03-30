@@ -47,17 +47,6 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = instance.stream
 
-  override def doSearch[V](query: Query[Doc, Model, V])
-                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
-    Task.error(new UnsupportedOperationException("HaloDBStore does not support searching"))
-
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    throw new UnsupportedOperationException("HaloDBStore does not support aggregation")
-
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
-    Task.error(new UnsupportedOperationException("HaloDBStore does not support aggregation"))
-
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = instance.truncate()
 
   override protected def doDispose(): Task[Unit] = super.doDispose().next(instance.dispose())

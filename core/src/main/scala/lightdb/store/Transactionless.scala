@@ -5,7 +5,7 @@ import fabric.rw._
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
-import lightdb.store.split.SplitStore
+import lightdb.store.split.SplitCollection
 import rapid.{Forge, Task}
 
 case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: Store[Doc, Model]) {
@@ -52,7 +52,7 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     def insert(stream: rapid.Stream[Json],
                disableSearchUpdates: Boolean): Task[Int] = store.transaction { implicit transaction =>
       if (disableSearchUpdates) {
-        transaction.put(SplitStore.NoSearchUpdates, true)
+        transaction.put(SplitCollection.NoSearchUpdates, true)
       }
       stream
         .map(_.as[Doc](store.model.rw))

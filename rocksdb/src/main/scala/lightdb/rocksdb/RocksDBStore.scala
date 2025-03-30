@@ -97,17 +97,6 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
       }
     })).map(bytes2Json)
 
-  override def doSearch[V](query: Query[Doc, Model, V])
-                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
-    throw new UnsupportedOperationException("RocksDBStore does not support searching")
-
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    throw new UnsupportedOperationException("RocksDBStore does not support aggregation")
-
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
-    throw new UnsupportedOperationException("RocksDBStore does not support aggregation")
-
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task {
     (handle match {
       case Some(h) => iterator(rocksDB.newIterator(h), value = false).map(a => rocksDB.delete(h, a))

@@ -5,7 +5,7 @@ import fabric.rw._
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.spatial.Geo
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -133,15 +133,15 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
     }
   }
 
-  protected def storeManager: StoreManager
+  protected def storeManager: CollectionManager
 
   object DB extends LightDB {
-    override type SM = StoreManager
-    override val storeManager: StoreManager = spec.storeManager
+    override type SM = CollectionManager
+    override val storeManager: CollectionManager = spec.storeManager
 
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people: Store[Person, Person.type] = store(Person)
+    val people: Collection[Person, Person.type] = store(Person)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

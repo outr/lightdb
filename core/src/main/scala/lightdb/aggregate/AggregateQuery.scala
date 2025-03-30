@@ -38,10 +38,10 @@ case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](que
   )
 
   def count(implicit transaction: Transaction[Doc]): Task[Int] =
-    query.store.aggregateCount(this)
+    query.collection.aggregateCount(this)
 
   def stream(implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    query.store.aggregate(this)
+    query.collection.aggregate(this)
 
   def toList(implicit transaction: Transaction[Doc]): Task[List[MaterializedAggregate[Doc, Model]]] = stream.toList
 }
