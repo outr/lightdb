@@ -32,7 +32,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   /**
    * Default StoreManager to use for stores that do not specify a Store.
    */
-  def storeManager: SM
+  val storeManager: SM
 
   /**
    * List of upgrades that should be applied at the start of this database.
@@ -122,10 +122,9 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * @param storeManager   specify the StoreManager. If this is not set, the database's storeManager will be used.
    */
   def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                               name: Option[String] = None): SM#S[Doc, Model] = {
+                                                               name: Option[String] = None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val sm = storeManager
-    val store = sm.create[Doc, Model](this, model, n, StoreMode.All())
+    val store = storeManager.create[Doc, Model](this, model, n, StoreMode.All())
     synchronized {
       _stores = _stores ::: List(store)
     }

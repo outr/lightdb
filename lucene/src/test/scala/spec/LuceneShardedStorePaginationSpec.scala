@@ -87,11 +87,11 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
   }
 
   object db extends LightDB {
+    override type SM = ShardedStoreManager
+    override val storeManager: ShardedStoreManager = ShardedStoreManager(LuceneStore, 3, BalancedShardManager)
     override lazy val directory: Option[Path] = Some(Path.of(s"db/ShardedStorePaginationSpec"))
 
     val docs: Store[TestDoc, TestDoc.type] = store(TestDoc)
-
-    override def storeManager: StoreManager = ShardedStoreManager(LuceneStore, 3, BalancedShardManager)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

@@ -137,12 +137,11 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
 
   object DB extends LightDB {
     override type SM = StoreManager
+    override val storeManager: StoreManager = spec.storeManager
 
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val people: Store[Person, Person.type] = store(Person)
-
-    override def storeManager: StoreManager = spec.storeManager
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

@@ -19,7 +19,7 @@ class TypeSafetySpec extends AnyWordSpec with Matchers {
         override type SM = MapStore.type
 
         override def directory: Option[Path] = None
-        override def storeManager: MapStore.type = MapStore
+        override val storeManager: MapStore.type = MapStore
         override def upgrades: List[DatabaseUpgrade] = Nil
 
         // This should return a MapStore[Person, Person.type], not a generic Store[Person, Person.type]
