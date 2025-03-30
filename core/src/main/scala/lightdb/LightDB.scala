@@ -7,7 +7,6 @@ import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
 import rapid._
-import scribe.{rapid => logger}
 
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean

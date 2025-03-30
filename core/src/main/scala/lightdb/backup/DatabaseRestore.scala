@@ -5,7 +5,6 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.Store
 import rapid._
-import scribe.{rapid => logger}
 
 import java.io.File
 import java.util.zip.ZipFile

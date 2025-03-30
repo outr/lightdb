@@ -2,12 +2,12 @@ package lightdb.chroniclemap
 
 import fabric.Json
 import lightdb.aggregate.AggregateQuery
-import lightdb.{Id, LightDB, Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.{Id, LightDB, Query, SearchResults}
 import net.openhft.chronicle.map.ChronicleMap
 import rapid.Task
 

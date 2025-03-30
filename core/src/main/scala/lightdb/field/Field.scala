@@ -53,7 +53,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   override protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter[Doc] =
     Filter.RangeDouble(name, from, to)
 
-  override def IN(values: Seq[V]): Filter[Doc] = {
+  override def in(values: Seq[V]): Filter[Doc] = {
     Field.MaxIn.foreach { max =>
       if (values.size > max) throw new RuntimeException(s"Attempting to specify ${values.size} values for IN clause in $name, but maximum is ${Field.MaxIn}.")
     }

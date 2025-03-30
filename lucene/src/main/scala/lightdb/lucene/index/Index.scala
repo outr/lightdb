@@ -5,7 +5,6 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.facet.taxonomy.TaxonomyReader
 import org.apache.lucene.facet.taxonomy.directory.{DirectoryTaxonomyReader, DirectoryTaxonomyWriter}
 import org.apache.lucene.index.{ConcurrentMergeScheduler, IndexWriter, IndexWriterConfig, TieredMergePolicy}
-import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.search.{IndexSearcher, SearcherFactory, SearcherManager}
 import org.apache.lucene.store.{BaseDirectory, ByteBuffersDirectory, FSDirectory}
 

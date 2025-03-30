@@ -1,7 +1,7 @@
 package spec
 
-import lightdb.store.{MapStore, StoreManager}
 import lightdb.store.sharded.ShardedStoreManager
+import lightdb.store.{MapStore, StoreManager}
 
 @EmbeddedTest
 class ShardedStoreSpec extends AbstractKeyValueSpec {

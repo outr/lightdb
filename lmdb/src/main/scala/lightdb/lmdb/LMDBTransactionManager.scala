@@ -1,11 +1,10 @@
 package lightdb.lmdb
 
+import lightdb.util.ActionIterator
 import org.lmdbjava._
+import rapid.Task
 
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
-import rapid.Task
-import lightdb.util.ActionIterator
 
 case class LMDBTransactionManager(env: Env[ByteBuffer]) { manager =>
   @volatile private var writeTransaction: Txn[ByteBuffer] = _

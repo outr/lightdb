@@ -4,17 +4,17 @@ import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb.aggregate.AggregateQuery
-import lightdb.{Id, LightDB, Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
+import lightdb.{Id, LightDB, Query, SearchResults}
 import org.lmdbjava._
 import rapid.{Task, Unique}
 
 import java.nio.ByteBuffer
-import java.nio.file.{Files, Path}
+import java.nio.file.Files
 
 class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    model: Model,

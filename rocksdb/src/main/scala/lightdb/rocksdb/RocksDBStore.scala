@@ -10,7 +10,7 @@ import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, ColumnFamilyOptions, DBOptions, FlushOptions, Options, RocksDB, RocksIterator}
+import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, FlushOptions, Options, RocksDB, RocksIterator}
 import rapid.Task
 
 import java.nio.file.{Files, Path}

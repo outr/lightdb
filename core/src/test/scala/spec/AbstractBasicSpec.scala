@@ -331,7 +331,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "query with indexes" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).indexes.search.flatMap(_.list).map { results =>
+        db.people.query.filter(_.name in List("Allan", "Brenda", "Charlie")).indexes.search.flatMap(_.list).map { results =>
           results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
           results.map(_(_.doc).name).toSet should be(Set("Allan", "Brenda", "Charlie"))
         }
@@ -339,7 +339,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "query with doc and indexes" in {
       db.people.transaction { implicit transaction =>
-        db.people.query.filter(_.name IN List("Allan", "Brenda", "Charlie")).docAndIndexes.stream.toList.map { results =>
+        db.people.query.filter(_.name in List("Allan", "Brenda", "Charlie")).docAndIndexes.stream.toList.map { results =>
           results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
           results.map(_.doc.name).toSet should be(Set("Allan", "Brenda", "Charlie"))
         }
