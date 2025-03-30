@@ -44,6 +44,8 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 }
 
 object DuckDBStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = DuckDBStore[Doc, Model]
+
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
     val path = file match {
       case Some(f) =>
@@ -71,7 +73,7 @@ object DuckDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) => new DuckDBStore[Doc, Model](
         name = name,

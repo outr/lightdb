@@ -280,12 +280,14 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 }
 
 object LuceneStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = LuceneStore[Doc, Model]
+
   private val regexChars = ".?+*|{}[]()\"\\#".toSet
   def escapeRegexLiteral(s: String): String = s.flatMap(c => if (regexChars.contains(c)) s"\\$c" else c.toString)
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
     new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.lucene")), storeMode, db, this)
 }

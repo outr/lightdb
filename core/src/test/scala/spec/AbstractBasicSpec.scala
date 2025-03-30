@@ -605,6 +605,8 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   def storeManager: StoreManager
 
   class DB extends LightDB {
+    override type SM = StoreManager
+
     spec.features.foreach {
       case (key, value) =>
         put(key, value)

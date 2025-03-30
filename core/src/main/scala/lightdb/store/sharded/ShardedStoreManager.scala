@@ -16,10 +16,12 @@ case class ShardedStoreManager(storeManager: StoreManager,
                                shardManager: ShardManager = HashBasedShardManager) extends StoreManager {
   override lazy val name: String = s"Sharded($storeManager, $shardCount)"
 
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = ShardedStore[Doc, Model]
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): ShardedStore[Doc, Model] = {
     // Create N stores representing each shard
     val shards = (0 until shardCount).map { shardIndex =>
       val shardName = s"$name.shard$shardIndex"
