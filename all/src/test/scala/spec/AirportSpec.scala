@@ -5,6 +5,7 @@ import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.lucene.LuceneStore
+import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.SplitStoreManager
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
@@ -120,7 +121,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   // ChronicleMap: 3s (full load: 19s)
   object DB extends LightDB {
     override type SM = SplitStoreManager
-    override val storeManager: SplitStoreManager = SplitStoreManager(ChronicleMapStore, LuceneStore)
+    override val storeManager: SplitStoreManager = SplitStoreManager(RocksDBStore, LuceneStore)
 
     lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 
