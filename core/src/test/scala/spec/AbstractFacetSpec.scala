@@ -283,11 +283,11 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
   class DB extends LightDB {
     override type SM = StoreManager
+    override val storeManager: StoreManager = spec.storeManager
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val entries: Store[Entry, Entry.type] = store(Entry)
 
-    override def storeManager: StoreManager = spec.storeManager
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
 
