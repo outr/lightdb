@@ -14,7 +14,7 @@ import lightdb.lock.LockManager
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.split.SplitStore
 import lightdb.transaction.Transaction
-import lightdb.trigger.CollectionTriggers
+import lightdb.trigger.StoreTriggers
 import lightdb.util.{Disposable, Initializable}
 import rapid._
 
@@ -34,7 +34,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
 
-  object trigger extends CollectionTriggers[Doc]
+  object trigger extends StoreTriggers[Doc]
 
   override protected def initialize(): Task[Unit] = {
     model match {

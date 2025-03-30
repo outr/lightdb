@@ -2,10 +2,9 @@ package benchmark.bench.impl
 
 import benchmark.bench.Bench
 import fabric.rw._
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
-import lightdb.store.StoreManager
+import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import rapid.Task
@@ -77,11 +76,11 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
   override def dispose(): Unit = DB.people.dispose()
 
   object DB extends LightDB {
-    Collection.CacheQueries = true
+    Store.CacheQueries = true
 
     override lazy val directory: Option[Path] = Some(Path.of(s"db/${storeManager.getClass.getSimpleName.replace("$", "")}"))
 
-    val people: Collection[Person, Person.type] = store(Person)
+    val people: Store[Person, Person.type] = store(Person)
 
     override def storeManager: StoreManager = bench.storeManager
     override def upgrades: List[DatabaseUpgrade] = Nil
