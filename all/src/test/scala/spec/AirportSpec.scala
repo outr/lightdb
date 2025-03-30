@@ -2,13 +2,12 @@ package spec
 
 import fabric.rw._
 import lightdb.chroniclemap.ChronicleMapStore
-import lightdb.collection.Collection
 import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
-import lightdb.store.StoreManager
+import lightdb.store.{Store, StoreManager}
 import lightdb.store.split.SplitStoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
@@ -29,7 +28,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       DB.init.succeed
     }
     "have two collections" in {
-      DB.collections.map(_.name).toSet should be(Set("_backingStore", "Flight", "Airport"))
+      DB.stores.map(_.name).toSet should be(Set("_backingStore", "Flight", "Airport"))
       Task.unit.succeed
     }
 //    "query VIP airports" in {
@@ -118,16 +117,16 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
   }
 
-  // HaloDB: 22s (full load: 100s)
-  // RocksDB: 22s (full load: 106s)
-  // ChronicleMap: 21s (full load: 98s)
+  // HaloDB: --- (full load: 32s)
+  // RocksDB: 3s (full load: 32s)
+  // ChronicleMap: 3s (full load: 19s)
   object DB extends LightDB {
-    override def storeManager: StoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
+    override lazy val storeManager: StoreManager = SplitStoreManager(ChronicleMapStore, LuceneStore)
 
     lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 
-    val airports: Collection[Airport, Airport.type] = collection(Airport)
-    val flights: Collection[Flight, Flight.type] = collection(Flight)
+    val airports: Store[Airport, Airport.type] = store(Airport)
+    val flights: Store[Flight, Flight.type] = store(Flight)
 
     override def upgrades: List[DatabaseUpgrade] = List(DataImportUpgrade)
   }

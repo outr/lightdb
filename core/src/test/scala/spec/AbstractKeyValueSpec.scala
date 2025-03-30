@@ -1,9 +1,8 @@
 package spec
 
 import fabric.rw._
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.store.StoreManager
+import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -177,8 +176,8 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
   class DB extends LightDB {
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val users: Collection[User, User.type] = collection(User)
-    val addresses: Collection[Address, Address.type] = collection(Address)
+    val users: Store[User, User.type] = store(User)
+    val addresses: Store[Address, Address.type] = store(Address)
 
     override def storeManager: StoreManager = spec.storeManager
 

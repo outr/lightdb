@@ -6,7 +6,6 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import lightdb._
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
-import lightdb.collection.Collection
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.Field._
@@ -23,16 +22,16 @@ import rapid.Task
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
-abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, lightDB: LightDB, storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
   protected def connectionManager: ConnectionManager
 
   override def supportsArbitraryQuery: Boolean = true
 
-  override protected def initialize(): Task[Unit] = Task.next {
+  override protected def initialize(): Task[Unit] = super.initialize().next(Task.next {
     transaction { implicit transaction =>
       initTransaction()
     }
-  }
+  })
 
   protected def createTable()(implicit transaction: Transaction[Doc]): Unit = {
     val entries = fields.collect {
@@ -117,7 +116,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
       key = StateKey[Doc],
-      value = SQLState(connectionManager, transaction, this, Collection.CacheQueries)
+      value = SQLState(connectionManager, transaction, this, Store.CacheQueries)
     )
   }
 
@@ -140,7 +139,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   private[sql] lazy val insertSQL: String = createInsertSQL()
   private[sql] lazy val upsertSQL: String = createUpsertSQL()
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val state = getState
     val indexingState = new IndexingState
     state.withInsertPreparedStatement { ps =>
@@ -149,7 +148,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
-      if (state.batchInsert.get() >= Collection.MaxInsertBatch) {
+      if (state.batchInsert.get() >= Store.MaxInsertBatch) {
         ps.executeBatch()
         state.batchInsert.set(0)
       }
@@ -157,7 +156,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     doc
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val state = getState
     val indexingState = new IndexingState
     state.withUpsertPreparedStatement { ps =>
@@ -166,7 +165,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
-      if (state.batchUpsert.get() >= Collection.MaxInsertBatch) {
+      if (state.batchUpsert.get() >= Store.MaxInsertBatch) {
         ps.executeBatch()
         state.batchUpsert.set(0)
       }
@@ -174,9 +173,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     doc
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(idField, id).map(_.nonEmpty)
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(id).map(_.nonEmpty)
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     val state = getState
     val b = new SQLQueryBuilder[Doc](
@@ -204,7 +203,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     val connection = connectionManager.getConnection
     val ps = connection.prepareStatement(s"DELETE FROM $name WHERE ${field.name} = ?")
@@ -655,5 +654,5 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override protected def doDispose(): Task[Unit] = connectionManager.release()
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(connectionManager.release())
 }

@@ -17,23 +17,22 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      model: Model,
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      instance: HaloDBInstance,
-                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+                                                                     lightDB: LightDB,
+                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
   private implicit def rw: RW[Doc] = model.rw
-
-  override protected def initialize(): Task[Unit] = Task.unit
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val json = doc.json(model.rw)
     instance.put(doc._id, json).map(_ => doc)
   }.flatten
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(idField, id).map(_.nonEmpty)
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = _get(idField, id).map(_.nonEmpty)
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
     if (field == idField) {
       instance.get(value.asInstanceOf[Id[Doc]]).map(_.map(_.as[Doc]))
     } else {
@@ -41,7 +40,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
     instance.delete(value.asInstanceOf[Id[Doc]]).map(_ => true)
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] = instance.count
@@ -61,7 +60,7 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = instance.truncate()
 
-  override protected def doDispose(): Task[Unit] = instance.dispose()
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(instance.dispose())
 }
 
 object HaloDBStore extends StoreManager {
@@ -70,6 +69,6 @@ object HaloDBStore extends StoreManager {
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
     val instance = new DirectHaloDBInstance(db.directory.get.resolve(name))
-    new HaloDBStore[Doc, Model](name, model, storeMode, instance, this)
+    new HaloDBStore[Doc, Model](name, model, storeMode, instance, db, this)
   }
 }

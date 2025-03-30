@@ -15,7 +15,8 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                  model: Model,
                                                                  val connectionManager: ConnectionManager,
                                                                  val storeMode: StoreMode[Doc, Model],
-                                                                 storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, storeManager) {
+                                                                 lightDB: LightDB,
+                                                                 storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, lightDB, storeManager) {
   override protected def upsertPrefix: String = "MERGE"
 
   protected def tables(connection: Connection): Set[String] = {
@@ -45,12 +46,14 @@ object H2Store extends StoreManager {
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                model: Model,
                                                                file: Option[Path],
-                                                               storeMode: StoreMode[Doc, Model]): H2Store[Doc, Model] =
+                                                               storeMode: StoreMode[Doc, Model],
+                                                               db: LightDB): H2Store[Doc, Model] =
     new H2Store[Doc, Model](
       name = name,
       model = model,
       connectionManager = SingleConnectionManager(config(file)),
       storeMode = storeMode,
+      lightDB = db,
       storeManager = this
     )
 
@@ -64,9 +67,10 @@ object H2Store extends StoreManager {
         model = model,
         connectionManager = sqlDB.connectionManager,
         storeMode,
+        lightDB = db,
         this
       )
-      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.h2")), storeMode)
+      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.h2")), storeMode, db)
     }
   }
 }

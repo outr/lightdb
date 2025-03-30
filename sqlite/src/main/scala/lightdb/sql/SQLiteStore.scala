@@ -23,7 +23,8 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      model: Model,
                                                                      val connectionManager: ConnectionManager,
                                                                      val storeMode: StoreMode[Doc, Model],
-                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, storeManager) {
+                                                                     lightDB: LightDB,
+                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, lightDB, storeManager) {
   override protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = super.initTransaction().map { _ =>
     val c = connectionManager.getConnection
     if (hasSpatial.sync()) {
@@ -114,12 +115,14 @@ object SQLiteStore extends StoreManager {
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                model: Model,
                                                                file: Option[Path],
-                                                               storeMode: StoreMode[Doc, Model]): SQLiteStore[Doc, Model] = {
+                                                               storeMode: StoreMode[Doc, Model],
+                                                               db: LightDB): SQLiteStore[Doc, Model] = {
     new SQLiteStore[Doc, Model](
       name = name,
       model = model,
       connectionManager = singleConnectionManager(file),
       storeMode = storeMode,
+      lightDB = db,
       storeManager = this
     )
   }
@@ -135,9 +138,10 @@ object SQLiteStore extends StoreManager {
           model = model,
           connectionManager = sqlDB.connectionManager,
           storeMode = storeMode,
+          lightDB = db,
           storeManager = this
         )
-      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.sqlite")), storeMode)
+      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.sqlite")), storeMode, db)
     }
   }
 

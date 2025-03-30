@@ -31,6 +31,7 @@ case class ShardedStoreManager(storeManager: StoreManager,
       model = model,
       shardManager = shardManager.create[Doc, Model](model, shards),
       storeMode = storeMode,
+      db = db,
       storeManager = this
     )
   }

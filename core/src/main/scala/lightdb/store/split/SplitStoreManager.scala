@@ -20,6 +20,7 @@ case class SplitStoreManager(storage: StoreManager,
       storage = storage,
       searching = searching.create[Doc, Model](db, model, name, if (searchIndexAll) StoreMode.All() else StoreMode.Indexes(storage)),
       storeMode = storeMode,
+      db = db,
       storeManager = this
     )
   }

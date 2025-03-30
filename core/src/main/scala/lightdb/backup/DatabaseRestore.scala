@@ -2,8 +2,8 @@ package lightdb.backup
 
 import fabric.io.JsonParser
 import lightdb.LightDB
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.store.Store
 import rapid._
 import scribe.{rapid => logger}
 
@@ -39,23 +39,23 @@ object DatabaseRestore {
     }
   }
 
-  def restore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](collection: Collection[Doc, Model],
+  def restore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: Store[Doc, Model],
                                                                  file: File,
                                                                  truncate: Boolean = true): Task[Int] = {
     if (file.exists()) {
-      if (truncate) collection.t.truncate()
+      if (truncate) store.t.truncate()
       val source = Source.fromFile(file)
       val stream = rapid.Stream.fromIterator(Task(source
         .getLines()
         .map(s => JsonParser(s))))
-      collection.t.json.insert(stream, disableSearchUpdates = false).guarantee(Task(source.close()))
+      store.t.json.insert(stream, disableSearchUpdates = false).guarantee(Task(source.close()))
     } else {
       throw new RuntimeException(s"${file.getAbsolutePath} doesn't exist")
     }
   }
 
-  private def process(db: LightDB, truncate: Boolean)(f: Collection[_, _] => Option[Source]): Task[Int] = {
-    db.collections.map { collection =>
+  private def process(db: LightDB, truncate: Boolean)(f: Store[_, _] => Option[Source]): Task[Int] = {
+    db.stores.map { collection =>
       f(collection) match {
         case Some(source) =>
           val task = for {

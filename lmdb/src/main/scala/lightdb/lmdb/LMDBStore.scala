@@ -20,15 +20,16 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    model: Model,
                                                                    instance: LMDBInstance,
                                                                    val storeMode: StoreMode[Doc, Model],
-                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+                                                                   db: LightDB,
+                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
   private val id = Unique()
   private val transactionKey: TransactionKey[LMDBTransaction] = TransactionKey(id)
 
   private lazy val dbi: Dbi[ByteBuffer] = instance.get(name)
 
-  override protected def initialize(): Task[Unit] = Task {
+  override protected def initialize(): Task[Unit] = super.initialize().next(Task {
     dbi
-  }
+  })
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
@@ -54,14 +55,14 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   private def withWrite[Return](f: Txn[ByteBuffer] => Task[Return]): Task[Return] =
     instance.transactionManager.withWrite(f)
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
     Task {
       dbi.put(txn, key(doc._id), value(doc), PutFlags.MDB_NOOVERWRITE)
       doc
     }
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
     Task {
       dbi.put(txn, key(doc._id), value(doc))
       doc
@@ -80,14 +81,14 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     JsonParser(jsonString)
   }
 
-  override def get[V](field: Field.UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: Field.UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = if (field == idField) {
     instance.transactionManager.get(dbi, key(value.asInstanceOf[Id[Doc]])).map(_.map(b2d))
   } else {
     throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
   }
 
-  override def delete[V](field: Field.UniqueIndex[Doc, V], value: V)
+  override protected def _delete[V](field: Field.UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Task[Boolean] = withWrite { txn =>
     Task {
       if (field == idField) {
@@ -121,7 +122,7 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     }
   }
 
-  override protected def doDispose(): Task[Unit] = instance.release(name)
+  override protected def doDispose(): Task[Unit] = super.doDispose().map(_ => instance.release(name))
 }
 
 object LMDBStore extends StoreManager {
@@ -174,6 +175,7 @@ object LMDBStore extends StoreManager {
       model = model,
       instance = instance(db),
       storeMode = storeMode,
+      db = db,
       storeManager = this
     )
   }

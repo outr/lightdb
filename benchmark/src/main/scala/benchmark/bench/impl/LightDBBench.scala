@@ -81,7 +81,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
 
     override lazy val directory: Option[Path] = Some(Path.of(s"db/${storeManager.getClass.getSimpleName.replace("$", "")}"))
 
-    val people: Collection[Person, Person.type] = collection(Person)
+    val people: Collection[Person, Person.type] = store(Person)
 
     override def storeManager: StoreManager = bench.storeManager
     override def upgrades: List[DatabaseUpgrade] = Nil

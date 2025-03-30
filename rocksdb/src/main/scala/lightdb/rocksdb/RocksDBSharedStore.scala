@@ -27,6 +27,7 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager {
       rocksDB = rocksDB,
       sharedStore = Some(RocksDBSharedStoreInstance(this, name)),
       storeMode = storeMode,
+      lightDB = db,
       storeManager = this
     )
 

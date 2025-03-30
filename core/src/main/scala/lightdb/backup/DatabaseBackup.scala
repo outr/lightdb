@@ -3,7 +3,7 @@ package lightdb.backup
 import fabric.Json
 import fabric.io.JsonFormatter
 import lightdb.LightDB
-import lightdb.collection.Collection
+import lightdb.store.Store
 import rapid._
 
 import java.io.{File, FileOutputStream, PrintWriter}
@@ -62,10 +62,10 @@ object DatabaseBackup {
     }
   }
 
-  private def process(db: LightDB)(f: (Collection[_, _], rapid.Stream[Json]) => Task[Int]): Task[Int] = {
-    db.collections.map { collection =>
-      collection.t.json.stream { stream =>
-        f(collection, stream)
+  private def process(db: LightDB)(f: (Store[_, _], rapid.Stream[Json]) => Task[Int]): Task[Int] = {
+    db.stores.map { store =>
+      store.t.json.stream { stream =>
+        f(store, stream)
       }
     }.tasks.map(_.sum)
   }

@@ -18,13 +18,14 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
                                                                     val storeMode: StoreMode[Doc, Model],
                                                                     hostname: String = "localhost",
                                                                     port: Int = 6379,
-                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+                                                                    db: LightDB,
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
   private lazy val InstanceKey: TransactionKey[Jedis] = TransactionKey("redisInstance")
 
   private lazy val config = new JedisPoolConfig
   private lazy val pool = new JedisPool(config, hostname, port)
 
-  override protected def initialize(): Task[Unit] = Task(pool.preparePool())
+  override protected def initialize(): Task[Unit] = super.initialize().next(Task(pool.preparePool()))
 
   private def getInstance(implicit transaction: Transaction[Doc]): Jedis =
     transaction.getOrCreate(InstanceKey, pool.getResource)
@@ -36,9 +37,9 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     transaction.get(InstanceKey).foreach(jedis => pool.returnResource(jedis))
   }
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     getInstance.hset(name, doc._id.value, toString(doc))
     doc
   }
@@ -46,7 +47,7 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] =
     Task(getInstance.hexists(name, id.value))
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       Option(getInstance.hget(name, value.asInstanceOf[Id[Doc]].value)).map(fromString)
@@ -55,7 +56,7 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Task[Boolean] =
     Task(getInstance.hdel(value.asInstanceOf[Id[Doc]].value) > 0L)
 
@@ -81,5 +82,5 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     size
   }
 
-  override protected def doDispose(): Task[Unit] = Task(pool.close())
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task(pool.close()))
 }
