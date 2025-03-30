@@ -174,12 +174,13 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
   def storeManager: StoreManager
 
   class DB extends LightDB {
+    override type SM = StoreManager
+    override val storeManager: StoreManager = spec.storeManager
+
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val users: Store[User, User.type] = store(User)
     val addresses: Store[Address, Address.type] = store(Address)
-
-    override def storeManager: StoreManager = spec.storeManager
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

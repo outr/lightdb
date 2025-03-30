@@ -119,7 +119,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   // RocksDB: 3s (full load: 32s)
   // ChronicleMap: 3s (full load: 19s)
   object DB extends LightDB {
-    override lazy val storeManager: StoreManager = SplitStoreManager(ChronicleMapStore, LuceneStore)
+    override type SM = SplitStoreManager
+    override val storeManager: SplitStoreManager = SplitStoreManager(ChronicleMapStore, LuceneStore)
 
     lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 

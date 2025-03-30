@@ -149,6 +149,8 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 }
 
 object RocksDBStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = RocksDBStore[Doc, Model]
+
   def createRocksDB(directory: Path): (RocksDB, List[ColumnFamilyHandle]) = {
     RocksDB.loadLibrary()
 
@@ -170,7 +172,7 @@ object RocksDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+                                                                         storeMode: StoreMode[Doc, Model]): RocksDBStore[Doc, Model] =
     new RocksDBStore[Doc, Model](
       name = name,
       model = model,

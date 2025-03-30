@@ -17,6 +17,8 @@ import scala.util.{Failure, Success}
  * functionality. It is always ideal for stores to be associated with a database.
  */
 trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatureKey] {
+  type SM <: StoreManager
+
   /**
    * Identifiable name for this database. Defaults to using the class name.
    */
@@ -30,7 +32,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   /**
    * Default StoreManager to use for stores that do not specify a Store.
    */
-  def storeManager: StoreManager
+  val storeManager: SM
 
   /**
    * List of upgrades that should be applied at the start of this database.
@@ -113,17 +115,36 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * before the database is initialized, but stores that are added after init will automatically be initialized
    * during this method call.
    *
-   * Note: If both are specified, store takes priority over storeManager.
-   *
-   * @param model          the model to use for this store
-   * @param name           the store's name (defaults to None meaning it will be generated based on the model name)
-   * @param storeManager   specify the StoreManager. If this is not set, the database's storeManager will be used.
+   * @param model the model to use for this store
+   * @param name the store's name (defaults to None meaning it will be generated based on the model name)
    */
   def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                               name: Option[String] = None,
-                                                               storeManager: Option[StoreManager] = None): Store[Doc, Model] = {
+                                                               name: Option[String] = None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val store = storeManager.getOrElse(this.storeManager).create[Doc, Model](this, model, n, StoreMode.All())
+    val store = storeManager.create[Doc, Model](this, model, n, StoreMode.All())
+    synchronized {
+      _stores = _stores ::: List(store)
+    }
+    if (isInitialized) { // Already initialized database, init store immediately
+      store.init.sync()
+    }
+    store
+  }
+
+  /**
+   * Create a new store and associate it with this database. It is preferable that all stores be created
+   * before the database is initialized, but stores that are added after init will automatically be initialized
+   * during this method call.
+   *
+   * @param model the model to use for this store
+   * @param name the store's name (defaults to None meaning it will be generated based on the model name)
+   * @param storeManager specify the StoreManager
+   */
+  def customStore[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
+                                                                                         storeManager: SM,
+                                                                                         name: Option[String] = None): storeManager.S[Doc, Model] = {
+    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val store = storeManager.create[Doc, Model](this, model, n, StoreMode.All())
     synchronized {
       _stores = _stores ::: List(store)
     }

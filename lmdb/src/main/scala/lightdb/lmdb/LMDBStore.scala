@@ -126,6 +126,8 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
 }
 
 object LMDBStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = LMDBStore[Doc, Model]
+
   /**
    * Maximum number of collections. Defaults to 1,000
    */
@@ -169,7 +171,7 @@ object LMDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] = {
     new LMDBStore[Doc, Model](
       name = name,
       model = model,
