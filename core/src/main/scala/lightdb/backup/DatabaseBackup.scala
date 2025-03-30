@@ -23,8 +23,8 @@ object DatabaseBackup {
     if (archive.exists()) archive.delete()
     val out = new ZipOutputStream(new FileOutputStream(archive))
     process(db) {
-      case (collection, stream) => Task {
-        val fileName = s"${collection.name}.jsonl"
+      case (store, stream) => Task {
+        val fileName = s"${store.name}.jsonl"
         val entry = new ZipEntry(s"backup/$fileName")
         out.putNextEntry(entry)
         stream.map { json =>
@@ -45,8 +45,8 @@ object DatabaseBackup {
   def apply(db: LightDB, directory: File): Task[Int] = {
     directory.mkdirs()
     process(db) {
-      case (collection, stream) => Task {
-        val fileName = s"${collection.name}.jsonl"
+      case (store, stream) => Task {
+        val fileName = s"${store.name}.jsonl"
         val file = new File(directory, fileName)
         val writer = new PrintWriter(file)
         stream.evalMap { json =>

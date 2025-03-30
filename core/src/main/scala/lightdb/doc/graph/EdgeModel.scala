@@ -6,7 +6,7 @@ import lightdb.field.Field
 import lightdb.field.Field.UniqueIndex
 import lightdb.store.{Store, StoreMode}
 import lightdb.transaction.Transaction
-import lightdb.trigger.CollectionTrigger
+import lightdb.trigger.StoreTrigger
 import rapid.{Task, logger}
 
 import scala.language.implicitConversions
@@ -184,8 +184,8 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
         name = s"${store.name}-reverseEdges",
         storeMode = StoreMode.All[RD, RM]()
       )
-      // TODO: Validate store contents against collection to verify integrity
-      store.trigger += new CollectionTrigger[Doc] {
+      // TODO: Validate store contents against store to verify integrity
+      store.trigger += new StoreTrigger[Doc] {
         override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = add(doc)
 
         override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = add(doc)

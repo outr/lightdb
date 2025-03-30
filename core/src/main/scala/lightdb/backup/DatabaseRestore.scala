@@ -16,8 +16,8 @@ object DatabaseRestore {
               archive: File = new File("backup.zip"),
               truncate: Boolean = true): Task[Int] = {
     val zip = new ZipFile(archive)
-    process(db, truncate) { collection =>
-      val fileName = s"backup/${collection.name}.jsonl"
+    process(db, truncate) { store =>
+      val fileName = s"backup/${store.name}.jsonl"
       Option(zip.getEntry(fileName))
         .map { zipEntry =>
           val input = zip.getInputStream(zipEntry)
@@ -29,8 +29,8 @@ object DatabaseRestore {
   def apply(db: LightDB,
             directory: File,
             truncate: Boolean = true): Task[Int] = {
-    process(db, truncate) { collection =>
-      val file = new File(directory, s"${collection.name}.jsonl")
+    process(db, truncate) { store =>
+      val file = new File(directory, s"${store.name}.jsonl")
       if (file.exists()) {
         Some(Source.fromFile(file))
       } else {
@@ -55,16 +55,16 @@ object DatabaseRestore {
   }
 
   private def process(db: LightDB, truncate: Boolean)(f: Store[_, _] => Option[Source]): Task[Int] = {
-    db.stores.map { collection =>
-      f(collection) match {
+    db.stores.map { store =>
+      f(store) match {
         case Some(source) =>
           val task = for {
-            _ <- logger.info(s"Restoring ${collection.name}...")
-            _ <- collection.t.truncate().when(truncate)
+            _ <- logger.info(s"Restoring ${store.name}...")
+            _ <- store.t.truncate().when(truncate)
             stream = rapid.Stream.fromIterator(Task(source.getLines().map(JsonParser.apply)))
-            count <- collection.t.json.insert(stream, disableSearchUpdates = true)
-            _ <- logger.info(s"Restored $count documents to ${collection.name}")
-          } yield Some((collection, count))
+            count <- store.t.json.insert(stream, disableSearchUpdates = true)
+            _ <- logger.info(s"Restored $count documents to ${store.name}")
+          } yield Some((store, count))
           task.guarantee(Task(source.close()))
         case None => Task.pure(None)
       }
@@ -72,7 +72,7 @@ object DatabaseRestore {
       for {
         _ <- logger.info("Finished Restoring. Re-Indexing...")
         counts <- list.map {
-          case (collection, count) => collection.reIndex().map(_ => count)
+          case (store, count) => store.reIndex().map(_ => count)
         }.tasks
         _ <- logger.info(s"Finished Re-Sync")
       } yield counts.sum

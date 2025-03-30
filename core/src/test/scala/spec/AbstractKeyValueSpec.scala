@@ -154,12 +154,12 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
         db.users.count.map(_ should be(CreateRecords + 24))
       }
     }
-    "truncate the collection again" in {
+    "truncate the store again" in {
       db.users.transaction { implicit transaction =>
         db.users.truncate().map(_ should be(CreateRecords + 24))
       }
     }
-    "truncate the addresses collection" in {
+    "truncate the addresses store" in {
       db.addresses.transaction { implicit transaction =>
         db.addresses.truncate().map(_ should be(3))
       }

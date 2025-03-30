@@ -6,7 +6,7 @@ import lightdb.store.Store
 import lightdb.transaction.Transaction
 import rapid.Task
 
-trait BasicCollectionTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTrigger[Doc] {
+trait BasicStoreTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends StoreTrigger[Doc] {
   def store: Store[Doc, Model]
 
   protected def adding(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit]

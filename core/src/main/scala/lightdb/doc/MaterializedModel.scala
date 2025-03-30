@@ -2,7 +2,7 @@ package lightdb.doc
 
 import lightdb.store.Store
 import lightdb.transaction.Transaction
-import lightdb.trigger.BasicCollectionTrigger
+import lightdb.trigger.BasicStoreTrigger
 import rapid.Task
 
 trait MaterializedModel[Doc <: Document[Doc], MaterialDoc <: Document[MaterialDoc], MaterialModel <: DocumentModel[MaterialDoc]] extends DocumentModel[Doc] { mm =>
@@ -16,7 +16,7 @@ trait MaterializedModel[Doc <: Document[Doc], MaterialDoc <: Document[MaterialDo
 
   override protected def init[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = {
     super.initialize(store).map { _ =>
-      materialStore.trigger += new BasicCollectionTrigger[MaterialDoc, MaterialModel] {
+      materialStore.trigger += new BasicStoreTrigger[MaterialDoc, MaterialModel] {
         override def store: Store[MaterialDoc, MaterialModel] = materialStore
 
         override protected def adding(doc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc]): Task[Unit] = mm.adding(doc)

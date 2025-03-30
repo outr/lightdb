@@ -14,8 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.util.{Failure, Success}
 
 /**
- * The database to be implemented. Collections *may* be used without a LightDB instance, but with drastically diminished
- * functionality. It is always ideal for collections to be associated with a database.
+ * The database to be implemented. stores *may* be used without a LightDB instance, but with drastically diminished
+ * functionality. It is always ideal for stores to be associated with a database.
  */
 trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatureKey] {
   /**
@@ -29,7 +29,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   def directory: Option[Path]
 
   /**
-   * Default StoreManager to use for collections that do not specify a Store.
+   * Default StoreManager to use for stores that do not specify a Store.
    */
   def storeManager: StoreManager
 
@@ -39,7 +39,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   def upgrades: List[DatabaseUpgrade]
 
   /**
-   * Automatically truncates all collections in the database during initialization if this is set to true.
+   * Automatically truncates all stores in the database during initialization if this is set to true.
    * Defaults to false.
    */
   protected def truncateOnInit: Boolean = false
@@ -51,29 +51,29 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   private val _disposed = new AtomicBoolean(false)
 
   /**
-   * All collections registered with this database
+   * All stores registered with this database
    */
   def stores: List[Store[_, _]] = _stores
 
   /**
-   * Returns a list of matching collection names based on the provided names
+   * Returns a list of matching store names based on the provided names
    */
-  def collectionsByNames(collectionNames: String*): List[Store[_, _]] = {
-    val set = collectionNames.toSet
+  def storesByNames(storeNames: String*): List[Store[_, _]] = {
+    val set = storeNames.toSet
     stores.filter(c => set.contains(c.name))
   }
 
   /**
-   * Offers each collection the ability to re-index data if supported. Only stores that separate storage and indexing
+   * Offers each store the ability to re-index data if supported. Only stores that separate storage and indexing
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
-   * collections to re-index or all collections will be invoked.
+   * stores to re-index or all stores will be invoked.
    */
-  def reIndex(collections: List[Store[_, _]] = stores): Task[Int] = collections.map(_.reIndex()).tasks.map(_.count(identity))
+  def reIndex(stores: List[Store[_, _]] = stores): Task[Int] = stores.map(_.reIndex()).tasks.map(_.count(identity))
 
   /**
-   * Offers each collection the ability to optimize the store.
+   * Offers each store the ability to optimize the store.
    */
-  def optimize(collections: List[Store[_, _]] = stores): Task[Unit] = collections.map(_.optimize()).tasks.unit
+  def optimize(stores: List[Store[_, _]] = stores): Task[Unit] = stores.map(_.optimize()).tasks.unit
 
   /**
    * True if this database has been disposed.
@@ -88,7 +88,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   override protected def initialize(): Task[Unit] = for {
     _ <- logger.info(s"$name database initializing...")
     _ = backingStore
-    _ <- logger.info(s"Initializing collections: ${stores.map(_.name).mkString(", ")}...")
+    _ <- logger.info(s"Initializing stores: ${stores.map(_.name).mkString(", ")}...")
     _ <- stores.map(_.init).tasks
     // Truncate the database before we do anything if specified
     _ <- truncate().next(logger.info("Truncating database...")).when(truncateOnInit)
@@ -110,14 +110,14 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   } yield ()
 
   /**
-   * Create a new Collection and associate it with this database. It is preferable that all collections be created
-   * before the database is initialized, but collections that are added after init will automatically be initialized
+   * Create a new store and associate it with this database. It is preferable that all stores be created
+   * before the database is initialized, but stores that are added after init will automatically be initialized
    * during this method call.
    *
    * Note: If both are specified, store takes priority over storeManager.
    *
-   * @param model          the model to use for this collection
-   * @param name           the collection's name (defaults to None meaning it will be generated based on the model name)
+   * @param model          the model to use for this store
+   * @param name           the store's name (defaults to None meaning it will be generated based on the model name)
    * @param storeManager   specify the StoreManager. If this is not set, the database's storeManager will be used.
    */
   def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
@@ -128,7 +128,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     synchronized {
       _stores = _stores ::: List(store)
     }
-    if (isInitialized) { // Already initialized database, init collection immediately
+    if (isInitialized) { // Already initialized database, init store immediately
       store.init.sync()
     }
     store
@@ -158,9 +158,9 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   }
 
   def truncate(): Task[Unit] = stores.map { c =>
-    val collection = c.asInstanceOf[Store[KeyValue, KeyValue.type]]
-    collection.transaction { implicit transaction =>
-      collection.truncate()(transaction)
+    val store = c.asInstanceOf[Store[KeyValue, KeyValue.type]]
+    store.transaction { implicit transaction =>
+      store.truncate()(transaction)
     }
   }.tasks.unit
 
@@ -194,8 +194,8 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   }
 
   override protected def doDispose(): Task[Unit] = if (_disposed.compareAndSet(false, true)) {
-    stores.map(_.asInstanceOf[Store[KeyValue, KeyValue.type]]).map { collection =>
-      collection.dispose
+    stores.map(_.asInstanceOf[Store[KeyValue, KeyValue.type]]).map { store =>
+      store.dispose
     }.tasks.flatMap { _ =>
       features.toList.map {
         case d: Disposable => d.dispose

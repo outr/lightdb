@@ -5,7 +5,7 @@ import lightdb.field.Field
 import lightdb.transaction.Transaction
 import rapid.Task
 
-trait CollectionTrigger[Doc <: Document[Doc]] {
+trait StoreTrigger[Doc <: Document[Doc]] {
   def transactionStart(transaction: Transaction[Doc]): Task[Unit] = Task.unit
   def transactionEnd(transaction: Transaction[Doc]): Task[Unit] = Task.unit
   def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = Task.unit

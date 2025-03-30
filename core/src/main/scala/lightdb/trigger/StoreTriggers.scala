@@ -5,14 +5,14 @@ import lightdb.field.Field.UniqueIndex
 import lightdb.transaction.Transaction
 import rapid._
 
-class CollectionTriggers[Doc <: Document[Doc]] extends CollectionTrigger[Doc] {
-  private var list = List.empty[CollectionTrigger[Doc]]
+class StoreTriggers[Doc <: Document[Doc]] extends StoreTrigger[Doc] {
+  private var list = List.empty[StoreTrigger[Doc]]
 
-  def +=(trigger: CollectionTrigger[Doc]): Unit = synchronized {
+  def +=(trigger: StoreTrigger[Doc]): Unit = synchronized {
     list = trigger :: list
   }
 
-  def -=(trigger: CollectionTrigger[Doc]): Unit = synchronized {
+  def -=(trigger: StoreTrigger[Doc]): Unit = synchronized {
     list = list.filterNot(_ eq trigger)
   }
 
