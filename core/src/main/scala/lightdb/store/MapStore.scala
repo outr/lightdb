@@ -86,8 +86,10 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
 }
 
 object MapStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = MapStore[Doc, Model]
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = new MapStore[Doc, Model](name, model, storeMode, db, this)
+                                                                         storeMode: StoreMode[Doc, Model]): MapStore[Doc, Model] = new MapStore[Doc, Model](name, model, storeMode, db, this)
 }

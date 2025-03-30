@@ -17,6 +17,8 @@ import scala.util.{Failure, Success}
  * functionality. It is always ideal for stores to be associated with a database.
  */
 trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatureKey] {
+  type SM <: StoreManager
+
   /**
    * Identifiable name for this database. Defaults to using the class name.
    */
@@ -30,7 +32,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   /**
    * Default StoreManager to use for stores that do not specify a Store.
    */
-  def storeManager: StoreManager
+  def storeManager: SM
 
   /**
    * List of upgrades that should be applied at the start of this database.
@@ -120,10 +122,10 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * @param storeManager   specify the StoreManager. If this is not set, the database's storeManager will be used.
    */
   def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                               name: Option[String] = None,
-                                                               storeManager: Option[StoreManager] = None): Store[Doc, Model] = {
+                                                               name: Option[String] = None): SM#S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val store = storeManager.getOrElse(this.storeManager).create[Doc, Model](this, model, n, StoreMode.All())
+    val sm = storeManager
+    val store = sm.create[Doc, Model](this, model, n, StoreMode.All())
     synchronized {
       _stores = _stores ::: List(store)
     }

@@ -98,6 +98,8 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 }
 
 object SQLiteStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SQLiteStore[Doc, Model]
+
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
     val path = file match {
       case Some(f) =>
@@ -130,7 +132,7 @@ object SQLiteStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): SQLiteStore[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) =>
         new SQLiteStore[Doc, Model](

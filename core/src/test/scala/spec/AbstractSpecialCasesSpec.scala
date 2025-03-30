@@ -68,9 +68,11 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
   def storeManager: StoreManager
 
   object DB extends LightDB {
+    override type SM = StoreManager
+
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val specialOne: Store[SpecialOne, SpecialOne.type] = store[SpecialOne, SpecialOne.type](SpecialOne)
+    val specialOne: Store[SpecialOne, SpecialOne.type] = store(SpecialOne)
 
     override def storeManager: StoreManager = spec.storeManager
     override def upgrades: List[DatabaseUpgrade] = Nil
