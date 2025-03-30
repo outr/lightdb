@@ -4,11 +4,9 @@ import fabric.rw._
 import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
-import lightdb.rocksdb.RocksDBStore
-import lightdb.store.{Store, StoreManager}
 import lightdb.store.split.SplitStoreManager
+import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -46,7 +44,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val keys = List("JFK", "LAX")
       DB.airports.transaction { implicit transaction =>
         DB.airports.query
-          .filter(_._id IN keys.map(Airport.id))
+          .filter(_._id.in(keys.map(Airport.id)))
           .toList
           .map { airports =>
             airports.map(_.name).toSet should be(Set("John F Kennedy Intl", "Los Angeles International"))

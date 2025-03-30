@@ -26,7 +26,7 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
   override protected def rangeDouble(from: Option[Double], to: Option[Double]): AggregateFilter[Doc] =
     AggregateFilter.RangeDouble(name, field.asInstanceOf[Field[Doc, Double]], from, to)
 
-  override def IN(values: Seq[V]): AggregateFilter[Doc] = AggregateFilter.In(name, field, values)
+  override def in(values: Seq[V]): AggregateFilter[Doc] = AggregateFilter.In(name, field, values)
 
   override def startsWith(value: String): AggregateFilter[Doc] = AggregateFilter.StartsWith(name, field, value)
   override def endsWith(value: String): AggregateFilter[Doc] = AggregateFilter.EndsWith(name, field, value)

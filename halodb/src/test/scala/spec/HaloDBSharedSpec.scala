@@ -1,6 +1,6 @@
 package spec
 
-import lightdb.halodb.{HaloDBSharedStore, HaloDBStore}
+import lightdb.halodb.HaloDBSharedStore
 import lightdb.store.StoreManager
 
 import java.nio.file.Path

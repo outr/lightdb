@@ -17,8 +17,7 @@ import org.apache.lucene.document._
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
-import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, WildcardQuery, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.util.automaton.RegExp
 import rapid.Task
 

@@ -7,7 +7,7 @@ import lightdb.field.Field
 import lightdb.lucene.LuceneStore
 import lightdb.store.sharded.manager.BalancedShardManager
 import lightdb.store.sharded.{ShardedStore, ShardedStoreManager}
-import lightdb.store.{MapStore, Store, StoreManager}
+import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec

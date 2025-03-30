@@ -7,7 +7,7 @@ import lightdb.field.Field.UniqueIndex
 import lightdb.store.{Store, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.trigger.StoreTrigger
-import rapid.{Task, logger}
+import rapid.Task
 
 import scala.language.implicitConversions
 

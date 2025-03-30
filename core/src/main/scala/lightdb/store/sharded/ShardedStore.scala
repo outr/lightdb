@@ -8,7 +8,7 @@ import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.sharded.manager.{ShardManager, ShardManagerInstance}
+import lightdb.store.sharded.manager.ShardManagerInstance
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.JsonOrdering

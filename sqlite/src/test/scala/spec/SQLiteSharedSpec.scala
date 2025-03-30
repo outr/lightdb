@@ -1,7 +1,6 @@
 package spec
 
 import lightdb.sql.{SQLiteSharedStore, SQLiteStore}
-import rapid.Task
 
 import java.nio.file.Path
 

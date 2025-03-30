@@ -58,7 +58,7 @@ trait FilterSupport[F, Doc, Filter] {
 
   protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter
 
-  def IN(values: Seq[F]): Filter
+  def in(values: Seq[F]): Filter
 
   def words(s: String,
             matchStartsWith: Boolean = true,
