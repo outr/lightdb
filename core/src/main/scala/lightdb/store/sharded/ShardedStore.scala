@@ -29,8 +29,9 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
                                                                       model: Model,
                                                                       shardManager: ShardManagerInstance[Doc, Model],
                                                                       val storeMode: StoreMode[Doc, Model],
-                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
-  override protected def initialize(): Task[Unit] = {
+                                                                      db: LightDB,
+                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
+  override protected def initialize(): Task[Unit] = super.initialize().next {
     shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.init)
     }
@@ -42,24 +43,24 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     }
   }
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.insert(doc)
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.insert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.upsert(doc)
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.upsert(doc)
 
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = shardManager.exists(id)
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
     val findFirst = () => shardManager.shards.foldLeft(Task.pure(Option.empty[Doc])) { (task, shard) =>
       task.flatMap {
         case Some(doc) => Task.pure(Some(doc))
-        case None => shard.get(field, value)
+        case None => shard.get(_ => field -> value)
       }
     }
     if (field == idField) {
       val id = value.asInstanceOf[Id[Doc]]
       shardManager.shardFor(id) match {
-        case Some(store) => store.get(field, value)
+        case Some(store) => store.get(_ => field -> value)
         case None => findFirst()
       }
     } else {
@@ -67,7 +68,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
     shardManager.delete(field, value).map(_.nonEmpty)
 
   override def count(implicit transaction: Transaction[Doc]): Task[Int] =
@@ -284,7 +285,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
     }
   }
 
-  override protected def doDispose(): Task[Unit] = {
+  override protected def doDispose(): Task[Unit] = super.doDispose().next {
     // Dispose all shards
     shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.dispose)

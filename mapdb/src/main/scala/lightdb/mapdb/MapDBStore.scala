@@ -18,7 +18,8 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
                                                                     model: Model,
                                                                     directory: Option[Path],
                                                                     val storeMode: StoreMode[Doc, Model],
-                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+                                                                    lightDB: LightDB,
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
   private lazy val db: DB = {
     val maker = directory.map { path =>
       Files.createDirectories(path.getParent)
@@ -28,13 +29,13 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
   }
   private lazy val map: HTreeMap[String, String] = db.hashMap("map", Serializer.STRING, Serializer.STRING).createOrOpen()
 
-  override protected def initialize(): Task[Unit] = Task(map.verify())
+  override protected def initialize(): Task[Unit] = super.initialize().next(Task(map.verify()))
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     map.put(doc._id.value, toString(doc))
     doc
   }
@@ -43,7 +44,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     map.containsKey(id.value)
   }
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       Option(map.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
@@ -52,7 +53,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Task[Boolean] =
     Task(map.remove(value.asInstanceOf[Id[Doc]].value) != null)
 
@@ -81,10 +82,10 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     size
   }
 
-  override protected def doDispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {
     db.commit()
     db.close()
-  }
+  })
 }
 
 object MapDBStore extends StoreManager {
@@ -92,5 +93,5 @@ object MapDBStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new MapDBStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, this)
+    new MapDBStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, db, this)
 }

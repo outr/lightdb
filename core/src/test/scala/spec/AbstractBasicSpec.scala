@@ -2,11 +2,10 @@ package spec
 
 import fabric.rw._
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
-import lightdb.collection.Collection
 import lightdb.doc._
 import lightdb.feature.DBFeatureKey
 import lightdb.filter._
-import lightdb.store.StoreManager
+import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, StoredValue, Timestamp}
 import org.scalatest.matchers.should.Matchers
@@ -615,9 +614,9 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-    val people: Collection[Person, Person.type] = collection(Person)
+    val people: Store[Person, Person.type] = store(Person)
 
-    val ageLinks: Collection[AgeLinks, AgeLinks.type] = collection(AgeLinks)
+    val ageLinks: Store[AgeLinks, AgeLinks.type] = store(AgeLinks)
 
     override def storeManager: StoreManager = spec.storeManager
 
@@ -663,7 +662,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val age: F[Int] = field("age", _.age)
     val people: F[List[Id[Person]]] = field("people", _.people)
 
-    override def materialCollection: Collection[Person, Person.type] = db.people
+    override def materialStore: Store[Person, Person.type] = db.people
 
     def id(age: Int): Id[AgeLinks] = Id(age.toString)
 

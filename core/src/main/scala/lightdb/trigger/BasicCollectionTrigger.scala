@@ -1,13 +1,13 @@
 package lightdb.trigger
 
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
+import lightdb.store.Store
 import lightdb.transaction.Transaction
 import rapid.Task
 
 trait BasicCollectionTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTrigger[Doc] {
-  def collection: Collection[Doc, Model]
+  def store: Store[Doc, Model]
 
   protected def adding(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit]
 
@@ -18,16 +18,16 @@ trait BasicCollectionTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] 
   override final def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = adding(doc)
 
   override final def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] =
-    collection.get(doc._id).map {
+    store.get(doc._id).map {
       case Some(current) => modifying(current, doc)
       case None => adding(doc)
     }
 
   override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Unit] = {
-    collection.query.filter(_ => index === value).docs.stream.foreach(removing).drain
+    store.query.filter(_ => index === value).docs.stream.foreach(removing).drain
   }
 
-  override final def truncate(): Task[Unit] = collection.transaction { implicit transaction =>
-    collection.stream.foreach(removing).drain
+  override final def truncate(): Task[Unit] = store.transaction { implicit transaction =>
+    store.stream.foreach(removing).drain
   }
 }

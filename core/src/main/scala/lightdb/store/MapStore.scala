@@ -13,25 +13,24 @@ import rapid.Task
 class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                   model: Model,
                                                                   val storeMode: StoreMode[Doc, Model],
-                                                                  storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) { store =>
+                                                                  db: LightDB,
+                                                                  storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) { store =>
   private var map = Map.empty[Id[Doc], Doc]
-
-  override protected def initialize(): Task[Unit] = Task.unit
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     store.synchronized {
       map += id(doc) -> doc
     }
     doc
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = insert(doc)
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = _insert(doc)
 
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task(map.contains(id))
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       map.get(value.asInstanceOf[Id[Doc]])
     } else {
@@ -39,7 +38,7 @@ class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V],
+  override protected def _delete[V](field: UniqueIndex[Doc, V],
                          value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     store.synchronized {
       if (field == idField) {
@@ -90,5 +89,5 @@ object MapStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = new MapStore[Doc, Model](name, model, storeMode, this)
+                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = new MapStore[Doc, Model](name, model, storeMode, db, this)
 }

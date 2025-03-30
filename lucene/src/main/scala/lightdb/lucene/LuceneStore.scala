@@ -32,7 +32,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      model: Model,
                                                                      directory: Option[Path],
                                                                      val storeMode: StoreMode[Doc, Model],
-                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+                                                                     lightDB: LightDB,
+                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
   private val id = Unique()
   private val transactionKey: TransactionKey[LuceneState[Doc]] = TransactionKey(id)
 
@@ -59,7 +60,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   def state(implicit transaction: Transaction[Doc]): LuceneState[Doc] = transaction(transactionKey)
 
-  override protected def initialize(): Task[Unit] = Task {
+  override protected def initialize(): Task[Unit] = super.initialize().next(Task {
     directory.foreach { path =>
       if (Files.exists(path)) {
         val directory = FSDirectory.open(path)
@@ -74,7 +75,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         }
       }
     }
-  }
+  })
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
@@ -83,10 +84,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     )
   }
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] =
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] =
     addDoc(doc, upsert = false)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] =
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] =
     addDoc(doc, upsert = true)
 
   private def createGeoFields(field: Field[Doc, _],
@@ -224,16 +225,16 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     doc
   }
 
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(idField, id).map(_.nonEmpty)
+  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = get(id).map(_.nonEmpty)
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
     val filter = Filter.Equals(field, value)
     val query = Query[Doc, Model, Doc](model, this, Conversion.Doc(), filter = Some(filter), limit = Some(1))
     doSearch[Doc](query).flatMap(_.list).map(_.headOption)
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     val query = searchBuilder.filter2Lucene(Some(field === value))
     index.indexWriter.deleteDocuments(query)
     true
@@ -273,9 +274,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     _ <- Task(index.indexWriter.deleteAll())
   } yield count
 
-  override protected def doDispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {
     index.dispose()
-  }
+  })
 }
 
 object LuceneStore extends StoreManager {
@@ -286,5 +287,5 @@ object LuceneStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.lucene")), storeMode, this)
+    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.lucene")), storeMode, db, this)
 }

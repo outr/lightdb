@@ -1,10 +1,9 @@
 package lightdb
 
 import fabric.rw._
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
-import lightdb.store.{StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
 import rapid._
@@ -48,20 +47,20 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
-  private var _collections = List.empty[Collection[_, _]]
+  private var _stores = List.empty[Store[_, _]]
   private val _disposed = new AtomicBoolean(false)
 
   /**
    * All collections registered with this database
    */
-  def collections: List[Collection[_, _]] = _collections
+  def stores: List[Store[_, _]] = _stores
 
   /**
    * Returns a list of matching collection names based on the provided names
    */
-  def collectionsByNames(collectionNames: String*): List[Collection[_, _]] = {
+  def collectionsByNames(collectionNames: String*): List[Store[_, _]] = {
     val set = collectionNames.toSet
-    collections.filter(c => set.contains(c.name))
+    stores.filter(c => set.contains(c.name))
   }
 
   /**
@@ -69,12 +68,12 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
    * collections to re-index or all collections will be invoked.
    */
-  def reIndex(collections: List[Collection[_, _]] = collections): Task[Int] = collections.map(_.reIndex()).tasks.map(_.count(identity))
+  def reIndex(collections: List[Store[_, _]] = stores): Task[Int] = collections.map(_.reIndex()).tasks.map(_.count(identity))
 
   /**
    * Offers each collection the ability to optimize the store.
    */
-  def optimize(collections: List[Collection[_, _]] = collections): Task[Unit] = collections.map(_.store.optimize()).tasks.unit
+  def optimize(collections: List[Store[_, _]] = stores): Task[Unit] = collections.map(_.optimize()).tasks.unit
 
   /**
    * True if this database has been disposed.
@@ -84,13 +83,13 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   /**
    * Backing key/value store used for persistent internal settings, StoredValues, and general key/value storage.
    */
-  lazy val backingStore: Collection[KeyValue, KeyValue.type] = collection(KeyValue, name = Some("_backingStore"))
+  lazy val backingStore: Store[KeyValue, KeyValue.type] = store(KeyValue, name = Some("_backingStore"))
 
   override protected def initialize(): Task[Unit] = for {
     _ <- logger.info(s"$name database initializing...")
     _ = backingStore
-    _ <- logger.info(s"Initializing collections: ${collections.map(_.name).mkString(", ")}...")
-    _ <- collections.map(_.init).tasks
+    _ <- logger.info(s"Initializing collections: ${stores.map(_.name).mkString(", ")}...")
+    _ <- stores.map(_.init).tasks
     // Truncate the database before we do anything if specified
     _ <- truncate().next(logger.info("Truncating database...")).when(truncateOnInit)
     // Determine if this is an uninitialized database
@@ -121,46 +120,45 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * @param name           the collection's name (defaults to None meaning it will be generated based on the model name)
    * @param storeManager   specify the StoreManager. If this is not set, the database's storeManager will be used.
    */
-  def collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                                    name: Option[String] = None,
-                                                                    storeManager: Option[StoreManager] = None): Collection[Doc, Model] = {
+  def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                               name: Option[String] = None,
+                                                               storeManager: Option[StoreManager] = None): Store[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val store = storeManager.getOrElse(this.storeManager).create[Doc, Model](this, model, n, StoreMode.All())
-    val c = Collection[Doc, Model](n, model, store, this)
     synchronized {
-      _collections = _collections ::: List(c)
+      _stores = _stores ::: List(store)
     }
     if (isInitialized) { // Already initialized database, init collection immediately
-      c.init.sync()
+      store.init.sync()
     }
-    c
+    store
   }
 
   object stored {
     def apply[T](key: String,
                  default: => T,
                  persistence: Persistence = Persistence.Stored,
-                 collection: Collection[KeyValue, KeyValue.type] = backingStore)
+                 store: Store[KeyValue, KeyValue.type] = backingStore)
                 (implicit rw: RW[T]): StoredValue[T] = StoredValue[T](
       key = key,
-      collection = collection,
+      store = store,
       default = () => default,
       persistence = persistence
     )
 
     def opt[T](key: String,
                persistence: Persistence = Persistence.Stored,
-               collection: Collection[KeyValue, KeyValue.type] = backingStore)
+               store: Store[KeyValue, KeyValue.type] = backingStore)
               (implicit rw: RW[T]): StoredValue[Option[T]] = StoredValue[Option[T]](
       key = key,
-      collection = collection,
+      store = store,
       default = () => None,
       persistence = persistence
     )
   }
 
-  def truncate(): Task[Unit] = collections.map { c =>
-    val collection = c.asInstanceOf[Collection[KeyValue, KeyValue.type]]
+  def truncate(): Task[Unit] = stores.map { c =>
+    val collection = c.asInstanceOf[Store[KeyValue, KeyValue.type]]
     collection.transaction { implicit transaction =>
       collection.truncate()(transaction)
     }
@@ -196,7 +194,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   }
 
   override protected def doDispose(): Task[Unit] = if (_disposed.compareAndSet(false, true)) {
-    collections.map(_.asInstanceOf[Collection[KeyValue, KeyValue.type]]).map { collection =>
+    stores.map(_.asInstanceOf[Store[KeyValue, KeyValue.type]]).map { collection =>
       collection.dispose
     }.tasks.flatMap { _ =>
       features.toList.map {

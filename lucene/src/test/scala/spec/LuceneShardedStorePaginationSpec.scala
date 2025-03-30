@@ -2,13 +2,12 @@ package spec
 
 import fabric.rw._
 import lightdb._
-import lightdb.collection.Collection
 import lightdb.doc._
 import lightdb.field.Field
 import lightdb.lucene.LuceneStore
 import lightdb.store.sharded.manager.BalancedShardManager
 import lightdb.store.sharded.{ShardedStore, ShardedStoreManager}
-import lightdb.store.{MapStore, StoreManager}
+import lightdb.store.{MapStore, Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -31,7 +30,7 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
     }
     "verify the proper counts per shard" in {
       db.docs.transaction { implicit transaction =>
-        db.docs.store.asInstanceOf[ShardedStore[TestDoc, TestDoc.type]].shardCounts.map { counts =>
+        db.docs.asInstanceOf[ShardedStore[TestDoc, TestDoc.type]].shardCounts.map { counts =>
           counts should be(Vector(
             100, 100, 100
           ))
@@ -90,7 +89,7 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
   object db extends LightDB {
     override lazy val directory: Option[Path] = Some(Path.of(s"db/ShardedStorePaginationSpec"))
 
-    val docs: Collection[TestDoc, TestDoc.type] = collection(TestDoc)
+    val docs: Store[TestDoc, TestDoc.type] = store(TestDoc)
 
     override def storeManager: StoreManager = ShardedStoreManager(LuceneStore, 3, BalancedShardManager)
 

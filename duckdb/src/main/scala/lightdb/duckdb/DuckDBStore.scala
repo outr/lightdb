@@ -13,7 +13,8 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      model: Model,
                                                                      val connectionManager: ConnectionManager,
                                                                      val storeMode: StoreMode[Doc, Model],
-                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, storeManager) {
+                                                                     lightDB: LightDB,
+                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, lightDB, storeManager) {
   // TODO: Use DuckDB's Appender for better performance
   /*override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     fields.zipWithIndex.foreach {
@@ -56,12 +57,13 @@ object DuckDBStore extends StoreManager {
     ))
   }
 
-  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, file: Option[Path], storeMode: StoreMode[Doc, Model]): DuckDBStore[Doc, Model] = {
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, file: Option[Path], storeMode: StoreMode[Doc, Model], db: LightDB): DuckDBStore[Doc, Model] = {
     new DuckDBStore[Doc, Model](
       name = name,
       model = model,
       connectionManager = singleConnectionManager(file),
       storeMode = storeMode,
+      lightDB = db,
       storeManager = this
     )
   }
@@ -76,9 +78,10 @@ object DuckDBStore extends StoreManager {
         model = model,
         connectionManager = sqlDB.connectionManager,
         storeMode = storeMode,
+        lightDB = db,
         storeManager = this
       )
-      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.duckdb")), storeMode)
+      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.duckdb")), storeMode, db)
     }
   }
 }

@@ -22,7 +22,8 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       rocksDB: RocksDB,
                                                                       sharedStore: Option[RocksDBSharedStoreInstance],
                                                                       val storeMode: StoreMode[Doc, Model],
-                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+                                                                      lightDB: LightDB,
+                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
   private val handle: Option[ColumnFamilyHandle] = sharedStore.map { ss =>
     ss.existingHandle match {
       case Some(handle) => handle
@@ -30,13 +31,11 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     }
   }
 
-  override protected def initialize(): Task[Unit] = Task.unit
-
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     val json = doc.json(model.rw)
     val bytes = JsonFormatter.Compact(json).getBytes("UTF-8")
     handle match {
@@ -53,7 +52,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     }
   }
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       val bytes = value.asInstanceOf[Id[Doc]].bytes
@@ -73,7 +72,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     JsonParser(jsonString)
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     val bytes = value.asInstanceOf[Id[Doc]].bytes
     handle match {
@@ -116,7 +115,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     }).size
   }
 
-  override protected def doDispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {
     val o = new FlushOptions
     handle match {
       case Some(h) =>
@@ -125,7 +124,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
         rocksDB.flush(o)
         rocksDB.closeE()
     }
-  }
+  })
 
   private def iterator(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
     // Initialize the iterator to the first position
@@ -178,6 +177,7 @@ object RocksDBStore extends StoreManager {
       rocksDB = createRocksDB(db.directory.get.resolve(name))._1,
       sharedStore = None,
       storeMode = storeMode,
+      lightDB = db,
       storeManager = this
     )
 }

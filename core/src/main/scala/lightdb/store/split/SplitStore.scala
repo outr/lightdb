@@ -17,10 +17,9 @@ class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val
                                                                     storage: Store[Doc, Model],
                                                                     searching: Store[Doc, Model],
                                                                     val storeMode: StoreMode[Doc, Model],
-                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
-  override protected def initialize(): Task[Unit] = {
-    storage.init.and(searching.init).unit
-  }
+                                                                    db: LightDB,
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
+  override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] =
     storage.prepareTransaction(transaction).and(searching.prepareTransaction(transaction)).unit
@@ -28,7 +27,7 @@ class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val
   private def ignoreSearchUpdates(implicit transaction: Transaction[Doc]): Boolean =
     transaction.get(SplitStore.NoSearchUpdates).contains(true)
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
     storage.insert(doc).flatMap { doc =>
       if (!ignoreSearchUpdates) {
         searching.insert(doc)
@@ -38,7 +37,7 @@ class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val
     }
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
     storage.upsert(doc).flatMap { doc =>
       if (!ignoreSearchUpdates) {
         searching.upsert(doc)
@@ -50,13 +49,13 @@ class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val
 
   override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = storage.exists(id)
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] =
-    storage.get(field, value)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]] =
+    storage.get(_ => field -> value)
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
-    storage.delete(field, value).flatTap { b =>
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
+    storage.delete(_ => field -> value).flatTap { b =>
       if (!ignoreSearchUpdates && b) {
-        searching.delete(field, value)
+        searching.delete(_ => field -> value)
       } else {
         Task.unit
       }
@@ -110,7 +109,7 @@ class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val
       storage.stream.evalMap(searching.insert).drain
     }
 
-  override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).unit
+  override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).next(super.doDispose())
 }
 
 object SplitStore {

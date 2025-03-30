@@ -2,13 +2,14 @@ package lightdb.doc
 
 import fabric.rw._
 import lightdb._
-import lightdb.collection.Collection
 import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.field.Field._
 import lightdb.field.{Field, FieldGetter}
 import lightdb.filter.FilterBuilder
+import lightdb.store.Store
 import rapid.{Task, Unique}
 
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.language.implicitConversions
 
 trait DocumentModel[Doc <: Document[Doc]] {
@@ -20,7 +21,18 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   def id(value: String = Unique.sync()): Id[Doc] = Id(value)
 
-  def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Task[Unit] = Task.unit
+  private val _initialized = new AtomicBoolean(false)
+
+  final def initialize[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = Task.defer {
+    val b = _initialized.compareAndSet(false, true)
+    if (b) {
+      init(store)
+    } else {
+      Task.unit
+    }
+  }
+
+  protected def init[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = Task.unit
 
   type F[V] = Field[Doc, V]
   type I[V] = Indexed[Doc, V]

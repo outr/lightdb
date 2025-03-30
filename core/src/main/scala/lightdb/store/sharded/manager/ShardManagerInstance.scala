@@ -15,7 +15,7 @@ trait ShardManagerInstance[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def shardFor(id: Id[Doc]): Option[Store[Doc, Model]]
 
   def findDocShard(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Option[Store[Doc, Model]]] = firstMatch { store =>
-    store.get(model._id, id).map(_.map(_ => store))
+    store.get(id).map(_.map(_ => store))
   }
 
   protected def shardFor(doc: Doc): Store[Doc, Model] = shardFor(doc._id)
@@ -47,7 +47,7 @@ trait ShardManagerInstance[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
         if (result.nonEmpty) {
           Task.pure(result)
         } else {
-          shard.delete(field, value).map {
+          shard.delete(_ => field -> value).map {
             case true => Some(shard)
             case false => None
           }
@@ -57,7 +57,7 @@ trait ShardManagerInstance[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
     if (field == model._id) {
       val id = value.asInstanceOf[Id[Doc]]
       shardFor(id) match {
-        case Some(store) => store.delete(field, value).map {
+        case Some(store) => store.delete(_ => field -> value).map {
           case true => Some(store)
           case false => None
         }

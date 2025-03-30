@@ -198,7 +198,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
         store.lock(doc._id, Task.pure(Some(doc)), establishLock) { current =>
           f(current.getOrElse(doc)).flatMap {
             case Some(modified) => store.upsert(modified).when(!current.contains(modified))
-            case None => store.delete(store.idField, doc._id).when(deleteOnNone)
+            case None => store.delete(doc._id).when(deleteOnNone)
           }.map(_ => None)
         }
       }

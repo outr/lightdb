@@ -18,7 +18,8 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            model: Model,
                                                                            directory: Option[Path],
                                                                            val storeMode: StoreMode[Doc, Model],
-                                                                           storeManager: StoreManager) extends Store[Doc, Model](name, model, storeManager) {
+                                                                           lightDB: LightDB,
+                                                                           storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
   sys.props("net.openhft.chronicle.hash.impl.util.jna.PosixFallocate.fallocate") = "false"
 
   private lazy val db: ChronicleMap[String, String] = {
@@ -38,18 +39,18 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override protected def initialize(): Task[Unit] = Task(db)
+  override protected def initialize(): Task[Unit] = super.initialize().next(Task(db))
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     if (db.putIfAbsent(doc._id.value, toString(doc)) != null) {
       throw new RuntimeException(s"${doc._id.value} already exists")
     }
     doc
   }
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
     db.put(doc._id.value, toString(doc))
     doc
   }
@@ -58,7 +59,7 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     db.containsKey(id.value)
   }
 
-  override def get[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
                      (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
     if (field == idField) {
       Option(db.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
@@ -67,7 +68,7 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override def delete[V](field: UniqueIndex[Doc, V], value: V)
+  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)
                         (implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
     if (field == idField) {
       db.remove(value.asInstanceOf[Id[Doc]].value) != null
@@ -101,9 +102,9 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     size
   }
 
-  override protected def doDispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {
     db.close()
-  }
+  })
 }
 
 object ChronicleMapStore extends StoreManager {
@@ -111,5 +112,5 @@ object ChronicleMapStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
-    new ChronicleMapStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, this)
+    new ChronicleMapStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, db, this)
 }

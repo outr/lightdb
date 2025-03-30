@@ -2,11 +2,10 @@ package spec
 
 import fabric.io.JsonParser
 import fabric.rw._
-import lightdb.collection.Collection
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.spatial.Geo
-import lightdb.store.StoreManager
+import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -139,7 +138,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
   object DB extends LightDB {
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people: Collection[Person, Person.type] = collection(Person)
+    val people: Store[Person, Person.type] = store(Person)
 
     override def storeManager: StoreManager = spec.storeManager
 

@@ -1,11 +1,10 @@
 package spec
 
 import fabric.rw._
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.filter._
-import lightdb.store.StoreManager
+import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -285,7 +284,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
   class DB extends LightDB {
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val entries: Collection[Entry, Entry.type] = collection(Entry)
+    val entries: Store[Entry, Entry.type] = store(Entry)
 
     override def storeManager: StoreManager = spec.storeManager
     override def upgrades: List[DatabaseUpgrade] = Nil

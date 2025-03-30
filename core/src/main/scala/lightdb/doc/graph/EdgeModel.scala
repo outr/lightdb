@@ -1,14 +1,13 @@
 package lightdb.doc.graph
 
 import lightdb.Id
-import lightdb.collection.Collection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.field.Field.UniqueIndex
 import lightdb.store.{Store, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.trigger.CollectionTrigger
-import rapid.Task
+import rapid.{Task, logger}
 
 import scala.language.implicitConversions
 
@@ -34,7 +33,7 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
   private val edgesReverseModel: EdgeConnectionsModel[To, From] = EdgeConnectionsModel()
 
   def edgesFor(id: Id[From]): Task[Set[Id[To]]] = _edgesStore.transaction { implicit transaction =>
-    _edgesStore.get(edgesModel._id, id.asInstanceOf[Id[EdgeConnections[From, To]]]).map(_.map(_.connections).getOrElse(Set.empty))
+    _edgesStore.get(id.asInstanceOf[Id[EdgeConnections[From, To]]]).map(_.map(_.connections).getOrElse(Set.empty))
   }
 
   def reachableFrom(id: Id[From])(implicit ev: Id[To] =:= Id[From]): Task[Set[(Id[To], Int)]] = Task {
@@ -168,32 +167,32 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
   }
 
   def reverseEdgesFor(id: Id[To]): Task[Set[Id[From]]] = _edgesReverseStore.transaction { implicit transaction =>
-    _edgesReverseStore.get(edgesReverseModel._id, id.asInstanceOf[Id[EdgeConnections[To, From]]]).map(_.map(_.connections).getOrElse(Set.empty))
+    _edgesReverseStore.get(id.asInstanceOf[Id[EdgeConnections[To, From]]]).map(_.map(_.connections).getOrElse(Set.empty))
   }
 
-  override def init[Model <: DocumentModel[Doc]](collection: Collection[Doc, Model]): Task[Unit] = {
-    super.init(collection).flatMap { _ =>
-      _edgesStore = collection.store.storeManager.create[D, M](
-        db = collection.db,
+  override protected def init[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = {
+    super.initialize(store).flatMap { _ =>
+      _edgesStore = store.storeManager.create[D, M](
+        db = store.lightDB,
         model = edgesModel,
-        name = s"${collection.name}-edges",
+        name = s"${store.name}-edges",
         storeMode = StoreMode.All[D, M]()
       )
-      _edgesReverseStore = collection.store.storeManager.create[RD, RM](
-        db = collection.db,
+      _edgesReverseStore = store.storeManager.create[RD, RM](
+        db = store.lightDB,
         model = edgesReverseModel,
-        name = s"${collection.name}-reverseEdges",
+        name = s"${store.name}-reverseEdges",
         storeMode = StoreMode.All[RD, RM]()
       )
       // TODO: Validate store contents against collection to verify integrity
-      collection.trigger += new CollectionTrigger[Doc] {
+      store.trigger += new CollectionTrigger[Doc] {
         override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = add(doc)
 
         override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = add(doc)
 
         override def delete[V](index: Field.UniqueIndex[Doc, V], value: V)
                               (implicit transaction: Transaction[Doc]): Task[Unit] =
-          collection.get(_ => index -> value).flatMap {
+          store.get(_ => index -> value).flatMap {
             case Some(doc) => remove(doc)
             case None => Task.unit
           }
