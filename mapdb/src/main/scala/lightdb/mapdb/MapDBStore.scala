@@ -89,9 +89,11 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
 }
 
 object MapDBStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = MapDBStore[Doc, Model]
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
     new MapDBStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, db, this)
 }

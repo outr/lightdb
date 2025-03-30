@@ -8,6 +8,8 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 
 case class HaloDBSharedStore(directory: Path, useNameAsPrefix: Boolean = false) extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = HaloDBStore[Doc, Model]
+
   private lazy val instance = new DirectHaloDBInstance(directory)
 
   private val prefixes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toVector
@@ -33,6 +35,6 @@ case class HaloDBSharedStore(directory: Path, useNameAsPrefix: Boolean = false) 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
     new HaloDBStore[Doc, Model](name, model, storeMode, SharedHaloDBInstance(instance, prefixFor(db, name)), db, this)
 }

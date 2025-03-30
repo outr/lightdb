@@ -11,6 +11,8 @@ import java.nio.file.Path
 case class RocksDBSharedStore(directory: Path) extends StoreManager {
   RocksDB.loadLibrary()
 
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = RocksDBStore[Doc, Model]
+
   val (rocksDB: RocksDB, existingHandles: List[ColumnFamilyHandle]) = RocksDBStore.createRocksDB(directory)
 
   val existingHandlesMap: Map[String, ColumnFamilyHandle] = existingHandles.map { h =>
@@ -20,7 +22,7 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] =
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
     new RocksDBStore[Doc, Model](
       name = name,
       model = model,

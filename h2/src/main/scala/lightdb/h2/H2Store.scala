@@ -39,6 +39,8 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
 }
 
 object H2Store extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = H2Store[Doc, Model]
+
   def config(file: Option[Path]): SQLConfig = SQLConfig(
     jdbcUrl = s"jdbc:h2:${file.map(_.toFile.getCanonicalPath).map(p => s"file:$p").getOrElse(s"test:${Unique.sync()}")};NON_KEYWORDS=VALUE,USER,SEARCH"
   )
@@ -60,7 +62,7 @@ object H2Store extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): H2Store[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) => new H2Store[Doc, Model](
         name = name,

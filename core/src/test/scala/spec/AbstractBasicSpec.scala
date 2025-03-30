@@ -605,6 +605,9 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   def storeManager: StoreManager
 
   class DB extends LightDB {
+    override type SM = StoreManager
+    override val storeManager: StoreManager = spec.storeManager
+
     spec.features.foreach {
       case (key, value) =>
         put(key, value)
@@ -617,8 +620,6 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val people: Store[Person, Person.type] = store(Person)
 
     val ageLinks: Store[AgeLinks, AgeLinks.type] = store(AgeLinks)
-
-    override def storeManager: StoreManager = spec.storeManager
 
     override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
   }

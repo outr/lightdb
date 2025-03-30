@@ -64,10 +64,12 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 }
 
 object HaloDBStore extends StoreManager {
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = HaloDBStore[Doc, Model]
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): HaloDBStore[Doc, Model] = {
     val instance = new DirectHaloDBInstance(db.directory.get.resolve(name))
     new HaloDBStore[Doc, Model](name, model, storeMode, instance, db, this)
   }

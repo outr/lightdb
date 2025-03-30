@@ -9,10 +9,12 @@ case class SplitStoreManager(storage: StoreManager,
                              searchIndexAll: Boolean = false) extends StoreManager {
   override lazy val name: String = s"Split($storage, $searching)"
 
+  override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SplitStore[Doc, Model]
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): Store[Doc, Model] = {
+                                                                         storeMode: StoreMode[Doc, Model]): SplitStore[Doc, Model] = {
     val storage = this.storage.create[Doc, Model](db, model, name, StoreMode.All())
     new SplitStore(
       name = name,
