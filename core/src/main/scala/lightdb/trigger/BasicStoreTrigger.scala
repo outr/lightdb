@@ -2,7 +2,7 @@ package lightdb.trigger
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.store.Store
+import lightdb.store.{Collection, Store}
 import lightdb.transaction.Transaction
 import rapid.Task
 
@@ -24,7 +24,10 @@ trait BasicStoreTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
 
   override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Unit] = {
-    store.query.filter(_ => index === value).docs.stream.foreach(removing).drain
+    store match {
+      case c: Collection[Doc, Model] => c.query.filter(_ => index === value).docs.stream.foreach(removing).drain
+      case _ => ???
+    }
   }
 
   override final def truncate(): Task[Unit] = store.transaction { implicit transaction =>

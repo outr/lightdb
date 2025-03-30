@@ -7,7 +7,7 @@ import lightdb.field.Field
 import lightdb.lucene.LuceneStore
 import lightdb.store.sharded.manager.BalancedShardManager
 import lightdb.store.sharded.{ShardedStore, ShardedStoreManager}
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{Collection, Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -91,7 +91,7 @@ class LuceneShardedStorePaginationSpec extends AsyncWordSpec with AsyncTaskSpec 
     override val storeManager: ShardedStoreManager = ShardedStoreManager(LuceneStore, 3, BalancedShardManager)
     override lazy val directory: Option[Path] = Some(Path.of(s"db/ShardedStorePaginationSpec"))
 
-    val docs: Store[TestDoc, TestDoc.type] = store(TestDoc)
+    val docs: Collection[TestDoc, TestDoc.type] = store(TestDoc)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

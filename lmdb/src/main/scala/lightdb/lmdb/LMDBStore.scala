@@ -105,17 +105,6 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] =
     rapid.Stream.fromIterator(instance.transactionManager.withReadIterator(txn => new LMDBValueIterator(dbi, txn).map(b2j)))
 
-  override def doSearch[V](query: Query[Doc, Model, V])
-                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
-    throw new UnsupportedOperationException("LMDBStore does not support searching")
-
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    throw new UnsupportedOperationException("LMDBStore does not support aggregation")
-
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
-    throw new UnsupportedOperationException("LMDBStore does not support aggregation")
-
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = count.flatTap { _ =>
     withWrite { txn =>
       Task(dbi.drop(txn))

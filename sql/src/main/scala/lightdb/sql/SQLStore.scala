@@ -14,7 +14,7 @@ import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{Collection, Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.ActionIterator
 import rapid.Task
@@ -22,7 +22,7 @@ import rapid.Task
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
-abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, lightDB: LightDB, storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
+abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, lightDB: LightDB, storeManager: StoreManager) extends Collection[Doc, Model](name, model, lightDB, storeManager) {
   protected def connectionManager: ConnectionManager
 
   override def supportsArbitraryQuery: Boolean = true

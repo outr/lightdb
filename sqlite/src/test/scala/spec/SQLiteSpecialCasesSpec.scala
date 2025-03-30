@@ -4,5 +4,5 @@ import lightdb.store.StoreManager
 
 @EmbeddedTest
 class SQLiteSpecialCasesSpec extends AbstractSpecialCasesSpec {
-  override def storeManager: StoreManager = SQLiteStore
+  override def storeManager: SQLiteStore.type = SQLiteStore
 }

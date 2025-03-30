@@ -3,14 +3,14 @@ package lightdb.store.sharded.manager
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.store.Store
+import lightdb.store.{Collection, Store}
 import lightdb.transaction.Transaction
 import rapid._
 
 import java.util.concurrent.atomic.AtomicInteger
 
 case class BalancedShardManager[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                                                   shards: Vector[Store[Doc, Model]]) extends ShardManagerInstance[Doc, Model] {
+                                                                                   shards: Vector[Collection[Doc, Model]]) extends ShardManagerInstance[Doc, Model] {
   private lazy val counters: Vector[AtomicInteger] = shards.map { store =>
     store.transaction { implicit transaction =>
       store.count
@@ -61,6 +61,6 @@ case class BalancedShardManager[Doc <: Document[Doc], Model <: DocumentModel[Doc
 }
 
 object BalancedShardManager extends ShardManager {
-  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model, shards: Vector[Store[Doc, Model]]): ShardManagerInstance[Doc, Model] =
+  override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model, shards: Vector[Collection[Doc, Model]]): ShardManagerInstance[Doc, Model] =
     BalancedShardManager(model, shards)
 }

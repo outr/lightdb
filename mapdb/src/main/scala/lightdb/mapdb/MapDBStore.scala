@@ -66,17 +66,6 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
       .map(toJson)
   })
 
-  override def doSearch[V](query: Query[Doc, Model, V])
-                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] =
-    throw new UnsupportedOperationException("MapDBStore does not support searching")
-
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    throw new UnsupportedOperationException("MapDBStore does not support aggregation")
-
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] =
-    throw new UnsupportedOperationException("MapDBStore does not support aggregation")
-
   override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = count.map { size =>
     map.clear()
     size

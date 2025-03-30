@@ -6,26 +6,26 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
 import lightdb.materialized.MaterializedAggregate
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{Collection, Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import rapid.{Task, logger}
 
 import scala.language.implicitConversions
 
-class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
-                                                                    model: Model,
-                                                                    storage: Store[Doc, Model],
-                                                                    searching: Store[Doc, Model],
-                                                                    val storeMode: StoreMode[Doc, Model],
-                                                                    db: LightDB,
-                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
+class SplitCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
+                                                                         model: Model,
+                                                                         storage: Store[Doc, Model],
+                                                                         searching: Collection[Doc, Model],
+                                                                         val storeMode: StoreMode[Doc, Model],
+                                                                         db: LightDB,
+                                                                         storeManager: StoreManager) extends Collection[Doc, Model](name, model, db, storeManager) {
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] =
     storage.prepareTransaction(transaction).and(searching.prepareTransaction(transaction)).unit
 
   private def ignoreSearchUpdates(implicit transaction: Transaction[Doc]): Boolean =
-    transaction.get(SplitStore.NoSearchUpdates).contains(true)
+    transaction.get(SplitCollection.NoSearchUpdates).contains(true)
 
   override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
     storage.insert(doc).flatMap { doc =>
@@ -112,6 +112,6 @@ class SplitStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val
   override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).next(super.doDispose())
 }
 
-object SplitStore {
+object SplitCollection {
   val NoSearchUpdates: TransactionKey[Boolean] = TransactionKey[Boolean]("splitStoreNoSearchUpdates")
 }

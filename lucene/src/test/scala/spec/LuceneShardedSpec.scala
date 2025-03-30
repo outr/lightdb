@@ -6,5 +6,5 @@ import lightdb.store.sharded.ShardedStoreManager
 
 @EmbeddedTest
 class LuceneShardedSpec extends AbstractBasicSpec {
-  override def storeManager: StoreManager = ShardedStoreManager(LuceneStore, 6)
+  override def storeManager: ShardedStoreManager = ShardedStoreManager(LuceneStore, 6)
 }

@@ -1,8 +1,8 @@
 package lightdb.store.sharded.manager
 
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.Store
+import lightdb.store.{Collection, Store}
 
 trait ShardManager {
-  def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model, shards: Vector[Store[Doc, Model]]): ShardManagerInstance[Doc, Model]
+  def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model, shards: Vector[Collection[Doc, Model]]): ShardManagerInstance[Doc, Model]
 }

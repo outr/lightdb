@@ -3,7 +3,7 @@ package lightdb.store.sharded
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.sharded.manager.{HashBasedShardManager, ShardManager}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 
 /**
  * A StoreManager that creates ShardedStore instances, which distribute data across multiple shards.
@@ -11,9 +11,9 @@ import lightdb.store.{Store, StoreManager, StoreMode}
  * @param storeManager The StoreManager to use for creating the individual shard stores
  * @param shardCount The number of shards to create
  */
-case class ShardedStoreManager(storeManager: StoreManager,
+case class ShardedStoreManager(storeManager: CollectionManager,
                                shardCount: Int,
-                               shardManager: ShardManager = HashBasedShardManager) extends StoreManager {
+                               shardManager: ShardManager = HashBasedShardManager) extends CollectionManager {
   override lazy val name: String = s"Sharded($storeManager, $shardCount)"
 
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = ShardedStore[Doc, Model]

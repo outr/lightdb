@@ -78,7 +78,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   protected def toJson(string: String): Json = JsonParser(string)
 
-  lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial))
+  lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial)).singleton
 
   def prepareTransaction(transaction: Transaction[Doc]): Task[Unit]
 
@@ -171,16 +171,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = jsonStream.map(_.as[Doc](model.rw))
 
   def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json]
-
-  lazy val query: Query[Doc, Model, Doc] = Query(model, this, Conversion.Doc())
-
-  def doSearch[V](query: Query[Doc, Model, V])
-                           (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]]
-
-  def aggregate(query: AggregateQuery[Doc, Model])
-               (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]]
-
-  def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int]
 
   def truncate()(implicit transaction: Transaction[Doc]): Task[Int]
 

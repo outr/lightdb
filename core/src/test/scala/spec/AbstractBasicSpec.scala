@@ -5,7 +5,7 @@ import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.doc._
 import lightdb.feature.DBFeatureKey
 import lightdb.filter._
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, StoredValue, Timestamp}
 import org.scalatest.matchers.should.Matchers
@@ -602,11 +602,11 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
   }
 
-  def storeManager: StoreManager
+  def storeManager: CollectionManager
 
   class DB extends LightDB {
-    override type SM = StoreManager
-    override val storeManager: StoreManager = spec.storeManager
+    override type SM = CollectionManager
+    override val storeManager: CollectionManager = spec.storeManager
 
     spec.features.foreach {
       case (key, value) =>
@@ -617,9 +617,9 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-    val people: Store[Person, Person.type] = store(Person)
+    val people: Collection[Person, Person.type] = store(Person)
 
-    val ageLinks: Store[AgeLinks, AgeLinks.type] = store(AgeLinks)
+    val ageLinks: Collection[AgeLinks, AgeLinks.type] = store(AgeLinks)
 
     override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
   }

@@ -11,12 +11,12 @@ import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
-import lightdb.store.{Conversion, Store}
+import lightdb.store.{Collection, Conversion, Store}
 import lightdb.transaction.Transaction
 import rapid.{Forge, Grouped, Task}
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Model,
-                                                                       store: Store[Doc, Model],
+                                                                       collection: Collection[Doc, Model],
                                                                        conversion: Conversion[Doc, V],
                                                                        filter: Option[Filter[Doc]] = None,
                                                                        sort: List[Sort] = Nil,
@@ -126,10 +126,10 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     ))
 
   def search(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
-    if (arbitraryQuery.nonEmpty && !store.supportsArbitraryQuery) {
-      throw new UnsupportedOperationException(s"Arbitrary query is set, but not allowed with this store (${store.getClass.getSimpleName})")
+    if (arbitraryQuery.nonEmpty && !collection.supportsArbitraryQuery) {
+      throw new UnsupportedOperationException(s"Arbitrary query is set, but not allowed with this store (${collection.getClass.getSimpleName})")
     }
-    val storeMode = store.storeMode
+    val storeMode = collection.storeMode
     if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
       val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
       if (storeMode.isIndexes) {
@@ -147,7 +147,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     } else {
       this
     }
-    store.doSearch(q)
+    collection.doSearch(q)
   }
 
   def streamPage(implicit transaction: Transaction[Doc]): rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
@@ -190,15 +190,15 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
              (implicit transaction: Transaction[Doc]): Unit = docs.stream
     .evalMap { doc =>
       if (safeModify) {
-        store.modify(doc._id, establishLock, deleteOnNone) {
+        collection.modify(doc._id, establishLock, deleteOnNone) {
           case Some(doc) => f(doc)
           case None => Task.pure(None)
         }
       } else {
-        store.lock(doc._id, Task.pure(Some(doc)), establishLock) { current =>
+        collection.lock(doc._id, Task.pure(Some(doc)), establishLock) { current =>
           f(current.getOrElse(doc)).flatMap {
-            case Some(modified) => store.upsert(modified).when(!current.contains(modified))
-            case None => store.delete(doc._id).when(deleteOnNone)
+            case Some(modified) => collection.upsert(modified).when(!current.contains(modified))
+            case None => collection.delete(doc._id).when(deleteOnNone)
           }.map(_ => None)
         }
       }

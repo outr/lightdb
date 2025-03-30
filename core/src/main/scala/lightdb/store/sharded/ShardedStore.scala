@@ -9,7 +9,7 @@ import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.sharded.manager.ShardManagerInstance
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{Collection, CollectionManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.util.JsonOrdering
 import rapid._
@@ -30,7 +30,7 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
                                                                       shardManager: ShardManagerInstance[Doc, Model],
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       db: LightDB,
-                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
+                                                                      storeManager: CollectionManager) extends Collection[Doc, Model](name, model, db, storeManager) {
   override protected def initialize(): Task[Unit] = super.initialize().next {
     shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.init)

@@ -9,7 +9,7 @@ import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.store.{Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.{LightDB, SortDirection}
 import org.sqlite.Collation
@@ -97,7 +97,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   }
 }
 
-object SQLiteStore extends StoreManager {
+object SQLiteStore extends CollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SQLiteStore[Doc, Model]
 
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
