@@ -19,10 +19,15 @@ import lightdb.transaction.Transaction
 import lightdb.util.ActionIterator
 import rapid.Task
 
+import java.nio.file.Path
 import java.sql.{Connection, PreparedStatement, ResultSet}
 import scala.language.implicitConversions
 
-abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, lightDB: LightDB, storeManager: StoreManager) extends Collection[Doc, Model](name, model, lightDB, storeManager) {
+abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                           path: Option[Path],
+                                                                           model: Model,
+                                                                           lightDB: LightDB,
+                                                                           storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
   protected def connectionManager: ConnectionManager
 
   override def supportsArbitraryQuery: Boolean = true

@@ -7,10 +7,13 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import rapid.Task
 
+import java.nio.file.Path
+
 abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                             path: Option[Path],
                                                                              model: Model,
                                                                              lightDB: LightDB,
-                                                                             storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
+                                                                             storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
   lazy val query: Query[Doc, Model, Doc] = Query(model, this, Conversion.Doc())
 
   def doSearch[V](query: Query[Doc, Model, V])

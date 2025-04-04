@@ -10,11 +10,14 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import rapid.Task
 
+import java.nio.file.Path
+
 class MapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                  path: Option[Path],
                                                                   model: Model,
                                                                   val storeMode: StoreMode[Doc, Model],
                                                                   db: LightDB,
-                                                                  storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) { store =>
+                                                                  storeManager: StoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) { store =>
   private var _map = Map.empty[Id[Doc], Doc]
 
   def map: Map[Id[Doc], Doc] = _map
@@ -85,5 +88,6 @@ object MapStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
-                                                                         storeMode: StoreMode[Doc, Model]): MapStore[Doc, Model] = new MapStore[Doc, Model](name, model, storeMode, db, this)
+                                                                         path: Option[Path],
+                                                                         storeMode: StoreMode[Doc, Model]): MapStore[Doc, Model] = new MapStore[Doc, Model](name, path, model, storeMode, db, this)
 }

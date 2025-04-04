@@ -18,10 +18,12 @@ import lightdb.{Id, LightDB, Query, SearchResults}
 import rapid._
 
 import java.io.File
+import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
+                                                                        val path: Option[Path],
                                                                         val model: Model,
                                                                         val lightDB: LightDB,
                                                                         val storeManager: StoreManager) extends Initializable with Disposable {

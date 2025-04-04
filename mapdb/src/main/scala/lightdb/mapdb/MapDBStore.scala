@@ -15,13 +15,13 @@ import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                    path: Option[Path],
                                                                     model: Model,
-                                                                    directory: Option[Path],
                                                                     val storeMode: StoreMode[Doc, Model],
                                                                     lightDB: LightDB,
-                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
   private lazy val db: DB = {
-    val maker = directory.map { path =>
+    val maker = path.map { path =>
       Files.createDirectories(path.getParent)
       DBMaker.fileDB(path.toFile)
     }.getOrElse(DBMaker.memoryDirectDB())
@@ -83,6 +83,7 @@ object MapDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
-    new MapDBStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, db, this)
+    new MapDBStore[Doc, Model](name, path, model, storeMode, db, this)
 }

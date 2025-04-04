@@ -18,12 +18,13 @@ import java.util
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                      path: Option[Path],
                                                                       model: Model,
                                                                       rocksDB: RocksDB,
                                                                       sharedStore: Option[RocksDBSharedStoreInstance],
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       lightDB: LightDB,
-                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
+                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
   private val handle: Option[ColumnFamilyHandle] = sharedStore.map { ss =>
     ss.existingHandle match {
       case Some(handle) => handle
@@ -161,11 +162,13 @@ object RocksDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): RocksDBStore[Doc, Model] =
     new RocksDBStore[Doc, Model](
       name = name,
+      path = path,
       model = model,
-      rocksDB = createRocksDB(db.directory.get.resolve(name))._1,
+      rocksDB = createRocksDB(path.get)._1,
       sharedStore = None,
       storeMode = storeMode,
       lightDB = db,

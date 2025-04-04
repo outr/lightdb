@@ -12,11 +12,12 @@ import java.sql.Connection
 
 // TODO: Look into http://www.h2gis.org/docs/1.5.0/quickstart/ for spatial support
 class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                 path: Option[Path],
                                                                  model: Model,
                                                                  val connectionManager: ConnectionManager,
                                                                  val storeMode: StoreMode[Doc, Model],
                                                                  lightDB: LightDB,
-                                                                 storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, lightDB, storeManager) {
+                                                                 storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   override protected def upsertPrefix: String = "MERGE"
 
   protected def tables(connection: Connection): Set[String] = {
@@ -46,14 +47,15 @@ object H2Store extends CollectionManager {
   )
 
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                               path: Option[Path],
                                                                model: Model,
-                                                               file: Option[Path],
                                                                storeMode: StoreMode[Doc, Model],
                                                                db: LightDB): H2Store[Doc, Model] =
     new H2Store[Doc, Model](
       name = name,
+      path = path,
       model = model,
-      connectionManager = SingleConnectionManager(config(file)),
+      connectionManager = SingleConnectionManager(config(path)),
       storeMode = storeMode,
       lightDB = db,
       storeManager = this
@@ -62,17 +64,19 @@ object H2Store extends CollectionManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): H2Store[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) => new H2Store[Doc, Model](
         name = name,
+        path = path,
         model = model,
         connectionManager = sqlDB.connectionManager,
         storeMode,
         lightDB = db,
         this
       )
-      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.h2")), storeMode, db)
+      case None => apply[Doc, Model](name, path, model, storeMode, db)
     }
   }
 }

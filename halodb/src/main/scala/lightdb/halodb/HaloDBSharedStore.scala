@@ -35,6 +35,7 @@ case class HaloDBSharedStore(directory: Path, useNameAsPrefix: Boolean = false) 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
-    new HaloDBStore[Doc, Model](name, model, storeMode, SharedHaloDBInstance(instance, prefixFor(db, name)), db, this)
+    new HaloDBStore[Doc, Model](name, path, model, storeMode, SharedHaloDBInstance(instance, prefixFor(db, name)), db, this)
 }

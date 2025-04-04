@@ -18,7 +18,7 @@ object Geo {
   private implicit lazy val plyRW: RW[Polygon] = RW.gen
   private implicit lazy val mplyRW: RW[MultiPolygon] = RW.gen
 
-  implicit val rw: RW[Geo] = RW.poly[Geo](className = Some("lightdb.spatial.Geo"))(
+  implicit val rw: RW[Geo] = RW.poly[Geo]()(
     pRW, mpRW, lsRW, mlsRW, plyRW, mplyRW //, RW.gen[GeometryCollection]
   )
 

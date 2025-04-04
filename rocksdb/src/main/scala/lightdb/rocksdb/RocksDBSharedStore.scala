@@ -22,9 +22,11 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
     new RocksDBStore[Doc, Model](
       name = name,
+      path = path,
       model = model,
       rocksDB = rocksDB,
       sharedStore = Some(RocksDBSharedStoreInstance(this, name)),

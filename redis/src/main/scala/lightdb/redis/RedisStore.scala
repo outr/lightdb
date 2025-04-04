@@ -11,15 +11,17 @@ import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import rapid.Task
 
+import java.nio.file.Path
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                    path: Option[Path],
                                                                     model: Model,
                                                                     val storeMode: StoreMode[Doc, Model],
                                                                     hostname: String = "localhost",
                                                                     port: Int = 6379,
                                                                     db: LightDB,
-                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
+                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) {
   private lazy val InstanceKey: TransactionKey[Jedis] = TransactionKey("redisInstance")
 
   private lazy val config = new JedisPoolConfig

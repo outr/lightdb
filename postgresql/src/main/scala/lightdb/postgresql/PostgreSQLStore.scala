@@ -6,14 +6,16 @@ import lightdb.sql.SQLStore
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.{StoreManager, StoreMode}
 
+import java.nio.file.Path
 import java.sql.Connection
 
 class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                         path: Option[Path],
                                                                          model: Model,
                                                                          val connectionManager: ConnectionManager,
                                                                          val storeMode: StoreMode[Doc, Model],
                                                                          lightDB: LightDB,
-                                                                         storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, lightDB, storeManager) {
+                                                                         storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT * FROM information_schema.tables;")
     try {

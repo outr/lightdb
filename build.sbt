@@ -79,7 +79,7 @@ val jedisVersion: String = "5.2.0"
 
 val fabricVersion: String = "1.16.0"
 
-val scribeVersion: String = "3.16.0"
+val scribeVersion: String = "3.16.1"
 
 val luceneVersion: String = "10.1.0"
 
@@ -97,7 +97,7 @@ val postgresqlVersion: String = "42.7.5"
 
 val chronicleMapVersion: String = "3.27ea0"
 
-val rapidVersion: String = "0.11.1"
+val rapidVersion: String = "0.11.2"
 
 val scalaTestVersion: String = "3.2.19"
 
@@ -115,7 +115,6 @@ lazy val core = crossProject(JVMPlatform)
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
-			"com.outr" %%% "scribe-rapid" % scribeVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,

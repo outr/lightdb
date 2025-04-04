@@ -5,6 +5,7 @@ import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.halodb.HaloDBStore
+import lightdb.lmdb.LMDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.{SplitCollection, SplitStoreManager}
@@ -13,8 +14,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import rapid.{AsyncTaskSpec, Task, Unique}
-import scribe.{rapid => logger}
+import rapid.{AsyncTaskSpec, Task, Unique, logger}
 
 import java.nio.file.Path
 import scala.collection.mutable
@@ -123,12 +123,12 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
   }
 
-  // HaloDB: --- (full load: 32s)
-  // RocksDB: 3s (full load: 32s)
-  // ChronicleMap: 3s (full load: 19s)
+  // HaloDB: 5s (full load: 103s)
+  // RocksDB: 3s (full load: 110s)
+  // ChronicleMap: 4s (full load: 79s)
   object DB extends LightDB {
     override type SM = SplitStoreManager
-    override val storeManager: SplitStoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
+    override val storeManager: SplitStoreManager = SplitStoreManager(RocksDBStore, LuceneStore)
 
     lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 

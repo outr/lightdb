@@ -121,7 +121,8 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
                                                                name: Option[String] = None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val store = storeManager.create[Doc, Model](this, model, n, StoreMode.All())
+    val path = directory.map(_.resolve(n))
+    val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
     synchronized {
       _stores = _stores ::: List(store)
     }
@@ -144,7 +145,8 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
                                                                                          storeManager: SM,
                                                                                          name: Option[String] = None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val store = storeManager.create[Doc, Model](this, model, n, StoreMode.All())
+    val path = directory.map(_.resolve(n))
+    val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
     synchronized {
       _stores = _stores ::: List(store)
     }
