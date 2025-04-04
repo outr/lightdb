@@ -35,7 +35,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   object trigger extends StoreTriggers[Doc]
 
-  override protected def initialize(): Task[Unit] = {
+  override protected def initialize(): Task[Unit] = Task.defer {
     model match {
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet

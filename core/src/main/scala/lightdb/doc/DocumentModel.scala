@@ -21,10 +21,17 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   def id(value: String = Unique.sync()): Id[Doc] = Id(value)
 
-  private val _initialized = new AtomicBoolean(false)
+  private var _initialized = Set.empty[Store[_, _]]
 
   final def initialize[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = Task.defer {
-    val b = _initialized.compareAndSet(false, true)
+    val b = synchronized {
+      if (_initialized.contains(store)) {
+        false
+      } else {
+        _initialized += store
+        true
+      }
+    }
     if (b) {
       init(store)
     } else {

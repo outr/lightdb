@@ -289,5 +289,5 @@ object LuceneStore extends CollectionManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
-    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.lucene")), storeMode, db, this)
+    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, db, this)
 }

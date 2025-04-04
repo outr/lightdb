@@ -10,6 +10,7 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid._
+import scribe.{Level, Logger}
 
 import scala.language.implicitConversions
 
@@ -59,6 +60,7 @@ object HaloDBStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): HaloDBStore[Doc, Model] = {
+    Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
     val instance = new DirectHaloDBInstance(db.directory.get.resolve(name))
     new HaloDBStore[Doc, Model](name, model, storeMode, instance, db, this)
   }
