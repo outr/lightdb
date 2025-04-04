@@ -4,9 +4,10 @@ import fabric.rw._
 import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
-import lightdb.store.split.SplitStoreManager
+import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
@@ -21,7 +22,7 @@ import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
 // TODO: Figure out why this is breaking on GH
-//@EmbeddedTest
+@EmbeddedTest
 class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
@@ -42,7 +43,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         airport.name should be("John F Kennedy Intl")
       }
     }
-    /*"query the airports by id filter" in {
+    "query the airports by id filter" in {
       val keys = List("JFK", "LAX")
       DB.airports.transaction { implicit transaction =>
         DB.airports.query
@@ -62,9 +63,14 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
             airport._id should be(Airport.id("JFK"))
           }
       }
-    }*/
+    }
     "count all the airports" in {
       DB.airports.t.count.map(_ should be(3375))
+    }
+    "count all connections" in {
+      Flight.edgesStore.t.count.map { count =>
+        count should be(286)
+      }
     }
 //    "validate airport references" in {
 //      Flight.airportReferences.facet(Airport.id("JFK")).map { facet =>
@@ -122,12 +128,12 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   // ChronicleMap: 3s (full load: 19s)
   object DB extends LightDB {
     override type SM = SplitStoreManager
-    override val storeManager: SplitStoreManager = SplitStoreManager(RocksDBStore, LuceneStore)
+    override val storeManager: SplitStoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
 
     lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 
-    val airports: Store[Airport, Airport.type] = store(Airport)
-    val flights: Store[Flight, Flight.type] = store(Flight)
+    val airports: SplitCollection[Airport, Airport.type] = store(Airport)
+    val flights: SplitCollection[Flight, Flight.type] = store(Flight)
 
     override def upgrades: List[DatabaseUpgrade] = List(DataImportUpgrade)
   }

@@ -175,13 +175,13 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
       _edgesStore = store.storeManager.create[D, M](
         db = store.lightDB,
         model = edgesModel,
-        name = s"${store.name}-edges",
+        name = s"${store.name}/edges",
         storeMode = StoreMode.All[D, M]()
       )
       _edgesReverseStore = store.storeManager.create[RD, RM](
         db = store.lightDB,
         model = edgesReverseModel,
-        name = s"${store.name}-reverseEdges",
+        name = s"${store.name}/reverseEdges",
         storeMode = StoreMode.All[RD, RM]()
       )
       // TODO: Validate store contents against store to verify integrity

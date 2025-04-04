@@ -133,17 +133,18 @@ object SQLiteStore extends CollectionManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          storeMode: StoreMode[Doc, Model]): SQLiteStore[Doc, Model] = {
+    val n = name.substring(name.indexOf('/') + 1)
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) =>
         new SQLiteStore[Doc, Model](
-          name = name,
+          name = n,
           model = model,
           connectionManager = sqlDB.connectionManager,
           storeMode = storeMode,
           lightDB = db,
           storeManager = this
         )
-      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.sqlite")), storeMode, db)
+      case None => apply[Doc, Model](n, model, db.directory.map(_.resolve(s"$name.sqlite")), storeMode, db)
     }
   }
 

@@ -24,7 +24,7 @@ case class ShardedStoreManager(storeManager: CollectionManager,
                                                                          storeMode: StoreMode[Doc, Model]): ShardedStore[Doc, Model] = {
     // Create N stores representing each shard
     val shards = (0 until shardCount).map { shardIndex =>
-      val shardName = s"$name.shard$shardIndex"
+      val shardName = s"$name/shard$shardIndex"
       storeManager.create[Doc, Model](db, model, shardName, storeMode)
     }.toVector
 
