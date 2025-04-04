@@ -10,15 +10,17 @@ import lightdb.store.{Collection, Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionKey}
 import rapid.{Task, logger}
 
+import java.nio.file.Path
 import scala.language.implicitConversions
 
 class SplitCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
+                                                                         path: Option[Path],
                                                                          model: Model,
                                                                          storage: Store[Doc, Model],
                                                                          searching: Collection[Doc, Model],
                                                                          val storeMode: StoreMode[Doc, Model],
                                                                          db: LightDB,
-                                                                         storeManager: StoreManager) extends Collection[Doc, Model](name, model, db, storeManager) {
+                                                                         storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, db, storeManager) {
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] =

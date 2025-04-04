@@ -10,11 +10,12 @@ import java.nio.file.Path
 import java.sql.Connection
 
 class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                     path: Option[Path],
                                                                      model: Model,
                                                                      val connectionManager: ConnectionManager,
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      lightDB: LightDB,
-                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, model, lightDB, storeManager) {
+                                                                     storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   // TODO: Use DuckDB's Appender for better performance
   /*override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     fields.zipWithIndex.foreach {
@@ -59,11 +60,16 @@ object DuckDBStore extends CollectionManager {
     ))
   }
 
-  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String, model: Model, file: Option[Path], storeMode: StoreMode[Doc, Model], db: LightDB): DuckDBStore[Doc, Model] = {
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                               path: Option[Path],
+                                                               model: Model,
+                                                               storeMode: StoreMode[Doc, Model],
+                                                               db: LightDB): DuckDBStore[Doc, Model] = {
     new DuckDBStore[Doc, Model](
       name = name,
+      path = path,
       model = model,
-      connectionManager = singleConnectionManager(file),
+      connectionManager = singleConnectionManager(path),
       storeMode = storeMode,
       lightDB = db,
       storeManager = this
@@ -73,17 +79,19 @@ object DuckDBStore extends CollectionManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] = {
     db.get(SQLDatabase.Key) match {
       case Some(sqlDB) => new DuckDBStore[Doc, Model](
         name = name,
+        path = path,
         model = model,
         connectionManager = sqlDB.connectionManager,
         storeMode = storeMode,
         lightDB = db,
         storeManager = this
       )
-      case None => apply[Doc, Model](name, model, db.directory.map(_.resolve(s"$name.duckdb")), storeMode, db)
+      case None => apply[Doc, Model](name, path, model, storeMode, db)
     }
   }
 }

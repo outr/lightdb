@@ -11,9 +11,9 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.store.sharded.manager.ShardManagerInstance
 import lightdb.store.{Collection, CollectionManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import lightdb.util.JsonOrdering
 import rapid._
 
+import java.nio.file.Path
 import scala.language.implicitConversions
 
 /**
@@ -26,11 +26,12 @@ import scala.language.implicitConversions
  * @param storeManager The store manager
  */
 class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
+                                                                      path: Option[Path],
                                                                       model: Model,
                                                                       shardManager: ShardManagerInstance[Doc, Model],
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       db: LightDB,
-                                                                      storeManager: CollectionManager) extends Collection[Doc, Model](name, model, db, storeManager) {
+                                                                      storeManager: CollectionManager) extends Collection[Doc, Model](name, path, model, db, storeManager) {
   override protected def initialize(): Task[Unit] = super.initialize().next {
     shardManager.shards.foldLeft(Task.unit) { (task, shard) =>
       task.flatMap(_ => shard.init)
@@ -120,8 +121,8 @@ class ShardedStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override v
                 val f = field.asInstanceOf[Field[Doc, _]]
                 if (list.head._1.isInstanceOf[Document[_]]) {
                   val ordering = direction match {
-                    case SortDirection.Ascending => JsonOrdering
-                    case SortDirection.Descending => JsonOrdering.reverse
+                    case SortDirection.Ascending => Json.JsonOrdering
+                    case SortDirection.Descending => Json.JsonOrdering.reverse
                   }
                   list.asInstanceOf[List[(Doc, Double)]].sortBy(t => f.getJson(t._1, indexingState))(ordering).asInstanceOf[List[(V, Double)]]
                 } else {

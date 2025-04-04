@@ -14,14 +14,15 @@ import org.lmdbjava._
 import rapid.{Task, Unique}
 
 import java.nio.ByteBuffer
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
 
 class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                   path: Option[Path],
                                                                    model: Model,
                                                                    instance: LMDBInstance,
                                                                    val storeMode: StoreMode[Doc, Model],
                                                                    db: LightDB,
-                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, model, db, storeManager) {
+                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) {
   private val id = Unique()
   private val transactionKey: TransactionKey[LMDBTransaction] = TransactionKey(id)
 
@@ -137,34 +138,39 @@ object LMDBStore extends StoreManager {
 
   private var instances = Map.empty[LightDB, LMDBInstance]
 
-  def instance(db: LightDB): LMDBInstance = synchronized {
+  def instance(db: LightDB, path: Path): LMDBInstance = synchronized {
     instances.get(db) match {
       case Some(instance) => instance
       case None =>
-        val directory = db.directory.get
-        if (!Files.exists(directory)) {
-          Files.createDirectories(directory)
-        }
-        val env = Env
-          .create()
-          .setMaxDbs(MaxDbs)
-          .setMapSize(MapSize)
-          .setMaxReaders(MaxReaders)
-          .open(directory.toFile)
-        val instance = LMDBInstance(env)
+        val instance = createInstance(path)
         instances += db -> instance
         instance
     }
   }
 
+  private def createInstance(path: Path): LMDBInstance = {
+    if (!Files.exists(path)) {
+      Files.createDirectories(path)
+    }
+    val env = Env
+      .create()
+      .setMaxDbs(MaxDbs)
+      .setMapSize(MapSize)
+      .setMaxReaders(MaxReaders)
+      .open(path.toFile)
+    LMDBInstance(env)
+  }
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] = {
     new LMDBStore[Doc, Model](
       name = name,
+      path = path,
       model = model,
-      instance = instance(db),
+      instance = createInstance(path.get),
       storeMode = storeMode,
       db = db,
       storeManager = this

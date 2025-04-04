@@ -116,19 +116,8 @@ object Aggregator {
     var list = groups.toList.map(t => MaterializedAggregate[Doc, Model](Obj(t._2), model))
     query.sort.reverse.foreach {
       case (f, direction) =>
-        list = list.sortBy(_.json(f.name))(if (direction == Ascending) JsonOrdering else JsonOrdering.reverse)
+        list = list.sortBy(_.json(f.name))(if (direction == Ascending) Json.JsonOrdering else Json.JsonOrdering.reverse)
     }
     rapid.Stream.fromIterator(Task(list.iterator))
-  }
-}
-
-// TODO: Move this to Fabric
-object JsonOrdering extends Ordering[Json] {
-  override def compare(x: Json, y: Json): Int = x match {
-    case NumInt(l, _) if y.isNumInt => l.compareTo(y.asLong)
-    case NumDec(bd, _) if y.isNumDec => bd.compareTo(y.asBigDecimal)
-    case n: Num if y.isNum => n.asDouble.compareTo(y.asDouble)
-    case Str(s, _) if y.isStr => s.compareTo(y.asString)
-    case _ => 0
   }
 }

@@ -12,14 +12,16 @@ import lightdb.transaction.Transaction
 import rapid._
 import scribe.{Level, Logger}
 
+import java.nio.file.Path
 import scala.language.implicitConversions
 
 class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                     path: Option[Path],
                                                                      model: Model,
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      instance: HaloDBInstance,
                                                                      lightDB: LightDB,
-                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, model, lightDB, storeManager) {
+                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
   private implicit def rw: RW[Doc] = model.rw
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
@@ -59,9 +61,10 @@ object HaloDBStore extends StoreManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): HaloDBStore[Doc, Model] = {
     Logger("com.oath.halodb").withMinimumLevel(Level.Warn).replace()
-    val instance = new DirectHaloDBInstance(db.directory.get.resolve(name))
-    new HaloDBStore[Doc, Model](name, model, storeMode, instance, db, this)
+    val instance = new DirectHaloDBInstance(path.get)
+    new HaloDBStore[Doc, Model](name, path, model, storeMode, instance, db, this)
   }
 }

@@ -29,17 +29,17 @@ import java.nio.file.{Files, Path}
 import scala.language.implicitConversions
 
 class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
+                                                                     path: Option[Path],
                                                                      model: Model,
-                                                                     directory: Option[Path],
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      lightDB: LightDB,
-                                                                     storeManager: StoreManager) extends Collection[Doc, Model](name, model, lightDB, storeManager) {
+                                                                     storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
   private val id = Unique()
   private val transactionKey: TransactionKey[LuceneState[Doc]] = TransactionKey(id)
 
   IndexSearcher.setMaxClauseCount(10_000_000)
 
-  lazy val index = Index(directory)
+  lazy val index = Index(path)
   lazy val facetsConfig: FacetsConfig = {
     val c = new FacetsConfig
     fields.foreach {
@@ -61,7 +61,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   def state(implicit transaction: Transaction[Doc]): LuceneState[Doc] = transaction(transactionKey)
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task {
-    directory.foreach { path =>
+    this.path.foreach { path =>
       if (Files.exists(path)) {
         val directory = FSDirectory.open(path)
         val reader = DirectoryReader.open(directory)
@@ -288,6 +288,7 @@ object LuceneStore extends CollectionManager {
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
+                                                                         path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
-    new LuceneStore[Doc, Model](name, model, db.directory.map(_.resolve(name)), storeMode, db, this)
+    new LuceneStore[Doc, Model](name, path, model, storeMode, db, this)
 }
