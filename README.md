@@ -15,16 +15,19 @@ Computationally focused database using pluggable stores
 - PostgreSQL (https://www.postgresql.org)
 - Redis (https://redis.io)
 
+## In-Progress
+- Tantivy (https://github.com/quickwit-oss/tantivy) - Working on creating a wrapper around Rust's extremely fast alternative to Apache Lucene (See https://github.com/outr/scantivy)
+
 ## SBT Configuration
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "2.3.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "3.0.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "2.3.0"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "3.0.0"
 ```
 
 ## Videos
@@ -56,7 +59,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "2.3.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "3.0.0"
 ```
 
 ---
@@ -69,7 +72,7 @@ LightDB uses **Document** and **DocumentModel** for schema definitions. Here's a
 
 ```scala
 import lightdb._
-import lightdb.collection._
+import lightdb.store._
 import lightdb.doc._
 import fabric.rw._
 
@@ -103,7 +106,7 @@ object City {
 
 ### Step 2: Create the Database Class
 
-Define the database with collections for each model:
+Define the database with stores for each model:
 
 ```scala
 import lightdb.sql._
@@ -111,12 +114,13 @@ import lightdb.store._
 import lightdb.upgrade._
 import java.nio.file.Path
 
-class DB extends LightDB {
+object db extends LightDB {
+  override type SM = CollectionManager
+  override val storeManager: CollectionManager = SQLiteStore
+   
   lazy val directory: Option[Path] = Some(Path.of(s"docs/db/example"))
    
-  lazy val people: Collection[Person, Person.type] = collection(Person)
-
-  override def storeManager: StoreManager = SQLiteStore
+  lazy val people: Collection[Person, Person.type] = store(Person)
 
   override def upgrades: List[DatabaseUpgrade] = Nil
 }
@@ -128,11 +132,9 @@ class DB extends LightDB {
 
 ### Step 1: Initialize the Database
 
-Instantiate and initialize the database:
+Initialize the database:
 
 ```scala
-val db = new DB
-// db: DB = repl.MdocSession$MdocApp$DB@59dcda3f
 db.init.sync()
 ```
 
@@ -148,7 +150,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = Id(value = "Ftmyhx68mWJHC8mwZ7kcKMdGgPE2jQZN")
+//   _id = Id(value = "N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj")
 // )
 db.people.transaction { implicit transaction =>
   db.people.insert(adam)
@@ -159,7 +161,7 @@ db.people.transaction { implicit transaction =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = Id(value = "Ftmyhx68mWJHC8mwZ7kcKMdGgPE2jQZN")
+//   _id = Id(value = "N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj")
 // )
 ```
 
@@ -173,7 +175,7 @@ db.people.transaction { implicit transaction =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)), Person(Adam,21,None,Set(),List(),Id(HN5sRuc4kzsD117zfXWgik8cYiXgBnV5)), Person(Adam,21,None,Set(),List(),Id(b97xde4gBEVjx5kmhERIuW0mViUUzwgD)), Person(Adam,21,None,Set(),List(),Id(sviPlbAHMRPe70xFYdqLWOWcold9vD18)), Person(Adam,21,None,Set(),List(),Id(a87FV2xnllmkd54vbJkApxROdmY2R9GW)), Person(Adam,21,None,Set(),List(),Id(lge8a6IpKSA12E5SWQvdXikxdBR7xyRe)), Person(Adam,21,None,Set(),List(),Id(W2gu1kYGDkdFbKzJrR4A4byFXwWuJljr)), Person(Adam,21,None,Set(),List(),Id(wp1sqU2agSbZHSesK6Zx9QRtX4gN6CeA)), Person(Adam,21,None,Set(),List(),Id(Ftmyhx68mWJHC8mwZ7kcKMdGgPE2jQZN)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),Id(N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj)))
 ```
 
 ---
@@ -210,7 +212,7 @@ db.people.transaction { implicit transaction =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 189},repl.MdocSession$MdocApp$Person$@1d249262))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 21},repl.MdocSession$MdocApp$Person$@6a2d4fb1))
 ```
 
 ### Grouping
@@ -221,7 +223,7 @@ db.people.transaction { implicit transaction =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),Id(jh1j1u8RFGhdDsgLA9FTvFhT6gmK4sA2)), Person(Adam,21,None,Set(),List(),Id(HN5sRuc4kzsD117zfXWgik8cYiXgBnV5)), Person(Adam,21,None,Set(),List(),Id(b97xde4gBEVjx5kmhERIuW0mViUUzwgD)), Person(Adam,21,None,Set(),List(),Id(sviPlbAHMRPe70xFYdqLWOWcold9vD18)), Person(Adam,21,None,Set(),List(),Id(a87FV2xnllmkd54vbJkApxROdmY2R9GW)), Person(Adam,21,None,Set(),List(),Id(lge8a6IpKSA12E5SWQvdXikxdBR7xyRe)), Person(Adam,21,None,Set(),List(),Id(W2gu1kYGDkdFbKzJrR4A4byFXwWuJljr)), Person(Adam,21,None,Set(),List(),Id(wp1sqU2agSbZHSesK6Zx9QRtX4gN6CeA)), Person(Adam,21,None,Set(),List(),Id(Ftmyhx68mWJHC8mwZ7kcKMdGgPE2jQZN)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),Id(N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj)))))
 ```
 
 ---
@@ -235,14 +237,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db, new File("backup.zip")).sync()
-// res5: Int = 10
+// res5: Int = 2
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res6: Int = 10
+// res6: Int = 2
 ```
 
 ---

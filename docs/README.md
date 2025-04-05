@@ -15,6 +15,9 @@ Computationally focused database using pluggable stores
 - PostgreSQL (https://www.postgresql.org)
 - Redis (https://redis.io)
 
+## In-Progress
+- Tantivy (https://github.com/quickwit-oss/tantivy) - Working on creating a wrapper around Rust's extremely fast alternative to Apache Lucene (See https://github.com/outr/scantivy)
+
 ## SBT Configuration
 
 To add all modules:
@@ -69,7 +72,7 @@ LightDB uses **Document** and **DocumentModel** for schema definitions. Here's a
 
 ```scala mdoc
 import lightdb._
-import lightdb.collection._
+import lightdb.store._
 import lightdb.doc._
 import fabric.rw._
 
@@ -103,7 +106,7 @@ object City {
 
 ### Step 2: Create the Database Class
 
-Define the database with collections for each model:
+Define the database with stores for each model:
 
 ```scala mdoc
 import lightdb.sql._
@@ -111,12 +114,13 @@ import lightdb.store._
 import lightdb.upgrade._
 import java.nio.file.Path
 
-class DB extends LightDB {
+object db extends LightDB {
+  override type SM = CollectionManager
+  override val storeManager: CollectionManager = SQLiteStore
+   
   lazy val directory: Option[Path] = Some(Path.of(s"docs/db/example"))
    
-  lazy val people: Collection[Person, Person.type] = collection(Person)
-
-  override def storeManager: StoreManager = SQLiteStore
+  lazy val people: Collection[Person, Person.type] = store(Person)
 
   override def upgrades: List[DatabaseUpgrade] = Nil
 }
@@ -128,10 +132,9 @@ class DB extends LightDB {
 
 ### Step 1: Initialize the Database
 
-Instantiate and initialize the database:
+Initialize the database:
 
 ```scala mdoc
-val db = new DB
 db.init.sync()
 ```
 
