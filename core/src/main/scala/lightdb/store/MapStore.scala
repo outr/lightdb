@@ -3,10 +3,8 @@ package lightdb.store
 import fabric.Json
 import fabric.rw.Convertible
 import lightdb._
-import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
-import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import rapid.Task
 

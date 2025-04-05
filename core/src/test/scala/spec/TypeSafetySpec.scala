@@ -1,11 +1,10 @@
 package spec
 
 import fabric.rw._
-import lightdb.{Id, LightDB, store}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.field.Field
-import lightdb.store.{MapStore, Store, StoreManager}
+import lightdb.store.MapStore
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 

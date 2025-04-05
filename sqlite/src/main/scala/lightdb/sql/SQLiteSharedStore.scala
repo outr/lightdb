@@ -3,7 +3,7 @@ package lightdb.sql
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, StoreMode}
 
 import java.nio.file.Path
 

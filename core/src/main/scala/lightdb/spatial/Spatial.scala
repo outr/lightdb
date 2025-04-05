@@ -35,7 +35,6 @@ object Spatial {
     case Geo.MultiPoint(points) =>
       factory.createMultiPoint(points.map {
         case Geo.Point(lat, lon) => factory.createPoint(new Coordinate(lon, lat))
-        case _ => throw new IllegalArgumentException("Invalid point in MultiPoint")
       }.toArray)
     case line: Geo.Line => factory.createLineString(line.points.map {
       case Geo.Point(lat, lon) => new Coordinate(lon, lat)

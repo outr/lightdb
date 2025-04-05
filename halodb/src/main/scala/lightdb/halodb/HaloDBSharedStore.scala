@@ -2,7 +2,7 @@ package lightdb.halodb
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{StoreManager, StoreMode}
 
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger

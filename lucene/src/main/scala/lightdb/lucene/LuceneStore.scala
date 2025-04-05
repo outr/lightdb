@@ -13,7 +13,7 @@ import lightdb.filter.Filter
 import lightdb.lucene.index.Index
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.Geo
-import lightdb.store.{Collection, CollectionManager, Conversion, Store, StoreManager, StoreMode}
+import lightdb.store._
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.util.Aggregator
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}

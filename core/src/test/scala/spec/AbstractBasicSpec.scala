@@ -5,7 +5,7 @@ import lightdb.backup.{DatabaseBackup, DatabaseRestore}
 import lightdb.doc._
 import lightdb.feature.DBFeatureKey
 import lightdb.filter._
-import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
+import lightdb.store.{Collection, CollectionManager, Store}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, StoredValue, Timestamp}
 import org.scalatest.matchers.should.Matchers

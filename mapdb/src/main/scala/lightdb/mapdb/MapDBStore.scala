@@ -2,10 +2,8 @@ package lightdb.mapdb
 
 import fabric.Json
 import lightdb._
-import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
-import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}

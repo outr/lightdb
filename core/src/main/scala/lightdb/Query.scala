@@ -11,7 +11,7 @@ import lightdb.field.{Field, IndexingState}
 import lightdb.filter._
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
-import lightdb.store.{Collection, Conversion, Store}
+import lightdb.store.{Collection, Conversion}
 import lightdb.transaction.Transaction
 import rapid.{Forge, Grouped, Task}
 

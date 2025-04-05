@@ -3,7 +3,7 @@ package lightdb.postgresql
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{StoreManager, StoreMode}
 
 import java.nio.file.Path
 

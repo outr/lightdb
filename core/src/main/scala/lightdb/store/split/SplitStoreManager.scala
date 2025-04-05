@@ -2,7 +2,7 @@ package lightdb.store.split
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, StoreManager, StoreMode}
 
 import java.nio.file.Path
 

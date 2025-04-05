@@ -4,7 +4,7 @@ import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.filter._
-import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
+import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers

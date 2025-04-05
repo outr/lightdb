@@ -4,7 +4,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.sql.{SQLDatabase, SQLStore}
-import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, StoreManager, StoreMode}
 
 import java.nio.file.Path
 import java.sql.Connection

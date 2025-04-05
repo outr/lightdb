@@ -1,6 +1,6 @@
 package spec
 import lightdb.duckdb.DuckDBStore
-import lightdb.store.{CollectionManager, StoreManager}
+import lightdb.store.CollectionManager
 
 //@EmbeddedTest
 class DuckDBSpec extends AbstractBasicSpec {

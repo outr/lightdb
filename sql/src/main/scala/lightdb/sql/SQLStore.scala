@@ -14,7 +14,7 @@ import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.{Collection, Conversion, Store, StoreManager, StoreMode}
+import lightdb.store._
 import lightdb.transaction.Transaction
 import lightdb.util.ActionIterator
 import rapid.Task

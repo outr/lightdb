@@ -9,7 +9,6 @@ import lightdb.filter.FilterBuilder
 import lightdb.store.Store
 import rapid.{Task, Unique}
 
-import java.util.concurrent.atomic.AtomicBoolean
 import scala.language.implicitConversions
 
 trait DocumentModel[Doc <: Document[Doc]] {

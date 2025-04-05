@@ -1,7 +1,6 @@
 package spec
 
 import lightdb.lucene.LuceneStore
-import lightdb.store.StoreManager
 import lightdb.store.sharded.ShardedStoreManager
 
 @EmbeddedTest

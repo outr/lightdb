@@ -1,6 +1,6 @@
 package spec
 import lightdb.h2.H2Store
-import lightdb.store.{CollectionManager, StoreManager}
+import lightdb.store.CollectionManager
 
 @EmbeddedTest
 class H2Spec extends AbstractBasicSpec {
