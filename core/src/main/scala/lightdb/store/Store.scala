@@ -4,17 +4,15 @@ import fabric.Json
 import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
-import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.field.Field
 import lightdb.field.Field._
 import lightdb.lock.LockManager
-import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.Transaction
 import lightdb.trigger.StoreTriggers
 import lightdb.util.{Disposable, Initializable}
-import lightdb.{Id, LightDB, Query, SearchResults}
+import lightdb.{Id, LightDB}
 import rapid._
 
 import java.io.File

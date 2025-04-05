@@ -2,7 +2,6 @@ package spec
 
 import lightdb.lmdb.LMDBStore
 import lightdb.lucene.LuceneStore
-import lightdb.store.StoreManager
 import lightdb.store.split.SplitStoreManager
 
 // TODO: Figure out why this is failing

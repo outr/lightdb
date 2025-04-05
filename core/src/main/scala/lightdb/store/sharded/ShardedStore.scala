@@ -9,7 +9,7 @@ import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.sharded.manager.ShardManagerInstance
-import lightdb.store.{Collection, CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.store.{Collection, CollectionManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid._
 

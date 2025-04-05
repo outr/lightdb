@@ -3,7 +3,7 @@ package lightdb.store.sharded
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.sharded.manager.{HashBasedShardManager, ShardManager}
-import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, StoreMode}
 
 import java.nio.file.Path
 

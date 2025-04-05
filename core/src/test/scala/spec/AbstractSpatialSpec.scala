@@ -5,7 +5,7 @@ import fabric.rw._
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.spatial.Geo
-import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
+import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers

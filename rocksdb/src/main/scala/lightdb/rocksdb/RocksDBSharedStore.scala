@@ -2,7 +2,7 @@ package lightdb.rocksdb
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{StoreManager, StoreMode}
 import org.rocksdb.{ColumnFamilyHandle, RocksDB}
 import rapid.Task
 

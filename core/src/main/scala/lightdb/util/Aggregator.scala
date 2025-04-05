@@ -1,7 +1,7 @@
 package lightdb.util
 
 import fabric.rw._
-import fabric.{Json, Null, Num, NumDec, NumInt, Obj, Str, num}
+import fabric.{Json, Null, NumDec, NumInt, Obj, num}
 import lightdb.SortDirection.Ascending
 import lightdb.aggregate.{AggregateQuery, AggregateType}
 import lightdb.doc.{Document, DocumentModel}
@@ -83,7 +83,6 @@ object Aggregator {
               case Some(c) => (value :: c.as[List[Json]]).json
               case None => List(value).json
             }
-            case _ => throw new UnsupportedOperationException(s"Unsupported type for ${f.`type`}: $value (${f.field.name})")
           }
           if (newValue != Null) {
             map += f.name -> newValue

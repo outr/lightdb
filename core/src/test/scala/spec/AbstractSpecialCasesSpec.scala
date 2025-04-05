@@ -3,7 +3,7 @@ package spec
 import fabric._
 import fabric.rw._
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
-import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
+import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB, Sort, Timestamp}
 import org.scalatest.matchers.should.Matchers

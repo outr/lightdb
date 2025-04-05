@@ -9,7 +9,7 @@ import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.store.{CollectionManager, Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, Conversion, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.{LightDB, SortDirection}
 import org.sqlite.Collation
