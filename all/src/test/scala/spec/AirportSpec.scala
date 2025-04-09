@@ -125,7 +125,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     override type SM = SplitStoreManager
     override val storeManager: SplitStoreManager = SplitStoreManager(RocksDBStore, LuceneStore)
 
-    lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
+    override lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 
     val airports: SplitCollection[Airport, Airport.type] = store(Airport)
     val flights: SplitCollection[Flight, Flight.type] = store(Flight)
