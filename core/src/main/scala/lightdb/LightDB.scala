@@ -156,8 +156,9 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     store
   }
 
-  def multiStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model): MultiStore[Doc, Model] =
-    MultiStore(model)
+  def multiStore[Key, Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                         nameFromKey: Key => String = (k: Key) => k.toString): MultiStore[Key, Doc, Model] =
+    MultiStore(model, nameFromKey)
 
   object stored {
     def apply[T](key: String,
@@ -231,15 +232,16 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     Task.unit
   }
 
-  case class MultiStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model) {
-    private var stores = Map.empty[String, storeManager.S[Doc, Model]]
+  case class MultiStore[Key, Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                                nameFromKey: Key => String) {
+    private var stores = Map.empty[Key, storeManager.S[Doc, Model]]
 
-    def apply(name: String): storeManager.S[Doc, Model] = synchronized {
-      stores.get(name) match {
+    def apply(key: Key): storeManager.S[Doc, Model] = synchronized {
+      stores.get(key) match {
         case Some(store) => store
         case None =>
-          val s = store[Doc, Model](model, name = Some(name))
-          stores += name -> s
+          val s = store[Doc, Model](model, name = Some(nameFromKey(key)))
+          stores += key -> s
           s
       }
     }
