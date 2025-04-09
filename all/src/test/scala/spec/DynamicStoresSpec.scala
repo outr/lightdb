@@ -48,7 +48,7 @@ class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
     override lazy val directory: Option[Path] = Some(Path.of("db/DynamicStoresSpec"))
 
-    val users: MultiStore[User, User.type] = multiStore(User)
+    val users: MultiStore[String, User, User.type] = multiStore(User)
 
     lazy val users1: S[User, User.type] = users("users1")
     lazy val users2: S[User, User.type] = users("users2")
