@@ -1,7 +1,7 @@
 package spec
 
 import fabric.rw._
-import lightdb.{Id, LightDB}
+import lightdb.{Id, LightDB, MultiStore}
 import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.chroniclemap.ChronicleMapStore.S
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
@@ -48,7 +48,7 @@ class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
     override lazy val directory: Option[Path] = Some(Path.of("db/DynamicStoresSpec"))
 
-    val users: MultiStore[String, User, User.type] = multiStore(User)
+    private val users: MultiStore[String, User, User.type, SM] = multiStore(User)
 
     lazy val users1: S[User, User.type] = users("users1")
     lazy val users2: S[User, User.type] = users("users2")
