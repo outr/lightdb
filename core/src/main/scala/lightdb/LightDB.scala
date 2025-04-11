@@ -158,12 +158,12 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
 
   def multiStore[Key, Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
                                                                          nameFromKey: Key => String = (k: Key) => k.toString): MultiStore[Key, Doc, Model, SM] =
-    MultiStore(model, storeManager, nameFromKey)
+    MultiStore(model, storeManager, nameFromKey, this)
 
   def multiStoreCustom[Key, Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
                                                                                                    storeManager: SM,
                                                                                                    nameFromKey: Key => String = (k: Key) => k.toString): MultiStore[Key, Doc, Model, SM] =
-    MultiStore(model, storeManager, nameFromKey)
+    MultiStore(model, storeManager, nameFromKey, this)
 
   object stored {
     def apply[T](key: String,
@@ -235,23 +235,5 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     }.unit
   } else {
     Task.unit
-  }
-
-  case class MultiStore[Key, Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
-                                                                                                    storeManager: SM,
-                                                                                                    nameFromKey: Key => String) {
-    private var _stores = Map.empty[Key, storeManager.S[Doc, Model]]
-    def stores: Map[Key, storeManager.S[Doc, Model]] = _stores
-    def toList: List[storeManager.S[Doc, Model]] = stores.values.toList
-
-    def apply(key: Key): storeManager.S[Doc, Model] = synchronized {
-      _stores.get(key) match {
-        case Some(store) => store
-        case None =>
-          val s = storeCustom[Doc, Model, SM](model, storeManager, name = Some(nameFromKey(key)))
-          _stores += key -> s
-          s
-      }
-    }
   }
 }
