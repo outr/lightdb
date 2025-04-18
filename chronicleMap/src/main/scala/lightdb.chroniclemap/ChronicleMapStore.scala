@@ -8,6 +8,7 @@ import lightdb.transaction.Transaction
 import lightdb.{Id, LightDB}
 import net.openhft.chronicle.map.ChronicleMap
 import rapid.Task
+import scribe.{Level, Logger}
 
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -101,6 +102,9 @@ object ChronicleMapStore extends StoreManager {
                                                                          model: Model,
                                                                          name: String,
                                                                          path: Option[Path],
-                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] = {
+    Logger("net.openhft.chronicle").withMinimumLevel(Level.Warn).replace()
+
     new ChronicleMapStore[Doc, Model](name, path, model, storeMode, db, this)
+  }
 }
