@@ -72,7 +72,7 @@ object DatabaseRestore {
         _ <- logger.info("Finished Restoring. Re-Indexing...")
         counts <- list.map {
           case (store, count) => store.reIndex().map(_ => count)
-        }.tasks
+        }.tasksPar
         _ <- logger.info(s"Finished Re-Sync")
       } yield counts.sum
     }

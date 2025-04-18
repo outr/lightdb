@@ -69,7 +69,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
    * stores to re-index or all stores will be invoked.
    */
-  def reIndex(stores: List[Store[_, _]] = stores): Task[Int] = stores.map(_.reIndex()).tasks.map(_.count(identity))
+  def reIndex(stores: List[Store[_, _]] = stores): Task[Int] = stores.map(_.reIndex()).tasksPar.map(_.count(identity))
 
   /**
    * Offers each store the ability to optimize the store.
