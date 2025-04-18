@@ -465,7 +465,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "do a database backup" in {
-      DatabaseBackup.archive(db, new File(s"backups/$specName.zip")).map(_ should be(49))
+      DatabaseBackup.archive(db.stores, new File(s"backups/$specName.zip")).map(_ should be(49))
     }
     "insert a lot more names" in {
       db.people.transaction { implicit transaction =>
