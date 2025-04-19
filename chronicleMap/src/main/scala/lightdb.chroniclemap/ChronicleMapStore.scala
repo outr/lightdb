@@ -63,7 +63,7 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     if (field == idField) {
       Option(db.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
     } else {
-      throw new UnsupportedOperationException(s"MapDBStore can only get on _id, but ${field.name} was attempted")
+      throw new UnsupportedOperationException(s"ChronicleMapStore can only get on _id, but ${field.name} was attempted")
     }
   }
 
@@ -72,7 +72,7 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     if (field == idField) {
       db.remove(value.asInstanceOf[Id[Doc]].value) != null
     } else {
-      throw new UnsupportedOperationException(s"MapDBStore can only get on _id, but ${field.name} was attempted")
+      throw new UnsupportedOperationException(s"ChronicleMapStore can only get on _id, but ${field.name} was attempted")
     }
   }
 
