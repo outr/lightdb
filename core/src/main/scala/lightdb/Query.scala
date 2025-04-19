@@ -13,7 +13,7 @@ import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Collection, Conversion}
 import lightdb.transaction.Transaction
-import rapid.{Forge, Grouped, Task}
+import rapid.{Forge, Grouped, Pull, Task}
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Model,
                                                                        collection: Collection[Doc, Model],
@@ -166,9 +166,10 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
             case None => total
           }
           val pages = query.offset to end by query.pageSize
-          pages.iterator.map { offset =>
+          val iterator = pages.iterator.map { offset =>
             rapid.Stream.force(copy(offset = offset).search.map(_.streamWithScore))
           }
+          Pull.fromIterator(iterator)
         }
       }
     }
