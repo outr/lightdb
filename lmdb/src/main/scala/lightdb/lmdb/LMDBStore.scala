@@ -1,18 +1,19 @@
 package lightdb.lmdb
 
-import fabric.Json
+import fabric.{Json, Null}
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{BufferedWritingStore, Store, StoreManager, StoreMode, WriteBuffer, WriteOp}
 import lightdb.transaction.{Transaction, TransactionKey}
 import lightdb.{Id, LightDB}
 import org.lmdbjava._
-import rapid.{Task, Unique}
+import rapid._
 
 import java.nio.ByteBuffer
 import java.nio.file.{Files, Path}
+import scala.language.implicitConversions
 
 class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    path: Option[Path],
@@ -20,22 +21,19 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    instance: LMDBInstance,
                                                                    val storeMode: StoreMode[Doc, Model],
                                                                    db: LightDB,
-                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) {
+                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) with BufferedWritingStore[Doc, Model] {
   private val id = Unique()
-  private val transactionKey: TransactionKey[LMDBTransaction] = TransactionKey(id)
+  private val transactionKey: TransactionKey[LMDBTransaction[Doc]] = TransactionKey(id)
 
-  private lazy val dbi: Dbi[ByteBuffer] = instance.get(name)
-
-  override protected def initialize(): Task[Unit] = super.initialize().next(Task {
-    dbi
-  })
+  protected implicit def transaction2Txn(transaction: Transaction[Doc]): Txn[ByteBuffer] =
+    transaction(transactionKey).readTxn
 
   override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
     transaction.put(
       key = transactionKey,
-      value = LMDBTransaction(instance)
+      value = LMDBTransaction[Doc](instance.env)
     )
-  }
+  }.flatMap(_ => super.prepareTransaction(transaction))
 
   private def key(id: Id[Doc]): ByteBuffer = {
     val bb = LMDBStore.keyBufferPool.get(512)
@@ -51,66 +49,85 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
     bb.flip()
   }
 
-  private def withWrite[Return](f: Txn[ByteBuffer] => Task[Return]): Task[Return] =
-    instance.transactionManager.withWrite(f)
-
-  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
-    Task {
-      dbi.put(txn, key(doc._id), value(doc), PutFlags.MDB_NOOVERWRITE)
-      doc
-    }
+  private def b2d(bb: ByteBuffer): Option[Doc] = b2j(bb) match {
+    case Null => None
+    case json => Some(json.as[Doc](model.rw))
   }
-
-  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = withWrite { txn =>
-    Task {
-      dbi.put(txn, key(doc._id), value(doc))
-      doc
-    }
-  }
-
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] =
-    instance.transactionManager.exists(dbi, key(id))
-
-  private def b2d(bb: ByteBuffer): Doc = b2j(bb).as[Doc](model.rw)
 
   private def b2j(bb: ByteBuffer): Json = {
     val bytes = new Array[Byte](bb.remaining())
     bb.get(bytes)
     val jsonString = new String(bytes, "UTF-8")
-    JsonParser(jsonString)
+    if (jsonString.isEmpty) {
+      Null
+    } else {
+      JsonParser(jsonString)
+    }
+  }
+
+  override protected def getWriteBuffer(transaction: Transaction[Doc]): WriteBuffer[Doc] =
+    transaction(transactionKey).writeBuffer
+
+  override protected def setWriteBuffer(writeBuffer: WriteBuffer[Doc], transaction: Transaction[Doc]): Unit =
+    transaction(transactionKey).writeBuffer = writeBuffer
+
+  override protected def _truncate(implicit transaction: Transaction[Doc]): Task[Int] = count.flatTap { _ =>
+    val txn = instance.env.txnWrite()
+    try {
+      instance.dbi.drop(txn)
+      Task.unit
+    } finally {
+      txn.commit()
+      txn.close()
+    }
   }
 
   override protected def _get[V](field: Field.UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = if (field == idField) {
-    instance.transactionManager.get(dbi, key(value.asInstanceOf[Id[Doc]])).map(_.map(b2d))
+                                (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = if (field == idField) {
+    Task(Option(instance.dbi.get(transaction, key(value.asInstanceOf[Id[Doc]]))).flatMap(b2d))
   } else {
     throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
   }
 
-  override protected def _delete[V](field: Field.UniqueIndex[Doc, V], value: V)
-                        (implicit transaction: Transaction[Doc]): Task[Boolean] = withWrite { txn =>
-    Task {
-      if (field == idField) {
-        dbi.delete(txn, key(value.asInstanceOf[Id[Doc]]))
-      } else {
-        throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${field.name} was attempted")
-      }
+  override def _exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
+    val cursor = instance.dbi.openCursor(transaction)
+    try {
+      cursor.get(key(id), GetOp.MDB_SET_KEY)
+    } finally {
+      cursor.close()
     }
   }
 
-  override def count(implicit transaction: Transaction[Doc]): Task[Int] =
-    instance.transactionManager.count(dbi)
+  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task {
+    instance.dbi.stat(transaction).entries.toInt
+  }
 
   override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] =
-    rapid.Stream.fromIterator(instance.transactionManager.withReadIterator(txn => new LMDBValueIterator(dbi, txn).map(b2j)))
+    rapid.Stream.fromIterator(Task(new LMDBValueIterator(instance.dbi, transaction))).map(b2j)
 
-  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = count.flatTap { _ =>
-    withWrite { txn =>
-      Task(dbi.drop(txn))
-    }
+  override protected def flushBuffer(stream: rapid.Stream[WriteOp[Doc]]): Task[Unit] = Task {
+    val txn = instance.env.txnWrite()
+    stream
+      .map {
+        case WriteOp.Insert(doc) => instance.dbi.put(txn, key(doc._id), value(doc), PutFlags.MDB_NOOVERWRITE)
+        case WriteOp.Upsert(doc) => instance.dbi.put(txn, key(doc._id), value(doc))
+        case WriteOp.Delete(id) => instance.dbi.delete(txn, key(id))
+      }
+      .count
+      .guarantee {
+        // TODO: Consider rollback / abort if there's an error
+        Task {
+          txn.commit()
+          txn.close()
+        }
+      }
+  }.flatten.unit
+
+  override protected def doDispose(): Task[Unit] = super.doDispose().map { _ =>
+    instance.env.sync(true)
+    instance.dbi.close()
+    instance.env.close()
   }
-
-  override protected def doDispose(): Task[Unit] = super.doDispose().map(_ => instance.release(name))
 }
 
 object LMDBStore extends StoreManager {
@@ -155,8 +172,8 @@ object LMDBStore extends StoreManager {
       .setMaxDbs(MaxDbs)
       .setMapSize(MapSize)
       .setMaxReaders(MaxReaders)
-      .open(path.toFile)
-    LMDBInstance(env)
+      .open(path.toFile, EnvFlags.MDB_WRITEMAP)
+    LMDBInstance(env, env.openDbi(name, DbiFlags.MDB_CREATE))
   }
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

@@ -3,56 +3,76 @@ package lightdb.store
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.transaction.Transaction
-import lightdb.util.ElasticHashMap
-import rapid.Task
-
-import java.util.concurrent.ConcurrentHashMap
-import scala.jdk.CollectionConverters.CollectionHasAsScala
+import lightdb.transaction.{Transaction, TransactionFeature, TransactionKey}
+import rapid.{Task, Unique}
 
 trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Store[Doc, Model] {
+  private val id = Unique()
+
   protected def maxTransactionWriteBuffer: Int = BufferedWritingStore.MaxTransactionWriteBuffer
 
-  private val transactionWriteBuffers = new ConcurrentHashMap[Transaction[Doc], WriteBuffer]
+  protected def getWriteBuffer(transaction: Transaction[Doc]): WriteBuffer[Doc]
+  protected def setWriteBuffer(writeBuffer: WriteBuffer[Doc], transaction: Transaction[Doc]): Unit
 
-  final protected def flushMap(map: Map[Id[Doc], WriteOp]): Task[WriteBuffer] = Task.defer {
-    val stream = rapid.Stream.fromIterator(Task(map.valuesIterator))
-    flushBuffer(stream).map(_ => WriteBuffer())
+  protected def withWriteBuffer(f: WriteBuffer[Doc] => Task[WriteBuffer[Doc]])
+                               (implicit transaction: Transaction[Doc]): Task[WriteBuffer[Doc]] = Task {
+    transaction.synchronized {
+      val wb = getWriteBuffer(transaction)
+      val modified = f(wb).sync()
+      setWriteBuffer(modified, transaction)
+      modified
+    }
   }
 
-  protected def flushBuffer(stream: rapid.Stream[WriteOp]): Task[Unit]
+  final protected def flushMap(map: Map[Id[Doc], WriteOp[Doc]]): Task[WriteBuffer[Doc]] = Task.defer {
+    val stream = rapid.Stream.fromIterator(Task(map.valuesIterator))
+    flushBuffer(stream).map(_ => WriteBuffer[Doc]())
+  }
 
-  protected def writeMod(f: Map[Id[Doc], WriteOp] => Task[Map[Id[Doc], WriteOp]])
-                        (implicit transaction: Transaction[Doc]): Task[WriteBuffer] = Task {
-    transactionWriteBuffers.compute(transaction, (_, current) => {
-      val b = Option(current).getOrElse(WriteBuffer())
-      val s = b.map.size
-      val map = f(b.map).sync()
-      val d = b.map.size - s
+  protected def flushBuffer(stream: rapid.Stream[WriteOp[Doc]]): Task[Unit]
+
+  protected def writeMod(f: Map[Id[Doc], WriteOp[Doc]] => Task[Map[Id[Doc], WriteOp[Doc]]])
+                        (implicit transaction: Transaction[Doc]): Task[WriteBuffer[Doc]] = withWriteBuffer { b =>
+    val s = b.map.size
+    f(b.map).map { map =>
+      val d = map.size - s
       if (b.map.size > maxTransactionWriteBuffer) {
         flushMap(map).sync()
       } else {
         b.copy(map, d)
       }
+    }
+  }
+
+  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
+    transaction.put(TransactionKey(id), new TransactionFeature {
+      override def commit(): Task[Unit] = {
+        writeMod { map =>
+          flushMap(map).map(_.map)
+        }(transaction).flatMap(_ => super.commit())
+      }
     })
   }
 
   override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = writeMod { map =>
+    Task(map + (doc._id -> WriteOp.Insert(doc)))
+  }.map(_ => doc)
+
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = writeMod { map =>
     Task(map + (doc._id -> WriteOp.Upsert(doc)))
   }.map(_ => doc)
 
-  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = _insert(doc)
+  protected def _exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean]
 
-  abstract override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task.defer {
-    Option(transactionWriteBuffers.get(transaction)) match {
-      case Some(wb) => wb.map.get(id) match {
-        case Some(op) => op match {
-          case _: WriteOp.Upsert => Task.pure(true)
-          case WriteOp.Delete => Task.pure(false)
-        }
-        case None => super.exists(id)
+  override final def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task.defer {
+    val wb = getWriteBuffer(transaction)
+    wb.map.get(id) match {
+      case Some(op) => op match {
+        case _: WriteOp.Insert[Doc] => Task.pure(true)
+        case _: WriteOp.Upsert[Doc] => Task.pure(true)
+        case _: WriteOp.Delete[Doc] => Task.pure(false)
       }
-      case None => super.exists(id)
+      case None => _exists(id)
     }
   }
 
@@ -61,35 +81,28 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
     writeMod { map =>
       Task {
         val id = value.asInstanceOf[Id[Doc]]
-        map - id
+        map + (id -> WriteOp.Delete(id))
       }
-    }.map(_.delta < 0)
+    }.map(_.delta > 0)
   } else {
     throw new UnsupportedOperationException(s"BufferedWritingStore can only get on _id, but ${index.name} was attempted")
   }
 
-  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task {
-    val count = transactionWriteBuffers.values().asScala.map(_.map.size).sum
-    transactionWriteBuffers.clear()
-    count
-  }
+  protected def _truncate(implicit transaction: Transaction[Doc]): Task[Int]
 
-  override def releaseTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.defer {
-    writeMod { map =>
-      flushMap(map).map(_.map)
-    }(transaction)
-  }.flatMap(_ => super.releaseTransaction(transaction))
+  override final def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task.defer {
+    var count = 0
+    withWriteBuffer { wb =>
+      Task {
+        count = wb.map.size
+        wb.copy(Map.empty)
+      }
+    }.flatMap { _ =>
+      _truncate.map(c => c + count)
+    }
+  }
 
   override protected def doDispose(): Task[Unit] = super.doDispose()
-
-  case class WriteBuffer(map: Map[Id[Doc], WriteOp] = ElasticHashMap.empty(), delta: Int = 0)
-
-  sealed trait WriteOp
-
-  object WriteOp {
-    case class Upsert(doc: Doc) extends WriteOp
-    case object Delete extends WriteOp
-  }
 }
 
 object BufferedWritingStore {

@@ -6,8 +6,8 @@ import lightdb._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
 import lightdb.store.{Store, StoreManager, StoreMode}
-import lightdb.transaction.{Transaction, TransactionKey}
-import rapid.Task
+import lightdb.transaction.{Transaction, TransactionFeature, TransactionKey}
+import rapid.{Task, Unique}
 
 import java.nio.file.Path
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -30,11 +30,12 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
   private def getInstance(implicit transaction: Transaction[Doc]): Jedis =
     transaction.getOrCreate(InstanceKey, pool.getResource)
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
-
-  override def releaseTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
-    super.releaseTransaction(transaction)
-    transaction.get(InstanceKey).foreach(jedis => pool.returnResource(jedis))
+  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
+    transaction.put(TransactionKey(), new TransactionFeature {
+      override def commit(): Task[Unit] = Task {
+        transaction.get(InstanceKey).foreach(jedis => pool.returnResource(jedis))
+      }.next(super.commit())
+    })
   }
 
   override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)

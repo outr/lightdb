@@ -5,10 +5,12 @@ import rapid.Task
 
 import java.nio.ByteBuffer
 
-case class LMDBInstance(env: Env[ByteBuffer]) { instance =>
-  private var map = Map.empty[String, Dbi[ByteBuffer]]
+case class LMDBInstance(env: Env[ByteBuffer], dbi: Dbi[ByteBuffer]) {
 
-  lazy val transactionManager: LMDBTransactionManager = LMDBTransactionManager(env)
+
+//  private var map = Map.empty[String, Dbi[ByteBuffer]]
+
+  /*lazy val transactionManager: LMDBTransactionManager = LMDBTransactionManager(env)
 
   def get(name: String): Dbi[ByteBuffer] = synchronized {
     map.get(name) match {
@@ -32,5 +34,5 @@ case class LMDBInstance(env: Env[ByteBuffer]) { instance =>
         case None => // Ignore
       }
     }
-  }
+  }*/
 }

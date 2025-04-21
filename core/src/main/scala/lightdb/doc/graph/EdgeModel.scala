@@ -188,16 +188,51 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
       )
       // TODO: Validate store contents against store to verify integrity
       store.trigger += new StoreTrigger[Doc] {
-        override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = add(doc)
+        private var map: Map[Transaction[Doc], (Transaction[D], Transaction[RD])] = Map.empty
+        private def t(implicit transaction: Transaction[Doc]): (Transaction[D], Transaction[RD]) = synchronized {
+          map.get(transaction) match {
+            case Some((d, rd)) => d -> rd
+            case None =>
+              val d = _edgesStore.transaction.create().sync()
+              val rd = _edgesReverseStore.transaction.create().sync()
+              map += transaction -> (d, rd)
+              d -> rd
+          }
+        }
+        private def removeTransaction(transaction: Transaction[Doc]): Unit = synchronized {
+          val task = map.get(transaction) match {
+            case Some((dt, rt)) => for {
+              _ <- dt.commit()
+              _ <- rt.commit()
+              _ <- dt.close()
+              _ <- rt.close()
+              _ = this.synchronized {
+                map -= transaction
+              }
+            } yield ()
+            case None => Task.unit
+          }
+          task.sync()
+        }
 
-        override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = add(doc)
+        override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = {
+          val (dt, rt) = t
+          add(doc)(dt, rt)
+        }
+
+        override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = insert(doc)
 
         override def delete[V](index: Field.UniqueIndex[Doc, V], value: V)
                               (implicit transaction: Transaction[Doc]): Task[Unit] =
           store.get(_ => index -> value).flatMap {
-            case Some(doc) => remove(doc)
+            case Some(doc) =>
+              val (dt, rt) = t
+              remove(doc)(dt, rt)
             case None => Task.unit
           }
+
+        override def transactionEnd(transaction: Transaction[Doc]): Task[Unit] = Task(removeTransaction(transaction))
+          .next(super.transactionEnd(transaction))
 
         override def dispose(): Task[Unit] = for {
           _ <- _edgesStore.dispose
@@ -221,68 +256,60 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
     }
   }
 
-  protected def add(doc: Doc): Task[Unit] = for {
-    _ <- _edgesStore.transaction { implicit transaction =>
-      _edgesStore.modify(doc._from) { edgeOption =>
-        Task {
-          Some(edgeOption match {
-            case Some(e) => e.copy(
-              connections = e.connections + doc._to
-            )
-            case None => EdgeConnections(
-              _id = doc._from,
-              connections = Set(doc._to)
-            )
-          })
-        }
+  protected def add(doc: Doc)(implicit et: Transaction[D], ert: Transaction[RD]): Task[Unit] = for {
+    _ <- _edgesStore.modify(doc._from) { edgeOption =>
+      Task {
+        Some(edgeOption match {
+          case Some(e) => e.copy(
+            connections = e.connections + doc._to
+          )
+          case None => EdgeConnections(
+            _id = doc._from,
+            connections = Set(doc._to)
+          )
+        })
       }
     }
-    _ <- _edgesReverseStore.transaction { implicit transaction =>
-      _edgesReverseStore.modify(doc._to) { edgeReverseOption =>
-        Task {
-          Some(edgeReverseOption match {
-            case Some(e) => e.copy(
-              connections = e.connections + doc._from
-            )
-            case None => EdgeConnections(
-              _id = doc._to,
-              connections = Set(doc._from)
-            )
-          })
-        }
+    _ <- _edgesReverseStore.modify(doc._to) { edgeReverseOption =>
+      Task {
+        Some(edgeReverseOption match {
+          case Some(e) => e.copy(
+            connections = e.connections + doc._from
+          )
+          case None => EdgeConnections(
+            _id = doc._to,
+            connections = Set(doc._from)
+          )
+        })
       }
     }
   } yield ()
 
-  protected def remove(doc: Doc): Task[Unit] = for {
-    _ <- _edgesStore.transaction { implicit transaction =>
-      _edgesStore.modify(doc._from) { edgeOption =>
-        Task {
-          edgeOption.flatMap { e =>
-            val edge = e.copy(
-              connections = e.connections - doc._to
-            )
-            if (edge.connections.isEmpty) {
-              None
-            } else {
-              Some(edge)
-            }
+  protected def remove(doc: Doc)(implicit et: Transaction[D], ert: Transaction[RD]): Task[Unit] = for {
+    _ <- _edgesStore.modify(doc._from) { edgeOption =>
+      Task {
+        edgeOption.flatMap { e =>
+          val edge = e.copy(
+            connections = e.connections - doc._to
+          )
+          if (edge.connections.isEmpty) {
+            None
+          } else {
+            Some(edge)
           }
         }
       }
     }
-    _ <- _edgesReverseStore.transaction { implicit transaction =>
-      _edgesReverseStore.modify(doc._to) { edgeReverseOption =>
-        Task {
-          edgeReverseOption.flatMap { e =>
-            val edge = e.copy(
-              connections = e.connections - doc._from
-            )
-            if (edge.connections.isEmpty) {
-              None
-            } else {
-              None
-            }
+    _ <- _edgesReverseStore.modify(doc._to) { edgeReverseOption =>
+      Task {
+        edgeReverseOption.flatMap { e =>
+          val edge = e.copy(
+            connections = e.connections - doc._from
+          )
+          if (edge.connections.isEmpty) {
+            None
+          } else {
+            None
           }
         }
       }
