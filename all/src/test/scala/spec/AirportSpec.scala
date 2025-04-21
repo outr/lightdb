@@ -3,6 +3,7 @@ package spec
 import fabric.rw._
 import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.{SplitCollection, SplitStoreManager}
@@ -123,7 +124,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   // ChronicleMap: 4s (full load: 79s)
   object DB extends LightDB {
     override type SM = SplitStoreManager
-    override val storeManager: SplitStoreManager = SplitStoreManager(RocksDBStore, LuceneStore)
+    override val storeManager: SplitStoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
 
     override lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 

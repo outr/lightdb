@@ -82,9 +82,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def prepareTransaction(transaction: Transaction[Doc]): Task[Unit]
 
-  def releaseTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
-    transaction.commit()
-  }
+  private def releaseTransaction(transaction: Transaction[Doc]): Task[Unit] = transaction.commit()
 
   protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc]
 
