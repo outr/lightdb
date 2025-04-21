@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "3.1.0-SNAPSHOT"
+ThisBuild / version := "3.1.0"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -148,7 +148,8 @@ lazy val core = crossProject(JVMPlatform)
 		}
 	)
 	.jvmSettings(
-		fork := true
+		fork := true,
+		Test / fork := true
 	)
 
 lazy val sql = project.in(file("sql"))
@@ -156,6 +157,7 @@ lazy val sql = project.in(file("sql"))
 	.settings(
 		name := s"$projectName-sql",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"com.zaxxer" % "HikariCP" % hikariCPVersion,
 			"org.apache.commons" % "commons-dbcp2" % commonsDBCP2Version,
@@ -168,6 +170,7 @@ lazy val sqlite = project.in(file("sqlite"))
 	.settings(
 		name := s"$projectName-sqlite",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
@@ -179,6 +182,7 @@ lazy val h2 = project.in(file("h2"))
 	.settings(
 		name := s"$projectName-h2",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"com.h2database" % "h2" % h2Version,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
@@ -190,6 +194,7 @@ lazy val postgresql = project.in(file("postgresql"))
 	.settings(
 		name := s"$projectName-postgresql",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.postgresql" % "postgresql" % postgresqlVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
@@ -201,6 +206,7 @@ lazy val duckdb = project.in(file("duckdb"))
 	.settings(
 		name := s"$projectName-duckdb",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.duckdb" % "duckdb_jdbc" % duckdbVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
@@ -212,6 +218,7 @@ lazy val lucene = project.in(file("lucene"))
 	.settings(
 		name := s"$projectName-lucene",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.apache.lucene" % "lucene-core" % luceneVersion,
 			"org.apache.lucene" % "lucene-memory" % luceneVersion,
@@ -228,6 +235,7 @@ lazy val halodb = project.in(file("halodb"))
 	.settings(
 		name := s"$projectName-halo",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"com.outr" % "halodb-revive" % haloDBVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
@@ -239,6 +247,7 @@ lazy val rocksdb = project.in(file("rocksdb"))
 	.settings(
 		name := s"$projectName-rocks",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
@@ -253,7 +262,8 @@ lazy val mapdb = project.in(file("mapdb"))
 			"org.mapdb" % "mapdb" % mapdbVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
-		fork := true
+		fork := true,
+		Test / fork := true
 	)
 
 lazy val lmdb = project.in(file("lmdb"))
@@ -264,7 +274,8 @@ lazy val lmdb = project.in(file("lmdb"))
 			"org.lmdbjava" % "lmdbjava" % lmdbVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
-		fork := true
+		fork := true,
+		Test / fork := true
 	)
 
 lazy val chronicleMap = project.in(file("chronicleMap"))
@@ -275,7 +286,8 @@ lazy val chronicleMap = project.in(file("chronicleMap"))
 			"net.openhft" % "chronicle-map" % chronicleMapVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
-		fork := true
+		fork := true,
+		Test / fork := true
 	)
 
 lazy val redis = project.in(file("redis"))
@@ -286,7 +298,8 @@ lazy val redis = project.in(file("redis"))
 			"redis.clients" % "jedis" % jedisVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		),
-		fork := true
+		fork := true,
+		Test / fork := true
 	)
 
 lazy val all = project.in(file("all"))
@@ -294,6 +307,7 @@ lazy val all = project.in(file("all"))
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
@@ -305,6 +319,7 @@ lazy val benchmark = project.in(file("benchmark"))
 	.settings(
 		name := s"$projectName-benchmark",
 		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.mongodb" % "mongodb-driver-sync" % "5.0.1",
 			"org.postgresql" % "postgresql" % "42.7.4",

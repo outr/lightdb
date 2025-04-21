@@ -4,16 +4,26 @@
 Computationally focused database using pluggable stores
 
 ## Provided Stores
-- Yahoo's HaloDB (https://github.com/yahoo/HaloDB)
-- MapDB (https://mapdb.org)
-- Facebook's RocksDB (https://rocksdb.org)
-- Redis (https://redis.io)
-- Apache Lucene (https://lucene.apache.org)
-- SQLite (https://www.sqlite.org)
-- H2 (https://h2database.com)
-- DuckDB (https://duckdb.org)
-- PostgreSQL (https://www.postgresql.org)
-- Redis (https://redis.io)
+| Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Notes                                 |
+|------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|---------------------------------------|
+| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅       | ✅          | ✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | Fast, simple write-optimized store    |
+| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | Ultra low-latency, off-heap storage   |
+| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅       | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | Read-optimized, mature B+Tree engine  |
+| [MapDB](https://mapdb.org)                                            | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | Easy Java-native persistence           |
+| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | High-performance LSM tree             |
+| [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | Popular in-memory data structure store|
+| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | Best-in-class full-text search engine |
+| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | Lightweight embedded SQL              |
+| [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | Java-native SQL engine                |
+| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | Columnar, ideal for analytics         |
+| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | Full-featured RDBMS                   |
+
+### Legend
+- ✅: Supported / Good
+- ✅✅: Strong
+- ✅✅✅: Best-in-class
+- 🟡: Limited or trade-offs
+- ❌: Not supported
 
 ## In-Progress
 - Tantivy (https://github.com/quickwit-oss/tantivy) - Working on creating a wrapper around Rust's extremely fast alternative to Apache Lucene (See https://github.com/outr/scantivy)
@@ -217,7 +227,7 @@ Backup your database:
 import lightdb.backup._
 import java.io.File
 
-DatabaseBackup.archive(db, new File("backup.zip")).sync()
+DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
 ```
 
 Restore from a backup:

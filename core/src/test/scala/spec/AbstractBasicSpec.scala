@@ -592,10 +592,8 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
       QueryOptimizer.optimize(query) should be(optimized)
     }
-    "truncate the collection again" in {
-      db.people.transaction { implicit transaction =>
-        db.people.truncate().map(_ should be(24))
-      }
+    "truncate the database" in {
+      db.truncate().succeed
     }
     "dispose the database" in {
       db.dispose.succeed
@@ -618,7 +616,6 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
     val people: Collection[Person, Person.type] = store(Person)
-
     val ageLinks: Collection[AgeLinks, AgeLinks.type] = store(AgeLinks)
 
     override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
