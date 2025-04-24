@@ -14,7 +14,7 @@ import rapid.Task
  * @tparam From The source node document type
  * @tparam To The target node document type
  */
-sealed trait GraphStep[Edge <: Document[Edge], From <: Document[From], To <: Document[To]] {
+trait GraphStep[Edge <: Document[Edge], From <: Document[From], To <: Document[To]] {
   /**
    * Find neighbors of a node in the graph.
    *
