@@ -14,7 +14,7 @@ import rapid.Task
  * @tparam From The source node document type
  * @tparam To The target node document type
  */
-trait GraphStep[Edge <: Document[Edge], From <: Document[From], To <: Document[To]] {
+sealed trait GraphStep[Edge <: Document[Edge], From <: Document[From], To <: Document[To]] {
   /**
    * Find neighbors of a node in the graph.
    *
@@ -60,7 +60,7 @@ object GraphStep {
 
   /**
    * Create a GraphStep that follows edges in both directions.
-   * Requires From and To to be the same type.
+   * Requires From and To as the same type.
    *
    * @param model The edge model
    * @return A GraphStep for bidirectional traversal
