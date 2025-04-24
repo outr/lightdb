@@ -18,29 +18,36 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
   protected lazy val specName: String = getClass.getSimpleName
   protected lazy val db: DB = new DB
 
-  private def runFixpoint(startId: Id[Node])
-                         (traversalFn: Id[Node] => StatefulGraphTraversalEngine[Node, Set[Id[Node]]]): Task[Set[Id[Node]]] = {
-    def loop(current: Id[Node], visited: Set[Id[Node]]): Task[Set[Id[Node]]] = {
-      db.edges.transaction { implicit tx: Transaction[SimpleEdge] =>
-        // perform the step inside the same transaction
-        Task.pure(traversalFn(current))
-      }.flatMap { engineInst =>
-        engineInst.run().flatMap { raw =>
-          val result: Set[Id[Node]] = raw.asInstanceOf[Set[Id[Node]]]
-          val newVisited: Set[Id[Node]] = visited ++ result
-          val unseen: Set[Id[Node]] = newVisited -- visited
+  // Helper method to create a traversal that collects all reachable nodes
+  private def collectAllReachable(startId: Id[Node], step: GraphStep[SimpleEdge, Node, Node], 
+                                maxDepth: Option[Int] = None)
+                                (implicit tx: Transaction[SimpleEdge]): Task[Set[Id[Node]]] = {
+    val engine = GraphTraversalEngine(startId)
+      .withState(Set.empty[Id[Node]])
 
-          if (unseen.isEmpty) {
-            Task.pure(newVisited)
-          } else {
-            Task.sequence(unseen.toList.map(loop(_, newVisited)))
-              .map(_.foldLeft(newVisited)(_ ++ _))
+    maxDepth match {
+      case Some(depth) =>
+        // For depth-limited traversal, use step() and run()
+        engine.step(
+          step,
+          (id: Id[Node], currentDepth: Int, visited: Set[Id[Node]]) => Task.pure {
+            if (visited.contains(id) || currentDepth > depth)
+              TraversalDecision.Skip(visited)
+            else
+              TraversalDecision.Continue(visited + id)
           }
-        }
-      }
-    }
+        ).run().map(_.asInstanceOf[Set[Id[Node]]])
 
-    loop(startId, Set(startId))
+      case None =>
+        // For full traversal, use fixpoint
+        engine.fixpoint(
+          step,
+          (id: Id[Node], _: Int, visited: Set[Id[Node]]) => Task.pure {
+            if (visited.contains(id)) TraversalDecision.Skip(visited)
+            else TraversalDecision.Continue(visited + id)
+          }
+        ).map(_.asInstanceOf[Set[Id[Node]]])
+    }
   }
 
   specName should {
@@ -68,63 +75,29 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
       } yield succeed
     }
     "traverse graph from A to collect all reachable nodes" in {
-      def traversalFn(start: Id[Node])(implicit transaction: Transaction[SimpleEdge]): StatefulGraphTraversalEngine[Node, Set[Id[Node]]] =
-        GraphTraversalEngine
-          .startFrom(start)
-          .withState(Set.empty[Id[Node]])
-          .step(
-            GraphStep.forward(SimpleEdgeModel),
-            (id, _, visited) => Task.pure {
-              if (visited.contains(id)) TraversalDecision.Skip(visited)
-              else TraversalDecision.Continue(visited + id)
-            }
-          )
-
-      db.edges.transaction { implicit transaction =>
-        runFixpoint(Id("A"))(traversalFn).map { result =>
-          result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
-        }
+      db.edges.transaction { implicit tx =>
+        collectAllReachable(Id("A"), GraphStep.forward(SimpleEdgeModel))
+          .map { result =>
+            result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
+          }
       }
     }
     "traverse graph in reverse from D to find parents" in {
-      def traversalFn(start: Id[Node])(implicit transaction: Transaction[SimpleEdge]): StatefulGraphTraversalEngine[Node, Set[Id[Node]]] =
-        GraphTraversalEngine
-          .startFrom(start)
-          .withState(Set.empty[Id[Node]])
-          .step(
-            GraphStep.reverse(SimpleEdgeModel),
-            (id, _, visited) => Task.pure {
-              if (visited.contains(id)) TraversalDecision.Skip(visited)
-              else TraversalDecision.Continue(visited + id)
-            }
-          )
-
-      db.edges.transaction { implicit transaction =>
-        runFixpoint(Id("D"))(traversalFn).map { result =>
-          result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
-        }
+      db.edges.transaction { implicit tx =>
+        collectAllReachable(Id("D"), GraphStep.reverse(SimpleEdgeModel))
+          .map { result =>
+            result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
+          }
       }
     }
     "traverse with depth limitation" in {
       val maxDepth = 1
-      db.edges.transaction { implicit tx: Transaction[SimpleEdge] =>
-          GraphTraversalEngine
-            .startFrom(Id("A"))
-            .withState(Set.empty[Id[Node]])
-            .step(
-              GraphStep.forward(SimpleEdgeModel),
-              (id, depth, visited) => Task.pure {
-                if (visited.contains(id) || depth > maxDepth)
-                  TraversalDecision.Skip(visited)
-                else
-                  TraversalDecision.Continue(visited + id)
-              }
-            )
-            .run()
-        }.map(_.asInstanceOf[Set[Id[Node]]])
-        .map { result =>
-          result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
-        }
+      db.edges.transaction { implicit tx =>
+        collectAllReachable(Id("A"), GraphStep.forward(SimpleEdgeModel), Some(maxDepth))
+          .map { result =>
+            result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
+          }
+      }
     }
     "dispose the database" in {
       db.dispose.next(dispose()).succeed

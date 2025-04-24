@@ -11,6 +11,6 @@ package object traversal {
     From <: Document[From],
     To <: Document[To]
   ](val store: Store[Edge, Model]) {
-    def traversal(start: Id[From]): GraphTraversalEngineInstance[From] = GraphTraversalEngine.startFrom(start)
+    def traversal(start: Id[From]): GraphTraversalEngine[From] = GraphTraversalEngine(start)
   }
 }
