@@ -22,8 +22,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
   private def collectAllReachable(startId: Id[Node], step: GraphStep[SimpleEdge, Node, Node], 
                                 maxDepth: Option[Int] = None)
                                 (implicit tx: Transaction[SimpleEdge]): Task[Set[Id[Node]]] = {
-    val engine = GraphTraversalEngine(startId)
-      .withState(Set.empty[Id[Node]])
+    val engine = GraphTraversalEngine(startId, Set.empty[Id[Node]])
 
     maxDepth match {
       case Some(depth) =>
@@ -124,13 +123,14 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
 case class Node(name: String, _id: Id[Node] = Id()) extends Document[Node]
 
 object Node extends DocumentModel[Node] with JsonConversion[Node] {
-  override implicit val rw = RW.gen
-  val name = field.index("name", _.name)
+  override implicit val rw: RW[Node] = RW.gen
+
+  val name: I[String] = field.index("name", _.name)
 }
 
 case class SimpleEdge(_from: Id[Node], _to: Id[Node], _id: Id[SimpleEdge] = Id())
   extends EdgeDocument[SimpleEdge, Node, Node] with Document[SimpleEdge]
 
 object SimpleEdgeModel extends EdgeModel[SimpleEdge, Node, Node] with JsonConversion[SimpleEdge] {
-  override implicit lazy val rw = RW.gen
+  override implicit lazy val rw: RW[SimpleEdge] = RW.gen
 }
