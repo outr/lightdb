@@ -7,15 +7,13 @@ import lightdb.store.{Store, StoreManager}
 import lightdb.traversal._
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
-import lightdb.transaction.Transaction
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path
 
-abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
-  spec =>
+abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   protected lazy val specName: String = getClass.getSimpleName
   protected lazy val db: DB = new DB
 
@@ -45,7 +43,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { implicit tx =>
-        GraphTraversalEngine(Id[Node]("A"))
+        db.edges.traverse(Id("A"))
           .collectAllReachable(GraphStep.forward(SimpleEdgeModel))
           .map { result =>
             result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
@@ -54,7 +52,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph in reverse from D to find parents" in {
       db.edges.transaction { implicit tx =>
-        GraphTraversalEngine(Id[Node]("D"))
+        db.edges.traverse(Id("D"))
           .collectAllReachable(GraphStep.reverse(SimpleEdgeModel))
           .map { result =>
             result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
@@ -64,7 +62,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse with depth limitation" in {
       val maxDepth = 1
       db.edges.transaction { implicit tx =>
-        GraphTraversalEngine(Id[Node]("A"))
+        db.edges.traverse(Id("A"))
           .collectAllReachable(GraphStep.forward(SimpleEdgeModel), Some(maxDepth))
           .map { result =>
             result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
