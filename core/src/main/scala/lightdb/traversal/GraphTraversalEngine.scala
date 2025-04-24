@@ -9,7 +9,7 @@ import scala.collection.mutable
 
 class GraphTraversalEngine[From <: Document[From], S](current: Set[Id[From]],
                                                       state: S,
-                                                      visited: Set[Id[_]] = Set.empty,
+                                                      val visited: Set[Id[_]] = Set.empty,
                                                       depth: Int = 0) {
   def step[Edge <: Document[Edge], To <: Document[To]](via: GraphStep[Edge, From, To],
                                                        f: (Id[From], Int, S) => Task[TraversalDecision[S]])
@@ -41,6 +41,38 @@ class GraphTraversalEngine[From <: Document[From], S](current: Set[Id[From]],
         )
       )
       .sync()
+  }
+
+  def collectAllReachable[Edge <: Document[Edge], To <: Document[To]](step: GraphStep[Edge, From, To],
+                                                                      maxDepth: Option[Int] = None)
+                                                                     (implicit tx: Transaction[Edge]): Task[Set[Id[_]]] = {
+    maxDepth match {
+      case Some(max) =>
+        def loop[D <: Document[D]](engine: GraphTraversalEngine[D, Set[Id[_]]], currentDepth: Int): Task[Set[Id[_]]] = {
+          if (currentDepth > max) Task.pure(engine.visited)
+          else {
+            val next = engine.step(
+              step.asInstanceOf[GraphStep[Edge, D, To]],
+              (id: Id[D], _: Int, visited: Set[Id[_]]) =>
+                Task.pure {
+                  if (visited.contains(id)) TraversalDecision.Skip(visited)
+                  else TraversalDecision.Continue(visited + id)
+                }
+            )
+            next.run().flatMap(_ => loop(next, currentDepth + 1))
+          }
+        }
+        loop(GraphTraversalEngine(current.head, Set.empty[Id[_]]), 0)
+      case None =>
+        fixpoint(
+          step,
+          (id, _, s) =>
+            Task.pure {
+              if (visited.contains(id)) TraversalDecision.Skip(s)
+              else TraversalDecision.Continue(s)
+            }
+        )
+    }
   }
 
   def run(): Task[Set[Id[_]]] = Task.pure(visited ++ current)
@@ -76,4 +108,7 @@ class GraphTraversalEngine[From <: Document[From], S](current: Set[Id[From]],
 object GraphTraversalEngine {
   def apply[From <: Document[From], S](start: Id[From], initial: S): GraphTraversalEngine[From, S] =
     new GraphTraversalEngine(Set(start), initial)
+
+  def apply[From <: Document[From]](start: Id[From]): GraphTraversalEngine[From, Set[From]] =
+    apply(start, Set.empty)
 }
