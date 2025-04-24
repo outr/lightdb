@@ -1,4 +1,4 @@
-package lightdb.doc.graph
+package lightdb.graph
 
 import fabric.rw._
 import lightdb.Id
