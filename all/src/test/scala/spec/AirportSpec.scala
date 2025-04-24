@@ -1,8 +1,8 @@
 package spec
 
 import fabric.rw._
-import lightdb.doc.graph.{EdgeDocument, EdgeModel}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
