@@ -109,6 +109,6 @@ object GraphTraversalEngine {
   def apply[From <: Document[From], S](start: Id[From], initial: S): GraphTraversalEngine[From, S] =
     new GraphTraversalEngine(Set(start), initial)
 
-  def apply[From <: Document[From]](start: Id[From]): GraphTraversalEngine[From, Set[From]] =
+  def apply[From <: Document[From]](start: Id[From]): GraphTraversalEngine[From, Set[Id[From]]] =
     apply(start, Set.empty)
 }
