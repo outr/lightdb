@@ -4,6 +4,7 @@ import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.transaction.TransactionManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
 import rapid._
@@ -85,6 +86,8 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * Backing key/value store used for persistent internal settings, StoredValues, and general key/value storage.
    */
   lazy val backingStore: Store[KeyValue, KeyValue.type] = store(KeyValue, name = Some("_backingStore"))
+
+  lazy val transactions: TransactionManager = new TransactionManager
 
   override protected def initialize(): Task[Unit] = for {
     _ <- logger.info(s"$name database initializing...")
