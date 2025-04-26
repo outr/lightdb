@@ -3,7 +3,7 @@ package spec
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
-import lightdb.{Id, LightDB}
+import lightdb._
 import lightdb.store.{Store, StoreManager}
 import lightdb.transaction.Transaction
 import lightdb.traversal._
@@ -49,8 +49,11 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     }
     "verify who alice reports to and collaborates with" in {
       db.collaboratesWith.transaction { implicit tx =>
-        db.reportsTo.traverse(Id("alice"))
+        db.reportsTo.traverse(Set(Id("alice")))
           .collectAllReachable(ReportsAndCollaborationStep(db.collaboratesWith))
+          .map { results =>
+            results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))
+          }
       }.succeed
     }
     "truncate the database" in {

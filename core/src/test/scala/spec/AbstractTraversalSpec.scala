@@ -62,7 +62,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse with depth limitation" in {
       val maxDepth = 1
       db.edges.transaction { implicit tx =>
-        db.edges.traverse(Id("A"))
+        db.edges.traverse(Set(Id("A")))
           .collectAllReachable(GraphStep.forward(SimpleEdgeModel), Some(maxDepth))
           .map { result =>
             result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
