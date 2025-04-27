@@ -2,7 +2,7 @@ package lightdb.store
 
 import lightdb.doc.{Document, DocumentModel}
 
-sealed trait StoreMode[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
+sealed trait StoreMode[Doc <: Document[Doc], +Model <: DocumentModel[Doc]] {
   def isAll: Boolean = false
   def isIndexes: Boolean = false
 }
