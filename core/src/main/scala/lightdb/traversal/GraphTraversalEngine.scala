@@ -5,66 +5,27 @@ import lightdb.Id
 import lightdb.transaction.Transaction
 import rapid.Task
 
-/** Represents a chain of traversal steps with enforced type transitions. */
-sealed trait StepChain[Start <: Document[Start], End <: Document[End]] {
-  def run(ids: Set[Id[Start]]): Task[Set[Id[End]]]
-}
+class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (private val current: Set[Id[S]], private val chain: Step[S, C]) {
+  def step[E <: Document[E]](via: GraphStep[E, C, C])(implicit tx: Transaction[E]): BFSEngine[C, E] =
+    new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, Int.MaxValue)
 
-final case class SingleStep[
-  Edge <: Document[Edge],
-  A <: Document[A],
-  B <: Document[B]
-](
-   step: GraphStep[Edge, A, B]
- )(implicit tx: Transaction[Edge]) extends StepChain[A, B] {
-  override def run(ids: Set[Id[A]]): Task[Set[Id[B]]] = {
-    Task.sequence(ids.toList.map(id => step.neighbors(id))).map(_.flatten.toSet)
-  }
-}
+  def step[E <: Document[E]](via: GraphStep[E, C, C], maxDepth: Int)(implicit tx: Transaction[E]): BFSEngine[C, E] =
+    new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, maxDepth)
 
-final case class ChainStep[
-  Edge <: Document[Edge],
-  A <: Document[A],
-  B <: Document[B],
-  C <: Document[C]
-](
-   previous: StepChain[A, B],
-   next: GraphStep[Edge, B, C]
- )(implicit tx: Transaction[Edge]) extends StepChain[A, C] {
-  override def run(ids: Set[Id[A]]): Task[Set[Id[C]]] = {
-    previous.run(ids).flatMap { midNodes =>
-      Task.sequence(midNodes.toList.map(id => next.neighbors(id))).map(_.flatten.toSet)
-    }
-  }
-}
+  def step[E <: Document[E], Next <: Document[Next]](via: GraphStep[E, C, Next])
+                                                    (implicit tx: Transaction[E]): GraphTraversalEngine[S, Next] =
+    new GraphTraversalEngine(current, Step.Chain(chain, via))
 
-/**
- * A traversal builder that allows chaining multiple steps and executing them type-safely.
- */
-final class GraphTraversalEngine[Start <: Document[Start], Current <: Document[Current]](
-                                                                                          val current: Set[Id[Start]],
-                                                                                          val chain: StepChain[Start, Current]
-                                                                                        ) {
-
-  def step[Edge <: Document[Edge], Next <: Document[Next]](
-                                                            via: GraphStep[Edge, Current, Next]
-                                                          )(implicit tx: Transaction[Edge]): GraphTraversalEngine[Start, Next] =
-    new GraphTraversalEngine(
-      current = current,
-      chain = ChainStep(chain, via)
-    )
-
-  def collectAllReachable(): Task[Set[Id[Current]]] =
+  def collectAllReachable(): Task[Set[Id[C]]] =
     chain.run(current)
 }
 
 object GraphTraversalEngine {
-  def start[Edge <: Document[Edge], Start <: Document[Start], Next <: Document[Next]](
-                                                                                       startIds: Set[Id[Start]],
-                                                                                       via: GraphStep[Edge, Start, Next]
-                                                                                     )(implicit tx: Transaction[Edge]): GraphTraversalEngine[Start, Next] =
-    new GraphTraversalEngine(
-      current = startIds,
-      chain = SingleStep(via)
-    )
+  def start[E <: Document[E], A <: Document[A], B <: Document[B]](startIds: Set[Id[A]], via: GraphStep[E, A, B])
+                                                                 (implicit tx: Transaction[E]): GraphTraversalEngine[A, B] =
+    new GraphTraversalEngine(startIds, Step.Single(via))
+
+  def start[E <: Document[E], A <: Document[A], B <: Document[B]](startId: Id[A], via: GraphStep[E, A, B])
+                                                                 (implicit tx: Transaction[E]): GraphTraversalEngine[A, B] =
+    start(Set(startId), via)
 }

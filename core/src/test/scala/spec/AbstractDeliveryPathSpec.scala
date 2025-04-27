@@ -5,7 +5,6 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb._
 import lightdb.store.{Store, StoreManager}
-import lightdb.transaction.Transaction
 import lightdb.traversal._
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -25,11 +24,11 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
     "insert delivery chain nodes" in {
       db.transactions(db.warehouses, db.trucks, db.depots, db.drones, db.customers) { implicit tx =>
         for {
-          _ <- db.warehouses.insert(Warehouse("w1", Id("warehouse1")))
-          _ <- db.trucks.insert(Truck("truck1", Id("truck1")))
-          _ <- db.depots.insert(Depot("depot1", Id("depot1")))
-          _ <- db.drones.insert(Drone("drone1", Id("drone1")))
-          _ <- db.customers.insert(Customer("customer1", Id("customer1")))
+          _ <- db.warehouses.insert(Warehouse("w1", Id("warehouse1")))(tx.ta)
+          _ <- db.trucks.insert(Truck("truck1", Id("truck1")))(tx.tb)
+          _ <- db.depots.insert(Depot("depot1", Id("depot1")))(tx.tc)
+          _ <- db.drones.insert(Drone("drone1", Id("drone1")))(tx.td)
+          _ <- db.customers.insert(Customer("customer1", Id("customer1")))(tx.te)
         } yield succeed
       }
     }
@@ -51,10 +50,10 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
         db.deliversToCustomer
       ) { implicit tx =>
         for {
-          customers <- db.shipsTo.traverse(Id("warehouse1"))
-            .step(GraphStep.forward(DeliversToDepotModel))
-            .step(GraphStep.forward(LoadsToModel))
-            .step(GraphStep.forward(DeliversToCustomerModel))
+          customers <- db.shipsTo.traverse(Id[Warehouse]("warehouse1"))(tx.ta)
+            .step(GraphStep.forward(DeliversToDepotModel))(tx.tb)
+            .step(GraphStep.forward(LoadsToModel))(tx.tc)
+            .step(GraphStep.forward(DeliversToCustomerModel))(tx.td)
             .collectAllReachable()
         } yield {
           customers should contain only Id("customer1")
