@@ -49,13 +49,13 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
-  private var _stores = List.empty[Store[_, _]]
+  private var _stores = List.empty[Store[_, _ <: DocumentModel[_]]]
   private val _disposed = new AtomicBoolean(false)
 
   /**
    * All stores registered with this database
    */
-  def stores: List[Store[_, _]] = _stores
+  def stores: List[Store[_, _ <: DocumentModel[_]]] = _stores
 
   /**
    * Returns a list of matching store names based on the provided names

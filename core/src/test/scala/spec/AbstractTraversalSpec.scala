@@ -43,8 +43,9 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { implicit tx =>
-        db.edges.traverse(Id("A"))
-          .collectAllReachable(GraphStep.forward(SimpleEdgeModel))
+        db.edges.traverse(Id[Node]("A"))
+          .step(GraphStep.forward(SimpleEdgeModel))
+          .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
           }
@@ -52,8 +53,9 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph in reverse from D to find parents" in {
       db.edges.transaction { implicit tx =>
-        db.edges.traverse(Id("D"))
-          .collectAllReachable(GraphStep.reverse(SimpleEdgeModel))
+        db.edges.traverse(Id[Node]("D"))
+          .step(GraphStep.reverse(SimpleEdgeModel))
+          .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
           }
@@ -62,8 +64,9 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse with depth limitation" in {
       val maxDepth = 1
       db.edges.transaction { implicit tx =>
-        db.edges.traverse(Set(Id("A")))
-          .collectAllReachable(GraphStep.forward(SimpleEdgeModel), Some(maxDepth))
+        db.edges.traverse(Set(Id[Node]("A")))
+          .step(GraphStep.forward(SimpleEdgeModel), maxDepth)
+          .collectAllReachable()
           .map { result =>
             result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
           }
