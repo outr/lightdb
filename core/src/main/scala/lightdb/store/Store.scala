@@ -8,8 +8,10 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.{DocNotFoundException, ModelMissingFieldsException}
 import lightdb.field.Field
 import lightdb.field.Field._
+import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.lock.LockManager
 import lightdb.transaction.Transaction
+import lightdb.traversal.{GraphStep, GraphTraversalEngine}
 import lightdb.trigger.StoreTriggers
 import lightdb.util.{Disposable, Initializable}
 import lightdb.{Id, LightDB}
@@ -20,11 +22,11 @@ import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
-                                                                        val path: Option[Path],
-                                                                        val model: Model,
-                                                                        val lightDB: LightDB,
-                                                                        val storeManager: StoreManager) extends Initializable with Disposable {
+abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val name: String,
+                                                                         val path: Option[Path],
+                                                                         val model: Model,
+                                                                         val lightDB: LightDB,
+                                                                         val storeManager: StoreManager) extends Initializable with Disposable {
   def supportsArbitraryQuery: Boolean = false
 
   protected def id(doc: Doc): Id[Doc] = doc._id

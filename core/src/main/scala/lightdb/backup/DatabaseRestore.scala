@@ -53,7 +53,7 @@ object DatabaseRestore {
     }
   }
 
-  private def process(db: LightDB, truncate: Boolean)(f: Store[_, _] => Option[Source]): Task[Int] = {
+  private def process(db: LightDB, truncate: Boolean)(f: Store[_, _ <: DocumentModel[_]] => Option[Source]): Task[Int] = {
     db.stores.map { store =>
       f(store) match {
         case Some(source) =>

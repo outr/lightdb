@@ -1,0 +1,31 @@
+package lightdb.traversal
+
+import lightdb.doc.Document
+import lightdb.Id
+import lightdb.transaction.Transaction
+import rapid.Task
+
+class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (private val current: Set[Id[S]], private val chain: Step[S, C]) {
+  def step[E <: Document[E]](via: GraphStep[E, C, C])(implicit tx: Transaction[E]): BFSEngine[C, E] =
+    new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, Int.MaxValue)
+
+  def step[E <: Document[E]](via: GraphStep[E, C, C], maxDepth: Int)(implicit tx: Transaction[E]): BFSEngine[C, E] =
+    new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, maxDepth)
+
+  def step[E <: Document[E], Next <: Document[Next]](via: GraphStep[E, C, Next])
+                                                    (implicit tx: Transaction[E]): GraphTraversalEngine[S, Next] =
+    new GraphTraversalEngine(current, Step.Chain(chain, via))
+
+  def collectAllReachable(): Task[Set[Id[C]]] =
+    chain.run(current)
+}
+
+object GraphTraversalEngine {
+  def start[E <: Document[E], A <: Document[A], B <: Document[B]](startIds: Set[Id[A]], via: GraphStep[E, A, B])
+                                                                 (implicit tx: Transaction[E]): GraphTraversalEngine[A, B] =
+    new GraphTraversalEngine(startIds, Step.Single(via))
+
+  def start[E <: Document[E], A <: Document[A], B <: Document[B]](startId: Id[A], via: GraphStep[E, A, B])
+                                                                 (implicit tx: Transaction[E]): GraphTraversalEngine[A, B] =
+    start(Set(startId), via)
+}

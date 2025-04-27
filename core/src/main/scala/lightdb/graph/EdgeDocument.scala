@@ -1,4 +1,4 @@
-package lightdb.doc.graph
+package lightdb.graph
 
 import lightdb.Id
 import lightdb.doc.Document
