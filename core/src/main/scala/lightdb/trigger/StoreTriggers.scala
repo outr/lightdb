@@ -1,34 +1,34 @@
 package lightdb.trigger
 
-import lightdb.doc.Document
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
 import lightdb.transaction.Transaction
 import rapid._
 
-class StoreTriggers[Doc <: Document[Doc]] extends StoreTrigger[Doc] {
-  private var list = List.empty[StoreTrigger[Doc]]
+class StoreTriggers[Doc <: Document[Doc], +Model <: DocumentModel[Doc]] extends StoreTrigger[Doc, Model] {
+  private var list = List.empty[StoreTrigger[Doc, Model]]
 
-  def +=(trigger: StoreTrigger[Doc]): Unit = synchronized {
+  def +=(trigger: StoreTrigger[Doc, _ <: Model]): Unit = synchronized {
     list = trigger :: list
   }
 
-  def -=(trigger: StoreTrigger[Doc]): Unit = synchronized {
+  def -=(trigger: StoreTrigger[Doc, _ <: Model]): Unit = synchronized {
     list = list.filterNot(_ eq trigger)
   }
 
-  override def transactionStart(transaction: Transaction[Doc]): Task[Unit] =
+  override def transactionStart(transaction: Transaction[Doc, _ <: Model]): Task[Unit] =
     list.map(_.transactionStart(transaction)).tasks.unit
 
-  override def transactionEnd(transaction: Transaction[Doc]): Task[Unit] =
+  override def transactionEnd(transaction: Transaction[Doc, _ <: Model]): Task[Unit] =
     list.map(_.transactionEnd(transaction)).tasks.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] =
+  override def insert(doc: Doc)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Unit] =
     list.map(_.insert(doc)).tasks.unit
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] =
+  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Unit] =
     list.map(_.upsert(doc)).tasks.unit
 
-  override def delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Unit] =
+  override def delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Unit] =
     list.map(_.delete(index, value)).tasks.unit
 
   override def truncate(): Task[Unit] =

@@ -27,6 +27,8 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
                                                                          val model: Model,
                                                                          val lightDB: LightDB,
                                                                          val storeManager: StoreManager) extends Initializable with Disposable {
+  type TX <: Transaction[Doc, _ <: Model]
+
   def supportsArbitraryQuery: Boolean = false
 
   protected def id(doc: Doc): Id[Doc] = doc._id
@@ -35,7 +37,7 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
 
-  object trigger extends StoreTriggers[Doc]
+  object trigger extends StoreTriggers[Doc, Model]
 
   override protected def initialize(): Task[Unit] = Task.defer {
     model match {
@@ -82,35 +84,11 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
   lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial)).singleton
 
-  def prepareTransaction(transaction: Transaction[Doc]): Task[Unit]
+  protected def createTransaction(): Task[TX]
 
-  private def releaseTransaction(transaction: Transaction[Doc]): Task[Unit] = transaction.commit()
+  private def releaseTransaction(transaction: TX): Task[Unit] = transaction.commit()
 
-  protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc]
-
-  protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc]
-
-  def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean]
-
-  protected def _get[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Doc]]
-
-  def count(implicit transaction: Transaction[Doc]): Task[Int]
-
-  protected def _delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean]
-
-  final def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = trigger.insert(doc).flatMap { _ =>
-    _insert(doc)
-  }
-
-  final def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = trigger.upsert(doc).flatMap { _ =>
-    _upsert(doc)
-  }
-
-  final def insert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = for {
-    _ <- docs.map(trigger.insert).tasks
-    _ <- docs.map(insert).tasks
-  } yield docs
-
+  /*
   final def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = for {
     _ <- docs.map(trigger.upsert).tasks
     _ <- docs.map(upsert).tasks
@@ -172,7 +150,7 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
   def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json]
 
-  def truncate()(implicit transaction: Transaction[Doc]): Task[Int]
+  def truncate()(implicit transaction: Transaction[Doc]): Task[Int]*/
 
   def verify(): Task[Boolean] = Task.pure(false)
 
@@ -187,17 +165,17 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
   def optimize(): Task[Unit] = Task.unit
 
   object transaction {
-    private val set = ConcurrentHashMap.newKeySet[Transaction[Doc]]
+    private val set = ConcurrentHashMap.newKeySet[Transaction[Doc, _ <: Model]]
 
     def active: Int = set.size()
 
-    def apply[Return](f: Transaction[Doc] => Task[Return]): Task[Return] = create().flatMap { transaction =>
+    def apply[Return](f: Transaction[Doc, _ <: Model] => Task[Return]): Task[Return] = create().flatMap { transaction =>
       f(transaction).guarantee(release(transaction))
     }
 
-    def create(): Task[Transaction[Doc]] = for {
+    def create(): Task[Transaction[Doc, _ <: Model]] = for {
       _ <- logger.info(s"Creating new Transaction for $name").when(Store.LogTransactions)
-      transaction = new Transaction[Doc]
+      transaction = new Transaction[Doc, _ <: Model]
       _ <- prepareTransaction(transaction)
       _ = set.add(transaction)
       _ <- trigger.transactionStart(transaction)
