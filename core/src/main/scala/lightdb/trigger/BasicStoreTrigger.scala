@@ -6,8 +6,10 @@ import lightdb.store.{Collection, Store}
 import lightdb.transaction.Transaction
 import rapid.Task
 
+import scala.annotation.unchecked.uncheckedVariance
+
 trait BasicStoreTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends StoreTrigger[Doc, Model] {
-  def store: Store[Doc, Model]
+  def store: Store[Doc, Model @uncheckedVariance]
 
   protected def adding(doc: Doc)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Unit]
 
@@ -25,12 +27,14 @@ trait BasicStoreTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
 
   override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Unit] = {
     store match {
-      case c: Collection[Doc, Model] => c.query.filter(_ => index === value).docs.stream.foreach(removing).drain
+      case c: Collection[Doc, Model @uncheckedVariance] => 
+        // Use the transaction's delete method with a function
+        transaction.delete(_ => (index, value)).map(_ => ())
       case _ => ???
     }
   }
 
   override final def truncate: Task[Unit] = store.transaction { implicit transaction =>
-    transaction.stream.foreach(removing).drain
+    transaction.stream.map(doc => removing(doc)(transaction)).drain
   }
 }
