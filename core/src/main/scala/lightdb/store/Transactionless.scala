@@ -11,7 +11,7 @@ import rapid.{Forge, Task}
 /**
  * Convenience feature for simple one-off operations removing the need to manually create a transaction around it.
  */
-case class Transactionless[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](store: Store[Doc, Model]) {
+case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: Store[Doc, Model]) {
   def insert(doc: Doc): Task[Doc] = store.transaction(_.insert(doc))
 
   def upsert(doc: Doc): Task[Doc] = store.transaction(_.upsert(doc))
