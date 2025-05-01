@@ -22,14 +22,12 @@ import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-import scala.annotation.unchecked.uncheckedVariance
-
-abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val name: String,
+abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
                                                                          val path: Option[Path],
                                                                          val model: Model,
                                                                          val lightDB: LightDB,
                                                                          val storeManager: StoreManager) extends Initializable with Disposable {
-  type TX <: Transaction[Doc, _ <: Model]
+  type TX <: Transaction[Doc, Model]
 
   def supportsArbitraryQuery: Boolean = false
 
@@ -39,7 +37,7 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
 
-  object trigger extends StoreTriggers[Doc, Model @uncheckedVariance]
+  object trigger extends StoreTriggers[Doc, Model]
 
   override protected def initialize(): Task[Unit] = Task.defer {
     model match {
@@ -135,6 +133,27 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
     }
   }
 
+  def traverse[From <: Document[From], To <: Document[To]](start: Id[From])
+                                                          (implicit tx: Transaction[Doc]): GraphTraversalEngine[From, To] =
+    traverse(Set(start))
+
+  def traverse[From <: Document[From], To <: Document[To]](starts: Set[Id[From]])
+                                                          (implicit tx: Transaction[Doc]): GraphTraversalEngine[From, To] = {
+    model match {
+      case em: EdgeModel[Doc @unchecked, From @unchecked, To @unchecked] @unchecked =>
+        val step = new GraphStep[Doc, From, To] {
+          override def neighbors(id: Id[From])(implicit t: Transaction[Doc]): Task[Set[Id[To]]] =
+            em.edgesFor(id)
+        }
+        GraphTraversalEngine.start[Doc, From, To](starts, step)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"traverse(...) is only supported on Store instances with EdgeModel, but got: ${model.getClass}"
+        )
+    }
+  }
+
+
   override protected def doDispose(): Task[Unit] = transaction.releaseAll().flatMap { transactions =>
     logger.warn(s"Released $transactions active transactions").when(transactions > 0)
   }.guarantee(trigger.dispose)
@@ -142,7 +161,7 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
 object Store {
   var CacheQueries: Boolean = false
-  var MaxInsertBatch: Int = 1000000
+  var MaxInsertBatch: Int = 1_000_000
   var LogTransactions: Boolean = false
 
   def determineSize(file: File): Long = if (file.isDirectory) {
