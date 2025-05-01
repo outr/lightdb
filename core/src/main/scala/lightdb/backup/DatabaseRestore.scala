@@ -59,7 +59,7 @@ object DatabaseRestore {
         case Some(source) =>
           val task = for {
             _ <- logger.info(s"Restoring ${store.name}...")
-            _ <- store.t.truncate().when(truncate)
+            _ <- store.t.truncate.when(truncate)
             stream = rapid.Stream.fromIterator(Task(source.getLines().map(JsonParser.apply)))
             count <- store.t.json.insert(stream, disableSearchUpdates = true)
             _ <- logger.info(s"Restored $count documents to ${store.name}")

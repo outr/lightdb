@@ -22,6 +22,8 @@ import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
+import scala.annotation.unchecked.uncheckedVariance
+
 abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val name: String,
                                                                          val path: Option[Path],
                                                                          val model: Model,
@@ -37,7 +39,7 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
 
-  object trigger extends StoreTriggers[Doc, Model]
+  object trigger extends StoreTriggers[Doc, Model @uncheckedVariance]
 
   override protected def initialize(): Task[Unit] = Task.defer {
     model match {
@@ -86,71 +88,7 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
   protected def createTransaction(): Task[TX]
 
-  private def releaseTransaction(transaction: TX): Task[Unit] = transaction.commit()
-
-  /*
-  final def upsert(docs: Seq[Doc])(implicit transaction: Transaction[Doc]): Task[Seq[Doc]] = for {
-    _ <- docs.map(trigger.upsert).tasks
-    _ <- docs.map(upsert).tasks
-  } yield docs
-
-  def modify(id: Id[Doc],
-             establishLock: Boolean = true,
-             deleteOnNone: Boolean = false)
-            (f: Forge[Option[Doc], Option[Doc]])
-            (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
-    lock(id, get(id), establishLock) { existing =>
-      f(existing).flatMap {
-        case Some(doc) => upsert(doc).map(_ => Some(doc))
-        case None if deleteOnNone => delete(id).map(_ => None)
-        case None => Task.pure(None)
-      }
-    }
-  }
-
-  def apply[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Task[Doc] =
-    get[V](f).map {
-      case Some(doc) => doc
-      case None =>
-        val (field, value) = f(model)
-        throw DocNotFoundException(name, field.name, value)
-    }
-
-  def apply(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Doc] = get(id).map(_.getOrElse {
-    throw DocNotFoundException(name, "_id", id)
-  })
-
-  def get[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
-    val (field, value) = f(model)
-    _get(field, value)
-  }
-
-  def get(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Option[Doc]] = _get(idField, id)
-
-  def getAll(ids: Seq[Id[Doc]])(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = rapid.Stream
-    .emits(ids)
-    .evalMap(apply)
-
-  def getOrCreate(id: Id[Doc], create: => Doc, establishLock: Boolean = true)
-                 (implicit transaction: Transaction[Doc]): Task[Doc] = modify(id, establishLock = establishLock) {
-    case Some(doc) => Task.pure(Some(doc))
-    case None => Task.pure(Some(create))
-  }.map(_.get)
-
-  def delete[V](f: Model => (UniqueIndex[Doc, V], V))(implicit transaction: Transaction[Doc]): Task[Boolean] = {
-    val (field, value) = f(model)
-    trigger.delete(field, value).flatMap(_ => _delete(field, value))
-  }
-
-  def delete(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = delete(_._id -> id)
-
-  def list()(implicit transaction: Transaction[Doc]): Task[List[Doc]] = stream.toList
-
-  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[Doc] = jsonStream.map(_.as[Doc](model.rw))
-
-  def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json]
-
-  def truncate()(implicit transaction: Transaction[Doc]): Task[Int]*/
+  private def releaseTransaction(transaction: TX): Task[Unit] = transaction.commit
 
   def verify(): Task[Boolean] = Task.pure(false)
 
@@ -165,27 +103,26 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
   def optimize(): Task[Unit] = Task.unit
 
   object transaction {
-    private val set = ConcurrentHashMap.newKeySet[Transaction[Doc, _ <: Model]]
+    private val set = ConcurrentHashMap.newKeySet[TX]
 
     def active: Int = set.size()
 
-    def apply[Return](f: Transaction[Doc, _ <: Model] => Task[Return]): Task[Return] = create().flatMap { transaction =>
+    def apply[Return](f: TX => Task[Return]): Task[Return] = create().flatMap { transaction =>
       f(transaction).guarantee(release(transaction))
     }
 
-    def create(): Task[Transaction[Doc, _ <: Model]] = for {
+    def create(): Task[TX] = for {
       _ <- logger.info(s"Creating new Transaction for $name").when(Store.LogTransactions)
-      transaction = new Transaction[Doc, _ <: Model]
-      _ <- prepareTransaction(transaction)
+      transaction <- createTransaction()
       _ = set.add(transaction)
       _ <- trigger.transactionStart(transaction)
     } yield transaction
 
-    def release(transaction: Transaction[Doc]): Task[Unit] = for {
+    def release(transaction: TX): Task[Unit] = for {
       _ <- logger.info(s"Releasing Transaction for $name").when(Store.LogTransactions)
       _ <- trigger.transactionEnd(transaction)
       _ <- releaseTransaction(transaction)
-      _ <- transaction.close()
+      _ <- transaction.close
       _ = set.remove(transaction)
     } yield ()
 
@@ -200,7 +137,7 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
 
   override protected def doDispose(): Task[Unit] = transaction.releaseAll().flatMap { transactions =>
     logger.warn(s"Released $transactions active transactions").when(transactions > 0)
-  }.guarantee(trigger.dispose())
+  }.guarantee(trigger.dispose)
 }
 
 object Store {

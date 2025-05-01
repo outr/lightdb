@@ -5,14 +5,14 @@ import lightdb.field.Field.UniqueIndex
 import lightdb.transaction.Transaction
 import rapid._
 
-class StoreTriggers[Doc <: Document[Doc], +Model <: DocumentModel[Doc]] extends StoreTrigger[Doc, Model] {
+class StoreTriggers[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends StoreTrigger[Doc, Model] {
   private var list = List.empty[StoreTrigger[Doc, Model]]
 
-  def +=(trigger: StoreTrigger[Doc, _ <: Model]): Unit = synchronized {
+  def +=(trigger: StoreTrigger[Doc, Model]): Unit = synchronized {
     list = trigger :: list
   }
 
-  def -=(trigger: StoreTrigger[Doc, _ <: Model]): Unit = synchronized {
+  def -=(trigger: StoreTrigger[Doc, Model]): Unit = synchronized {
     list = list.filterNot(_ eq trigger)
   }
 
@@ -31,9 +31,9 @@ class StoreTriggers[Doc <: Document[Doc], +Model <: DocumentModel[Doc]] extends 
   override def delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Unit] =
     list.map(_.delete(index, value)).tasks.unit
 
-  override def truncate(): Task[Unit] =
-    list.map(_.truncate()).tasks.unit
+  override def truncate: Task[Unit] =
+    list.map(_.truncate).tasks.unit
 
-  override def dispose(): Task[Unit] =
-    list.map(_.dispose()).tasks.unit
+  override def dispose: Task[Unit] =
+    list.map(_.dispose).tasks.unit
 }

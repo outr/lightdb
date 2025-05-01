@@ -12,7 +12,7 @@ case class SearchResults[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](m
                                                                                total: Option[Int],
                                                                                streamWithScore: rapid.Stream[(V, Double)],
                                                                                facetResults: Map[FacetField[Doc], FacetResult],
-                                                                               transaction: Transaction[Doc]) {
+                                                                               transaction: Transaction[Doc, Model]) {
   def stream: rapid.Stream[V] = streamWithScore.map(_._1)
 
   lazy val listWithScore: Task[List[(V, Double)]] = streamWithScore.toList

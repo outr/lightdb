@@ -1,47 +1,34 @@
 package lightdb.transaction
 
+import fabric._
+import fabric.rw._
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.DocNotFoundException
-import lightdb.feature.FeatureSupport
 import lightdb.field.Field.UniqueIndex
 import lightdb.store.Store
 import rapid._
 
-/*final class Transaction[Doc <: Document[Doc]] extends FeatureSupport[TransactionKey] { transaction =>
-  def commit(): Task[Unit] = features.map {
-    case f: TransactionFeature => f.commit()
-    case _ => Task.unit // Ignore
-  }.tasks.unit
+trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
+  protected def store: Store[Doc, Model]
 
-  def rollback(): Task[Unit] = features.map {
-    case f: TransactionFeature => f.rollback()
-    case _ => Task.unit // Ignore
-  }.tasks.unit
-
-  def close(): Task[Unit] = features.map {
-    case f: TransactionFeature => f.close()
-    case _ => Task.unit // Ignore
-  }.tasks.unit
-}*/
-
-trait Transaction[Doc <: Document[Doc], +Model <: DocumentModel[Doc]] {
-  protected def store: Store[Doc, _ <: Model]
-
-  final def get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = ???
   final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc)(this).flatMap { _ =>
     _insert(doc)
   }
-  def insert(docs: Seq[Doc]): Task[Seq[Doc]] = for {
-    _ <- docs.map(store.trigger.insert(_)(this)).tasks
-    _ <- docs.map(insert).tasks
-  } yield docs
+  def insert(docs: Seq[Doc]): Task[Seq[Doc]] = docs.map(insert).tasks
   final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc)(this).flatMap { _ =>
     _upsert(doc)
   }
+  def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = docs.map(upsert).tasks
   final def exists(id: Id[Doc]): Task[Boolean] = _exists(id)
-  final def count: Task[Int] = ???
-  final def delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = ???
+  final def count: Task[Int] = _count
+  final def delete[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Boolean] = {
+    val (field, value) = f(store.model)
+    store.trigger.delete(field, value)(this).flatMap(_ => _delete(field, value))
+  }
+  final def commit: Task[Unit] = _commit
+  final def rollback: Task[Unit] = _rollback
+  final def close: Task[Unit] = _close
 
   def get[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Option[Doc]] = {
     val (field, value) = f(store.model)
@@ -60,10 +47,27 @@ trait Transaction[Doc <: Document[Doc], +Model <: DocumentModel[Doc]] {
       val (field, value) = f(store.model)
       throw DocNotFoundException(store.name, field.name, value)
   }
+  def getOrCreate(id: Id[Doc], create: => Doc, establishLock: Boolean = true): Task[Doc] =
+    modify(id, establishLock = establishLock) {
+      case Some(doc) => Task.pure(Some(doc))
+      case None => Task.pure(Some(create))
+    }.map(_.get)
   def modify(id: Id[Doc],
              establishLock: Boolean = true,
              deleteOnNone: Boolean = false)
-            (f: Forge[Option[Doc], Option[Doc]]): Task[Option[Doc]] = ???
+            (f: Forge[Option[Doc], Option[Doc]]): Task[Option[Doc]] = store.lock(id, get(id), establishLock) { existing =>
+    f(existing).flatMap {
+      case Some(doc) => upsert(doc).map(_ => Some(doc))
+      case None if deleteOnNone => delete(id).map(_ => None)
+      case None => Task.pure(None)
+    }
+  }
+  def delete(id: Id[Doc]): Task[Boolean] = delete(_._id -> id)
+
+  def list: Task[List[Doc]] = stream.toList
+  def stream: rapid.Stream[Doc] = jsonStream.map(_.as[Doc](store.model.rw))
+  def jsonStream: rapid.Stream[Json]
+  def truncate: Task[Int]
 
   protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
   protected def _insert(doc: Doc): Task[Doc]
@@ -72,4 +76,7 @@ trait Transaction[Doc <: Document[Doc], +Model <: DocumentModel[Doc]] {
   protected def _exists(id: Id[Doc]): Task[Boolean]
   protected def _count: Task[Int]
   protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean]
+  protected def _commit: Task[Unit]
+  protected def _rollback: Task[Unit]
+  protected def _close: Task[Unit]
 }

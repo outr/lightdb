@@ -193,9 +193,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
 
   def truncate(): Task[Unit] = stores.map { c =>
     val store = c.asInstanceOf[Store[KeyValue, KeyValue.type]]
-    store.transaction { implicit transaction =>
-      store.truncate()(transaction)
-    }
+    store.transaction(_.truncate)
   }.tasks.unit
 
   private def doUpgrades(upgrades: List[DatabaseUpgrade],
