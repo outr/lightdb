@@ -17,10 +17,10 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
   lazy val query: Query[Doc, Model, Doc] = Query(model, this, Conversion.Doc())
 
   def doSearch[V](query: Query[Doc, Model, V])
-                 (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]]
+                 (implicit transaction: Transaction[Doc, Model]): Task[SearchResults[Doc, Model, V]]
 
   def aggregate(query: AggregateQuery[Doc, Model])
-               (implicit transaction: Transaction[Doc]): rapid.Stream[MaterializedAggregate[Doc, Model]]
+               (implicit transaction: Transaction[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]]
 
-  def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int]
+  def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc, Model]): Task[Int]
 }

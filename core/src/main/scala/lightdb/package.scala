@@ -1,6 +1,4 @@
-import lightdb.transaction.{Transaction, TransactionManagerImplicits, Tx2}
-
-package object lightdb extends TransactionManagerImplicits {
+package object lightdb {
   implicit class NumericOps[A](numeric: Numeric[A]) {
     def map[B](to: A => B)(from: B => A): Numeric[B] = new Numeric[B] {
       override def plus(x: B, y: B): B = to(numeric.plus(from(x), from(y)))

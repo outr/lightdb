@@ -11,9 +11,9 @@ import scala.jdk.CollectionConverters._
 trait MaterializedBatchModel[Doc <: Document[Doc], MaterialDoc <: Document[MaterialDoc], MaterialModel <: DocumentModel[MaterialDoc]] extends MaterializedModel[Doc, MaterialDoc, MaterialModel] {
   protected def maxBatchSize: Int = 10_000
 
-  private val map = new ConcurrentHashMap[Transaction[MaterialDoc], TransactionState]
+  private val map = new ConcurrentHashMap[Transaction[MaterialDoc, MaterialModel], TransactionState]
 
-  private def changed(docState: DocState[MaterialDoc])(implicit transaction: Transaction[MaterialDoc]): Task[Unit] = Task {
+  private def changed(docState: DocState[MaterialDoc])(implicit transaction: Transaction[MaterialDoc, MaterialModel]): Task[Unit] = Task {
     map.compute(transaction, (_, current) => {
       val state = Option(current).getOrElse(new TransactionState)
       state.changed(docState)
@@ -30,19 +30,19 @@ trait MaterializedBatchModel[Doc <: Document[Doc], MaterialDoc <: Document[Mater
 
   protected def process(list: List[List[DocState[MaterialDoc]]]): Task[Unit]
 
-  override protected def adding(doc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc]): Task[Unit] =
+  override protected def adding(doc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc, MaterialModel]): Task[Unit] =
     changed(DocState.Added(doc))
 
   override protected def modifying(oldDoc: MaterialDoc, newDoc: MaterialDoc)
-                                  (implicit transaction: Transaction[MaterialDoc]): Task[Unit] =
+                                  (implicit transaction: Transaction[MaterialDoc, MaterialModel]): Task[Unit] =
     changed(DocState.Modified(newDoc))
 
-  override protected def removing(doc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc]): Task[Unit] =
+  override protected def removing(doc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc, MaterialModel]): Task[Unit] =
     changed(DocState.Removed(doc))
 
-  override protected def transactionStart(transaction: Transaction[MaterialDoc]): Task[Unit] = Task.unit
+  override protected def transactionStart(transaction: Transaction[MaterialDoc, MaterialModel]): Task[Unit] = Task.unit
 
-  override protected def transactionEnd(transaction: Transaction[MaterialDoc]): Task[Unit] = Task {
+  override protected def transactionEnd(transaction: Transaction[MaterialDoc, MaterialModel]): Task[Unit] = Task {
     Option(map.get(transaction)).foreach { state =>
       if (state.size > 0) {
         val list = state.process()
