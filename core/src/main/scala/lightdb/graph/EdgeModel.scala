@@ -33,7 +33,7 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
   private val edgesReverseModel: EdgeConnectionsModel[To, From] = EdgeConnectionsModel()
 
   def edgesFor(id: Id[From]): Task[Set[Id[To]]] = _edgesStore.transaction { implicit transaction =>
-    _edgesStore.get(id.asInstanceOf[Id[EdgeConnections[From, To]]]).map(_.map(_.connections).getOrElse(Set.empty))
+    transaction.get(id.asInstanceOf[Id[EdgeConnections[From, To]]]).map(_.map(_.connections).getOrElse(Set.empty))
   }
 
   def reachableFrom(id: Id[From])(implicit ev: Id[To] =:= Id[From]): Task[Set[(Id[To], Int)]] = Task {
@@ -167,7 +167,7 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
   }
 
   def reverseEdgesFor(id: Id[To]): Task[Set[Id[From]]] = _edgesReverseStore.transaction { implicit transaction =>
-    _edgesReverseStore.get(id.asInstanceOf[Id[EdgeConnections[To, From]]]).map(_.map(_.connections).getOrElse(Set.empty))
+    transaction.get(id.asInstanceOf[Id[EdgeConnections[To, From]]]).map(_.map(_.connections).getOrElse(Set.empty))
   }
 
   override protected def init[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = {
@@ -187,9 +187,9 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
         storeMode = StoreMode.All[RD, RM]()
       )
       // TODO: Validate store contents against store to verify integrity
-      store.trigger += new StoreTrigger[Doc] {
-        private var map: Map[Transaction[Doc], (Transaction[D], Transaction[RD])] = Map.empty
-        private def t(implicit transaction: Transaction[Doc]): (Transaction[D], Transaction[RD]) = synchronized {
+      store.trigger += new StoreTrigger[Doc, Model] {
+        private var map: Map[Transaction[Doc, Model], (Transaction[D, M], Transaction[RD, RM])] = Map.empty
+        private def t(implicit transaction: Transaction[Doc, Model]): (Transaction[D, M], Transaction[RD, RM]) = synchronized {
           map.get(transaction) match {
             case Some((d, rd)) => d -> rd
             case None =>
@@ -199,13 +199,13 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
               d -> rd
           }
         }
-        private def removeTransaction(transaction: Transaction[Doc]): Unit = synchronized {
+        private def removeTransaction(transaction: Transaction[Doc, Model]): Unit = synchronized {
           val task = map.get(transaction) match {
             case Some((dt, rt)) => for {
-              _ <- dt.commit()
-              _ <- rt.commit()
-              _ <- dt.close()
-              _ <- rt.close()
+              _ <- dt.commit
+              _ <- rt.commit
+              _ <- dt.close
+              _ <- rt.close
               _ = this.synchronized {
                 map -= transaction
               }
@@ -215,36 +215,36 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
           task.sync()
         }
 
-        override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = {
+        override def insert(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit] = {
           val (dt, rt) = t
           add(doc)(dt, rt)
         }
 
-        override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Unit] = insert(doc)
+        override def upsert(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit] = insert(doc)
 
         override def delete[V](index: Field.UniqueIndex[Doc, V], value: V)
-                              (implicit transaction: Transaction[Doc]): Task[Unit] =
-          store.get(_ => index -> value).flatMap {
+                              (implicit transaction: Transaction[Doc, Model]): Task[Unit] =
+          transaction.get(_ => index -> value).flatMap {
             case Some(doc) =>
               val (dt, rt) = t
               remove(doc)(dt, rt)
             case None => Task.unit
           }
 
-        override def transactionEnd(transaction: Transaction[Doc]): Task[Unit] = Task(removeTransaction(transaction))
+        override def transactionEnd(transaction: Transaction[Doc, Model]): Task[Unit] = Task(removeTransaction(transaction))
           .next(super.transactionEnd(transaction))
 
-        override def dispose(): Task[Unit] = for {
+        override def dispose: Task[Unit] = for {
           _ <- _edgesStore.dispose
           _ <- _edgesReverseStore.dispose
         } yield ()
 
-        override def truncate(): Task[Unit] = for {
+        override def truncate: Task[Unit] = for {
           _ <- _edgesStore.transaction { implicit transaction =>
-            _edgesStore.truncate()
+            transaction.truncate
           }
           _ <- _edgesReverseStore.transaction { implicit transaction =>
-            _edgesReverseStore.truncate()
+            transaction.truncate
           }
         } yield ()
       }
@@ -256,8 +256,8 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
     }
   }
 
-  protected def add(doc: Doc)(implicit et: Transaction[D], ert: Transaction[RD]): Task[Unit] = for {
-    _ <- _edgesStore.modify(doc._from) { edgeOption =>
+  protected def add(doc: Doc)(implicit et: Transaction[D, M], ert: Transaction[RD, RM]): Task[Unit] = for {
+    _ <- et.modify(doc._from) { edgeOption =>
       Task {
         Some(edgeOption match {
           case Some(e) => e.copy(
@@ -270,7 +270,7 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
         })
       }
     }
-    _ <- _edgesReverseStore.modify(doc._to) { edgeReverseOption =>
+    _ <- ert.modify(doc._to) { edgeReverseOption =>
       Task {
         Some(edgeReverseOption match {
           case Some(e) => e.copy(
@@ -285,8 +285,8 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
     }
   } yield ()
 
-  protected def remove(doc: Doc)(implicit et: Transaction[D], ert: Transaction[RD]): Task[Unit] = for {
-    _ <- _edgesStore.modify(doc._from) { edgeOption =>
+  protected def remove(doc: Doc)(implicit et: Transaction[D, M], ert: Transaction[RD, RM]): Task[Unit] = for {
+    _ <- et.modify(doc._from) { edgeOption =>
       Task {
         edgeOption.flatMap { e =>
           val edge = e.copy(
@@ -300,7 +300,7 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
         }
       }
     }
-    _ <- _edgesReverseStore.modify(doc._to) { edgeReverseOption =>
+    _ <- ert.modify(doc._to) { edgeReverseOption =>
       Task {
         edgeReverseOption.flatMap { e =>
           val edge = e.copy(
