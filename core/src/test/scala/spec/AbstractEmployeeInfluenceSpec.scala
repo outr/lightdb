@@ -51,7 +51,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
       db.reportsTo.transaction { implicit tx =>
         db.collaboratesWith.transaction { implicit ct =>
           db.reportsTo.traverse(Set(Id[Employee]("alice")))
-            .step(ReportsAndCollaborationStep(db.collaboratesWith))
+            .step[CollaboratesWith](ReportsAndCollaborationStep(db.collaboratesWith))
             .collectAllReachable()
             .map { results =>
               results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))

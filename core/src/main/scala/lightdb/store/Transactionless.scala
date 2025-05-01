@@ -8,7 +8,7 @@ import lightdb.field.Field.UniqueIndex
 import lightdb.store.split.SplitCollection
 import rapid.{Forge, Task}
 
-case class Transactionless[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](store: Store[Doc, Model]) {
+case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: Store[Doc, Model]) {
   /**
    * Convenience feature for simple one-off operations removing the need to manually create a transaction around it.
    */

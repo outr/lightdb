@@ -22,7 +22,7 @@ import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val name: String,
+abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
                                                                          val path: Option[Path],
                                                                          val model: Model,
                                                                          val lightDB: LightDB,
@@ -219,6 +219,27 @@ abstract class Store[Doc <: Document[Doc], +Model <: DocumentModel[Doc]](val nam
       list.size
     }
   }
+
+  def traverse[From <: Document[From], To <: Document[To]](start: Id[From])
+                                                          (implicit tx: Transaction[Doc]): GraphTraversalEngine[From, To] =
+    traverse(Set(start))
+
+  def traverse[From <: Document[From], To <: Document[To]](starts: Set[Id[From]])
+                                                          (implicit tx: Transaction[Doc]): GraphTraversalEngine[From, To] = {
+    model match {
+      case em: EdgeModel[Doc @unchecked, From @unchecked, To @unchecked] @unchecked =>
+        val step = new GraphStep[Doc, From, To] {
+          override def neighbors(id: Id[From])(implicit t: Transaction[Doc]): Task[Set[Id[To]]] =
+            em.edgesFor(id)
+        }
+        GraphTraversalEngine.start[Doc, From, To](starts, step)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"traverse(...) is only supported on Store instances with EdgeModel, but got: ${model.getClass}"
+        )
+    }
+  }
+
 
   override protected def doDispose(): Task[Unit] = transaction.releaseAll().flatMap { transactions =>
     logger.warn(s"Released $transactions active transactions").when(transactions > 0)

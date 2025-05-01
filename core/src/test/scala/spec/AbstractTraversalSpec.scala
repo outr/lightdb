@@ -44,7 +44,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { implicit tx =>
         db.edges.traverse(Id[Node]("A"))
-          .step(GraphStep.forward(SimpleEdgeModel))
+          .step[SimpleEdge](GraphStep.forward(SimpleEdgeModel))
           .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
@@ -54,7 +54,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse graph in reverse from D to find parents" in {
       db.edges.transaction { implicit tx =>
         db.edges.traverse(Id[Node]("D"))
-          .step(GraphStep.reverse(SimpleEdgeModel))
+          .step[SimpleEdge](GraphStep.reverse(SimpleEdgeModel))
           .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
