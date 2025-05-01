@@ -98,7 +98,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 object Field {
   val NullString: String = "||NULL||"
 
-  var MaxIn: Option[Int] = Some(1_000)
+  var MaxIn: Option[Int] = Some(1000)
 
   def apply[Doc <: Document[Doc], V](name: String, get: FieldGetter[Doc, V])(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
     name = name,

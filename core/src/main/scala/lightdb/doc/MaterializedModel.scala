@@ -5,8 +5,10 @@ import lightdb.transaction.Transaction
 import lightdb.trigger.BasicStoreTrigger
 import rapid.Task
 
+import scala.annotation.unchecked.uncheckedVariance
+
 trait MaterializedModel[Doc <: Document[Doc], MaterialDoc <: Document[MaterialDoc], MaterialModel <: DocumentModel[MaterialDoc]] extends DocumentModel[Doc] { mm =>
-  def materialStore: Store[MaterialDoc, MaterialModel]
+  def materialStore: Store[MaterialDoc, MaterialModel @uncheckedVariance]
 
   protected def adding(doc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc, _ <: MaterialModel]): Task[Unit]
   protected def modifying(oldDoc: MaterialDoc, newDoc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc, _ <: MaterialModel]): Task[Unit]
@@ -16,8 +18,8 @@ trait MaterializedModel[Doc <: Document[Doc], MaterialDoc <: Document[MaterialDo
 
   override protected def init[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = {
     super.initialize(store).map { _ =>
-      materialStore.trigger += new BasicStoreTrigger[MaterialDoc, MaterialModel] {
-        override def store: Store[MaterialDoc, MaterialModel] = materialStore
+      materialStore.trigger += new BasicStoreTrigger[MaterialDoc, MaterialModel @uncheckedVariance] {
+        override def store: Store[MaterialDoc, MaterialModel @uncheckedVariance] = materialStore
 
         override protected def adding(doc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc, _ <: MaterialModel]): Task[Unit] = mm.adding(doc)
         override protected def modifying(oldDoc: MaterialDoc, newDoc: MaterialDoc)(implicit transaction: Transaction[MaterialDoc, _ <: MaterialModel]): Task[Unit] = mm.modifying(oldDoc, newDoc)

@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters._
 
 trait MaterializedBatchModel[Doc <: Document[Doc], MaterialDoc <: Document[MaterialDoc], MaterialModel <: DocumentModel[MaterialDoc]] extends MaterializedModel[Doc, MaterialDoc, MaterialModel] {
-  protected def maxBatchSize: Int = 10_000
+  protected def maxBatchSize: Int = 10000
 
   private val map = new ConcurrentHashMap[Transaction[MaterialDoc, MaterialModel], TransactionState]
 
@@ -76,4 +76,3 @@ trait MaterializedBatchModel[Doc <: Document[Doc], MaterialDoc <: Document[Mater
     }
   }
 }
-

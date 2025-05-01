@@ -11,11 +11,11 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
 
   protected def maxTransactionWriteBuffer: Int = BufferedWritingStore.MaxTransactionWriteBuffer
 
-  protected def getWriteBuffer(transaction: Transaction[Doc]): WriteBuffer[Doc]
-  protected def setWriteBuffer(writeBuffer: WriteBuffer[Doc], transaction: Transaction[Doc]): Unit
+  protected def getWriteBuffer(transaction: Transaction[Doc, _ <: Model]): WriteBuffer[Doc]
+  protected def setWriteBuffer(writeBuffer: WriteBuffer[Doc], transaction: Transaction[Doc, _ <: Model]): Unit
 
   protected def withWriteBuffer(f: WriteBuffer[Doc] => Task[WriteBuffer[Doc]])
-                               (implicit transaction: Transaction[Doc]): Task[WriteBuffer[Doc]] = Task {
+                               (implicit transaction: Transaction[Doc, _ <: Model]): Task[WriteBuffer[Doc]] = Task {
     transaction.synchronized {
       val wb = getWriteBuffer(transaction)
       val modified = f(wb).sync()
@@ -32,7 +32,7 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
   protected def flushBuffer(stream: rapid.Stream[WriteOp[Doc]]): Task[Unit]
 
   protected def writeMod(f: Map[Id[Doc], WriteOp[Doc]] => Task[Map[Id[Doc], WriteOp[Doc]]])
-                        (implicit transaction: Transaction[Doc]): Task[WriteBuffer[Doc]] = withWriteBuffer { b =>
+                        (implicit transaction: Transaction[Doc, _ <: Model]): Task[WriteBuffer[Doc]] = withWriteBuffer { b =>
     val s = b.map.size
     f(b.map).map { map =>
       val d = map.size - s
@@ -44,7 +44,7 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
     }
   }
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task {
+  override def prepareTransaction(transaction: Transaction[Doc, _ <: Model]): Task[Unit] = Task {
     transaction.put(TransactionKey(id), new TransactionFeature {
       override def commit(): Task[Unit] = {
         writeMod { map =>
@@ -54,17 +54,17 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
     })
   }
 
-  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = writeMod { map =>
+  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Doc] = writeMod { map =>
     Task(map + (doc._id -> WriteOp.Insert(doc)))
   }.map(_ => doc)
 
-  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = writeMod { map =>
+  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc, _ <: Model]): Task[Doc] = writeMod { map =>
     Task(map + (doc._id -> WriteOp.Upsert(doc)))
   }.map(_ => doc)
 
-  protected def _exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean]
+  protected def _exists(id: Id[Doc])(implicit transaction: Transaction[Doc, _ <: Model]): Task[Boolean]
 
-  override final def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task.defer {
+  override final def exists(id: Id[Doc])(implicit transaction: Transaction[Doc, _ <: Model]): Task[Boolean] = Task.defer {
     val wb = getWriteBuffer(transaction)
     wb.map.get(id) match {
       case Some(op) => op match {
@@ -77,7 +77,7 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
   }
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V)
-                                   (implicit transaction: Transaction[Doc]): Task[Boolean] = if (index == idField) {
+                                   (implicit transaction: Transaction[Doc, _ <: Model]): Task[Boolean] = if (index == idField) {
     writeMod { map =>
       Task {
         val id = value.asInstanceOf[Id[Doc]]
@@ -88,9 +88,9 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
     throw new UnsupportedOperationException(s"BufferedWritingStore can only get on _id, but ${index.name} was attempted")
   }
 
-  protected def _truncate(implicit transaction: Transaction[Doc]): Task[Int]
+  protected def _truncate(implicit transaction: Transaction[Doc, _ <: Model]): Task[Int]
 
-  override final def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = Task.defer {
+  override final def truncate()(implicit transaction: Transaction[Doc, _ <: Model]): Task[Int] = Task.defer {
     var count = 0
     withWriteBuffer { wb =>
       Task {
@@ -106,5 +106,5 @@ trait BufferedWritingStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ex
 }
 
 object BufferedWritingStore {
-  var MaxTransactionWriteBuffer: Int = 20_000
+  var MaxTransactionWriteBuffer: Int = 20000
 }
