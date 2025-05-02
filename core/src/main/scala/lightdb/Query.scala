@@ -12,11 +12,10 @@ import lightdb.filter._
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Collection, Conversion}
-import lightdb.transaction.Transaction
+import lightdb.transaction.{CollectionTransaction, Transaction}
 import rapid.{Forge, Grouped, Pull, Task}
 
-case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Model,
-                                                                       collection: Collection[Doc, Model],
+case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transaction: CollectionTransaction[Doc, Model],
                                                                        conversion: Conversion[Doc, V],
                                                                        filter: Option[Filter[Doc]] = None,
                                                                        sort: List[Sort] = Nil,
@@ -29,6 +28,9 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
                                                                        facets: List[FacetQuery[Doc]] = Nil,
                                                                        arbitraryQuery: Option[ArbitraryQuery] = None,
                                                                        optimize: Boolean = false) { query =>
+  def collection: Collection[Doc, Model] = transaction.store
+  def model: Model = collection.model
+
   private type Q = Query[Doc, Model, V]
 
   def scored: Q = copy(scoreDocs = true)
@@ -125,7 +127,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
       radius = radius
     ))
 
-  def search(implicit transaction: Transaction[Doc, Model]): Task[SearchResults[Doc, Model, V]] = {
+  def search: Task[SearchResults[Doc, Model, V]] = {
     if (arbitraryQuery.nonEmpty && !collection.supportsArbitraryQuery) {
       throw new UnsupportedOperationException(s"Arbitrary query is set, but not allowed with this store (${collection.getClass.getSimpleName})")
     }
@@ -147,17 +149,17 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     } else {
       this
     }
-    collection.doSearch(q)
+    transaction.doSearch(q)
   }
 
-  def streamPage(implicit transaction: Transaction[Doc, Model]): rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
+  def streamPage: rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
 
-  def streamScoredPage(implicit transaction: Transaction[Doc, Model]): rapid.Stream[(V, Double)] =
+  def streamScoredPage: rapid.Stream[(V, Double)] =
     rapid.Stream.force(search.map(_.streamWithScore))
 
-  def stream(implicit transaction: Transaction[Doc, Model]): rapid.Stream[V] = streamScored.map(_._1)
+  def stream: rapid.Stream[V] = streamScored.map(_._1)
 
-  def streamScored(implicit transaction: Transaction[Doc, Model]): rapid.Stream[(V, Double)] = {
+  def streamScored: rapid.Stream[(V, Double)] = {
     rapid.Stream.merge {
       Task.defer {
         copy(limit = Some(1), countTotal = true).search.map(_.total.get).map { total =>
