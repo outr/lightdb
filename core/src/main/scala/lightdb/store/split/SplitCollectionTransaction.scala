@@ -1,15 +1,17 @@
 package lightdb.store.split
 
 import fabric.Json
-import lightdb.Id
+import lightdb.{Id, Query, SearchResults}
+import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
-import lightdb.transaction.Transaction
+import lightdb.materialized.MaterializedAggregate
+import lightdb.transaction.{CollectionTransaction, Transaction}
 import rapid.Task
 
 case class SplitCollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SplitCollection[Doc, Model],
                                                                                          storage: Transaction[Doc, Model],
-                                                                                         searching: Transaction[Doc, Model]) extends Transaction[Doc, Model] {
+                                                                                         searching: CollectionTransaction[Doc, Model]) extends CollectionTransaction[Doc, Model] {
   /**
    * Set this to false to ignore data changes in this transaction not applying changes to the searching transaction.
    *
@@ -60,6 +62,15 @@ case class SplitCollectionTransaction[Doc <: Document[Doc], Model <: DocumentMod
     _ <- store.storage.transaction.release(storage.asInstanceOf[store.storage.TX])
     _ <- store.searching.transaction.release(searching.asInstanceOf[store.searching.TX])
   } yield ()
+
+  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
+    searching.doSearch(query)
+
+  override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
+    searching.aggregate(query)
+
+  override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] =
+    searching.aggregateCount(query)
 
   override def truncate: Task[Int] = storage.truncate.flatTap { _ =>
     searching.truncate.when(applySearchUpdates)

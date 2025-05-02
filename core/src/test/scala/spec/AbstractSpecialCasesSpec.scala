@@ -38,21 +38,21 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "verify filtering by created works" in {
       DB.specialOne.transaction { implicit transaction =>
         for {
-          _ <- DB.specialOne.query.filter(_.created < Timestamp()).toList.map(_.map(_.name).toSet should be(Set("First", "Second")))
-          _ <- DB.specialOne.query.filter(_.created > Timestamp()).toList.map(_.map(_.name).toSet should be(Set.empty))
+          _ <- transaction.query.filter(_.created < Timestamp()).toList.map(_.map(_.name).toSet should be(Set("First", "Second")))
+          _ <- transaction.query.filter(_.created > Timestamp()).toList.map(_.map(_.name).toSet should be(Set.empty))
         } yield succeed
       }
     }
     "verify the storage of data is correct" in {
       DB.specialOne.transaction { implicit transaction =>
-        DB.specialOne.query.sort(Sort.ByField(SpecialOne.name).asc).json(ref => List(ref._id)).toList.map { list =>
+        transaction.query.sort(Sort.ByField(SpecialOne.name).asc).json(ref => List(ref._id)).toList.map { list =>
           list should be(List(obj("_id" -> "first"), obj("_id" -> "second")))
         }
       }
     }
     "group ids" in {
       DB.specialOne.transaction { implicit transaction =>
-        DB.specialOne.query.aggregate(ref => List(ref._id.concat)).toList.map { list =>
+        transaction.query.aggregate(ref => List(ref._id.concat)).toList.map { list =>
           list.map(_(_._id.concat)) should be(List(List(SpecialOne.id("first"), SpecialOne.id("second"))))
         }
       }

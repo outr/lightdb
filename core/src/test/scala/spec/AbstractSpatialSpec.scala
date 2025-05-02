@@ -79,7 +79,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
     }
     "sort by distance from Oklahoma City" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.distance(
+        transaction.query.distance(
           _.point.list,
           from = oklahomaCity,
           radius = Some(1320.miles)
@@ -97,7 +97,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
     }
     "sort by distance from Noble using geo" in {
       DB.people.transaction { implicit transaction =>
-        DB.people.query.distance(
+        transaction.query.distance(
           _.geo,
           from = noble,
           radius = Some(10_000.miles)

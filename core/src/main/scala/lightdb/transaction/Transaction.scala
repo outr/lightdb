@@ -10,7 +10,7 @@ import lightdb.store.Store
 import rapid._
 
 trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
-  protected def store: Store[Doc, Model]
+  def store: Store[Doc, Model]
 
   final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc)(this).flatMap { _ =>
     _insert(doc)

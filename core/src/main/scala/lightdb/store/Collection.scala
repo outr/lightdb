@@ -3,7 +3,7 @@ package lightdb.store
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
-import lightdb.transaction.Transaction
+import lightdb.transaction.{CollectionTransaction, Transaction}
 import lightdb.{LightDB, Query, SearchResults}
 import rapid.Task
 
@@ -14,13 +14,5 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
                                                                              model: Model,
                                                                              lightDB: LightDB,
                                                                              storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
-  lazy val query: Query[Doc, Model, Doc] = Query(model, this, Conversion.Doc())
-
-  def doSearch[V](query: Query[Doc, Model, V])
-                 (implicit transaction: Transaction[Doc, Model]): Task[SearchResults[Doc, Model, V]]
-
-  def aggregate(query: AggregateQuery[Doc, Model])
-               (implicit transaction: Transaction[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]]
-
-  def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc, Model]): Task[Int]
+  override type TX <: CollectionTransaction[Doc, Model]
 }

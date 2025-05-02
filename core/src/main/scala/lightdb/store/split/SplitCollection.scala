@@ -28,17 +28,6 @@ class SplitCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
     t2 <- searching.transaction.create()
   } yield SplitCollectionTransaction(this, t1, t2)
 
-  override def doSearch[V](query: Query[Doc, Model, V])
-                          (implicit transaction: Transaction[Doc, Model]): Task[SearchResults[Doc, Model, V]] =
-    searching.doSearch[V](query)
-
-  override def aggregate(query: AggregateQuery[Doc, Model])
-                        (implicit transaction: Transaction[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    searching.aggregate(query)
-
-  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc, Model]): Task[Int] =
-    searching.aggregateCount(query)
-
   override def verify(): Task[Boolean] = transaction { implicit transaction =>
     for {
       storageCount <- transaction.storage.count
