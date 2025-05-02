@@ -71,27 +71,27 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify the database is empty" in {
       db.people.transaction { implicit transaction =>
-        db.people.count.map(_ should be(0))
+        transaction.count.map(_ should be(0))
       }
     }
     "insert the records" in {
       db.people.transaction { implicit transaction =>
-        db.people.insert(names).map(_ should not be None)
+        transaction.insert(names).map(_ should not be None)
       }
     }
     "retrieve the first record by _id -> id" in {
       db.people.transaction { implicit transaction =>
-        db.people(_._id -> adam._id).map(_ should be(adam))
+        transaction(_._id -> adam._id).map(_ should be(adam))
       }
     }
     "retrieve the first record by id" in {
       db.people.transaction { implicit transaction =>
-        db.people(adam._id).map(_ should be(adam))
+        transaction(adam._id).map(_ should be(adam))
       }
     }
     "count the records in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.count.map(_ should be(26))
+        transaction.count.map(_ should be(26))
       }
     }
     "stream the ids in the database" in {
@@ -103,7 +103,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "stream the records in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.stream.map(_.age).toList.map(_.toSet).map { ages =>
+        transaction.stream.map(_.age).toList.map(_.toSet).map { ages =>
           ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
         }
       }
@@ -197,7 +197,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "delete some records" in {
       db.people.transaction { implicit transaction =>
-        db.people.delete(_._id -> linda._id).and(db.people.delete(_._id -> yuri._id)).map { t =>
+        transaction.delete(_._id -> linda._id).and(transaction.delete(_._id -> yuri._id)).map { t =>
           t should be(true -> true)
         }
       }
@@ -216,13 +216,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify the records were deleted" in {
       db.people.transaction { implicit transaction =>
-        db.people.count.map(_ should be(24))
+        transaction.count.map(_ should be(24))
       }
     }
     // TODO: Fix same transaction modifying the same record concurrently
     "modify a record" in {
       db.people.transaction { implicit transaction =>
-        db.people.modify(adam._id) {
+        transaction.modify(adam._id) {
           case Some(p) => Task.pure(Some(p.copy(name = "Allan")))
           case None => fail("Adam was not found!")
         }
@@ -233,7 +233,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify the record has been renamed" in {
       db.people.transaction { implicit transaction =>
-        db.people(_._id -> adam._id).map(_.name should be("Allan"))
+        transaction(_._id -> adam._id).map(_.name should be("Allan"))
       }
     }
     "verify start time has been set" in {
@@ -252,7 +252,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "query the database to verify records were persisted properly" in {
       db.people.transaction { implicit transaction =>
-        db.people.stream.toList.map(_.map(_.name).toSet).map { set =>
+        transaction.stream.toList.map(_.map(_.name).toSet).map { set =>
           set should be(Set(
             "Tori", "Ruth", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin",
             "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg", "Veronica"
@@ -305,8 +305,8 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "update the city for a user" in {
       db.people.transaction { implicit transaction =>
-        db.people(zoey._id).flatMap { p =>
-          db.people.upsert(p.copy(city = Some(City("Los Angeles"))))
+        transaction(zoey._id).flatMap { p =>
+          transaction.upsert(p.copy(city = Some(City("Los Angeles"))))
         }
       }.succeed
     }
@@ -314,10 +314,10 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.people.transaction { implicit transaction =>
         for {
           original <- db.people.query.filter(_.name === "Ruth").first
-          _ <- db.people.upsert(original.copy(
+          _ <- transaction.upsert(original.copy(
             name = "Not Ruth"
           ))
-          _ <- transaction.commit()
+          _ <- transaction.commit
           people <- db.people.query.filter(_.name === "Not Ruth").toList
         } yield people.map(_.name) should be(List("Not Ruth"))
       }
@@ -477,12 +477,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             nicknames = Set("robot", s"sf$index")
           )
         }
-        db.people.insert(p).succeed
+        transaction.insert(p).succeed
       }
     }
     "verify the correct number of people exist in the database" in {
       db.people.transaction { implicit transaction =>
-        db.people.count.map(_ should be(CreateRecords + 24))
+        transaction.count.map(_ should be(CreateRecords + 24))
       }
     }
     "verify id count matches total count" in {
@@ -540,12 +540,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "truncate the collection" in {
       db.people.transaction { implicit transaction =>
-        db.people.truncate().map(_ should be(CreateRecords + 24))
+        transaction.truncate.map(_ should be(CreateRecords + 24))
       }
     }
     "verify the collection is empty" in {
       db.people.transaction { implicit transaction =>
-        db.people.count.map(_ should be(0))
+        transaction.count.map(_ should be(0))
       }
     }
     "restore from database backup" in {
@@ -553,7 +553,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify the correct number of records exist" in {
       db.people.transaction { implicit transaction =>
-        db.people.count.map(_ should be(24))
+        transaction.count.map(_ should be(24))
       }
     }
     /*"insert an invalid record via JSON" in {
@@ -676,7 +676,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             val remove = firsts.collect {
               case DocState.Removed(doc) => doc._id
             }.toSet
-            db.ageLinks.modify(AgeLinks.id(age)) { existing =>
+            transaction.modify(AgeLinks.id(age)) { existing =>
               val current = existing.getOrElse(AgeLinks(age, Nil))
               val modified = current.copy(
                 people = (current.people ::: add).filterNot(remove.contains)

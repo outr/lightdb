@@ -22,24 +22,26 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
       db.init.succeed
     }
     "insert delivery chain nodes" in {
-      db.transactions(db.warehouses, db.trucks, db.depots, db.drones, db.customers) { implicit tx =>
-        for {
-          _ <- db.warehouses.insert(Warehouse("w1", Id("warehouse1")))(tx.ta)
-          _ <- db.trucks.insert(Truck("truck1", Id("truck1")))(tx.tb)
-          _ <- db.depots.insert(Depot("depot1", Id("depot1")))(tx.tc)
-          _ <- db.drones.insert(Drone("drone1", Id("drone1")))(tx.td)
-          _ <- db.customers.insert(Customer("customer1", Id("customer1")))(tx.te)
-        } yield succeed
+      db.transactions(db.warehouses, db.trucks, db.depots, db.drones, db.customers) {
+        case (warehouses, trucks, depots, drones, customers) =>
+          for {
+            _ <- warehouses.insert(Warehouse("w1", Id("warehouse1")))
+            _ <- trucks.insert(Truck("truck1", Id("truck1")))
+            _ <- depots.insert(Depot("depot1", Id("depot1")))
+            _ <- drones.insert(Drone("drone1", Id("drone1")))
+            _ <- customers.insert(Customer("customer1", Id("customer1")))
+          } yield succeed
       }
     }
     "insert delivery chain edges" in {
-      db.transactions(db.shipsTo, db.deliversToDepot, db.loadsTo, db.deliversToCustomer) { implicit tx =>
-        for {
-          _ <- db.shipsTo.insert(ShipsTo(Id("warehouse1"), Id("truck1")))(tx.ta)
-          _ <- db.deliversToDepot.insert(DeliversToDepot(Id("truck1"), Id("depot1")))(tx.tb)
-          _ <- db.loadsTo.insert(LoadsTo(Id("depot1"), Id("drone1")))(tx.tc)
-          _ <- db.deliversToCustomer.insert(DeliversToCustomer(Id("drone1"), Id("customer1")))(tx.td)
-        } yield succeed
+      db.transactions(db.shipsTo, db.deliversToDepot, db.loadsTo, db.deliversToCustomer) {
+        case (shipsTo, deliversToDepot, loadsTo, deliversToCustomer) =>
+          for {
+            _ <- shipsTo.insert(ShipsTo(Id("warehouse1"), Id("truck1")))
+            _ <- deliversToDepot.insert(DeliversToDepot(Id("truck1"), Id("depot1")))
+            _ <- loadsTo.insert(LoadsTo(Id("depot1"), Id("drone1")))
+            _ <- deliversToCustomer.insert(DeliversToCustomer(Id("drone1"), Id("customer1")))
+          } yield succeed
       }
     }
     "traverse full delivery path from warehouse to customer" in {
@@ -48,16 +50,15 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
         db.deliversToDepot,
         db.loadsTo,
         db.deliversToCustomer
-      ) { implicit tx =>
-        for {
-          customers <- db.shipsTo.traverse(Id[Warehouse]("warehouse1"))(tx.ta)
-            .step(GraphStep.forward(DeliversToDepotModel))(tx.tb)
-            .step(GraphStep.forward(LoadsToModel))(tx.tc)
-            .step(GraphStep.forward(DeliversToCustomerModel))(tx.td)
-            .collectAllReachable()
-        } yield {
-          customers should contain only Id("customer1")
-        }
+      ) {
+        case (shipsTo, deliversToDepot, loadsTo, deliversToCustomer) =>
+          for {
+            customers <- db.shipsTo.traverse(Id[Warehouse]("warehouse1"))(shipsTo)
+              .step(GraphStep.forward(DeliversToDepotModel))(deliversToDepot)
+              .step(GraphStep.forward(LoadsToModel))(loadsTo)
+              .step(GraphStep.forward(DeliversToCustomerModel))(deliversToCustomer)
+              .collectAllReachable()
+          } yield customers should contain only Id("customer1")
       }.succeed
     }
     "truncate the database" in {

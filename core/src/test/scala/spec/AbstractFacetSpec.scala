@@ -32,12 +32,12 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify the database is empty" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.count.map(_ should be(0))
+        transaction.count.map(_ should be(0))
       }
     }
     "insert the records" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.insert(List(one, two, three, four, five, six, seven)).map(_ should not be None)
+        transaction.insert(List(one, two, three, four, five, six, seven)).map(_ should not be None)
       }
     }
     "list author facets" in {
@@ -89,7 +89,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "modify a record" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.upsert(five.copy(name = "Cinco")).succeed
+        transaction.upsert(five.copy(name = "Cinco")).succeed
       }
     }
     "list all results for 2010" in {
@@ -221,7 +221,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "remove a keyword from One" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.upsert(one.copy(keywords = List("support@one.com"))).succeed
+        transaction.upsert(one.copy(keywords = List("support@one.com"))).succeed
       }
     }
     "show all results for support@two.com excluding updated" in {
@@ -256,7 +256,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "delete a facets document" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.delete(four._id).succeed
+        transaction.delete(four._id).succeed
       }
     }
     "query all documents verifying deletion of Four" in {
@@ -271,7 +271,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "truncate the collection" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.truncate().map(_ should be(6))
+        transaction.truncate.map(_ should be(6))
       }
     }
     "dispose the database" in {

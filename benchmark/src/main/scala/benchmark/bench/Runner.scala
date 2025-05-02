@@ -9,7 +9,7 @@ import lightdb.lmdb.LMDBStore
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.sql.SQLiteStore
-import lightdb.store.MapStore
+import lightdb.store.hashmap.HashMapStore
 import lightdb.store.split.SplitStoreManager
 import org.apache.commons.io.FileUtils
 
@@ -25,7 +25,7 @@ object Runner {
     "MongoDB" -> MongoDBBench,
 //    "LightDB011" -> LightDB011Bench
     "LightDB-SQLite" -> LightDBBench(SQLiteStore),
-    "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(MapStore, SQLiteStore)),
+    "LightDB-Map-SQLite" -> LightDBBench(SplitStoreManager(HashMapStore, SQLiteStore)),
     "LightDB-HaloDB-SQLite" -> LightDBBench(SplitStoreManager(HaloDBStore, SQLiteStore)),
     "LightDB-Lucene" -> LightDBBench(LuceneStore),
     "LightDB-HaloDB-Lucene" -> LightDBBench(SplitStoreManager(HaloDBStore, LuceneStore)),
