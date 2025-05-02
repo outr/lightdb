@@ -31,8 +31,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def supportsArbitraryQuery: Boolean = false
 
-  protected def id(doc: Doc): Id[Doc] = doc._id
-
   lazy val idField: UniqueIndex[Doc, Id[Doc]] = model._id
 
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager

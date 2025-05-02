@@ -71,7 +71,6 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
   protected def _insert(doc: Doc): Task[Doc]
-  protected def _insert(docs: Seq[Doc]): Task[Seq[Doc]]
   protected def _upsert(doc: Doc): Task[Doc]
   protected def _exists(id: Id[Doc]): Task[Boolean]
   protected def _count: Task[Int]

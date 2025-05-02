@@ -27,7 +27,7 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
     "verify the SpecialOne instances were stored properly" in {
       DB.specialOne.transaction { implicit transaction =>
-        DB.specialOne.stream.toList.map { list =>
+        transaction.stream.toList.map { list =>
           list.map(_.name).toSet should be(Set("First", "Second"))
           list.map(_.wrappedString).toSet should be(Set(WrappedString("Apple"), WrappedString("Banana")))
           list.map(_.person).toSet should be(Set(Person("Andrew", 1), Person("Bianca", 2)))

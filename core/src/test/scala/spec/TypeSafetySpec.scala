@@ -2,7 +2,7 @@ package spec
 
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.store.MapStore
+import lightdb.store.hashmap.HashMapStore
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -16,22 +16,22 @@ class TypeSafetySpec extends AnyWordSpec with Matchers {
     "return the specific store type" in {
       // Create a simple in-memory database
       object TestDB extends LightDB {
-        override type SM = MapStore.type
+        override type SM = HashMapStore.type
 
         override def directory: Option[Path] = None
-        override val storeManager: MapStore.type = MapStore
+        override val storeManager: HashMapStore.type = HashMapStore
         override def upgrades: List[DatabaseUpgrade] = Nil
 
-        lazy val people: MapStore[Person, Person.type] = store[Person, Person.type](Person)
+        lazy val people: HashMapStore[Person, Person.type] = store[Person, Person.type](Person)
       }
 
       TestDB.init.sync()
 
-      TestDB.people shouldBe a[MapStore[_, _]]
+      TestDB.people shouldBe a[HashMapStore[_, _]]
 
       TestDB.people.t.insert(Person("Test 1", 1)).sync()
 
-      val mapStore: MapStore[Person, Person.type] = TestDB.people
+      val mapStore: HashMapStore[Person, Person.type] = TestDB.people
       mapStore.map.size should be(1)
 
       TestDB.dispose.sync()
