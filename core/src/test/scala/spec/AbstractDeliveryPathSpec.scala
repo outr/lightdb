@@ -54,9 +54,9 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
         case (shipsTo, deliversToDepot, loadsTo, deliversToCustomer) =>
           for {
             customers <- db.shipsTo.traverse(Id[Warehouse]("warehouse1"))(shipsTo)
-              .step(GraphStep.forward(DeliversToDepotModel))(deliversToDepot)
-              .step(GraphStep.forward(LoadsToModel))(loadsTo)
-              .step(GraphStep.forward(DeliversToCustomerModel))(deliversToCustomer)
+              .step3(GraphStep.forward[DeliversToDepot, DeliversToDepotModel.type, Truck, Depot](DeliversToDepotModel))(deliversToDepot)
+              .step3(GraphStep.forward[LoadsTo, LoadsToModel.type, Depot, Drone](LoadsToModel))(loadsTo)
+              .step3(GraphStep.forward[DeliversToCustomer, DeliversToCustomerModel.type, Drone, Customer](DeliversToCustomerModel))(deliversToCustomer)
               .collectAllReachable()
           } yield customers should contain only Id("customer1")
       }.succeed
