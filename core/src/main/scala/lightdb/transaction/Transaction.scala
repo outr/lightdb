@@ -6,7 +6,9 @@ import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.DocNotFoundException
 import lightdb.field.Field.UniqueIndex
+import lightdb.graph.EdgeModel
 import lightdb.store.Store
+import lightdb.traversal.{GraphStep, GraphTraversalEngine}
 import rapid._
 
 trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
@@ -63,6 +65,24 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
     }
   }
   def delete(id: Id[Doc]): Task[Boolean] = delete(_._id -> id)
+
+  def traverse[From <: Document[From], To <: Document[To]](start: Id[From]): GraphTraversalEngine[From, To] =
+    traverse(Set(start))
+
+  def traverse[From <: Document[From], To <: Document[To]](starts: Set[Id[From]]): GraphTraversalEngine[From, To] = {
+    store.model match {
+      case em: EdgeModel[Doc @unchecked, From @unchecked, To @unchecked] @unchecked =>
+        val step = new GraphStep[Doc, Model, From, To] {
+          override def neighbors(id: Id[From])(implicit t: Transaction[Doc, Model]): Task[Set[Id[To]]] =
+            em.edgesFor(id)
+        }
+        GraphTraversalEngine.start[Doc, Model, From, To](starts, step)(this)
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"traverse(...) is only supported on Store instances with EdgeModel, but got: ${store.model.getClass}"
+        )
+    }
+  }
 
   def list: Task[List[Doc]] = stream.toList
   def stream: rapid.Stream[Doc] = jsonStream.map(_.as[Doc](store.model.rw))
