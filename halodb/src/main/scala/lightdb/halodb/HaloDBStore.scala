@@ -2,9 +2,7 @@ package lightdb.halodb
 
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field._
 import lightdb.store.{Store, StoreManager, StoreMode}
-import lightdb.transaction.Transaction
 import rapid._
 import scribe.{Level, Logger}
 
