@@ -2,8 +2,8 @@ package lightdb.postgresql
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.sql.{SQLState, SQLStore}
 import lightdb.sql.connect.ConnectionManager
+import lightdb.sql.{SQLState, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid.Task

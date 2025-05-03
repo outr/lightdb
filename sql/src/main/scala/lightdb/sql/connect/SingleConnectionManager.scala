@@ -2,7 +2,6 @@ package lightdb.sql.connect
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.SQLState
-import lightdb.transaction.Transaction
 import rapid.Task
 
 import java.sql.{Connection, DriverManager}

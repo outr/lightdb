@@ -1,11 +1,8 @@
 package lightdb.store
 
-import lightdb.aggregate.AggregateQuery
+import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.materialized.MaterializedAggregate
-import lightdb.transaction.{CollectionTransaction, Transaction}
-import lightdb.{LightDB, Query, SearchResults}
-import rapid.Task
+import lightdb.transaction.CollectionTransaction
 
 import java.nio.file.Path
 

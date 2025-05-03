@@ -5,7 +5,6 @@ import fabric.io.JsonFormatter
 import fabric.rw.Asable
 import fabric.{Arr, Json, Null, NumDec, NumInt, Str}
 import lightdb.aggregate.AggregateQuery
-import lightdb.{Id, Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.{FacetField, Tokenized}
 import lightdb.field.{Field, IndexingState}
@@ -15,6 +14,7 @@ import lightdb.spatial.Geo
 import lightdb.store.Conversion
 import lightdb.transaction.{CollectionTransaction, Transaction}
 import lightdb.util.Aggregator
+import lightdb.{Id, Query, SearchResults}
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line, Polygon}

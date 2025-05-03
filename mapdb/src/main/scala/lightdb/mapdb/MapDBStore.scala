@@ -1,16 +1,13 @@
 package lightdb.mapdb
 
-import fabric.Json
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field._
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}
 import rapid.Task
 
 import java.nio.file.{Files, Path}
-import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                     path: Option[Path],

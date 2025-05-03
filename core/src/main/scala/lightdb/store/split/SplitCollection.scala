@@ -1,9 +1,7 @@
 package lightdb.store.split
 
 import lightdb._
-import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Collection, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid.{Task, logger}

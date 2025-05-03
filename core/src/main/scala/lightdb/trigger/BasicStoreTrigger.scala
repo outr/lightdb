@@ -2,7 +2,7 @@ package lightdb.trigger
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.store.{Collection, Store}
+import lightdb.store.Store
 import lightdb.transaction.Transaction
 import rapid.Task
 

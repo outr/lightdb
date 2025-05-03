@@ -1,7 +1,7 @@
 package lightdb.traversal
 
-import lightdb.doc.{Document, DocumentModel}
 import lightdb.Id
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction
 import rapid.Task
 

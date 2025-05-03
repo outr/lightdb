@@ -1,10 +1,10 @@
 package lightdb.transaction
 
 import lightdb.aggregate.AggregateQuery
-import lightdb.{Query, SearchResults}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Collection, Conversion}
+import lightdb.{Query, SearchResults}
 import rapid.Task
 
 trait CollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Transaction[Doc, Model] {

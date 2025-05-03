@@ -2,7 +2,6 @@ package lightdb.sql.connect
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql._
-import lightdb.transaction.Transaction
 
 import java.sql.Connection
 import javax.sql.DataSource

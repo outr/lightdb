@@ -1,9 +1,9 @@
 package spec
 
 import lightdb.sql.SQLiteStore
-import lightdb.store.split.SplitStoreManager
 import lightdb.store.CollectionManager
 import lightdb.store.hashmap.HashMapStore
+import lightdb.store.split.SplitStoreManager
 
 @EmbeddedTest
 class SQLiteAndMapSplitSpec extends AbstractBasicSpec {

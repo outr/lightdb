@@ -1,12 +1,12 @@
 package lightdb.store.split
 
 import fabric.Json
-import lightdb.{Id, Query, SearchResults}
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
 import lightdb.materialized.MaterializedAggregate
 import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.{Id, Query, SearchResults}
 import rapid.Task
 
 case class SplitCollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SplitCollection[Doc, Model],

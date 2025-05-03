@@ -1,25 +1,24 @@
 package lightdb.sql
 
 import fabric.define.DefType
-import fabric.{Json, Null, arr, bool, num, obj, str}
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
+import fabric.{Json, Null, arr, bool, num, obj, str}
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.distance.Distance
-import lightdb.{Id, Query, SearchResults, Sort, SortDirection}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.field.{Field, IndexingState}
 import lightdb.field.Field.Tokenized
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
-import lightdb.store.{Conversion, Store, StoreMode}
-import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.store.{Conversion, Store}
+import lightdb.transaction.CollectionTransaction
 import lightdb.util.ActionIterator
+import lightdb.{Id, Query, SearchResults, Sort, SortDirection}
 import rapid.Task
 
 import java.sql.{PreparedStatement, ResultSet}
-import scala.util.Try
 
 trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] {
   override def store: SQLStore[Doc, Model]

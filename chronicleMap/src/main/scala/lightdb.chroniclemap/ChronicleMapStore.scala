@@ -1,8 +1,8 @@
 package lightdb.chroniclemap
 
+import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
-import lightdb.LightDB
 import lightdb.transaction.Transaction
 import net.openhft.chronicle.map.ChronicleMap
 import rapid.Task

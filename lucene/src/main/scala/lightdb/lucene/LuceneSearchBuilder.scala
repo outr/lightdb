@@ -11,7 +11,6 @@ import lightdb.filter.{Condition, Filter}
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Spatial}
 import lightdb.store.{Conversion, StoreMode}
-import lightdb.transaction.Transaction
 import lightdb.{Id, Query, SearchResults, Sort, SortDirection}
 import org.apache.lucene.document._
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts

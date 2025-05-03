@@ -8,7 +8,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.store.{BufferedWritingTransaction, WriteBuffer, WriteOp}
 import lightdb.transaction.Transaction
-import org.lmdbjava.{Env, GetOp, PutFlags, Txn}
+import org.lmdbjava.{Env, PutFlags, Txn}
 import rapid._
 
 import java.nio.ByteBuffer
