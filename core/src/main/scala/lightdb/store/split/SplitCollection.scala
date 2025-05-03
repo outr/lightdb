@@ -53,10 +53,11 @@ class SplitCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
 
   override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
 
-  private def reIndexInternal()(implicit transaction: Transaction[Doc, Model]): Task[Unit] = transaction
+  private def reIndexInternal()(implicit transaction: TX): Task[Unit] = transaction
+    .searching
     .truncate
     .flatMap { _ =>
-      transaction.stream.evalMap(transaction.insert).drain
+      transaction.storage.stream.evalMap(transaction.searching.insert).drain
     }
 
   override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).next(super.doDispose())
