@@ -2,9 +2,11 @@ package lightdb.postgresql
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.sql.SQLStore
+import lightdb.sql.{SQLState, SQLStore}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.{StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.transaction.Transaction
+import rapid.Task
 
 import java.nio.file.Path
 import java.sql.Connection
@@ -16,6 +18,13 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                                          val storeMode: StoreMode[Doc, Model],
                                                                          lightDB: LightDB,
                                                                          storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
+  override type TX = PostgreSQLTransaction[Doc, Model]
+
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
+    val state = SQLState(connectionManager, this, Store.CacheQueries)
+    PostgreSQLTransaction(this, state, parent)
+  }
+
   protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT * FROM information_schema.tables;")
     try {
