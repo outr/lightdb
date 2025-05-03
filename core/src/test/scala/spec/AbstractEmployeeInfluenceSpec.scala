@@ -48,15 +48,13 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
       }.succeed
     }
     "verify who alice reports to and collaborates with" in {
-      db.reportsTo.transaction { implicit tx =>
-        db.collaboratesWith.transaction { implicit ct =>
-          db.reportsTo.traverse(Set(Id[Employee]("alice")))
-            .bfs(ReportsAndCollaborationStep(db.collaboratesWith))
-            .collectAllReachable()
-            .map { results =>
-              results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))
-            }
-        }
+      db.collaboratesWith.transaction { implicit ct =>
+        ct.traverse(Set(Id[Employee]("alice")))
+          .bfs(ReportsAndCollaborationStep(db.collaboratesWith))
+          .collectAllReachable()
+          .map { results =>
+            results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))
+          }
       }.succeed
     }
     "truncate the database" in {

@@ -6,10 +6,8 @@ import lightdb.transaction.Transaction
 import rapid.Task
 
 class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (private val current: Set[Id[S]], private val chain: Step[S, C]) {
-  def bfs[E <: Document[E], M <: DocumentModel[E]](via: GraphStep[E, M, C, C])(implicit tx: Transaction[E, M]): BFSEngine[C, E, M] =
-    new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, Int.MaxValue)
-
-  def bfs[E <: Document[E], M <: DocumentModel[E]](via: GraphStep[E, M, C, C], maxDepth: Int)(implicit tx: Transaction[E, M]): BFSEngine[C, E, M] =
+  def bfs[E <: Document[E], M <: DocumentModel[E]](via: GraphStep[E, M, C, C],
+                                                   maxDepth: Int = Int.MaxValue)(implicit tx: Transaction[E, M]): BFSEngine[C, E, M] =
     new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, maxDepth)
 
   def step[E <: Document[E], M <: DocumentModel[E], Next <: Document[Next]](via: GraphStep[E, M, C, Next])
