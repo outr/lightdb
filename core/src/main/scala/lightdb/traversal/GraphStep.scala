@@ -14,7 +14,7 @@ import rapid.Task
  * @tparam From The source node document type
  * @tparam To The target node document type
  */
-trait GraphStep[Edge <: Document[Edge], From <: Document[From], To <: Document[To]] {
+trait GraphStep[Edge <: Document[Edge], Model <: DocumentModel[Edge], From <: Document[From], To <: Document[To]] {
   /**
    * Find neighbors of a node in the graph.
    *
@@ -22,7 +22,7 @@ trait GraphStep[Edge <: Document[Edge], From <: Document[From], To <: Document[T
    * @param transaction The transaction context
    * @return A task that resolves to a set of neighbor node IDs
    */
-  def neighbors(id: Id[From])(implicit transaction: Transaction[Edge]): Task[Set[Id[To]]]
+  def neighbors(id: Id[From])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[To]]]
 }
 
 object GraphStep {
@@ -34,11 +34,12 @@ object GraphStep {
    */
   def forward[
     Edge <: EdgeDocument[Edge, From, To],
+    Model <: EdgeModel[Edge, From, To],
     From <: Document[From],
     To   <: Document[To]
-  ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, From, To] =
-    new GraphStep[Edge, From, To] {
-      override def neighbors(id: Id[From])(implicit transaction: Transaction[Edge]): Task[Set[Id[To]]] =
+  ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, Model, From, To] =
+    new GraphStep[Edge, Model, From, To] {
+      override def neighbors(id: Id[From])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[To]]] =
         model.edgesFor(id)
     }
 
@@ -50,11 +51,12 @@ object GraphStep {
    */
   def reverse[
     Edge <: EdgeDocument[Edge, From, To],
+    Model <: EdgeModel[Edge, From, To],
     From <: Document[From],
-    To   <: Document[To]
-  ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, To, From] =
-    new GraphStep[Edge, To, From] {
-      override def neighbors(id: Id[To])(implicit transaction: Transaction[Edge]): Task[Set[Id[From]]] =
+    To <: Document[To]
+  ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, Model, To, From] =
+    new GraphStep[Edge, Model, To, From] {
+      override def neighbors(id: Id[To])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[From]]] =
         model.reverseEdgesFor(id)
     }
 
@@ -67,10 +69,11 @@ object GraphStep {
    */
   def both[
     Edge <: EdgeDocument[Edge, Node, Node],
+    Model <: EdgeModel[Edge, Node, Node],
     Node <: Document[Node]
-  ](model: EdgeModel[Edge, Node, Node]): GraphStep[Edge, Node, Node] =
-    new GraphStep[Edge, Node, Node] {
-      override def neighbors(id: Id[Node])(implicit transaction: Transaction[Edge]): Task[Set[Id[Node]]] =
+  ](model: EdgeModel[Edge, Node, Node]): GraphStep[Edge, Model, Node, Node] =
+    new GraphStep[Edge, Model, Node, Node] {
+      override def neighbors(id: Id[Node])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[Node]]] =
         for {
           fwd <- model.edgesFor(id)
           rev <- model.reverseEdgesFor(id)

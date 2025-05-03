@@ -1,18 +1,18 @@
 package lightdb.sql
 
-import lightdb.doc.Document
+import lightdb.doc.{Document, DocumentModel}
 
 import java.sql.SQLException
 
-case class SQLQueryBuilder[Doc <: Document[Doc]](store: SQLStore[Doc, _],
-                                                 state: SQLState[Doc],
-                                                 fields: List[SQLPart] = Nil,
-                                                 filters: List[SQLPart] = Nil,
-                                                 group: List[SQLPart] = Nil,
-                                                 having: List[SQLPart] = Nil,
-                                                 sort: List[SQLPart] = Nil,
-                                                 limit: Option[Int] = None,
-                                                 offset: Int) {
+case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SQLStore[Doc, Model],
+                                                                              state: SQLState[Doc, Model],
+                                                                              fields: List[SQLPart] = Nil,
+                                                                              filters: List[SQLPart] = Nil,
+                                                                              group: List[SQLPart] = Nil,
+                                                                              having: List[SQLPart] = Nil,
+                                                                              sort: List[SQLPart] = Nil,
+                                                                              limit: Option[Int] = None,
+                                                                              offset: Int) {
   lazy val sql: String = {
     val b = new StringBuilder
     b.append("SELECT\n")

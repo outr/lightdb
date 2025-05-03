@@ -3,9 +3,10 @@ package lightdb.h2
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.sql.{SQLDatabase, SQLStore}
-import lightdb.store.{CollectionManager, StoreManager, StoreMode}
-import rapid.Unique
+import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
+import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.transaction.Transaction
+import rapid.{Task, Unique}
 
 import java.nio.file.Path
 import java.sql.Connection
@@ -18,9 +19,16 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                  val storeMode: StoreMode[Doc, Model],
                                                                  lightDB: LightDB,
                                                                  storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
+  override type TX = H2Transaction[Doc, Model]
+
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
+    val state = SQLState(connectionManager, this, Store.CacheQueries)
+    H2Transaction(this, state, parent)
+  }
+
   override protected def upsertPrefix: String = "MERGE"
 
-  protected def tables(connection: Connection): Set[String] = {
+  override protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = 'PUBLIC';")
     try {
       val rs = ps.executeQuery()

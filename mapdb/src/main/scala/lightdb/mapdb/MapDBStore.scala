@@ -18,6 +18,8 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
                                                                     val storeMode: StoreMode[Doc, Model],
                                                                     lightDB: LightDB,
                                                                     storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
+  override type TX = MapDBTransaction[Doc, Model]
+
   private lazy val db: DB = {
     val maker = path.map { path =>
       Files.createDirectories(path.getParent)
@@ -25,48 +27,12 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     }.getOrElse(DBMaker.memoryDirectDB())
     maker.make()
   }
-  private lazy val map: HTreeMap[String, String] = db.hashMap("map", Serializer.STRING, Serializer.STRING).createOrOpen()
+  private[mapdb] lazy val map: HTreeMap[String, String] = db.hashMap("map", Serializer.STRING, Serializer.STRING).createOrOpen()
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task(map.verify()))
 
-  override def prepareTransaction(transaction: Transaction[Doc]): Task[Unit] = Task.unit
-
-  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = upsert(doc)
-
-  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = Task {
-    map.put(doc._id.value, toString(doc))
-    doc
-  }
-
-  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
-    map.containsKey(id.value)
-  }
-
-  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
-                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = Task {
-    if (field == idField) {
-      Option(map.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
-    } else {
-      throw new UnsupportedOperationException(s"MapDBStore can only get on _id, but ${field.name} was attempted")
-    }
-  }
-
-  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)
-                        (implicit transaction: Transaction[Doc]): Task[Boolean] =
-    Task(map.remove(value.asInstanceOf[Id[Doc]].value) != null)
-
-  override def count(implicit transaction: Transaction[Doc]): Task[Int] = Task(map.size())
-
-  override def jsonStream(implicit transaction: Transaction[Doc]): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
-    map.values()
-      .iterator()
-      .asScala
-      .map(toJson)
-  })
-
-  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = count.map { size =>
-    map.clear()
-    size
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
+    MapDBTransaction(this, parent)
   }
 
   override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {

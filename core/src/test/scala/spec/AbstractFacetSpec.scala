@@ -32,17 +32,17 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify the database is empty" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.count.map(_ should be(0))
+        transaction.count.map(_ should be(0))
       }
     }
     "insert the records" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.insert(List(one, two, three, four, five, six, seven)).map(_ should not be None)
+        transaction.insert(List(one, two, three, four, five, six, seven)).map(_ should not be None)
       }
     }
     "list author facets" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .facet(_.authorsFacet)
           .docs
           .limit(1)
@@ -58,7 +58,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "list all publishDate facets" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .facet(_.publishDateFacet)
           .docs
           .search
@@ -73,7 +73,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "list all support@one.com keyword facets" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .filter(_.keywords has "support@one.com")
           .facet(_.keywordsFacet)
           .docs
@@ -89,12 +89,12 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "modify a record" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.upsert(five.copy(name = "Cinco")).succeed
+        transaction.upsert(five.copy(name = "Cinco")).succeed
       }
     }
     "list all results for 2010" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .filter(_.publishDateFacet.drillDown("2010"))
           .facet(_.authorsFacet)
           .facet(_.publishDateFacet, path = List("2010"))
@@ -115,7 +115,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "exclude all results for 2010" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .facet(_.authorsFacet)
           .facet(_.publishDateFacet)
           .filter(_.builder.mustNot(_.publishDateFacet.drillDown("2010")))
@@ -136,7 +136,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "list all results for 2010/10" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .facet(_.authorsFacet)
           .facet(_.publishDateFacet, path = List("2010", "10"))
           .filter(_.publishDateFacet.drillDown("2010", "10"))
@@ -157,7 +157,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "list all results for 2010/10/20" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .facet(_.authorsFacet)
           .facet(_.publishDateFacet, path = List("2010", "10", "20"))
           .filter(_.publishDateFacet.drillDown("2010", "10", "20"))
@@ -177,7 +177,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "show only results for 1999" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .facet(_.authorsFacet)
           .facet(_.publishDateFacet, path = List("1999"))
           .filter(_.publishDateFacet.drillDown("1999").onlyThisLevel)
@@ -197,7 +197,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "show all results for support@two.com" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .filter(_.keywordsFacet.drillDown("support@two.com"))
           .search
           .flatMap { results =>
@@ -207,7 +207,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "show all results for support@three.com or support" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .filter(_.builder
             .should(_.keywordsFacet.drillDown("support@three.com"))
             .should(_.keywordsFacet.drillDown("support"))
@@ -221,12 +221,12 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "remove a keyword from One" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.upsert(one.copy(keywords = List("support@one.com"))).succeed
+        transaction.upsert(one.copy(keywords = List("support@one.com"))).succeed
       }
     }
     "show all results for support@two.com excluding updated" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .filter(_.keywordsFacet.drillDown("support@two.com"))
           .stream
           .toList
@@ -237,7 +237,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "show only top-level results without a publish date" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query
+        transaction.query
           .facet(_.authorsFacet)
           .facet(_.publishDateFacet)
           .filter(_.publishDateFacet.drillDown().onlyThisLevel)
@@ -256,12 +256,12 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "delete a facets document" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.delete(four._id).succeed
+        transaction.delete(four._id).succeed
       }
     }
     "query all documents verifying deletion of Four" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.query.facet(_.authorsFacet).search.map { results =>
+        transaction.query.facet(_.authorsFacet).search.map { results =>
           results.getFacet(_.publishDateFacet) should be(None)
           val authorResult = results.facet(_.authorsFacet)
           authorResult.values.map(_.value) should be(List("Bob", "Lisa", "James", "Frank", "George"))
@@ -271,7 +271,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "truncate the collection" in {
       db.entries.transaction { implicit transaction =>
-        db.entries.truncate().map(_ should be(6))
+        transaction.truncate.map(_ should be(6))
       }
     }
     "dispose the database" in {

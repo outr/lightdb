@@ -24,7 +24,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "insert graph nodes and edges" in {
       for {
         _ <- db.nodes.transaction { implicit tx =>
-          db.nodes.insert(List(
+          tx.insert(List(
             Node("A", Id("A")),
             Node("B", Id("B")),
             Node("C", Id("C")),
@@ -32,7 +32,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
           ))
         }
         _ <- db.edges.transaction { implicit tx =>
-          db.edges.insert(List(
+          tx.insert(List(
             SimpleEdge(Id("A"), Id("B")),
             SimpleEdge(Id("A"), Id("C")),
             SimpleEdge(Id("B"), Id("D")),
@@ -43,8 +43,8 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { implicit tx =>
-        db.edges.traverse(Id[Node]("A"))
-          .step[SimpleEdge](GraphStep.forward(SimpleEdgeModel))
+        tx.traverse(Id[Node]("A"))
+          .bfs(GraphStep.forward[SimpleEdge, SimpleEdgeModel.type, Node, Node](SimpleEdgeModel))
           .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
@@ -53,8 +53,8 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph in reverse from D to find parents" in {
       db.edges.transaction { implicit tx =>
-        db.edges.traverse(Id[Node]("D"))
-          .step[SimpleEdge](GraphStep.reverse(SimpleEdgeModel))
+        tx.traverse(Id[Node]("D"))
+          .bfs(GraphStep.reverse[SimpleEdge, SimpleEdgeModel.type, Node, Node](SimpleEdgeModel))
           .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
@@ -64,8 +64,8 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse with depth limitation" in {
       val maxDepth = 1
       db.edges.transaction { implicit tx =>
-        db.edges.traverse(Set(Id[Node]("A")))
-          .step(GraphStep.forward(SimpleEdgeModel), maxDepth)
+        tx.traverse(Set(Id[Node]("A")))
+          .bfs(GraphStep.forward[SimpleEdge, SimpleEdgeModel.type, Node, Node](SimpleEdgeModel), maxDepth)
           .collectAllReachable()
           .map { result =>
             result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
