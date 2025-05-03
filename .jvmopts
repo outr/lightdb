@@ -1,7 +1,5 @@
--Xms1G
--Xmx8G
--Xss512M
--XX:MaxMetaspaceSize=4096M
--XX:ReservedCodeCacheSize=500M
+-Xms512M
+-Xmx2G
+-Xss512K
+-XX:MaxMetaspaceSize=512M
 -XX:+TieredCompilation
--XX:-UseGCOverheadLimit

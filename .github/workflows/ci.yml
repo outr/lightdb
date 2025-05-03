@@ -19,10 +19,8 @@ jobs:
         uses: sbt/setup-sbt@v1
       - name: Coursier cache
         uses: coursier/cache-action@v6
-      - name: Set Java options
-        run: echo "SBT_OPTS=-Xmx2G -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=." >> $GITHUB_ENV
       - name: Set CI JVM options
-        run: echo "SBT_OPTS=-Xms512M -Xmx2G -Xss512k -XX:MaxMetaspaceSize=512M" >> $GITHUB_ENV
+        run: echo "SBT_OPTS=-Xms512M -Xmx2G -Xss512k -XX:MaxMetaspaceSize=512M -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=." >> $GITHUB_ENV
       - name: Build and test
         run: |
           sbt -v -Dfile.encoding=UTF-8 +test
