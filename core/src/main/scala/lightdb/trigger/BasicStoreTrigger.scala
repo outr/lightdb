@@ -26,11 +26,8 @@ trait BasicStoreTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
     }
 
   override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc, Model]): Task[Unit] = {
-    store match {
-      case c: Collection[Doc, Model @uncheckedVariance] => 
-        // Use the transaction's delete method with a function
-        transaction.delete(_ => (index, value)).map(_ => ())
-      case _ => ???
+    transaction(_ => index -> value).flatMap { doc =>
+      removing(doc)
     }
   }
 
