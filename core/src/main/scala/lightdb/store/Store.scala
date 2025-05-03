@@ -74,12 +74,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   lazy val t: Transactionless[Doc, Model] = Transactionless(this)
 
-  protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(model.rw))
-
-  protected def fromString(string: String): Doc = toJson(string).as[Doc](model.rw)
-
-  protected def toJson(string: String): Json = JsonParser(string)
-
   lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial)).singleton
 
   protected def createTransaction(): Task[TX]
