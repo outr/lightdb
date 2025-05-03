@@ -9,7 +9,8 @@ import lightdb.transaction.Transaction
 import rapid.Task
 
 case class HaloDBTransaction[Doc <: Document [Doc], Model <: DocumentModel[Doc]](store: HaloDBStore[Doc, Model],
-                                                                                 instance: HaloDBInstance) extends Transaction[Doc, Model] {
+                                                                                 instance: HaloDBInstance,
+                                                                                 parent: Option[Transaction[Doc, Model]]) extends Transaction[Doc, Model] {
   override def jsonStream: rapid.Stream[Json] = instance.stream
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = {

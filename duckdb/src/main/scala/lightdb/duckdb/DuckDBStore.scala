@@ -3,8 +3,10 @@ package lightdb.duckdb
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.sql.{SQLDatabase, SQLStore}
-import lightdb.store.{CollectionManager, StoreManager, StoreMode}
+import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
+import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.transaction.Transaction
+import rapid.Task
 
 import java.nio.file.Path
 import java.sql.Connection
@@ -16,6 +18,13 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      lightDB: LightDB,
                                                                      storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
+  override type TX = DuckDBTransaction[Doc, Model]
+
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[DuckDBTransaction[Doc, Model]] = Task {
+    val state = SQLState(connectionManager, this, Store.CacheQueries)
+    DuckDBTransaction(this, state, parent)
+  }
+
   // TODO: Use DuckDB's Appender for better performance
   /*override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
     fields.zipWithIndex.foreach {

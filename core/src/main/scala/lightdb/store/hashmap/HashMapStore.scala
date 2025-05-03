@@ -3,6 +3,7 @@ package lightdb.store.hashmap
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.transaction.Transaction
 import rapid.Task
 
 import java.nio.file.Path
@@ -19,7 +20,7 @@ class HashMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 
   def map: Map[Id[Doc], Doc] = _map
 
-  override protected def createTransaction(): Task[TX] = Task(HashMapTransaction(this))
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task(HashMapTransaction(this, parent))
 
   override protected def doDispose(): Task[Unit] = Task {
     store.synchronized {

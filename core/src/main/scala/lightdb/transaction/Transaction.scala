@@ -14,6 +14,7 @@ import rapid._
 
 trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def store: Store[Doc, Model]
+  def parent: Option[Transaction[Doc, Model]]
 
   final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc)(this).flatMap { _ =>
     _insert(doc)

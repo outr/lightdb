@@ -23,10 +23,13 @@ class SplitCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
 
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
-  override protected def createTransaction(): Task[TX] = for {
-    t1 <- storage.transaction.create()
-    t2 <- searching.transaction.create()
-  } yield SplitCollectionTransaction(this, t1, t2)
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
+    t <- Task(SplitCollectionTransaction(this, parent))
+    t1 <- storage.transaction.create(Some(t))
+    t2 <- searching.transaction.create(Some(t))
+    _ = t._storage = t1
+    _ = t._searching = t2
+  } yield t
 
   override def verify(): Task[Boolean] = transaction { implicit transaction =>
     for {

@@ -1,8 +1,8 @@
 package lightdb.sql
 
-import lightdb.doc.Document
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.transaction.{Transaction, TransactionFeature}
+import lightdb.transaction.Transaction
 import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
@@ -10,10 +10,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import scala.util.Try
 
-case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
-                                          transaction: Transaction[Doc],
-                                          store: SQLStore[Doc, _],
-                                          caching: Boolean) extends TransactionFeature {
+case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectionManager: ConnectionManager,
+                                                                       store: SQLStore[Doc, Model],
+                                                                       caching: Boolean) {
   private var psInsert: PreparedStatement = _
   private var psUpsert: PreparedStatement = _
   private[sql] var connection: Connection = _
@@ -25,9 +24,8 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
 
   private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
 
-
   def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = {
-    val connection = connectionManager.getConnection(transaction)
+    val connection = connectionManager.getConnection(this)
 
     def createPs(): PreparedStatement = {
       val ps = connection.prepareStatement(sql)
@@ -54,7 +52,7 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
 
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
     if (psInsert == null) {
-      val connection = connectionManager.getConnection(transaction)
+      val connection = connectionManager.getConnection(this)
       psInsert = connection.prepareStatement(store.insertSQL)
     }
     dirty = true
@@ -63,7 +61,7 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
 
   def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
     if (psUpsert == null) {
-      val connection = connectionManager.getConnection(transaction)
+      val connection = connectionManager.getConnection(this)
       psUpsert = connection.prepareStatement(store.upsertSQL)
     }
     dirty = true
@@ -78,7 +76,7 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     resultSets = rs :: resultSets
   }
 
-  override def commit(): Task[Unit] = Task {
+  def commit: Task[Unit] = Task {
     if (dirty) {
       // TODO: SingleConnection shares
       if (batchInsert.get() > 0) {
@@ -88,23 +86,22 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
         psUpsert.executeBatch()
       }
       dirty = false
-      Try(connectionManager.getConnection(transaction).commit()).failed.foreach { t =>
+      Try(connectionManager.getConnection(this).commit()).failed.foreach { t =>
         scribe.warn(s"Commit failed: ${t.getMessage}")
       }
     }
   }
 
-  override def rollback(): Task[Unit] = Task {
+  def rollback: Task[Unit] = Task {
     if (dirty) {
       dirty = false
-      Try(connectionManager.getConnection(transaction).rollback()).failed.foreach { t =>
+      Try(connectionManager.getConnection(this).rollback()).failed.foreach { t =>
         scribe.warn(s"Rollback failed: ${t.getMessage}")
       }
     }
   }
 
-  override def close(): Task[Unit] = Task {
-    super.close()
+  def close: Task[Unit] = Task {
     if (batchInsert.get() > 0) {
       psInsert.executeBatch()
     }
@@ -115,6 +112,6 @@ case class SQLState[Doc <: Document[Doc]](connectionManager: ConnectionManager,
     statements.foreach(s => Try(s.close()))
     if (psInsert != null) psInsert.close()
     if (psUpsert != null) psUpsert.close()
-    connectionManager.releaseConnection(transaction)
+    connectionManager.releaseConnection(this)
   }
 }
