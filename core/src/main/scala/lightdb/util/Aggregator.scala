@@ -14,8 +14,7 @@ import rapid.Task
  * Convenience class to stream aggregation for Stores that don't directly support aggregation
  */
 object Aggregator {
-  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: AggregateQuery[Doc, Model], model: Model)
-                                                              (implicit transaction: Transaction[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
+  def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: AggregateQuery[Doc, Model], model: Model): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
     val fields = query.functions.map(_.field).distinct
     val groupFields = query.functions.filter(_.`type` == AggregateType.Group).map(_.field)
     val stream = query.query.materialized(_ => fields).stream

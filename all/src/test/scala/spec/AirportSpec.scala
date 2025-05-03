@@ -42,7 +42,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     "query the airports by id filter" in {
       val keys = List("JFK", "LAX")
       DB.airports.transaction { implicit transaction =>
-        DB.airports.query
+        transaction.query
           .filter(_._id.in(keys.map(Airport.id)))
           .toList
           .map { airports =>
@@ -52,7 +52,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
     "query by airport name" in {
       DB.airports.transaction { implicit transaction =>
-        DB.airports.query
+        transaction.query
           .filter(_.name === "John F Kennedy Intl")
           .first
           .map { airport =>
@@ -254,7 +254,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       insertedAirports <- DB.airports.transaction { implicit transaction =>
         airports
           .evalForeach { airport =>
-            DB.airports.insert(airport).unit
+            transaction.insert(airport).unit
           }
           .count
       }
@@ -280,7 +280,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       insertedFlights <- DB.flights.transaction { implicit transaction =>
         flights
           .evalForeach { flight =>
-            DB.flights.insert(flight).unit
+            transaction.insert(flight).unit
           }
           .count
       }
