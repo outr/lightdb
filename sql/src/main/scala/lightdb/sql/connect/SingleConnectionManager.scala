@@ -1,6 +1,7 @@
 package lightdb.sql.connect
 
-import lightdb.doc.Document
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.sql.SQLState
 import lightdb.transaction.Transaction
 import rapid.Task
 
@@ -15,11 +16,11 @@ case class SingleConnectionManager(connectionCreator: () => java.sql.Connection)
     _connection
   }
 
-  override def getConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Connection = connection
+  override def getConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Connection = connection
 
-  override def currentConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Option[Connection] = Some(connection)
+  override def currentConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Option[Connection] = Some(connection)
 
-  override def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit = {}
+  override def releaseConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Unit = ()
 
   override protected def doDispose(): Task[Unit] = Task {
     if (!connection.getAutoCommit) connection.commit()

@@ -12,23 +12,24 @@ import lightdb.filter._
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Collection, Conversion}
-import lightdb.transaction.Transaction
+import lightdb.transaction.{CollectionTransaction, Transaction}
 import rapid.{Forge, Grouped, Pull, Task}
 
-case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Model,
-                                                                       collection: Collection[Doc, Model],
+case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transaction: CollectionTransaction[Doc, Model],
                                                                        conversion: Conversion[Doc, V],
                                                                        filter: Option[Filter[Doc]] = None,
                                                                        sort: List[Sort] = Nil,
                                                                        offset: Int = 0,
                                                                        limit: Option[Int] = None,
-                                                                       pageSize: Int = 1_000,
+                                                                       pageSize: Int = 1000,
                                                                        countTotal: Boolean = false,
                                                                        scoreDocs: Boolean = false,
                                                                        minDocScore: Option[Double] = None,
                                                                        facets: List[FacetQuery[Doc]] = Nil,
-                                                                       arbitraryQuery: Option[ArbitraryQuery] = None,
                                                                        optimize: Boolean = false) { query =>
+  def collection: Collection[Doc, Model] = transaction.store
+  def model: Model = collection.model
+
   private type Q = Query[Doc, Model, V]
 
   def scored: Q = copy(scoreDocs = true)
@@ -40,8 +41,6 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
 
   def optimized: Q = copy(optimize = true)
   def unOptimized: Q = copy(optimize = false)
-
-  def withArbitraryQuery(query: ArbitraryQuery): Q = copy(arbitraryQuery = Some(query))
 
   def clearFilters: Q = copy(filter = None)
 
@@ -125,10 +124,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
       radius = radius
     ))
 
-  def search(implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
-    if (arbitraryQuery.nonEmpty && !collection.supportsArbitraryQuery) {
-      throw new UnsupportedOperationException(s"Arbitrary query is set, but not allowed with this store (${collection.getClass.getSimpleName})")
-    }
+  def search: Task[SearchResults[Doc, Model, V]] = {
     val storeMode = collection.storeMode
     if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
       val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
@@ -147,17 +143,17 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
     } else {
       this
     }
-    collection.doSearch(q)
+    transaction.doSearch(q)
   }
 
-  def streamPage(implicit transaction: Transaction[Doc]): rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
+  def streamPage: rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
 
-  def streamScoredPage(implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] =
+  def streamScoredPage: rapid.Stream[(V, Double)] =
     rapid.Stream.force(search.map(_.streamWithScore))
 
-  def stream(implicit transaction: Transaction[Doc]): rapid.Stream[V] = streamScored.map(_._1)
+  def stream: rapid.Stream[V] = streamScored.map(_._1)
 
-  def streamScored(implicit transaction: Transaction[Doc]): rapid.Stream[(V, Double)] = {
+  def streamScored: rapid.Stream[(V, Double)] = {
     rapid.Stream.merge {
       Task.defer {
         copy(limit = Some(1), countTotal = true).search.map(_.total.get).map { total =>
@@ -188,38 +184,38 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](model: Mo
               deleteOnNone: Boolean = true,
               safeModify: Boolean = true)
              (f: Forge[Doc, Option[Doc]])
-             (implicit transaction: Transaction[Doc]): Unit = docs.stream
+             (implicit transaction: Transaction[Doc, Model]): Unit = docs.stream
     .evalMap { doc =>
       if (safeModify) {
-        collection.modify(doc._id, establishLock, deleteOnNone) {
+        transaction.modify(doc._id, establishLock, deleteOnNone) {
           case Some(doc) => f(doc)
           case None => Task.pure(None)
         }
       } else {
         collection.lock(doc._id, Task.pure(Some(doc)), establishLock) { current =>
           f(current.getOrElse(doc)).flatMap {
-            case Some(modified) => collection.upsert(modified).when(!current.contains(modified))
-            case None => collection.delete(doc._id).when(deleteOnNone)
+            case Some(modified) => transaction.upsert(modified).when(!current.contains(modified))
+            case None => transaction.delete(doc._id).when(deleteOnNone)
           }.map(_ => None)
         }
       }
     }
     .drain
 
-  def toList(implicit transaction: Transaction[Doc]): Task[List[V]] = stream.toList
+  def toList(implicit transaction: Transaction[Doc, Model]): Task[List[V]] = stream.toList
 
-  def first(implicit transaction: Transaction[Doc]): Task[V] = limit(1).stream.first
+  def first(implicit transaction: Transaction[Doc, Model]): Task[V] = limit(1).stream.first
 
-  def firstOption(implicit transaction: Transaction[Doc]): Task[Option[V]] = limit(1).stream.firstOption
+  def firstOption(implicit transaction: Transaction[Doc, Model]): Task[Option[V]] = limit(1).stream.firstOption
 
-  def count(implicit transaction: Transaction[Doc]): Task[Int] = limit(1).countTotal(true).search.map(_.total.get)
+  def count(implicit transaction: Transaction[Doc, Model]): Task[Int] = limit(1).countTotal(true).search.map(_.total.get)
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
     AggregateQuery(this, f(model))
 
   def grouped[F](f: Model => Field[Doc, F],
                  direction: SortDirection = SortDirection.Ascending)
-                (implicit transaction: Transaction[Doc]): rapid.Stream[Grouped[F, Doc]] = {
+                (implicit transaction: Transaction[Doc, Model]): rapid.Stream[Grouped[F, Doc]] = {
     val field = f(model)
     val state = new IndexingState
     sort(Sort.ByField(field, direction)).docs.stream.groupSequential(doc => field.get(doc, field, state))

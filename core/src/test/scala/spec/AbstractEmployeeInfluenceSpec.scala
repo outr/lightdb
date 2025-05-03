@@ -24,7 +24,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     }
     "insert employees" in {
       db.employees.transaction { implicit tx =>
-        db.employees.insert(List(
+        tx.insert(List(
           Employee("Alice", Id("alice")),
           Employee("Bob", Id("bob")),
           Employee("Carol", Id("carol")),
@@ -34,7 +34,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     }
     "insert reports to edges" in {
       db.reportsTo.transaction { implicit tx =>
-        db.reportsTo.insert(List(
+        tx.insert(List(
           ReportsTo(Id("bob"), Id("alice")), // Bob reports to Alice
           ReportsTo(Id("carol"), Id("bob"))  // Carol reports to Bob
         ))
@@ -42,21 +42,19 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     }
     "insert collaborates with edges" in {
       db.collaboratesWith.transaction { implicit tx =>
-        db.collaboratesWith.insert(List(
+        tx.insert(List(
           CollaboratesWith(Id("carol"), Id("dave")) // Carol collaborates with Dave
         ))
       }.succeed
     }
     "verify who alice reports to and collaborates with" in {
-      db.reportsTo.transaction { implicit tx =>
-        db.collaboratesWith.transaction { implicit ct =>
-          db.reportsTo.traverse(Set(Id[Employee]("alice")))
-            .step[CollaboratesWith](ReportsAndCollaborationStep(db.collaboratesWith))
-            .collectAllReachable()
-            .map { results =>
-              results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))
-            }
-        }
+      db.collaboratesWith.transaction { implicit ct =>
+        ct.traverse(Set(Id[Employee]("alice")))
+          .bfs(ReportsAndCollaborationStep(db.collaboratesWith))
+          .collectAllReachable()
+          .map { results =>
+            results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))
+          }
       }.succeed
     }
     "truncate the database" in {
@@ -107,8 +105,8 @@ object CollaboratesWithModel extends EdgeModel[CollaboratesWith, Employee, Emplo
   override implicit val rw: RW[CollaboratesWith] = RW.gen
 }
 
-case class ReportsAndCollaborationStep(collaboratesWith: Store[CollaboratesWith, CollaboratesWithModel.type]) extends GraphStep[CollaboratesWith, Employee, Employee] {
-  override def neighbors(id: Id[Employee])(implicit tx: Transaction[CollaboratesWith]): Task[Set[Id[Employee]]] = {
+case class ReportsAndCollaborationStep(collaboratesWith: Store[CollaboratesWith, CollaboratesWithModel.type]) extends GraphStep[CollaboratesWith, CollaboratesWithModel.type, Employee, Employee] {
+  override def neighbors(id: Id[Employee])(implicit tx: Transaction[CollaboratesWith, CollaboratesWithModel.type]): Task[Set[Id[Employee]]] = {
     for {
       subordinates <- ReportsToModel.reverseEdgesFor(id) // people who report to this ID
       collabs <- collaboratesWith.model.edgesFor(id)  // people this person collaborates with

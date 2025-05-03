@@ -1,6 +1,6 @@
 package lightdb.sql.connect
 
-import lightdb.doc.Document
+import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql._
 import lightdb.transaction.Transaction
 
@@ -20,8 +20,7 @@ trait DataSourceConnectionManager extends ConnectionManager {
     connection.close()
   }
 
-  override def getConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Connection = {
-    val state = getState
+  override def getConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Connection = {
     synchronized {
       if (state.connection == null) {
         state.connection = openConnection()
@@ -30,9 +29,11 @@ trait DataSourceConnectionManager extends ConnectionManager {
     state.connection
   }
 
-  override def currentConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Option[Connection] =
-    Option(getState.connection)
+  override def currentConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Option[Connection] = {
+    Option(state.connection)
+  }
 
-  override def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit =
-    currentConnection.foreach(closeConnection)
+  override def releaseConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Unit = {
+    currentConnection(state).foreach(closeConnection)
+  }
 }
