@@ -3,6 +3,7 @@ package lightdb.chroniclemap
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.LightDB
+import lightdb.transaction.Transaction
 import net.openhft.chronicle.map.ChronicleMap
 import rapid.Task
 import scribe.{Level, Logger}
@@ -36,7 +37,7 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override protected def createTransaction(): Task[TX] = Task(ChronicleMapTransaction(this, db))
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task(ChronicleMapTransaction(this, db, parent))
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task(db))
 

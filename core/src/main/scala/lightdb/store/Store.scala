@@ -29,8 +29,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
                                                                          val storeManager: StoreManager) extends Initializable with Disposable {
   type TX <: Transaction[Doc, Model]
 
-  def supportsArbitraryQuery: Boolean = false
-
   lazy val idField: UniqueIndex[Doc, Id[Doc]] = model._id
 
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
@@ -76,7 +74,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial)).singleton
 
-  protected def createTransaction(): Task[TX]
+  protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX]
 
   private def releaseTransaction(transaction: TX): Task[Unit] = transaction.commit
 
@@ -97,13 +95,13 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
     def active: Int = set.size()
 
-    def apply[Return](f: TX => Task[Return]): Task[Return] = create().flatMap { transaction =>
+    def apply[Return](f: TX => Task[Return]): Task[Return] = create(None).flatMap { transaction =>
       f(transaction).guarantee(release(transaction))
     }
 
-    def create(): Task[TX] = for {
+    def create(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
       _ <- logger.info(s"Creating new Transaction for $name").when(Store.LogTransactions)
-      transaction <- createTransaction()
+      transaction <- createTransaction(parent)
       _ = set.add(transaction)
       _ <- trigger.transactionStart(transaction)
     } yield transaction

@@ -193,8 +193,8 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
           map.get(transaction) match {
             case Some((d, rd)) => d -> rd
             case None =>
-              val d = _edgesStore.transaction.create().sync()
-              val rd = _edgesReverseStore.transaction.create().sync()
+              val d = _edgesStore.transaction.create(None).sync()
+              val rd = _edgesReverseStore.transaction.create(None).sync()
               map += transaction -> (d, rd)
               d -> rd
           }

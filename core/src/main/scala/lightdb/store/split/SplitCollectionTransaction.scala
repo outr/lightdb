@@ -10,8 +10,13 @@ import lightdb.transaction.{CollectionTransaction, Transaction}
 import rapid.Task
 
 case class SplitCollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SplitCollection[Doc, Model],
-                                                                                         storage: Transaction[Doc, Model],
-                                                                                         searching: CollectionTransaction[Doc, Model]) extends CollectionTransaction[Doc, Model] {
+                                                                                         parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] {
+  private[split] var _storage: Transaction[Doc, Model] = _
+  private[split] var _searching: CollectionTransaction[Doc, Model] = _
+
+  def storage: Transaction[Doc, Model] = _storage
+  def searching: CollectionTransaction[Doc, Model] = _searching
+
   /**
    * Set this to false to ignore data changes in this transaction not applying changes to the searching transaction.
    *

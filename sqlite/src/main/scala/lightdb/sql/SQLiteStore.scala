@@ -9,7 +9,7 @@ import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.store.{CollectionManager, Conversion, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, Conversion, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.{LightDB, SortDirection}
 import org.sqlite.Collation
@@ -26,8 +26,15 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      lightDB: LightDB,
                                                                      storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
-  override protected def initTransaction()(implicit transaction: Transaction[Doc]): Task[Unit] = super.initTransaction().map { _ =>
-    val c = connectionManager.getConnection
+  override type TX = SQLiteTransaction[Doc, Model]
+
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
+    val state = SQLState(connectionManager, this, Store.CacheQueries)
+    SQLiteTransaction(this, state, parent)
+  }
+
+  override protected def initTransaction(tx: TX): Task[Unit] = super.initTransaction(tx).map { _ =>
+    val c = tx.state.connectionManager.getConnection(tx.state)
     if (hasSpatial.sync()) {
       scribe.info(s"$name has spatial features. Enabling...")
       org.sqlite.Function.create(c, "DISTANCE", new org.sqlite.Function() {
@@ -85,17 +92,6 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   }
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
-
-  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] =
-    List(SQLPart(s"DISTANCE(${d.field.name}, ?) AS ${d.field.name}Distance", List(SQLArg.JsonArg(d.from.json))))
-
-  override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
-    SQLPart(s"DISTANCE_LESS_THAN(${f.fieldName}Distance, ?)", List(SQLArg.DoubleArg(f.radius.valueInMeters)))
-
-  override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = direction match {
-    case SortDirection.Ascending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_ASCENDING")
-    case SortDirection.Descending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_DESCENDING")
-  }
 }
 
 object SQLiteStore extends CollectionManager {

@@ -1,6 +1,7 @@
 package lightdb.sql.connect
 
-import lightdb.doc.Document
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.sql.SQLState
 import lightdb.transaction.Transaction
 import lightdb.util.Disposable
 import rapid.Task
@@ -22,9 +23,9 @@ trait ConnectionManager extends Disposable {
     }
   }
 
-  def getConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Connection
+  def getConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Connection
 
-  def currentConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Option[Connection]
+  def currentConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Option[Connection]
 
-  def releaseConnection[Doc <: Document[Doc]](implicit transaction: Transaction[Doc]): Unit
+  def releaseConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Unit
 }
