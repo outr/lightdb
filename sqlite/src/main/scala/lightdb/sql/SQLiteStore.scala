@@ -3,15 +3,13 @@ package lightdb.sql
 import fabric._
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
+import lightdb.LightDB
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field
-import lightdb.filter.Filter
 import lightdb.spatial.{Geo, Spatial}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
-import lightdb.store.{CollectionManager, Conversion, Store, StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import lightdb.{LightDB, SortDirection}
 import org.sqlite.Collation
 import rapid._
 

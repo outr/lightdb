@@ -1,9 +1,9 @@
 package spec
 
 import fabric.rw._
+import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
-import lightdb._
 import lightdb.store.{Store, StoreManager}
 import lightdb.transaction.Transaction
 import lightdb.traversal._

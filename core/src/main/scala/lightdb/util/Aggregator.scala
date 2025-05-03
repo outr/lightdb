@@ -7,7 +7,6 @@ import lightdb.aggregate.{AggregateQuery, AggregateType}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.materialized.MaterializedAggregate
-import lightdb.transaction.Transaction
 import rapid.Task
 
 /**

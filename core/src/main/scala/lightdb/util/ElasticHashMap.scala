@@ -1,7 +1,5 @@
 package lightdb.util
 
-import scala.collection.immutable.Map
-
 /**
  * Based on the Elastic Hash Table defined here: https://github.com/MWARDUNI/ElasticHashing
  */

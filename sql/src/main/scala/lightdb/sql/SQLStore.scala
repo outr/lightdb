@@ -1,26 +1,16 @@
 package lightdb.sql
 
-import fabric._
 import fabric.define.DefType
-import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw._
 import lightdb._
-import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
-import lightdb.distance.Distance
-import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.field.Field._
-import lightdb.field.{Field, IndexingState}
-import lightdb.filter.{Condition, Filter}
-import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
-import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store._
-import lightdb.transaction.Transaction
-import lightdb.util.ActionIterator
 import rapid.Task
 
 import java.nio.file.Path
-import java.sql.{Connection, PreparedStatement, ResultSet}
+import java.sql.Connection
 import scala.language.implicitConversions
 
 abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,

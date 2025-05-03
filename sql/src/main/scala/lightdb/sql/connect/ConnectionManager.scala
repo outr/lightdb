@@ -2,7 +2,6 @@ package lightdb.sql.connect
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.SQLState
-import lightdb.transaction.Transaction
 import lightdb.util.Disposable
 import rapid.Task
 

@@ -1,28 +1,16 @@
 package lightdb.lucene
 
-import fabric._
-import fabric.define.DefType
-import fabric.io.JsonFormatter
-import fabric.rw.Asable
 import lightdb._
-import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field._
-import lightdb.field.{Field, IndexingState}
-import lightdb.filter.Filter
 import lightdb.lucene.index.Index
-import lightdb.materialized.MaterializedAggregate
-import lightdb.spatial.Geo
 import lightdb.store._
 import lightdb.transaction.Transaction
-import lightdb.util.Aggregator
-import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
-import org.apache.lucene.facet.{FacetsConfig, FacetField => LuceneFacetField}
-import org.apache.lucene.geo.{Line, Polygon}
-import org.apache.lucene.index.{DirectoryReader, SegmentReader, Term}
-import org.apache.lucene.search.{IndexSearcher, MatchAllDocsQuery}
+import org.apache.lucene.facet.FacetsConfig
+import org.apache.lucene.index.{DirectoryReader, SegmentReader}
+import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.store.FSDirectory
-import org.apache.lucene.util.{BytesRef, Version}
+import org.apache.lucene.util.Version
 import rapid._
 
 import java.nio.file.{Files, Path}

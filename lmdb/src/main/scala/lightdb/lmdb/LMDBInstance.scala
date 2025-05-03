@@ -1,7 +1,6 @@
 package lightdb.lmdb
 
-import org.lmdbjava.{Dbi, DbiFlags, Env}
-import rapid.Task
+import org.lmdbjava.{Dbi, Env}
 
 import java.nio.ByteBuffer
 

@@ -2,7 +2,6 @@ package lightdb.sql
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.transaction.Transaction
 import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}

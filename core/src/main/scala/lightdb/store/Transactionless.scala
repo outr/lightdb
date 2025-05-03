@@ -5,7 +5,7 @@ import fabric.rw._
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
-import lightdb.store.split.{SplitCollection, SplitCollectionTransaction}
+import lightdb.store.split.SplitCollectionTransaction
 import rapid.{Forge, Task}
 
 /**

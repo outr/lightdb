@@ -1,11 +1,11 @@
 package spec
 
 import fabric.rw._
-import lightdb.{Id, LightDB, MultiStore}
 import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.chroniclemap.ChronicleMapStore.S
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{Id, LightDB, MultiStore}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec

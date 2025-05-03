@@ -2,7 +2,6 @@ package lightdb.backup
 
 import fabric.Json
 import fabric.io.JsonFormatter
-import lightdb.LightDB
 import lightdb.store.Store
 import rapid._
 

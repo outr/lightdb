@@ -1,9 +1,8 @@
 package lightdb.traversal
 
-import lightdb.{Id, LightDB}
+import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.graph.{EdgeDocument, EdgeModel}
-import lightdb.store.Store
 import lightdb.transaction.Transaction
 import rapid.Task
 

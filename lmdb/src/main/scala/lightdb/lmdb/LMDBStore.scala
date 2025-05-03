@@ -1,17 +1,12 @@
 package lightdb.lmdb
 
-import fabric.{Json, Null}
-import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw.{Asable, Convertible}
+import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field
-import lightdb.store.{Store, StoreManager, StoreMode, WriteBuffer, WriteOp}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import lightdb.{Id, LightDB}
 import org.lmdbjava._
 import rapid._
 
-import java.nio.ByteBuffer
 import java.nio.file.{Files, Path}
 import scala.language.implicitConversions
 
