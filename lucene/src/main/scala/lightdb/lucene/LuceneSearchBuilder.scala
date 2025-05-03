@@ -22,10 +22,10 @@ import org.apache.lucene.util.automaton.RegExp
 import rapid.Task
 
 class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
-                                                                             model: Model) {
-  def apply[V](query: Query[Doc, Model, V])
-              (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = Task {
-    val indexSearcher = store.state.indexSearcher
+                                                                             model: Model,
+                                                                             tx: LuceneTransaction[Doc, Model]) {
+  def apply[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task {
+    val indexSearcher = tx.state.indexSearcher
     val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
     val s: LuceneSort = sort(query.sort)
     val limit = query.limit.getOrElse(query.pageSize)
@@ -49,7 +49,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case fc: FacetsCollector => fc
     }
     val facetResults = facetsCollector.map { fc =>
-      val facets = new FastTaxonomyFacetCounts(store.state.taxonomyReader, store.facetsConfig, fc)
+      val facets = new FastTaxonomyFacetCounts(tx.state.taxonomyReader, store.facetsConfig, fc)
       query.facets.map { fq =>
         Option(fq.childrenLimit match {
           case Some(l) => facets.getTopChildren(l, fq.field.name, fq.path: _*)
@@ -120,11 +120,11 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
             }.toMap
             model.map2Doc(map) -> scoreDoc.score.toDouble
         }
-      case StoreMode.Indexes(storage) =>
+      case StoreMode.Indexes(_) =>
         val docId = scoreDoc.doc
         val id = Id[Doc](storedFields.document(docId).get("_id"))
         val score = scoreDoc.score.toDouble
-        storage(id).sync() -> score
+        tx.parent.get(id).sync() -> score
     }
     def docIterator(): Iterator[(Doc, Double)] = scoreDocs.iterator.map(loadScoreDoc)
     def jsonIterator(fields: List[Field[Doc, _]]): Iterator[(ScoreDoc, Json, Double)] = {
@@ -154,7 +154,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case Conversion.Distance(field, from, sort, radius) => idsAndScores.iterator.map {
         case (id, score) =>
           val state = new IndexingState
-          val doc = store(id)(transaction).sync()
+          val doc = tx.parent.getOrElse(tx)(id).sync()
           val distance = field.get(doc, field, state).map(d => Spatial.distance(from, d))
           DistanceAndDoc(doc, distance) -> score
       }
@@ -168,7 +168,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       total = Some(total),
       streamWithScore = stream,
       facetResults = facetResults,
-      transaction = transaction
+      transaction = tx
     )
   }
 
