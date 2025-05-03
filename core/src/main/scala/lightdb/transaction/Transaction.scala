@@ -1,6 +1,7 @@
 package lightdb.transaction
 
 import fabric._
+import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
@@ -98,4 +99,8 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected def _commit: Task[Unit]
   protected def _rollback: Task[Unit]
   protected def _close: Task[Unit]
+
+  protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(store.model.rw))
+  protected def fromString(string: String): Doc = toJson(string).as[Doc](store.model.rw)
+  protected def toJson(string: String): Json = JsonParser(string)
 }
