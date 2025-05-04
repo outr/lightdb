@@ -5,7 +5,7 @@ import lightdb.spatial.Geo
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
-@EmbeddedTest
+//@EmbeddedTest
 class GeoParsingSpec extends AnyWordSpec with Matchers {
   "Geo Parsing" should {
     "parse a String point" in {

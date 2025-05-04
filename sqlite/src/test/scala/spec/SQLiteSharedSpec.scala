@@ -4,7 +4,7 @@ import lightdb.sql.{SQLiteSharedStore, SQLiteStore}
 
 import java.nio.file.Path
 
-@EmbeddedTest
+//@EmbeddedTest
 class SQLiteSharedSpec extends AbstractBasicSpec {
   override lazy val storeManager: SQLiteSharedStore = SQLiteSharedStore(SQLiteStore.singleConnectionManager(Some(Path.of("db/SQLiteSharedSpec"))))
 }

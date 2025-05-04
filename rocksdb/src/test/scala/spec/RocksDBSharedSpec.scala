@@ -5,7 +5,7 @@ import rapid.Task
 
 import java.nio.file.Path
 
-@EmbeddedTest
+//@EmbeddedTest
 class RocksDBSharedSpec extends AbstractKeyValueSpec {
   override lazy val storeManager: RocksDBSharedStore = RocksDBSharedStore(Path.of("db/RocksDBSharedSpec"))
 

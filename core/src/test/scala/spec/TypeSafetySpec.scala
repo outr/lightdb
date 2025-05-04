@@ -10,7 +10,7 @@ import org.scalatest.wordspec.AnyWordSpec
 
 import java.nio.file.Path
 
-@EmbeddedTest
+//@EmbeddedTest
 class TypeSafetySpec extends AnyWordSpec with Matchers {
   "LightDB.store" should {
     "return the specific store type" in {

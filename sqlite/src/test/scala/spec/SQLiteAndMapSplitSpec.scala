@@ -5,7 +5,7 @@ import lightdb.store.CollectionManager
 import lightdb.store.hashmap.HashMapStore
 import lightdb.store.split.SplitStoreManager
 
-@EmbeddedTest
+//@EmbeddedTest
 class SQLiteAndMapSplitSpec extends AbstractBasicSpec {
   override protected def memoryOnly: Boolean = true
 

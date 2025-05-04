@@ -2,7 +2,7 @@ package spec
 
 import lightdb.lucene.LuceneStore
 
-@EmbeddedTest
+//@EmbeddedTest
 class LuceneSpec extends AbstractBasicSpec {
   override protected def filterBuilderSupported: Boolean = true
 
