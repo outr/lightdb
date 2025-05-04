@@ -12,7 +12,7 @@ import rapid.AsyncTaskSpec
 
 import java.nio.file.Path
 
-//@EmbeddedTest
+@EmbeddedTest
 class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "Dynamic Stores" should {
     "initialize the database" in {

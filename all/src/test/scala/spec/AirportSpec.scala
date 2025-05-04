@@ -17,7 +17,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
-//@EmbeddedTest
+@EmbeddedTest
 class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
