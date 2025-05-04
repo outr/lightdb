@@ -3,7 +3,7 @@ package spec
 import lightdb.store.StoreManager
 import lightdb.store.hashmap.HashMapStore
 
-@EmbeddedTest
+//@EmbeddedTest
 class HashMapStoreKeyValueSpec extends AbstractKeyValueSpec {
   override def storeManager: StoreManager = HashMapStore
 }
