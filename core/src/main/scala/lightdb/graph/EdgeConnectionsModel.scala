@@ -5,8 +5,9 @@ import lightdb.Id
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.Field.UniqueIndex
 
-case class EdgeConnectionsModel[From <: Document[From], To <: Document[To]]() extends DocumentModel[EdgeConnections[From, To]] with JsonConversion[EdgeConnections[From, To]] {
-  override implicit val rw: RW[EdgeConnections[From, To]] = RW.gen
+class EdgeConnectionsModel[Origin <: Document[Origin], From <: Document[From], To <: Document[To]] extends DocumentModel[EdgeConnections[Origin, From, To]] with JsonConversion[EdgeConnections[Origin, From, To]] {
+  override implicit val rw: RW[EdgeConnections[Origin, From, To]] = RW.gen
 
-  val connections: UniqueIndex[EdgeConnections[From, To], Set[Id[To]]] = field.unique("connections", _.connections)
+  val connections: I[Set[Id[Origin]]] = field.index("connections", _.connections)
+  val to: I[Set[Id[To]]] = field.index("to", _.to)
 }

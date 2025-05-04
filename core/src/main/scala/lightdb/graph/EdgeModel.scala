@@ -12,16 +12,16 @@ import rapid.Task
 import scala.language.implicitConversions
 
 trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <: Document[To]] extends DocumentModel[Doc] {
-  implicit def from2Id(id: Id[From]): Id[EdgeConnections[From, To]] = Id(id.value)
-  implicit def to2Id(id: Id[To]): Id[EdgeConnections[To, From]] = Id(id.value)
+  implicit def from2Id(id: Id[From]): Id[EdgeConnections[Doc, From, To]] = Id(id.value)
+  implicit def to2Id(id: Id[To]): Id[EdgeConnections[Doc, To, From]] = Id(id.value)
 
   val _from: UniqueIndex[Doc, Id[From]] = field.unique("_from", _._from)
   val _to: UniqueIndex[Doc, Id[To]] = field.unique("_to", _._to)
 
-  private type D = EdgeConnections[From, To]
-  private type M = EdgeConnectionsModel[From, To]
-  private type RD = EdgeConnections[To, From]
-  private type RM = EdgeConnectionsModel[To, From]
+  private type D = EdgeConnections[Doc, From, To]
+  private type M = EdgeConnectionsModel[Doc, From, To]
+  private type RD = EdgeConnections[Doc, To, From]
+  private type RM = EdgeConnectionsModel[Doc, To, From]
 
   private var _edgesStore: Store[D, M] = _
   private var _edgesReverseStore: Store[RD, RM] = _
@@ -29,11 +29,11 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
   def edgesStore: Store[D, M] = _edgesStore
   def edgesReverseStore: Store[RD, RM] = _edgesReverseStore
 
-  private val edgesModel: EdgeConnectionsModel[From, To] = EdgeConnectionsModel()
-  private val edgesReverseModel: EdgeConnectionsModel[To, From] = EdgeConnectionsModel()
+  private val edgesModel: EdgeConnectionsModel[Doc, From, To] = new EdgeConnectionsModel
+  private val edgesReverseModel: EdgeConnectionsModel[Doc, To, From] = new EdgeConnectionsModel
 
-  def edgesFor(id: Id[From]): Task[Set[Id[To]]] = _edgesStore.transaction { implicit transaction =>
-    transaction.get(id.asInstanceOf[Id[EdgeConnections[From, To]]]).map(_.map(_.connections).getOrElse(Set.empty))
+  def edgesFor(id: Id[From]): Task[Set[Id[To]]] = edgesStore.transaction { implicit transaction =>
+    transaction.get(id.asInstanceOf[Id[EdgeConnections[Doc, From, To]]]).map(_.map(_.to).getOrElse(Set.empty))
   }
 
   def reachableFrom(id: Id[From])(implicit ev: Id[To] =:= Id[From]): Task[Set[(Id[To], Int)]] = Task {
@@ -167,7 +167,7 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
   }
 
   def reverseEdgesFor(id: Id[To]): Task[Set[Id[From]]] = _edgesReverseStore.transaction { implicit transaction =>
-    transaction.get(id.asInstanceOf[Id[EdgeConnections[To, From]]]).map(_.map(_.connections).getOrElse(Set.empty))
+    transaction.get(id.asInstanceOf[Id[EdgeConnections[Doc, To, From]]]).map(_.map(_.to).getOrElse(Set.empty))
   }
 
   override protected def init[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = {
@@ -261,11 +261,13 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
       Task {
         Some(edgeOption match {
           case Some(e) => e.copy(
-            connections = e.connections + doc._to
+            connections = e.connections + doc._id,
+            to = e.to + doc._to
           )
           case None => EdgeConnections(
             _id = doc._from,
-            connections = Set(doc._to)
+            connections = Set(doc._id),
+            to = Set(doc._to)
           )
         })
       }
@@ -274,11 +276,13 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
       Task {
         Some(edgeReverseOption match {
           case Some(e) => e.copy(
-            connections = e.connections + doc._from
+            connections = e.connections + doc._id,
+            to = e.to + doc._from
           )
           case None => EdgeConnections(
             _id = doc._to,
-            connections = Set(doc._from)
+            connections = Set(doc._id),
+            to = Set(doc._from)
           )
         })
       }
@@ -290,7 +294,8 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
       Task {
         edgeOption.flatMap { e =>
           val edge = e.copy(
-            connections = e.connections - doc._to
+            connections = e.connections - doc._id,
+            to = e.to - doc._to
           )
           if (edge.connections.isEmpty) {
             None
@@ -304,7 +309,8 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
       Task {
         edgeReverseOption.flatMap { e =>
           val edge = e.copy(
-            connections = e.connections - doc._from
+            connections = e.connections - doc._id,
+            to = e.to - doc._from
           )
           if (edge.connections.isEmpty) {
             None

@@ -2,14 +2,14 @@ package spec
 
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.graph.{EdgeDocument, EdgeModel}
+import lightdb.graph.{EdgeConnections, EdgeDocument, EdgeModel}
 import lightdb.store.{Store, StoreManager}
 import lightdb.traversal._
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import rapid.{AsyncTaskSpec, Task}
+import rapid._
 
 import java.nio.file.Path
 
@@ -33,13 +33,24 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
         }
         _ <- db.edges.transaction { implicit tx =>
           tx.insert(List(
-            SimpleEdge(Id("A"), Id("B")),
-            SimpleEdge(Id("A"), Id("C")),
-            SimpleEdge(Id("B"), Id("D")),
-            SimpleEdge(Id("C"), Id("D"))
+            SimpleEdge(Id("A"), Id("B"), "A to B"),
+            SimpleEdge(Id("A"), Id("C"), "A to C"),
+            SimpleEdge(Id("B"), Id("D"), "B to D"),
+            SimpleEdge(Id("C"), Id("D"), "C to D")
           ))
         }
       } yield succeed
+    }
+    "test" in {
+      SimpleEdgeModel.edgesStore.transaction { est =>
+        db.edges.transaction { et =>
+          est(Id[EdgeConnections[SimpleEdge, Node, Node]]("A")).flatMap { edgeConnections =>
+            edgeConnections.connections.map(id => et(id)).tasks
+          }.map { edges =>
+            scribe.info(s"Edges: ${edges.map(_.name)}")
+          }.succeed
+        }
+      }
     }
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { implicit tx =>
@@ -102,9 +113,11 @@ object Node extends DocumentModel[Node] with JsonConversion[Node] {
   val name: I[String] = field.index("name", _.name)
 }
 
-case class SimpleEdge(_from: Id[Node], _to: Id[Node], _id: Id[SimpleEdge] = Id())
+case class SimpleEdge(_from: Id[Node], _to: Id[Node], name: String, _id: Id[SimpleEdge] = Id())
   extends EdgeDocument[SimpleEdge, Node, Node] with Document[SimpleEdge]
 
 object SimpleEdgeModel extends EdgeModel[SimpleEdge, Node, Node] with JsonConversion[SimpleEdge] {
   override implicit lazy val rw: RW[SimpleEdge] = RW.gen
+
+  val name: I[String] = field.index("name", _.name)
 }
