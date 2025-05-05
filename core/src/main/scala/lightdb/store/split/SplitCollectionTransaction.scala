@@ -5,17 +5,24 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
 import lightdb.materialized.MaterializedAggregate
+import lightdb.store.{Collection, Store}
 import lightdb.transaction.{CollectionTransaction, Transaction}
 import lightdb.{Id, Query, SearchResults}
 import rapid.Task
 
-case class SplitCollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SplitCollection[Doc, Model],
-                                                                                         parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] {
-  private[split] var _storage: Transaction[Doc, Model] = _
-  private[split] var _searching: CollectionTransaction[Doc, Model] = _
+case class SplitCollectionTransaction[
+  Doc <: Document[Doc],
+  Model <: DocumentModel[Doc],
+  Storage <: Store[Doc, Model],
+  Searching <: Collection[Doc, Model]
+](store: SplitCollection[Doc, Model, Storage, Searching],
+  parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] {
+  private[split] var _storage: store.storage.TX = _
+  private[split] var _searching: store.searching.TX = _
 
-  def storage: Transaction[Doc, Model] = _storage
-  def searching: CollectionTransaction[Doc, Model] = _searching
+  def storage: store.storage.TX = _storage
+
+  def searching: store.searching.TX = _searching
 
   /**
    * Set this to false to ignore data changes in this transaction not applying changes to the searching transaction.

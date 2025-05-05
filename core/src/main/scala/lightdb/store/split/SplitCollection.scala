@@ -9,15 +9,20 @@ import rapid.{Task, logger}
 import java.nio.file.Path
 import scala.language.implicitConversions
 
-class SplitCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](override val name: String,
-                                                                         path: Option[Path],
-                                                                         model: Model,
-                                                                         val storage: Store[Doc, Model],
-                                                                         val searching: Collection[Doc, Model],
-                                                                         val storeMode: StoreMode[Doc, Model],
-                                                                         db: LightDB,
-                                                                         storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, db, storeManager) {
-  override type TX = SplitCollectionTransaction[Doc, Model]
+class SplitCollection[
+  Doc <: Document[Doc],
+  Model <: DocumentModel[Doc],
+  Storage <: Store[Doc, Model],
+  Searching <: Collection[Doc, Model]
+](override val name: String,
+  path: Option[Path],
+  model: Model,
+  val storage: Storage,
+  val searching: Searching,
+  val storeMode: StoreMode[Doc, Model],
+  db: LightDB,
+  storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, db, storeManager) {
+  override type TX = SplitCollectionTransaction[Doc, Model, Storage, Searching]
 
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
@@ -25,8 +30,8 @@ class SplitCollection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](overrid
     t <- Task(SplitCollectionTransaction(this, parent))
     t1 <- storage.transaction.create(Some(t))
     t2 <- searching.transaction.create(Some(t))
-    _ = t._storage = t1
-    _ = t._searching = t2
+    _ = t._storage = t1.asInstanceOf[t.store.storage.TX]
+    _ = t._searching = t2.asInstanceOf[t.store.searching.TX]
   } yield t
 
   override def verify(): Task[Boolean] = transaction { implicit transaction =>

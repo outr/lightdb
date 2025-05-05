@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.halodb.HaloDBStore
 import lightdb.lucene.LuceneStore
+import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{Id, LightDB}
@@ -17,7 +18,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
-@EmbeddedTest
+//@EmbeddedTest
 class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
@@ -122,13 +123,13 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   // RocksDB: 3s (full load: 110s)
   // ChronicleMap: 4s (full load: 79s)
   object DB extends LightDB {
-    override type SM = SplitStoreManager
-    override val storeManager: SplitStoreManager = SplitStoreManager(HaloDBStore, LuceneStore)
+    override type SM = SplitStoreManager[RocksDBStore.type, LuceneStore.type]
+    override val storeManager: SplitStoreManager[RocksDBStore.type, LuceneStore.type] = SplitStoreManager(RocksDBStore, LuceneStore)
 
     override lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 
-    val airports: SplitCollection[Airport, Airport.type] = store(Airport)
-    val flights: SplitCollection[Flight, Flight.type] = store(Flight)
+    val airports: S[Airport, Airport.type] = store(Airport)
+    val flights: S[Flight, Flight.type] = store(Flight)
 
     override def upgrades: List[DatabaseUpgrade] = List(DataImportUpgrade)
   }
@@ -278,8 +279,11 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       }))
       insertedFlights <- DB.flights.transaction { implicit transaction =>
         flights
-          .evalForeach { flight =>
-            transaction.insert(flight).unit
+          .zipWithIndex
+          .evalForeach {
+            case (flight, index) =>
+              if (index % 10000 == 0) scribe.info(s"Inserting flight $index of 286464")
+              transaction.insert(flight).unit
           }
           .count
       }

@@ -9,5 +9,5 @@ import lightdb.store.split.SplitStoreManager
 class LMDBAndLuceneSpec extends AbstractBasicSpec {
   override protected def filterBuilderSupported: Boolean = true
 
-  override lazy val storeManager: SplitStoreManager = SplitStoreManager(LMDBStore, LuceneStore)
+  override lazy val storeManager: SplitStoreManager[LMDBStore.type, LuceneStore.type] = SplitStoreManager(LMDBStore, LuceneStore)
 }

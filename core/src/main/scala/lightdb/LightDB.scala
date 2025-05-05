@@ -19,6 +19,7 @@ import scala.util.{Failure, Success}
  */
 trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatureKey] {
   type SM <: StoreManager
+  type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = storeManager.S[Doc, Model]
 
   /**
    * Identifiable name for this database. Defaults to using the class name.

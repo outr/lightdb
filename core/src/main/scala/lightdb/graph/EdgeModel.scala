@@ -7,7 +7,7 @@ import lightdb.field.Field.UniqueIndex
 import lightdb.store.{Store, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.trigger.StoreTrigger
-import rapid.Task
+import rapid.{Task, logger}
 
 import scala.language.implicitConversions
 
@@ -256,7 +256,13 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
     }
   }
 
+//  private var set = Set.empty[String]
+
   protected def add(doc: Doc)(implicit et: Transaction[D, M], ert: Transaction[RD, RM]): Task[Unit] = for {
+//    _ <- logger.info(s"Adding ${doc._from} -> ${doc._to} (${set.size})")
+//    key = s"${doc._from}->${doc._to}"
+//    _ <- logger.info(s"Already exists! $key").when(set.contains(key))
+//    _ = set += key
     _ <- et.modify(doc._from) { edgeOption =>
       Task {
         Some(edgeOption match {

@@ -6,18 +6,26 @@ import fabric.rw._
 import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.transaction.Transaction
+import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.rocksdb.RocksIterator
 import rapid.Task
 
 case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model],
-                                                                                 parent: Option[Transaction[Doc, Model]]) extends Transaction[Doc, Model] {
+                                                                                 parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] {
   private def bytes2Doc(bytes: Array[Byte]): Doc = bytes2Json(bytes).as[Doc](store.model.rw)
 
   private def bytes2Json(bytes: Array[Byte]): Json = {
     val jsonString = new String(bytes, "UTF-8")
     JsonParser(jsonString)
   }
+
+  override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream
+    .fromIterator(Task(iterator({
+      store.handle match {
+        case Some(h) => store.rocksDB.newIterator(h)
+        case None => store.rocksDB.newIterator()
+      }
+    }, prefix = Some(prefix)))).map(bytes2Json)
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream
     .fromIterator(Task(iterator {
@@ -87,11 +95,20 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }).size
   }
 
-  private def iterator(rocksIterator: RocksIterator, value: Boolean = true): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
-    // Initialize the iterator to the first position
-    rocksIterator.seekToFirst()
+  private def iterator(rocksIterator: RocksIterator,
+                       value: Boolean = true,
+                       prefix: Option[String] = None): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
+    prefix match {
+      case Some(s) => rocksIterator.seek(s.getBytes("UTF-8"))     // Initialize the iterator to the prefix
+      case None => rocksIterator.seekToFirst()                    // Seek to the provided value as the start position
+    }
 
-    override def hasNext: Boolean = rocksIterator.isValid
+    val isValid: () => Boolean = prefix match {
+      case Some(s) => () => rocksIterator.isValid && new String(rocksIterator.key(), "UTF-8").startsWith(s)
+      case None => () => rocksIterator.isValid
+    }
+
+    override def hasNext: Boolean = isValid()
 
     override def next(): Array[Byte] = {
       if (!hasNext) throw new NoSuchElementException("No more elements in the RocksDB iterator")
