@@ -8,5 +8,5 @@ import lightdb.store.split.SplitStoreManager
 class RocksDBAndLuceneSpec extends AbstractBasicSpec {
   override protected def filterBuilderSupported: Boolean = true
 
-  override def storeManager: SplitStoreManager = SplitStoreManager(RocksDBStore, LuceneStore)
+  override def storeManager: SplitStoreManager[RocksDBStore.type, LuceneStore.type] = SplitStoreManager(RocksDBStore, LuceneStore)
 }

@@ -8,5 +8,5 @@ import lightdb.store.split.SplitStoreManager
 class ChronicleMapAndLuceneSpec extends AbstractBasicSpec {
   override protected def filterBuilderSupported: Boolean = true
 
-  override lazy val storeManager: SplitStoreManager = SplitStoreManager(ChronicleMapStore, LuceneStore)
+  override lazy val storeManager: SplitStoreManager[ChronicleMapStore.type, LuceneStore.type] = SplitStoreManager(ChronicleMapStore, LuceneStore)
 }

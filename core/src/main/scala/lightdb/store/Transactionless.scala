@@ -35,7 +35,7 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                disableSearchUpdates: Boolean): Task[Int] = store.transaction { implicit transaction =>
       if (disableSearchUpdates) {
         transaction match {
-          case t: SplitCollectionTransaction[_, _] => t.applySearchUpdates = false
+          case t: SplitCollectionTransaction[_, _, _, _] => t.applySearchUpdates = false
           case _ => // Ignore others
         }
       }
