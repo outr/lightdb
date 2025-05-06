@@ -1,6 +1,6 @@
 package lightdb.doc
 
-import lightdb.Id
+import lightdb.id.Id
 import lightdb.transaction.Transaction
 import rapid._
 

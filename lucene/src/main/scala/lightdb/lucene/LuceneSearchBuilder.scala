@@ -8,10 +8,11 @@ import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field.Tokenized
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
+import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Spatial}
 import lightdb.store.{Conversion, StoreMode}
-import lightdb.{Id, Query, SearchResults, Sort, SortDirection}
+import lightdb.{Query, SearchResults, Sort, SortDirection}
 import org.apache.lucene.document._
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}

@@ -3,9 +3,9 @@ package lightdb.lmdb
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import fabric.{Json, Null}
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
+import lightdb.id.Id
 import lightdb.store.{BufferedWritingTransaction, WriteBuffer, WriteOp}
 import lightdb.transaction.Transaction
 import org.lmdbjava.{Env, PutFlags, Txn}

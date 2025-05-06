@@ -1,9 +1,9 @@
 package lightdb.mapdb
 
 import fabric.Json
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
+import lightdb.id.Id
 import lightdb.transaction.Transaction
 import rapid.Task
 

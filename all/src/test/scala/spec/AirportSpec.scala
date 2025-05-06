@@ -8,7 +8,8 @@ import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB}
+import lightdb.LightDB
+import lightdb.id.{EdgeId, Id}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
@@ -180,10 +181,41 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
                     flightNum: Int,
                     tailNum: String,
                     distance: Int,
-                    _id: Id[Flight] = Flight.id()) extends EdgeDocument[Flight, Airport, Airport]
+                    _id: EdgeId[Flight, Airport, Airport]) extends EdgeDocument[Flight, Airport, Airport]
 
   object Flight extends EdgeModel[Flight, Airport, Airport] with JsonConversion[Flight] {
     override implicit val rw: RW[Flight] = RW.gen
+
+    def apply(_from: Id[Airport],
+              _to: Id[Airport],
+              year: Int,
+              month: Int,
+              day: Int,
+              dayOfWeek: Int,
+              depTime: Int,
+              arrTime: Int,
+              depTimeUTC: String,
+              arrTimeUTC: String,
+              uniqueCarrier: String,
+              flightNum: Int,
+              tailNum: String,
+              distance: Int): Flight = Flight(
+      _from = _from,
+      _to = _to,
+      year = year,
+      month = month,
+      day = day,
+      dayOfWeek = dayOfWeek,
+      depTime = depTime,
+      arrTime = arrTime,
+      depTimeUTC = depTimeUTC,
+      arrTimeUTC = arrTimeUTC,
+      uniqueCarrier = uniqueCarrier,
+      flightNum = flightNum,
+      tailNum = tailNum,
+      distance = distance,
+      _id = EdgeId(_from, _to, Unique())
+    )
 
     val year: F[Int] = field("year", _.year)
     val month: F[Int] = field("month", _.month)

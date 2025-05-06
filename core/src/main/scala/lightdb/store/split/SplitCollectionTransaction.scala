@@ -4,10 +4,11 @@ import fabric.Json
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
+import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Collection, Store}
 import lightdb.transaction.{CollectionTransaction, Transaction}
-import lightdb.{Id, Query, SearchResults}
+import lightdb.{Query, SearchResults}
 import rapid.Task
 
 case class SplitCollectionTransaction[

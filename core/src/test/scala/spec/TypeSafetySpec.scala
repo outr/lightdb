@@ -4,7 +4,8 @@ import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.store.hashmap.HashMapStore
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB}
+import lightdb.LightDB
+import lightdb.id.Id
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 

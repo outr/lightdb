@@ -7,7 +7,8 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.spatial.Geo
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB}
+import lightdb.LightDB
+import lightdb.id.Id
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec

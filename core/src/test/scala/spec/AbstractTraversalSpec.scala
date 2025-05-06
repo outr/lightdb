@@ -6,7 +6,8 @@ import lightdb.graph.{EdgeConnections, EdgeDocument, EdgeModel}
 import lightdb.store.{Store, StoreManager}
 import lightdb.traversal._
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB}
+import lightdb.LightDB
+import lightdb.id.{EdgeId, Id}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid._
@@ -42,7 +43,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
       } yield succeed
     }
     "test" in {
-      SimpleEdgeModel.edgesStore.transaction { est =>
+      SimpleEdge.edgesStore.transaction { est =>
         db.edges.transaction { et =>
           est(Id[EdgeConnections[SimpleEdge, Node, Node]]("A")).flatMap { edgeConnections =>
             edgeConnections.connections.map(id => et(id)).tasks
@@ -55,7 +56,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { implicit tx =>
         tx.traverse(Id[Node]("A"))
-          .bfs(GraphStep.forward[SimpleEdge, SimpleEdgeModel.type, Node, Node](SimpleEdgeModel))
+          .bfs(GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge))
           .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
@@ -65,7 +66,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse graph in reverse from D to find parents" in {
       db.edges.transaction { implicit tx =>
         tx.traverse(Id[Node]("D"))
-          .bfs(GraphStep.reverse[SimpleEdge, SimpleEdgeModel.type, Node, Node](SimpleEdgeModel))
+          .bfs(GraphStep.reverse[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge))
           .collectAllReachable()
           .map { result =>
             result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
@@ -76,7 +77,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
       val maxDepth = 1
       db.edges.transaction { implicit tx =>
         tx.traverse(Set(Id[Node]("A")))
-          .bfs(GraphStep.forward[SimpleEdge, SimpleEdgeModel.type, Node, Node](SimpleEdgeModel), maxDepth)
+          .bfs(GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge), maxDepth)
           .collectAllReachable()
           .map { result =>
             result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
@@ -101,7 +102,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     override def upgrades: List[DatabaseUpgrade] = Nil
 
     val nodes: Store[Node, Node.type] = store(Node)
-    val edges: Store[SimpleEdge, SimpleEdgeModel.type] = store(SimpleEdgeModel)
+    val edges: Store[SimpleEdge, SimpleEdge.type] = store(SimpleEdge)
   }
 }
 
@@ -113,11 +114,13 @@ object Node extends DocumentModel[Node] with JsonConversion[Node] {
   val name: I[String] = field.index("name", _.name)
 }
 
-case class SimpleEdge(_from: Id[Node], _to: Id[Node], name: String, _id: Id[SimpleEdge] = Id())
+case class SimpleEdge(_from: Id[Node], _to: Id[Node], name: String, _id: EdgeId[SimpleEdge, Node, Node])
   extends EdgeDocument[SimpleEdge, Node, Node] with Document[SimpleEdge]
 
-object SimpleEdgeModel extends EdgeModel[SimpleEdge, Node, Node] with JsonConversion[SimpleEdge] {
+object SimpleEdge extends EdgeModel[SimpleEdge, Node, Node] with JsonConversion[SimpleEdge] {
   override implicit lazy val rw: RW[SimpleEdge] = RW.gen
 
   val name: I[String] = field.index("name", _.name)
+
+  def apply(_from: Id[Node], _to: Id[Node], name: String): SimpleEdge = SimpleEdge(_from, _to, name, EdgeId(_from, _to))
 }

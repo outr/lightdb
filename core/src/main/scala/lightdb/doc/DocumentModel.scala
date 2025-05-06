@@ -6,6 +6,7 @@ import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.field.Field._
 import lightdb.field.{Field, FieldGetter}
 import lightdb.filter.FilterBuilder
+import lightdb.id.{Id, StringId}
 import lightdb.store.Store
 import rapid.{Task, Unique}
 
@@ -18,7 +19,7 @@ trait DocumentModel[Doc <: Document[Doc]] {
 
   val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", (doc: Doc) => doc._id)
 
-  def id(value: String = Unique.sync()): Id[Doc] = Id(value)
+  def id(value: String = Unique.sync()): Id[Doc] = StringId(value)
 
   private var _initialized = Set.empty[Store[_, _]]
 

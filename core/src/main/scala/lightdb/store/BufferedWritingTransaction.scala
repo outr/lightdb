@@ -1,8 +1,8 @@
 package lightdb.store
 
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
+import lightdb.id.Id
 import lightdb.transaction.Transaction
 import rapid._
 

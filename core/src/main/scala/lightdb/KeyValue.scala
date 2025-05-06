@@ -4,6 +4,7 @@ import fabric.Json
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.Field
+import lightdb.id.Id
 
 case class KeyValue(_id: Id[KeyValue], json: Json) extends Document[KeyValue]
 
