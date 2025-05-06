@@ -1,7 +1,7 @@
 package lightdb.store
 
-import lightdb.Id
 import lightdb.doc.Document
+import lightdb.id.Id
 
 sealed trait WriteOp[Doc <: Document[Doc]]
 

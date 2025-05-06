@@ -3,9 +3,9 @@ package lightdb.rocksdb
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
+import lightdb.id.Id
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.rocksdb.RocksIterator
 import rapid.Task

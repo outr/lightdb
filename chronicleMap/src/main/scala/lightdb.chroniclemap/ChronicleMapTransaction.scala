@@ -1,9 +1,9 @@
 package lightdb.chroniclemap
 
 import fabric.Json
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
+import lightdb.id.Id
 import lightdb.transaction.Transaction
 import net.openhft.chronicle.map.ChronicleMap
 import rapid.Task

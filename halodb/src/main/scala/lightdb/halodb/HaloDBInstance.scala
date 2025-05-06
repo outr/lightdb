@@ -1,7 +1,7 @@
 package lightdb.halodb
 
 import fabric.Json
-import lightdb.Id
+import lightdb.id.Id
 import rapid.Task
 
 trait HaloDBInstance {

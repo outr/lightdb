@@ -3,9 +3,10 @@ package spec
 import fabric._
 import fabric.rw._
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
+import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB, Sort, Timestamp}
+import lightdb.{LightDB, Sort, Timestamp}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec

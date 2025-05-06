@@ -1,8 +1,9 @@
 package lightdb.cache
 
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.id.Id
 import lightdb.transaction.Transaction
-import lightdb.{Id, Query, SearchResults, Timestamp}
+import lightdb.{Query, SearchResults, Timestamp}
 import rapid.{Fiber, Task}
 
 import java.util.concurrent.ConcurrentHashMap

@@ -1,9 +1,9 @@
 package lightdb.graph
 
 import fabric.rw._
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.Field.UniqueIndex
+import lightdb.id.Id
 
 class EdgeConnectionsModel[Origin <: Document[Origin], From <: Document[From], To <: Document[To]] extends DocumentModel[EdgeConnections[Origin, From, To]] with JsonConversion[EdgeConnections[Origin, From, To]] {
   override implicit val rw: RW[EdgeConnections[Origin, From, To]] = RW.gen

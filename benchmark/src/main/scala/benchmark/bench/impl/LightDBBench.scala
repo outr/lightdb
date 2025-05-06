@@ -6,7 +6,8 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.sql.SQLConversion
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{Id, LightDB}
+import lightdb.LightDB
+import lightdb.id.Id
 import rapid.Task
 
 import java.nio.file.Path

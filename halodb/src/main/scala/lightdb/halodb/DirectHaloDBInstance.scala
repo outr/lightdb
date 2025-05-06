@@ -3,7 +3,7 @@ package lightdb.halodb
 import com.oath.halodb.{HaloDB, HaloDBOptions}
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.{Json, Null}
-import lightdb.Id
+import lightdb.id.Id
 import rapid.Task
 
 import java.nio.file.{Files, Path}

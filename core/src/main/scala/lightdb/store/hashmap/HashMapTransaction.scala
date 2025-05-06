@@ -2,9 +2,9 @@ package lightdb.store.hashmap
 
 import fabric.Json
 import fabric.rw.Convertible
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
+import lightdb.id.Id
 import lightdb.transaction.Transaction
 import rapid.Task
 

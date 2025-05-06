@@ -4,6 +4,7 @@ import fabric.rw._
 import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
+import lightdb.id.{EdgeId, Id}
 import lightdb.store.{Store, StoreManager}
 import lightdb.transaction.Transaction
 import lightdb.traversal._
@@ -75,9 +76,9 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val employees: Store[Employee, EmployeeModel.type] = store(EmployeeModel)
-    val reportsTo: Store[ReportsTo, ReportsToModel.type] = store(ReportsToModel)
-    val collaboratesWith: Store[CollaboratesWith, CollaboratesWithModel.type] = store(CollaboratesWithModel)
+    val employees: Store[Employee, Employee.type] = store(Employee)
+    val reportsTo: Store[ReportsTo, ReportsTo.type] = store(ReportsTo)
+    val collaboratesWith: Store[CollaboratesWith, CollaboratesWith.type] = store(CollaboratesWith)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
@@ -85,30 +86,34 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
 
 case class Employee(name: String, _id: Id[Employee] = Id()) extends Document[Employee]
 
-object EmployeeModel extends DocumentModel[Employee] with JsonConversion[Employee] {
+object Employee extends DocumentModel[Employee] with JsonConversion[Employee] {
   override implicit val rw: RW[Employee] = RW.gen
 
   val name: F[String] = field("name", _.name)
 }
 
-case class ReportsTo(_from: Id[Employee], _to: Id[Employee], _id: Id[ReportsTo] = Id())
+case class ReportsTo(_from: Id[Employee], _to: Id[Employee], _id: EdgeId[ReportsTo, Employee, Employee])
   extends EdgeDocument[ReportsTo, Employee, Employee] with Document[ReportsTo]
 
-object ReportsToModel extends EdgeModel[ReportsTo, Employee, Employee] with JsonConversion[ReportsTo] {
+object ReportsTo extends EdgeModel[ReportsTo, Employee, Employee] with JsonConversion[ReportsTo] {
   override implicit val rw: RW[ReportsTo] = RW.gen
+
+  def apply(_from: Id[Employee], _to: Id[Employee]): ReportsTo = ReportsTo(_from, _to, EdgeId(_from, _to))
 }
 
-case class CollaboratesWith(_from: Id[Employee], _to: Id[Employee], _id: Id[CollaboratesWith] = Id())
+case class CollaboratesWith(_from: Id[Employee], _to: Id[Employee], _id: EdgeId[CollaboratesWith, Employee, Employee])
   extends EdgeDocument[CollaboratesWith, Employee, Employee]
 
-object CollaboratesWithModel extends EdgeModel[CollaboratesWith, Employee, Employee] with JsonConversion[CollaboratesWith] {
+object CollaboratesWith extends EdgeModel[CollaboratesWith, Employee, Employee] with JsonConversion[CollaboratesWith] {
   override implicit val rw: RW[CollaboratesWith] = RW.gen
+
+  def apply(_from: Id[Employee], _to: Id[Employee]): CollaboratesWith = CollaboratesWith(_from, _to, EdgeId(_from, _to))
 }
 
-case class ReportsAndCollaborationStep(collaboratesWith: Store[CollaboratesWith, CollaboratesWithModel.type]) extends GraphStep[CollaboratesWith, CollaboratesWithModel.type, Employee, Employee] {
-  override def neighbors(id: Id[Employee])(implicit tx: Transaction[CollaboratesWith, CollaboratesWithModel.type]): Task[Set[Id[Employee]]] = {
+case class ReportsAndCollaborationStep(collaboratesWith: Store[CollaboratesWith, CollaboratesWith.type]) extends GraphStep[CollaboratesWith, CollaboratesWith.type, Employee, Employee] {
+  override def neighbors(id: Id[Employee])(implicit tx: Transaction[CollaboratesWith, CollaboratesWith.type]): Task[Set[Id[Employee]]] = {
     for {
-      subordinates <- ReportsToModel.reverseEdgesFor(id) // people who report to this ID
+      subordinates <- ReportsTo.reverseEdgesFor(id) // people who report to this ID
       collabs <- collaboratesWith.model.edgesFor(id)  // people this person collaborates with
     } yield subordinates ++ collabs
   }

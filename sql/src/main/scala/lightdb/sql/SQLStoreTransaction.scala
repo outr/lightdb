@@ -10,12 +10,13 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.Field.Tokenized
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter}
+import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Conversion, Store}
 import lightdb.transaction.CollectionTransaction
 import lightdb.util.ActionIterator
-import lightdb.{Id, Query, SearchResults, Sort, SortDirection}
+import lightdb.{Query, SearchResults, Sort, SortDirection}
 import rapid.Task
 
 import java.sql.{PreparedStatement, ResultSet}

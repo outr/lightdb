@@ -3,11 +3,11 @@ package lightdb.transaction
 import fabric._
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
-import lightdb.Id
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.DocNotFoundException
 import lightdb.field.Field.UniqueIndex
 import lightdb.graph.EdgeModel
+import lightdb.id.Id
 import lightdb.store.Store
 import lightdb.traversal.{GraphStep, GraphTraversalEngine}
 import rapid._

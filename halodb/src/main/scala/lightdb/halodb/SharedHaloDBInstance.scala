@@ -1,13 +1,13 @@
 package lightdb.halodb
 
 import fabric._
-import lightdb.Id
+import lightdb.id.Id
 import rapid.Task
 
 case class SharedHaloDBInstance(direct: DirectHaloDBInstance, prefix: String) extends HaloDBInstance {
   direct.counter.incrementAndGet()
 
-  private def uid[Doc](id: Id[Doc]): Id[Doc] = id.copy(s"$prefix${id.value}")
+  private def uid[Doc](id: Id[Doc]): Id[Doc] = Id[Doc](s"$prefix${id.value}")
 
   private def addPrefix(json: Json): Json = {
     json.merge(obj(
