@@ -23,29 +23,7 @@ trait EdgeModel[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <
     s"${_from.value}-${_to.value}-$extra"
   }
 
-  /*def edgesFor(id: Id[From]): Task[Set[Id[To]]] = edgesStore.transaction { implicit transaction =>
-    transaction.get(id.asInstanceOf[Id[EdgeConnections[Doc, From, To]]]).map(_.map(_.to).getOrElse(Set.empty))
-  }
-
-  def reachableFrom(id: Id[From])(implicit ev: Id[To] =:= Id[From]): Task[Set[(Id[To], Int)]] = Task {
-    var reachable = Set.empty[(Id[To], Int)]
-    var visited = Set.empty[Id[To]]
-    var queue = List(id -> 0)
-
-    while (queue.nonEmpty) {
-      val (from, distance) = queue.head
-      queue = queue.tail
-
-      val edges = edgesFor(from).sync()
-      val newIds = edges.diff(visited)
-
-      visited ++= newIds
-      reachable ++= newIds.map(to => to -> (distance + 1))
-      queue = queue ::: newIds.toList.map(to => ev(to) -> (distance + 1))
-    }
-    reachable
-  }
-
+  /*
   def shortestPath(from: Id[From], to: Id[To])(implicit ev: Id[From] =:= Id[To]): Task[List[Id[To]]] = {
     if (ev(from) == to) {
       Task.pure(List(ev(from)))

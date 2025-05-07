@@ -1,8 +1,3 @@
-import lightdb.doc.Document
-import lightdb.graph.{EdgeDocument, EdgeModel}
-import lightdb.store.split.SplitCollectionTransaction
-import lightdb.transaction.{EdgeTransaction, PrefixScanningTransaction}
-
 import scala.language.implicitConversions
 
 package object lightdb {
@@ -21,11 +16,4 @@ package object lightdb {
       override def parseString(str: String): Option[B] = numeric.parseString(str).map(to)
     }
   }
-  implicit def prefixScanning2EdgeTransaction[
-    Doc <: EdgeDocument[Doc, From, To],
-    Model <: EdgeModel[Doc, From, To],
-    From <: Document[From],
-    To <: Document[To],
-    T <: PrefixScanningTransaction[Doc, Model]
-  ](t: T): EdgeTransaction[Doc, Model, From, To] = ???
 }

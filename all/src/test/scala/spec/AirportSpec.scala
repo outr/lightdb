@@ -69,8 +69,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
     "count all connections to JFK" in {
       DB.flights.transaction { tx =>
-        prefixScanning2EdgeTransaction(tx.storage).edgesFor(Airport.id("JFK")).toList.map { flights =>
-//        tx.storage.prefixList(Flight.prefix(Airport.id("JFK"))).map { flights =>
+        tx.storage.edgesFor[Flight, Airport, Airport](Airport.id("JFK")).toList.map { flights =>
           flights.length should be(4806)
           flights.map(_._to.value).toSet should be(Set(
             "LAS", "LAX", "MIA", "SJC", "HDN", "CMH", "PIT", "DCA", "IAD", "FLL", "CLE", "SYR", "STL", "LGB", "ORD",
@@ -88,27 +87,37 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 //        facet.ids.size should be(4826)
 //      }
 //    }
-    // TODO: Support guides traversals
-    /*"get all airport names reachable directly from LAX following edges" in {
-      val lax = Airport.id("LAX")
-      Flight.edgesFor(lax).map { airports =>
-        airports.size should be(82)
+    // TODO: Support guided traversals
+    "get all airport names reachable directly from LAX following edges" in {
+      DB.flights.transaction { tx =>
+        val lax = Airport.id("LAX")
+        tx.storage.edgesFor[Flight, Airport, Airport](lax).toList.map { flights =>
+          flights.map(_._to.value).distinct.length should be(82)
+        }
       }
     }
     "get all airports reachable from LAX" in {
       val lax = Airport.id("LAX")
-      Flight.reachableFrom(lax).map { airports =>
-        airports.size should be(286)
+      DB.flights.transaction { tx =>
+        tx.storage.reachableFrom[Flight, Airport](lax).toList.map { flights =>
+          flights.length should be(286)
+          val airports = flights.map(_._to.value).toSet
+          airports.size should be(286)
+        }
       }
     }
-    "find the shortest path between BIS and JFK" in {
+    "find the shortest paths between BIS and JFK" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
-      Flight.shortestPath(bis, jfk).map { path =>
-        path should be(List(bis, Airport.id("DEN"), jfk))
+      DB.flights.transaction { tx =>
+        tx.storage.shortestPaths[Flight, Airport](bis, jfk).map { paths =>
+          paths.map { path =>
+            scribe.info(s"Path: ${path.nodes}")
+          }
+        }.succeed
       }
     }
-    "find all the shortest paths between BIS and JFK" in {
+    /*"find all the shortest paths between BIS and JFK" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
       Flight.shortestPaths(bis, jfk).map { paths =>
@@ -117,15 +126,17 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
           List(bis, Airport.id("MSP"), jfk)
         ))
       }
-    }
+    }*/
     "find all paths between BIS and JFK" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
       val maxPaths = 1_000
-      Flight.allPaths(bis, jfk, maxPaths = maxPaths, maxDepth = 100).map { paths =>
-        paths.length should be(maxPaths)
+      DB.flights.transaction { tx =>
+        tx.storage.allPaths(bis, jfk, maxPaths = maxPaths, maxDepth = 100).map { paths =>
+          paths.length should be(maxPaths)
+        }
       }
-    }*/
+    }
     // TODO: Test ValueStore
     // TODO: the other stuff
     "dispose" in {
