@@ -50,18 +50,22 @@ trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   def allPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From], to: Id[From], maxPaths: Int, maxDepth: Int)
                                                                         (implicit ev: Doc =:= E): Task[List[TraversalPath[E, From]]] = {
     def loop(queue: List[(Id[From], List[E])], results: List[TraversalPath[E, From]]): Task[List[TraversalPath[E, From]]] = {
-      if (queue.isEmpty || results.length >= maxPaths) {
-        Task.pure(results)
-      } else {
+      if (queue.isEmpty || results.length >= maxPaths) Task.pure(results)
+      else {
         val (currentId, path) :: rest = queue
-        edgesFor[E, From, From](currentId).toList.flatMap { edges =>
-          val nextSteps = edges.filterNot(e => path.exists(_._to == e._to))
-          val newPaths: List[(Id[From], List[E])] = nextSteps.map(e => (e._to, path :+ e))
-          val (completed, pending) = newPaths.partition(_._1 == to)
-          val completedToAdd = completed.take(maxPaths - results.length).map(p => TraversalPath[E, From](p._2))
-          val updatedResults = results ++ completedToAdd
-          if (updatedResults.length >= maxPaths) Task.pure(updatedResults)
-          else loop(rest ++ pending, updatedResults)
+
+        if (path.length >= maxDepth) {
+          loop(rest, results)
+        } else {
+          edgesFor[E, From, From](currentId).toList.flatMap { edges =>
+            val nextSteps = edges.filterNot(e => path.exists(_._to == e._to))
+            val newPaths: List[(Id[From], List[E])] = nextSteps.map(e => (e._to, path :+ e))
+            val (completed, pending) = newPaths.partition(_._1 == to)
+            val completedToAdd = completed.take(maxPaths - results.length).map(p => TraversalPath[E, From](p._2))
+            val updatedResults = results ++ completedToAdd
+            if (updatedResults.length >= maxPaths) Task.pure(updatedResults)
+            else loop(rest ++ pending, updatedResults)
+          }
         }
       }
     }
@@ -69,11 +73,10 @@ trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     loop(queue = List((from, Nil)), results = Nil)
   }
 
-  def shortestPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](
-                                                                               from: Id[From],
+  def shortestPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From],
                                                                                to: Id[From],
-                                                                               maxPaths: Int = 1000
-                                                                             )(implicit ev: Doc =:= E): Task[List[TraversalPath[E, From]]] = {
+                                                                               maxPaths: Int = 1000)
+                                                                             (implicit ev: Doc =:= E): Task[List[TraversalPath[E, From]]] = {
     if (from == to) {
       Task.pure(List(TraversalPath[E, From](Nil)))
     } else Task {
