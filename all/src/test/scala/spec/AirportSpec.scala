@@ -15,6 +15,8 @@ import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
 
 import java.nio.file.Path
+import java.time.{Instant, ZoneOffset}
+import java.time.format.DateTimeFormatter
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
@@ -110,29 +112,53 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
       DB.flights.transaction { tx =>
-        tx.storage.shortestPaths[Flight, Airport](bis, jfk).map { paths =>
-          paths.map { path =>
-            scribe.info(s"Path: ${path.nodes}")
-          }
-        }.succeed
+        tx.storage.shortestPaths[Flight, Airport](bis, jfk).map { path =>
+          path.nodes.map(_.value).mkString(" -> ")
+        }.distinct.toList.map { list =>
+          list.toSet should be(Set("BIS -> DEN -> JFK", "BIS -> MSP -> JFK"))
+        }
       }
     }
-    /*"find all the shortest paths between BIS and JFK" in {
+    "find the shortest paths between BIS and JFK with between an hour and eight between each hop" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
-      Flight.shortestPaths(bis, jfk).map { paths =>
-        paths should be(List(
-          List(bis, Airport.id("DEN"), jfk),
-          List(bis, Airport.id("MSP"), jfk)
-        ))
+
+      DB.flights.transaction { tx =>
+        tx.storage.shortestPaths[Flight, Airport](
+          from = bis,
+          to = jfk,
+          edgeFilter = _ => true
+        ).filter { path =>
+          path.edges.sliding(2).forall {
+            case List(f1, f2) =>
+              val gap = f2.departure - f1.arrival
+              gap >= 3600 * 1000 && gap <= 3600 * 8000
+            case _ => true
+          }
+        }.last.map { path =>
+            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC)
+
+            val hops = path.edges.map { f =>
+              val dep = formatter.format(Instant.ofEpochMilli(f.departure))
+              val arr = formatter.format(Instant.ofEpochMilli(f.arrival))
+              s"${f._from} -> ${f._to} [$dep - $arr]"
+            }.mkString(" | ")
+
+            val totalMillis = path.edges.last.arrival - path.edges.head.departure
+            val totalHours = totalMillis / (1000 * 60 * 60)
+            val totalMinutes = (totalMillis / (1000 * 60)) % 60
+
+            scribe.info(s"Path: $hops | Total trip time: ${totalHours}h ${totalMinutes}m")
+            totalMillis should be(36240000L)
+          }
       }
-    }*/
+    }
     "find all paths between BIS and JFK" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
       val maxPaths = 1_000
       DB.flights.transaction { tx =>
-        tx.storage.allPaths(bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
+        tx.storage.allPaths[Flight, Airport](bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
           paths.length should be(maxPaths)
         }
       }
@@ -199,8 +225,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
                     dayOfWeek: Int,
                     depTime: Int,
                     arrTime: Int,
-                    depTimeUTC: String,
-                    arrTimeUTC: String,
+                    departure: Long,
+                    arrival: Long,
                     uniqueCarrier: String,
                     flightNum: Int,
                     tailNum: String,
@@ -232,8 +258,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       dayOfWeek = dayOfWeek,
       depTime = depTime,
       arrTime = arrTime,
-      depTimeUTC = depTimeUTC,
-      arrTimeUTC = arrTimeUTC,
+      departure = Instant.parse(depTimeUTC).toEpochMilli,
+      arrival = Instant.parse(arrTimeUTC).toEpochMilli,
       uniqueCarrier = uniqueCarrier,
       flightNum = flightNum,
       tailNum = tailNum,
@@ -247,8 +273,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val dayOfWeek: F[Int] = field("dayOfWeek", _.dayOfWeek)
     val depTime: F[Int] = field("depTime", _.depTime)
     val arrTime: F[Int] = field("arrTime", _.arrTime)
-    val depTimeUTC: F[String] = field("depTimeUTC", _.depTimeUTC)
-    val arrTimeUTC: F[String] = field("arrTimeUTC", _.arrTimeUTC)
+    val departure: F[Long] = field("departure", _.departure)
+    val arrival: F[Long] = field("arrival", _.arrival)
     val uniqueCarrier: F[String] = field("uniqueCarrier", _.uniqueCarrier)
     val flightNum: F[Int] = field("flightNum", _.flightNum)
     val tailNum: F[String] = field("tailNum", _.tailNum)

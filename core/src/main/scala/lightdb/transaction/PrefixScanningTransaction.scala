@@ -47,12 +47,12 @@ trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     recurse(Set(from), 0)
   }
 
-  def allPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](
-                                                                          from: Id[From],
-                                                                          to: Id[From],
-                                                                          maxDepth: Int,
-                                                                          bufferSize: Int = 100
-                                                                        )(implicit ev: Doc =:= E): rapid.Stream[TraversalPath[E, From]] = {
+  def allPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From],
+                                                                         to: Id[From],
+                                                                         maxDepth: Int,
+                                                                         bufferSize: Int = 100,
+                                                                         edgeFilter: E => Boolean = (_: E) => true)
+                                                                        (implicit ev: Doc =:= E): rapid.Stream[TraversalPath[E, From]] = {
     import scala.collection.mutable
 
     val queue = mutable.Queue[(Id[From], List[E])]()
@@ -75,7 +75,8 @@ trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
 
             if (path.length < maxDepth) {
               val edges: List[E] = edgesFor[E, From, From](currentId).toList.sync()
-              val nextSteps = edges.filterNot(e => path.exists(_._to == e._to))
+              val filteredEdges = edges.filter(edgeFilter)
+              val nextSteps = filteredEdges.filterNot(e => path.exists(_._to == e._to))
               val newPaths = nextSteps.map(e => (e._to, path :+ e))
               val (completed, pending) = newPaths.partition(_._1 == to)
 
@@ -106,61 +107,18 @@ trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   def shortestPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From],
-                                                                               to: Id[From],
-                                                                               maxPaths: Int = 1000)
-                                                                             (implicit ev: Doc =:= E): Task[List[TraversalPath[E, From]]] = {
-    if (from == to) {
-      Task.pure(List(TraversalPath[E, From](Nil)))
-    } else Task {
-      import scala.collection.mutable
-
-      val visited = mutable.Set(from)
-      val parentMap = mutable.Map.empty[Id[From], Set[E]].withDefaultValue(Set.empty)
-      val queue = mutable.Queue(from)
-      var found = false
-
-      while (queue.nonEmpty && !found) {
-        val nextQueue = mutable.Queue.empty[Id[From]]
-
-        for (current <- queue) {
-          val edges = edgesFor[E, From, From](current).toList.sync()
-          for (edge <- edges) {
-            val dest = edge._to
-            if (!visited.contains(dest) && !nextQueue.contains(dest)) {
-              parentMap(dest) = Set(edge)
-              nextQueue.enqueue(dest)
-            } else if (nextQueue.contains(dest)) {
-              parentMap(dest) = parentMap(dest) + edge
-            }
-          }
-        }
-
-        if (parentMap.contains(to)) found = true
-        visited ++= nextQueue
-        queue.clear()
-        queue.enqueueAll(nextQueue)
-      }
-
-      if (!parentMap.contains(to)) Nil
-      else {
-        def backtrack(current: Id[From], path: List[E]): List[List[E]] = {
-          if (current == from) List(path)
-          else {
-            parentMap(current).toList.flatMap { edge =>
-              backtrack(edge._from, edge :: path)
-            }
-          }
-        }
-
-        backtrack(to, Nil).take(maxPaths).map(TraversalPath(_))
-      }
-    }
-  }
+                                                                              to: Id[From],
+                                                                              maxDepth: Int = Int.MaxValue,
+                                                                              bufferSize: Int = 100,
+                                                                              edgeFilter: E => Boolean = (_: E) => true)
+                                                                             (implicit ev: Doc =:= E): rapid.Stream[TraversalPath[E, From]] =
+    allPaths[E, From](from, to, maxDepth, bufferSize, edgeFilter)
+      .takeWhileWithFirst((first, current) => current.edges.length == first.edges.length)
 }
 
 case class TraversalPath[E <: EdgeDocument[E, From, From], From <: Document[From]](edges: List[E]) {
-  def nodes: List[Id[From]] = edges.head._from :: (edges match {
+  def nodes: List[Id[From]] = edges match {
     case Nil => Nil
-    case head :: tail => head._from :: tail.map(_._to)
-  })
+    case _ => edges.head._from :: edges.map(_._to)
+  }
 }
