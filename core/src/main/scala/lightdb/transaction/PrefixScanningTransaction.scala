@@ -47,30 +47,62 @@ trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     recurse(Set(from), 0)
   }
 
-  def allPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From], to: Id[From], maxPaths: Int, maxDepth: Int)
-                                                                        (implicit ev: Doc =:= E): Task[List[TraversalPath[E, From]]] = {
-    def loop(queue: List[(Id[From], List[E])], results: List[TraversalPath[E, From]]): Task[List[TraversalPath[E, From]]] = {
-      if (queue.isEmpty || results.length >= maxPaths) Task.pure(results)
-      else {
-        val (currentId, path) :: rest = queue
+  def allPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](
+                                                                          from: Id[From],
+                                                                          to: Id[From],
+                                                                          maxDepth: Int,
+                                                                          bufferSize: Int = 100
+                                                                        )(implicit ev: Doc =:= E): rapid.Stream[TraversalPath[E, From]] = {
+    import scala.collection.mutable
 
-        if (path.length >= maxDepth) {
-          loop(rest, results)
+    val queue = mutable.Queue[(Id[From], List[E])]()
+    val seen = mutable.Set[List[Id[From]]]()
+    queue.enqueue((from, Nil))
+
+    val pull: Pull[TraversalPath[E, From]] = new Pull[TraversalPath[E, From]] {
+      private var buffer: List[TraversalPath[E, From]] = Nil
+
+      override def pull(): Option[TraversalPath[E, From]] = {
+        if (buffer.nonEmpty) {
+          val next = buffer.head
+          buffer = buffer.tail
+          Some(next)
         } else {
-          edgesFor[E, From, From](currentId).toList.flatMap { edges =>
-            val nextSteps = edges.filterNot(e => path.exists(_._to == e._to))
-            val newPaths: List[(Id[From], List[E])] = nextSteps.map(e => (e._to, path :+ e))
-            val (completed, pending) = newPaths.partition(_._1 == to)
-            val completedToAdd = completed.take(maxPaths - results.length).map(p => TraversalPath[E, From](p._2))
-            val updatedResults = results ++ completedToAdd
-            if (updatedResults.length >= maxPaths) Task.pure(updatedResults)
-            else loop(rest ++ pending, updatedResults)
+          var collected = List.empty[TraversalPath[E, From]]
+
+          while (queue.nonEmpty && collected.size < bufferSize) {
+            val (currentId, path) = queue.dequeue()
+
+            if (path.length < maxDepth) {
+              val edges: List[E] = edgesFor[E, From, From](currentId).toList.sync()
+              val nextSteps = edges.filterNot(e => path.exists(_._to == e._to))
+              val newPaths = nextSteps.map(e => (e._to, path :+ e))
+              val (completed, pending) = newPaths.partition(_._1 == to)
+
+              pending.foreach {
+                case (id, newPath) =>
+                  val signature = from +: newPath.map(_._to)
+                  if (!seen.contains(signature)) {
+                    seen += signature
+                    queue.enqueue((id, newPath))
+                  }
+              }
+
+              collected ++= completed.map(p => TraversalPath(p._2))
+            }
+          }
+
+          if (collected.nonEmpty) {
+            buffer = collected.tail
+            Some(collected.head)
+          } else {
+            None
           }
         }
       }
     }
 
-    loop(queue = List((from, Nil)), results = Nil)
+    rapid.Stream(Task.pure(pull))
   }
 
   def shortestPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From],

@@ -132,7 +132,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val jfk = Airport.id("JFK")
       val maxPaths = 1_000
       DB.flights.transaction { tx =>
-        tx.storage.allPaths(bis, jfk, maxPaths = maxPaths, maxDepth = 100).map { paths =>
+        tx.storage.allPaths(bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
           paths.length should be(maxPaths)
         }
       }
