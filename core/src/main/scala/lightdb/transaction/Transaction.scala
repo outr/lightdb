@@ -76,7 +76,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
       case em: EdgeModel[Doc @unchecked, From @unchecked, To @unchecked] =>
         val step = new GraphStep[Doc, Model, From, To] {
           override def neighbors(id: Id[From])(implicit t: Transaction[Doc, Model]): Task[Set[Id[To]]] =
-            em.edgesFor(id)
+            ??? //em.edgesFor(id)
         }
         GraphTraversalEngine.start[Doc, Model, From, To](starts, step)(this)
       case _ =>
