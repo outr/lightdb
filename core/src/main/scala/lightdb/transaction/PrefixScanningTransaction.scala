@@ -5,6 +5,7 @@ import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.graph.EdgeDocument
 import lightdb.id.Id
+import lightdb.traversal.TraversalPath
 import rapid.{Pull, Task}
 
 trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Transaction[Doc, Model] {
@@ -114,11 +115,4 @@ trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                                                                              (implicit ev: Doc =:= E): rapid.Stream[TraversalPath[E, From]] =
     allPaths[E, From](from, to, maxDepth, bufferSize, edgeFilter)
       .takeWhileWithFirst((first, current) => current.edges.length == first.edges.length)
-}
-
-case class TraversalPath[E <: EdgeDocument[E, From, From], From <: Document[From]](edges: List[E]) {
-  def nodes: List[Id[From]] = edges match {
-    case Nil => Nil
-    case _ => edges.head._from :: edges.map(_._to)
-  }
 }
