@@ -112,9 +112,10 @@ object CollaboratesWith extends EdgeModel[CollaboratesWith, Employee, Employee] 
 
 case class ReportsAndCollaborationStep(collaboratesWith: Store[CollaboratesWith, CollaboratesWith.type]) extends GraphStep[CollaboratesWith, CollaboratesWith.type, Employee, Employee] {
   override def neighbors(id: Id[Employee])(implicit tx: Transaction[CollaboratesWith, CollaboratesWith.type]): Task[Set[Id[Employee]]] = {
-    for {
-      subordinates <- ReportsTo.reverseEdgesFor(id) // people who report to this ID
-      collabs <- collaboratesWith.model.edgesFor(id)  // people this person collaborates with
-    } yield subordinates ++ collabs
+//    for {
+//      subordinates <- ReportsTo.reverseEdgesFor(id) // people who report to this ID
+//      collabs <- collaboratesWith.model.edgesFor(id)  // people this person collaborates with
+//    } yield subordinates ++ collabs
+    ???
   }
 }

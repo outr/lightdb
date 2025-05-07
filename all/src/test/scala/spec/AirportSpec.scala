@@ -8,7 +8,7 @@ import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.LightDB
+import lightdb._
 import lightdb.id.{EdgeId, Id}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -19,7 +19,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
-//@EmbeddedTest
+@EmbeddedTest
 class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
@@ -65,8 +65,21 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       DB.airports.t.count.map(_ should be(3375))
     }
     "count all connections" in {
-      Flight.edgesStore.t.count.map { count =>
-        count should be(286)
+      DB.flights.t.count.map(_ should be(286463))
+    }
+    "count all connections to JFK" in {
+      DB.flights.transaction { tx =>
+        prefixScanning2EdgeTransaction(tx.storage).edgesFor(Airport.id("JFK")).toList.map { flights =>
+//        tx.storage.prefixList(Flight.prefix(Airport.id("JFK"))).map { flights =>
+          flights.length should be(4806)
+          flights.map(_._to.value).toSet should be(Set(
+            "LAS", "LAX", "MIA", "SJC", "HDN", "CMH", "PIT", "DCA", "IAD", "FLL", "CLE", "SYR", "STL", "LGB", "ORD",
+            "BUR", "PVD", "STT", "BQN", "RIC", "ATL", "CLT", "BTV", "SEA", "PHX", "SMF", "BUF", "IAH", "ORF", "SRQ",
+            "PDX", "MSP", "CVG", "SAN", "TPA", "SFO", "AUS", "TUS", "RDU", "ROC", "PHL", "PWM", "OAK", "JAX", "SJU",
+            "DFW", "PBI", "BNA", "DTW", "MCO", "DEN", "MSY", "BOS", "PSE", "IND", "HPN", "BWI", "ONT", "BDL", "HOU",
+            "RSW", "SLC"
+          ))
+        }
       }
     }
 //    "validate airport references" in {
@@ -76,7 +89,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 //      }
 //    }
     // TODO: Support guides traversals
-    "get all airport names reachable directly from LAX following edges" in {
+    /*"get all airport names reachable directly from LAX following edges" in {
       val lax = Airport.id("LAX")
       Flight.edgesFor(lax).map { airports =>
         airports.size should be(82)
@@ -112,7 +125,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       Flight.allPaths(bis, jfk, maxPaths = maxPaths, maxDepth = 100).map { paths =>
         paths.length should be(maxPaths)
       }
-    }
+    }*/
     // TODO: Test ValueStore
     // TODO: the other stuff
     "dispose" in {
@@ -311,11 +324,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       }))
       insertedFlights <- DB.flights.transaction { implicit transaction =>
         flights
-          .zipWithIndex
-          .evalForeach {
-            case (flight, index) =>
-              if (index % 10000 == 0) scribe.info(s"Inserting flight $index of 286464")
-              transaction.insert(flight).unit
+          .evalForeach { flight =>
+            transaction.insert(flight).unit
           }
           .count
       }

@@ -39,7 +39,7 @@ object GraphStep {
   ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, Model, From, To] =
     new GraphStep[Edge, Model, From, To] {
       override def neighbors(id: Id[From])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[To]]] =
-        model.edgesFor(id)
+        ??? //model.edgesFor(id)
     }
 
   /**
@@ -56,7 +56,7 @@ object GraphStep {
   ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, Model, To, From] =
     new GraphStep[Edge, Model, To, From] {
       override def neighbors(id: Id[To])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[From]]] =
-        model.reverseEdgesFor(id)
+        ??? //model.reverseEdgesFor(id)
     }
 
   /**
@@ -73,9 +73,10 @@ object GraphStep {
   ](model: EdgeModel[Edge, Node, Node]): GraphStep[Edge, Model, Node, Node] =
     new GraphStep[Edge, Model, Node, Node] {
       override def neighbors(id: Id[Node])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[Node]]] =
-        for {
-          fwd <- model.edgesFor(id)
-          rev <- model.reverseEdgesFor(id)
-        } yield fwd ++ rev
+//        for {
+//          fwd <- model.edgesFor(id)
+//          rev <- model.reverseEdgesFor(id)
+//        } yield fwd ++ rev
+          ???
     }
 }
