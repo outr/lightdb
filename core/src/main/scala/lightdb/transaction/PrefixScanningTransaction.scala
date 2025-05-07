@@ -3,10 +3,129 @@ package lightdb.transaction
 import fabric._
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
-import rapid.Task
+import lightdb.graph.EdgeDocument
+import lightdb.id.Id
+import rapid.{Pull, Task}
 
 trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Transaction[Doc, Model] {
   def jsonPrefixStream(prefix: String): rapid.Stream[Json]
+
   def prefixStream(prefix: String): rapid.Stream[Doc] = jsonPrefixStream(prefix).map(_.as[Doc](store.model.rw))
+
   def prefixList(prefix: String): Task[List[Doc]] = prefixStream(prefix).toList
+
+  ///// Edge and Traversal Functionality /////
+
+  def edgesFor[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](from: Id[From])
+                                                                                          (implicit ev: Doc =:= E): rapid.Stream[E] =
+    prefixStream(from.value).map(ev.apply)
+
+  def reachableFrom[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From],
+                                                                              maxDepth: Int = Int.MaxValue)
+                                                                             (implicit ev: Doc =:= E): rapid.Stream[E] = {
+    var visited = Set.empty[Id[From]]
+
+    def recurse(queue: Set[Id[From]], depth: Int): rapid.Stream[E] = {
+      if (queue.isEmpty || depth >= maxDepth) {
+        rapid.Stream.empty
+      } else {
+        val head = queue.head
+        val rest = queue.tail
+
+        edgesFor[E, From, From](head).flatMap { edge =>
+          val to = edge._to
+          if (visited.contains(to)) {
+            rapid.Stream.empty
+          } else {
+            visited += to
+            rapid.Stream.emit(edge).append(recurse(Set(to), depth + 1))
+          }
+        }.append(recurse(rest, depth))
+      }
+    }
+
+    recurse(Set(from), 0)
+  }
+
+  def allPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](from: Id[From], to: Id[From], maxPaths: Int, maxDepth: Int)
+                                                                        (implicit ev: Doc =:= E): Task[List[TraversalPath[E, From]]] = {
+    def loop(queue: List[(Id[From], List[E])], results: List[TraversalPath[E, From]]): Task[List[TraversalPath[E, From]]] = {
+      if (queue.isEmpty || results.length >= maxPaths) {
+        Task.pure(results)
+      } else {
+        val (currentId, path) :: rest = queue
+        edgesFor[E, From, From](currentId).toList.flatMap { edges =>
+          val nextSteps = edges.filterNot(e => path.exists(_._to == e._to))
+          val newPaths: List[(Id[From], List[E])] = nextSteps.map(e => (e._to, path :+ e))
+          val (completed, pending) = newPaths.partition(_._1 == to)
+          val completedToAdd = completed.take(maxPaths - results.length).map(p => TraversalPath[E, From](p._2))
+          val updatedResults = results ++ completedToAdd
+          if (updatedResults.length >= maxPaths) Task.pure(updatedResults)
+          else loop(rest ++ pending, updatedResults)
+        }
+      }
+    }
+
+    loop(queue = List((from, Nil)), results = Nil)
+  }
+
+  def shortestPaths[E <: EdgeDocument[E, From, From], From <: Document[From]](
+                                                                               from: Id[From],
+                                                                               to: Id[From],
+                                                                               maxPaths: Int = 1000
+                                                                             )(implicit ev: Doc =:= E): Task[List[TraversalPath[E, From]]] = {
+    if (from == to) {
+      Task.pure(List(TraversalPath[E, From](Nil)))
+    } else Task {
+      import scala.collection.mutable
+
+      val visited = mutable.Set(from)
+      val parentMap = mutable.Map.empty[Id[From], Set[E]].withDefaultValue(Set.empty)
+      val queue = mutable.Queue(from)
+      var found = false
+
+      while (queue.nonEmpty && !found) {
+        val nextQueue = mutable.Queue.empty[Id[From]]
+
+        for (current <- queue) {
+          val edges = edgesFor[E, From, From](current).toList.sync()
+          for (edge <- edges) {
+            val dest = edge._to
+            if (!visited.contains(dest) && !nextQueue.contains(dest)) {
+              parentMap(dest) = Set(edge)
+              nextQueue.enqueue(dest)
+            } else if (nextQueue.contains(dest)) {
+              parentMap(dest) = parentMap(dest) + edge
+            }
+          }
+        }
+
+        if (parentMap.contains(to)) found = true
+        visited ++= nextQueue
+        queue.clear()
+        queue.enqueueAll(nextQueue)
+      }
+
+      if (!parentMap.contains(to)) Nil
+      else {
+        def backtrack(current: Id[From], path: List[E]): List[List[E]] = {
+          if (current == from) List(path)
+          else {
+            parentMap(current).toList.flatMap { edge =>
+              backtrack(edge._from, edge :: path)
+            }
+          }
+        }
+
+        backtrack(to, Nil).take(maxPaths).map(TraversalPath(_))
+      }
+    }
+  }
+}
+
+case class TraversalPath[E <: EdgeDocument[E, From, From], From <: Document[From]](edges: List[E]) {
+  def nodes: List[Id[From]] = edges.head._from :: (edges match {
+    case Nil => Nil
+    case head :: tail => head._from :: tail.map(_._to)
+  })
 }
