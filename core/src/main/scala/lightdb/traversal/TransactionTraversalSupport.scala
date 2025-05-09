@@ -117,6 +117,27 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
     }
 
     /**
+     * Create a BFS engine from multiple starting nodes
+     */
+    def bfs[E <: EdgeDocument[E, N, N], N <: Document[N]](
+                                                           startIds: Set[Id[N]],
+                                                           maxDepth: Int = Int.MaxValue
+                                                         )(implicit ev: Doc =:= E): BFSEngine[N, Doc, Model] = {
+      // Create a GraphStep that uses edges for traversal
+      val step = new GraphStep[Doc, Model, N, N] {
+        def neighbors(id: Id[N], tx: PrefixScanningTransaction[Doc, Model]): Task[Set[Id[N]]] = {
+          prefixStream(id.value)
+            .map(ev.apply) // Convert to E
+            .filter(_._from == id) // Ensure it's the correct from ID
+            .map(_._to) // Extract the to IDs
+            .toList // Collect as a list
+            .map(_.toSet) // Convert to a set
+        }
+      }
+      new BFSEngine(startIds, step, maxDepth)(self)
+    }
+
+    /**
      * Type alias for a step function
      */
     type StepFunction[From <: Document[From], To <: Document[To]] = Id[From] => Task[Set[Id[To]]]

@@ -2,7 +2,7 @@ package lightdb.traversal
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
-import lightdb.transaction.Transaction
+import lightdb.transaction.PrefixScanningTransaction
 import rapid.Task
 
 /**
@@ -27,9 +27,9 @@ object TraversalStep {
    */
   final case class Single[E <: Document[E], M <: DocumentModel[E], A <: Document[A], B <: Document[B]](
                                                                                                         step: GraphStep[E, M, A, B]
-                                                                                                      )(implicit tx: Transaction[E, M]) extends TraversalStep[A, B] {
+                                                                                                      )(implicit tx: PrefixScanningTransaction[E, M]) extends TraversalStep[A, B] {
     override def run(ids: Set[Id[A]]): Task[Set[Id[B]]] =
-      Task.sequence(ids.toList.map(step.neighbors)).map(_.flatten.toSet)
+      Task.sequence(ids.toList.map(id => step.neighbors(id, tx))).map(_.flatten.toSet)
   }
 
   /**
@@ -38,10 +38,10 @@ object TraversalStep {
   final case class Chain[E <: Document[E], M <: DocumentModel[E], A <: Document[A], C <: Document[C], B <: Document[B]](
                                                                                                                          prev: TraversalStep[A, C],
                                                                                                                          next: GraphStep[E, M, C, B]
-                                                                                                                       )(implicit tx: Transaction[E, M]) extends TraversalStep[A, B] {
+                                                                                                                       )(implicit tx: PrefixScanningTransaction[E, M]) extends TraversalStep[A, B] {
     override def run(ids: Set[Id[A]]): Task[Set[Id[B]]] =
       prev.run(ids).flatMap { mids =>
-        Task.sequence(mids.toList.map(next.neighbors)).map(_.flatten.toSet)
+        Task.sequence(mids.toList.map(mid => next.neighbors(mid, tx))).map(_.flatten.toSet)
       }
   }
 
@@ -56,7 +56,7 @@ object TraversalStep {
   ](
      builder: TraversalBuilder[Id[A]],
      via: GraphStep[E, M, A, B]
-   )(implicit tx: Transaction[E, M]): TraversalStep[A, B] = {
+   )(implicit tx: PrefixScanningTransaction[E, M]): TraversalStep[A, B] = {
     Single(via)
   }
 
@@ -69,7 +69,7 @@ object TraversalStep {
      */
     def toStep[E <: Document[E], M <: DocumentModel[E], B <: Document[B]](
                                                                            via: GraphStep[E, M, A, B]
-                                                                         )(implicit tx: Transaction[E, M]): TraversalStep[A, B] = {
+                                                                         )(implicit tx: PrefixScanningTransaction[E, M]): TraversalStep[A, B] = {
       fromTraversalBuilder(builder, via)
     }
 
@@ -79,7 +79,7 @@ object TraversalStep {
     def andThen[E <: Document[E], M <: DocumentModel[E], B <: Document[B], C <: Document[C]](
                                                                                               step: TraversalStep[B, C],
                                                                                               via: GraphStep[E, M, A, B]
-                                                                                            )(implicit tx: Transaction[E, M]): TraversalStep[A, C] = {
+                                                                                            )(implicit tx: PrefixScanningTransaction[E, M]): TraversalStep[A, C] = {
       val first = fromTraversalBuilder(builder, via)
       // Implementation would depend on your needs
       // For now, we'll just return the step

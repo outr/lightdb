@@ -68,7 +68,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   }
   def delete(id: Id[Doc]): Task[Boolean] = delete(_._id -> id)
 
-  def traverse[From <: Document[From], To <: Document[To]](start: Id[From]): GraphTraversalEngine[From, To] =
+  /*def traverse[From <: Document[From], To <: Document[To]](start: Id[From]): GraphTraversalEngine[From, To] =
     traverse(Set(start))
 
   def traverse[From <: Document[From], To <: Document[To]](starts: Set[Id[From]]): GraphTraversalEngine[From, To] = {
@@ -84,7 +84,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
           s"traverse(...) is only supported on Store instances with EdgeModel, but got: ${store.model.getClass}"
         )
     }
-  }
+  }*/
 
   def list: Task[List[Doc]] = stream.toList
   def stream: rapid.Stream[Doc] = jsonStream.map(_.as[Doc](store.model.rw))
