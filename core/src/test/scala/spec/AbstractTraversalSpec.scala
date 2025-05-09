@@ -2,7 +2,7 @@ package spec
 
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.graph.{EdgeConnections, EdgeDocument, EdgeModel}
+import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.store.{Store, StoreManager}
 import lightdb.traversal._
 import lightdb.upgrade.DatabaseUpgrade
@@ -41,17 +41,6 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
           ))
         }
       } yield succeed
-    }
-    "test" in {
-      SimpleEdge.edgesStore.transaction { est =>
-        db.edges.transaction { et =>
-          est(Id[EdgeConnections[SimpleEdge, Node, Node]]("A")).flatMap { edgeConnections =>
-            edgeConnections.connections.map(id => et(id)).tasks
-          }.map { edges =>
-            scribe.info(s"Edges: ${edges.map(_.name)}")
-          }.succeed
-        }
-      }
     }
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { implicit tx =>

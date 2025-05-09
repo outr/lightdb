@@ -15,7 +15,7 @@ case class SplitCollectionTransaction[
   Doc <: Document[Doc],
   Model <: DocumentModel[Doc],
   Storage <: Store[Doc, Model],
-  Searching <: Collection[Doc, Model]
+  Searching <: Collection[Doc, Model],
 ](store: SplitCollection[Doc, Model, Storage, Searching],
   parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] {
   private[split] var _storage: store.storage.TX = _
