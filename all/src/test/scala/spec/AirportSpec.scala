@@ -71,7 +71,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
     "count all connections to JFK" in {
       DB.flights.transaction { tx =>
-        tx.storage.edgesFor[Flight, Airport, Airport](Airport.id("JFK")).toList.map { flights =>
+        tx.storage.traversal.edgesFor[Flight, Airport, Airport](Airport.id("JFK")).toList.map { flights =>
           flights.length should be(4806)
           flights.map(_._to.value).toSet should be(Set(
             "LAS", "LAX", "MIA", "SJC", "HDN", "CMH", "PIT", "DCA", "IAD", "FLL", "CLE", "SYR", "STL", "LGB", "ORD",
@@ -93,7 +93,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     "get all airport names reachable directly from LAX following edges" in {
       DB.flights.transaction { tx =>
         val lax = Airport.id("LAX")
-        tx.storage.edgesFor[Flight, Airport, Airport](lax).toList.map { flights =>
+        tx.storage.traversal.edgesFor[Flight, Airport, Airport](lax).toList.map { flights =>
           flights.map(_._to.value).distinct.length should be(82)
         }
       }
@@ -101,7 +101,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     "get all airports reachable from LAX" in {
       val lax = Airport.id("LAX")
       DB.flights.transaction { tx =>
-        tx.storage.reachableFrom[Flight, Airport](lax).toList.map { flights =>
+        tx.storage.traversal.reachableFrom[Flight, Airport](lax).toList.map { flights =>
           flights.length should be(286)
           val airports = flights.map(_._to.value).toSet
           airports.size should be(286)
@@ -112,7 +112,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
       DB.flights.transaction { tx =>
-        tx.storage.shortestPaths[Flight, Airport](bis, jfk).map { path =>
+        tx.storage.traversal.shortestPaths[Flight, Airport](bis, jfk).map { path =>
           path.nodes.map(_.value).mkString(" -> ")
         }.distinct.toList.map { list =>
           list.toSet should be(Set("BIS -> DEN -> JFK", "BIS -> MSP -> JFK"))
@@ -124,7 +124,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val jfk = Airport.id("JFK")
 
       DB.flights.transaction { tx =>
-        tx.storage.shortestPaths[Flight, Airport](
+        tx.storage.traversal.shortestPaths[Flight, Airport](
           from = bis,
           to = jfk,
           edgeFilter = _ => true
@@ -158,7 +158,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val jfk = Airport.id("JFK")
       val maxPaths = 1_000
       DB.flights.transaction { tx =>
-        tx.storage.allPaths[Flight, Airport](bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
+        tx.storage.traversal.allPaths[Flight, Airport](bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
           paths.length should be(maxPaths)
         }
       }
