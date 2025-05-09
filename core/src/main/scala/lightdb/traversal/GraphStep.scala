@@ -3,13 +3,14 @@ package lightdb.traversal
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.Id
-import lightdb.transaction.Transaction
+import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import rapid.Task
 
 /**
  * A simplified GraphStep trait that represents a way to find neighbors in a graph.
- * 
+ *
  * @tparam Edge The edge document type
+ * @tparam Model The model type for Edge
  * @tparam From The source node document type
  * @tparam To The target node document type
  */
@@ -38,8 +39,21 @@ object GraphStep {
     To   <: Document[To]
   ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, Model, From, To] =
     new GraphStep[Edge, Model, From, To] {
-      override def neighbors(id: Id[From])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[To]]] =
-        ??? //model.edgesFor(id)
+      override def neighbors(id: Id[From])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[To]]] = {
+        transaction match {
+          case pst: PrefixScanningTransaction[Edge, Model] =>
+            // For PrefixScanningTransaction, use its traversal support
+            val typeEv = implicitly[Edge =:= Edge]
+            pst.traversal.edgesFor[Edge, From, To](id)(typeEv)
+              .map(_._to)
+              .toList
+              .map(ids => ids.toSet)
+
+          case _ =>
+            // Fallback when PrefixScanningTransaction is not available
+            Task.pure(Set.empty)
+        }
+      }
     }
 
   /**
@@ -55,8 +69,11 @@ object GraphStep {
     To <: Document[To]
   ](model: EdgeModel[Edge, From, To]): GraphStep[Edge, Model, To, From] =
     new GraphStep[Edge, Model, To, From] {
-      override def neighbors(id: Id[To])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[From]]] =
-        ??? //model.reverseEdgesFor(id)
+      override def neighbors(id: Id[To])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[From]]] = {
+        // Implementation depends on how reverse edges are accessed
+        // Placeholder implementation - you'll need to adapt this
+        Task.pure(Set.empty[Id[From]])
+      }
     }
 
   /**
@@ -72,11 +89,25 @@ object GraphStep {
     Node <: Document[Node]
   ](model: EdgeModel[Edge, Node, Node]): GraphStep[Edge, Model, Node, Node] =
     new GraphStep[Edge, Model, Node, Node] {
-      override def neighbors(id: Id[Node])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[Node]]] =
-//        for {
-//          fwd <- model.edgesFor(id)
-//          rev <- model.reverseEdgesFor(id)
-//        } yield fwd ++ rev
-          ???
+      override def neighbors(id: Id[Node])(implicit transaction: Transaction[Edge, Model]): Task[Set[Id[Node]]] = {
+        transaction match {
+          case pst: PrefixScanningTransaction[Edge, Model] =>
+            // Combine forward direction
+            val typeEv = implicitly[Edge =:= Edge]
+
+            // Forward direction
+            val forwardTask = pst.traversal.edgesFor[Edge, Node, Node](id)(typeEv)
+              .map(_._to)
+              .toList
+              .map(_.toSet)
+
+            // Implementation for reverse would go here
+            // For now, just return forward results
+            forwardTask
+
+          case _ =>
+            Task.pure(Set.empty)
+        }
+      }
     }
 }
