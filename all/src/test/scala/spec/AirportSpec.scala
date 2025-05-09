@@ -169,7 +169,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
       DB.flights.transaction { tx =>
         // Use the transaction's traversal.bfs API
-        tx.storage.traversal.bfs[Flight, Airport](lax, maxDepth = 1)
+        tx.storage.traversal.bfs[Flight, Airport](Set(lax), maxDepth = 1)
           .through(Flight)
           .map { directlyConnected =>
             // Verify direct connections from LAX
@@ -191,7 +191,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
       DB.flights.transaction { tx =>
         // Use the transaction's traversal.bfs API for a deeper search
-        tx.storage.traversal.bfs[Flight, Airport](bis, maxDepth = 2)
+        tx.storage.traversal.bfs[Flight, Airport](Set(bis), maxDepth = 2)
           .through(Flight)
           .map { reachableAirports =>
             // JFK should be reachable from BIS within 2 hops
@@ -213,7 +213,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         val originalTraversal = tx.storage.traversal.reachableFrom[Flight, Airport](lax).toList
 
         // Use the new BFS traversal with Flight edges between airports
-        val newTraversal = tx.storage.traversal.bfs[Flight, Airport](lax)
+        val newTraversal = tx.storage.traversal.bfs[Flight, Airport](Set(lax))
           .through(Flight)
 
         // Compare results

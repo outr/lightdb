@@ -2,7 +2,7 @@ package lightdb.traversal
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
-import lightdb.transaction.Transaction
+import lightdb.transaction.PrefixScanningTransaction
 import rapid.Task
 
 /**
@@ -21,7 +21,7 @@ class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (
   def bfs[E <: Document[E], M <: DocumentModel[E]](
                                                     via: GraphStep[E, M, C, C],
                                                     maxDepth: Int = Int.MaxValue
-                                                  )(implicit tx: Transaction[E, M]): BFSEngine[C, E, M] =
+                                                  )(implicit tx: PrefixScanningTransaction[E, M]): BFSEngine[C, E, M] =
     new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, maxDepth)
 
   /**
@@ -29,7 +29,7 @@ class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (
    */
   def step[E <: Document[E], M <: DocumentModel[E], Next <: Document[Next]](
                                                                              via: GraphStep[E, M, C, Next]
-                                                                           )(implicit tx: Transaction[E, M]): GraphTraversalEngine[S, Next] =
+                                                                           )(implicit tx: PrefixScanningTransaction[E, M]): GraphTraversalEngine[S, Next] =
     new GraphTraversalEngine(current, GraphTraversalEngine.ChainStep(chain, via))
 
   /**
@@ -68,9 +68,9 @@ object GraphTraversalEngine {
    */
   final case class SingleStep[E <: Document[E], M <: DocumentModel[E], A <: Document[A], B <: Document[B]](
                                                                                                             step: GraphStep[E, M, A, B]
-                                                                                                          )(implicit tx: Transaction[E, M]) extends StepLike[A, B] {
+                                                                                                          )(implicit tx: PrefixScanningTransaction[E, M]) extends StepLike[A, B] {
     override def run(ids: Set[Id[A]]): Task[Set[Id[B]]] =
-      Task.sequence(ids.toList.map(step.neighbors)).map(_.flatten.toSet)
+      Task.sequence(ids.toList.map(id => step.neighbors(id, tx))).map(_.flatten.toSet)
   }
 
   /**
@@ -79,10 +79,10 @@ object GraphTraversalEngine {
   final case class ChainStep[E <: Document[E], M <: DocumentModel[E], A <: Document[A], C <: Document[C], B <: Document[B]](
                                                                                                                              prev: StepLike[A, C],
                                                                                                                              next: GraphStep[E, M, C, B]
-                                                                                                                           )(implicit tx: Transaction[E, M]) extends StepLike[A, B] {
+                                                                                                                           )(implicit tx: PrefixScanningTransaction[E, M]) extends StepLike[A, B] {
     override def run(ids: Set[Id[A]]): Task[Set[Id[B]]] =
       prev.run(ids).flatMap { mids =>
-        Task.sequence(mids.toList.map(next.neighbors)).map(_.flatten.toSet)
+        Task.sequence(mids.toList.map(mid => next.neighbors(mid, tx))).map(_.flatten.toSet)
       }
   }
 
@@ -92,7 +92,7 @@ object GraphTraversalEngine {
   def start[E <: Document[E], M <: DocumentModel[E], A <: Document[A], B <: Document[B]](
                                                                                           startIds: Set[Id[A]],
                                                                                           via: GraphStep[E, M, A, B]
-                                                                                        )(implicit tx: Transaction[E, M]): GraphTraversalEngine[A, B] =
+                                                                                        )(implicit tx: PrefixScanningTransaction[E, M]): GraphTraversalEngine[A, B] =
     new GraphTraversalEngine(startIds, SingleStep(via))
 
   /**
@@ -101,7 +101,7 @@ object GraphTraversalEngine {
   def start[E <: Document[E], M <: DocumentModel[E], A <: Document[A], B <: Document[B]](
                                                                                           startId: Id[A],
                                                                                           via: GraphStep[E, M, A, B]
-                                                                                        )(implicit tx: Transaction[E, M]): GraphTraversalEngine[A, B] =
+                                                                                        )(implicit tx: PrefixScanningTransaction[E, M]): GraphTraversalEngine[A, B] =
     start(Set(startId), via)
 
   /**
@@ -110,7 +110,7 @@ object GraphTraversalEngine {
   def fromTraversalBuilder[A <: Document[A], B <: Document[B], E <: Document[E], M <: DocumentModel[E]](
                                                                                                          builder: TraversalBuilder[Id[A]],
                                                                                                          via: GraphStep[E, M, A, B]
-                                                                                                       )(implicit tx: Transaction[E, M]): GraphTraversalEngine[A, B] = {
+                                                                                                       )(implicit tx: PrefixScanningTransaction[E, M]): GraphTraversalEngine[A, B] = {
     // Extract the root ID from the builder
     val rootId = builder match {
       case TraversalBuilder(Some(id), _, _, _, _, _) => id.asInstanceOf[Id[A]]
@@ -129,7 +129,7 @@ object GraphTraversalEngine {
      */
     def toGraphTraversal[E <: Document[E], M <: DocumentModel[E], B <: Document[B]](
                                                                                      via: GraphStep[E, M, A, B]
-                                                                                   )(implicit tx: Transaction[E, M]): GraphTraversalEngine[A, B] = {
+                                                                                   )(implicit tx: PrefixScanningTransaction[E, M]): GraphTraversalEngine[A, B] = {
       fromTraversalBuilder(builder, via)
     }
   }
