@@ -2,7 +2,7 @@ package lightdb.traversal
 
 import rapid._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.graph.EdgeDocument
+import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.Id
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 
@@ -98,6 +98,48 @@ case class TraversalBuilder[T] private (
    * Check if a node has been visited
    */
   private def hasVisited(node: Any): Boolean = visitedNodes.contains(node)
+
+  /**
+   * Use a GraphStep to define how to find neighbors
+   */
+  def withGraphStep[From <: Document[From], To <: Document[To], E <: Document[E], M <: DocumentModel[E]](
+                                                                                                          step: GraphStep[E, M, From, To]
+                                                                                                        )(implicit tx: Transaction[E, M], ev: T <:< Id[From]): TraversalBuilder[Id[To]] = {
+    // Create a new builder for the target type
+    new TraversalBuilder[Id[To]](
+      root = None,
+      maxDepth = maxDepth,
+      visitedNodes = visitedNodes,
+      isConcurrent = isConcurrent,
+      nodeFilter = (_: Id[To]) => true,
+      childrenFunction = (_: Id[To]) => Task.pure(Seq.empty[Any])
+    ).withChildrenFunction { id =>
+      // Use the GraphStep to find neighbors
+      root match {
+        case Some(r) =>
+          val fromId = ev(r)
+          step.neighbors(fromId).map(_.toSeq)
+        case None =>
+          Task.pure(Seq.empty)
+      }
+    }
+  }
+
+  /**
+   * Execute the traversal using BFS algorithm
+   */
+  def executeBFS[E <: Document[E], M <: DocumentModel[E], From <: Document[From]](
+                                                                                   via: GraphStep[E, M, From, From]
+                                                                                 )(implicit tx: Transaction[E, M], ev: T <:< Id[From]): Task[Set[Id[From]]] = {
+    root match {
+      case Some(r) =>
+        val fromId = ev(r)
+        val engine = new BFSEngine(Set(fromId), via, maxDepth)
+        engine.collectAllReachable()
+      case None =>
+        Task.pure(Set.empty)
+    }
+  }
 }
 
 /**
@@ -130,6 +172,36 @@ object TraversalBuilder {
       nodeFilter = (_: T) => true,
       childrenFunction = (_: T) => Task.pure(Seq.empty[Any])
     )
+  }
+
+  /**
+   * Create a TraversalBuilder for a BFS traversal using GraphStep
+   */
+  def bfs[N <: Document[N], E <: Document[E], M <: DocumentModel[E]](
+                                                                      startIds: Set[Id[N]],
+                                                                      via: GraphStep[E, M, N, N],
+                                                                      maxDepth: Int = 10
+                                                                    )(implicit tx: Transaction[E, M]): TraversalBuilder[Id[N]] = {
+    // Create a minimal builder that can be configured further
+    val builder = TraversalBuilder[Id[N]](startIds.head)
+      .withMaxDepth(maxDepth)
+
+    // Add integration with BFSEngine if needed
+    builder
+  }
+
+  /**
+   * Create a TraversalBuilder for following a GraphStep
+   */
+  def step[From <: Document[From], To <: Document[To], E <: Document[E], M <: DocumentModel[E]](
+                                                                                                 startId: Id[From],
+                                                                                                 via: GraphStep[E, M, From, To]
+                                                                                               )(implicit tx: Transaction[E, M]): TraversalBuilder[Id[To]] = {
+    // Create a minimal builder that will follow the graph step
+    TraversalBuilder[Id[To]](null.asInstanceOf[Id[To]])
+      .withChildrenFunction { _ =>
+        via.neighbors(startId).map(_.toSeq)
+      }
   }
 }
 
@@ -469,6 +541,83 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
                                                                                )(implicit ev: Doc =:= E): Stream[TraversalPath[E, From]] = {
       allPaths[E, From](from, to, maxDepth, bufferSize, edgeFilter)
         .takeWhileWithFirst((first, current) => current.edges.length == first.edges.length)
+    }
+
+    /**
+     * Perform a breadth-first search from the starting node
+     */
+    def bfs[E <: EdgeDocument[E, From, From], From <: Document[From]](
+                                                                       fromId: Id[From],
+                                                                       maxDepth: Int = Int.MaxValue
+                                                                     )(implicit ev: Doc =:= E): BFSTraversal[E, From] = {
+      new BFSTraversal[E, From](fromId, maxDepth)
+    }
+
+    /**
+     * Start a graph traversal from the specified node
+     */
+    def graph[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](
+                                                                                           fromId: Id[From]
+                                                                                         )(implicit ev: Doc =:= E): GraphTraversal[E, From, To] = {
+      new GraphTraversal[E, From, To](fromId)
+    }
+
+    /**
+     * Helper class for BFS traversal
+     */
+    class BFSTraversal[E <: EdgeDocument[E, From, From], From <: Document[From]](
+                                                                                  fromId: Id[From],
+                                                                                  maxDepth: Int
+                                                                                ) {
+      /**
+       * Find all nodes reachable through edges of the same type
+       */
+      def through[EM <: EdgeModel[E, From, From]](
+                                                   edgeModel: EM
+                                                 )(implicit ev: Doc =:= E): Task[Set[Id[From]]] = {
+        // Create a custom step that uses our transaction's edgesFor method
+        val customStep = new GraphStep[E, EM, From, From] {
+          override def neighbors(id: Id[From])(implicit transaction: Transaction[E, EM]): Task[Set[Id[From]]] = {
+            edgesFor[E, From, From](id)(ev).map(_._to).toList.map(_.toSet)
+          }
+        }
+
+        // Create and use the BFS engine
+        val engine = new BFSEngine[From, E, EM](
+          Set(fromId),
+          customStep,
+          maxDepth
+        )(self.asInstanceOf[Transaction[E, EM]])
+
+        engine.collectAllReachable()
+      }
+    }
+
+    /**
+     * Helper class for graph traversal
+     */
+    class GraphTraversal[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](
+                                                                                                      fromId: Id[From]
+                                                                                                    ) {
+      /**
+       * Follow edges of the specified type
+       */
+      def follow[EM <: EdgeModel[E, From, To]](
+                                                edgeModel: EM
+                                              )(implicit ev: Doc =:= E): GraphTraversalEngine[From, To] = {
+        // Create a custom step that uses our transaction's edgesFor method
+        val customStep = new GraphStep[E, EM, From, To] {
+          override def neighbors(id: Id[From])(implicit transaction: Transaction[E, EM]): Task[Set[Id[To]]] = {
+            edgesFor[E, From, To](id)(ev).map(_._to).toList.map(_.toSet)
+          }
+        }
+
+        // Create the graph traversal engine
+        GraphTraversalEngine.start(
+          fromId,
+          customStep
+        )(self.asInstanceOf[Transaction[E, EM]])
+      }
     }
   }
 }

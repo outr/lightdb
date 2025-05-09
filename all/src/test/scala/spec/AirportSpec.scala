@@ -10,6 +10,7 @@ import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb._
 import lightdb.id.{EdgeId, Id}
+import lightdb.traversal.{GraphStep, GraphTraversalEngine, TraversalBuilder}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
@@ -160,6 +161,72 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       DB.flights.transaction { tx =>
         tx.storage.traversal.allPaths[Flight, Airport](bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
           paths.length should be(maxPaths)
+        }
+      }
+    }
+    "use tx.storage.traversal.bfs for airport connections" in {
+      val lax = Airport.id("LAX")
+
+      DB.flights.transaction { tx =>
+        // Use the transaction's traversal.bfs API
+        tx.storage.traversal.bfs[Flight, Airport](lax, maxDepth = 1)
+          .through(Flight)
+          .map { directlyConnected =>
+            // Verify direct connections from LAX
+            directlyConnected should contain(Airport.id("SFO"))
+            directlyConnected.size should be > 50
+
+            // These are known direct connections from LAX
+            directlyConnected should contain allOf(
+              Airport.id("JFK"),
+              Airport.id("ORD"),
+              Airport.id("DFW")
+            )
+          }
+      }
+    }
+    "use tx.storage.traversal.bfs for multi-step traversal" in {
+      val bis = Airport.id("BIS")
+      val jfk = Airport.id("JFK")
+
+      DB.flights.transaction { tx =>
+        // Use the transaction's traversal.bfs API for a deeper search
+        tx.storage.traversal.bfs[Flight, Airport](bis, maxDepth = 2)
+          .through(Flight)
+          .map { reachableAirports =>
+            // JFK should be reachable from BIS within 2 hops
+            reachableAirports should contain(jfk)
+
+            // Verify intermediate connections
+            reachableAirports should contain allOf(
+              Airport.id("DEN"),
+              Airport.id("MSP")
+            )
+          }
+      }
+    }
+    "compare original traversal with BFS traversal" in {
+      val lax = Airport.id("LAX")
+
+      DB.flights.transaction { tx =>
+        // Use the original reachableFrom method
+        val originalTraversal = tx.storage.traversal.reachableFrom[Flight, Airport](lax).toList
+
+        // Use the new BFS traversal with Flight edges between airports
+        val newTraversal = tx.storage.traversal.bfs[Flight, Airport](lax)
+          .through(Flight)
+
+        // Compare results
+        for {
+          original <- originalTraversal
+          newResults <- newTraversal
+        } yield {
+          // Extract airports from original traversal
+          val originalAirports = original.map(_._to).toSet
+
+          // Both should find the same set of reachable airports
+          newResults should be(originalAirports)
+          newResults.size should be(286)
         }
       }
     }
