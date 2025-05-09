@@ -2,25 +2,24 @@ package lightdb.traversal
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
-import lightdb.transaction.Transaction
+import lightdb.transaction.PrefixScanningTransaction
 import rapid.Task
 
 /**
- * A simple BFS‐based engine for one‐step traversals (From == To)
- * with an exact `maxDepth` limit.
+ * A simple BFS‐based engine for traversals with an exact `maxDepth` limit.
  */
 class BFSEngine[N <: Document[N], E <: Document[E], M <: DocumentModel[E]](
                                                                             startIds: Set[Id[N]],
                                                                             via: GraphStep[E, M, N, N],
                                                                             maxDepth: Int
-                                                                          )(implicit tx: Transaction[E, M]) {
+                                                                          )(implicit transaction: PrefixScanningTransaction[E, M]) {
 
   private def loop(frontier: Set[Id[N]], visited: Set[Id[N]], depth: Int): Task[Set[Id[N]]] =
     if (frontier.isEmpty || depth > maxDepth) {
       Task.pure(visited)
     } else {
       for {
-        lists <- Task.sequence(frontier.toList.map(via.neighbors))
+        lists <- Task.sequence(frontier.toList.map(id => via.neighbors(id, transaction)))
         next = lists.flatten.toSet -- visited
         out <- loop(next, visited ++ next, depth + 1)
       } yield out
@@ -33,42 +32,42 @@ class BFSEngine[N <: Document[N], E <: Document[E], M <: DocumentModel[E]](
 }
 
 /**
- * Integration with TraversalBuilder to create a BFSEngine from traversal parameters.
+ * Companion object with factory methods
  */
-object BFSEngineFactory {
+object BFSEngine {
   /**
-   * Create a BFSEngine from a TraversalBuilder configuration.
+   * Create a BFSEngine using a step function
    */
-  def fromTraversalConfig[
-    N <: Document[N],
-    E <: Document[E],
-    M <: DocumentModel[E]
-  ](
-     startIds: Set[Id[N]],
-     maxDepth: Int,
-     via: GraphStep[E, M, N, N]
-   )(implicit tx: Transaction[E, M]): BFSEngine[N, E, M] = {
-    new BFSEngine(startIds, via, maxDepth)
+  def withStepFunction[N <: Document[N]](
+                                          startIds: Set[Id[N]],
+                                          step: Id[N] => Task[Set[Id[N]]],
+                                          maxDepth: Int = Int.MaxValue
+                                        ): StepFunctionBFSEngine[N] = {
+    new StepFunctionBFSEngine[N](startIds, step, maxDepth)
   }
-}
 
-/**
- * Extensions for TraversalBuilder to integrate with BFSEngine.
- */
-trait BFSTraversalSupport {
   /**
-   * Extension methods for TraversalBuilder
+   * BFS engine that uses a step function
    */
-  implicit class BFSTraversalBuilderOps[T <: Document[T]](traversalBuilder: TraversalBuilder[T]) {
+  class StepFunctionBFSEngine[N <: Document[N]](
+                                                 startIds: Set[Id[N]],
+                                                 step: Id[N] => Task[Set[Id[N]]],
+                                                 maxDepth: Int
+                                               ) {
+    private def loop(frontier: Set[Id[N]], visited: Set[Id[N]], depth: Int): Task[Set[Id[N]]] =
+      if (frontier.isEmpty || depth > maxDepth) {
+        Task.pure(visited)
+      } else {
+        for {
+          lists <- Task.sequence(frontier.toList.map(step))
+          next = lists.flatten.toSet -- visited
+          out <- loop(next, visited ++ next, depth + 1)
+        } yield out
+      }
+
     /**
-     * Create a BFS traversal engine from this traversal configuration.
+     * Collect all nodes reachable from the starting nodes.
      */
-    def toBFS[E <: Document[E], M <: DocumentModel[E]](
-                                                        startIds: Set[Id[T]],
-                                                        via: GraphStep[E, M, T, T],
-                                                        maxDepth: Int = 10
-                                                      )(implicit tx: Transaction[E, M]): BFSEngine[T, E, M] = {
-      BFSEngineFactory.fromTraversalConfig(startIds, maxDepth, via)
-    }
+    def collectAllReachable(): Task[Set[Id[N]]] = loop(startIds, startIds, depth = 1)
   }
 }

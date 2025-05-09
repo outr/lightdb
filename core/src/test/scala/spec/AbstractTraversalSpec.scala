@@ -3,7 +3,8 @@ package spec
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
-import lightdb.store.{Store, StoreManager}
+import lightdb.store.{PrefixScanningStoreManager, Store, StoreManager}
+import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import lightdb.traversal._
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.LightDB
@@ -43,34 +44,64 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
       } yield succeed
     }
     "traverse graph from A to collect all reachable nodes" in {
-      db.edges.transaction { implicit tx =>
-        tx.traverse(Id[Node]("A"))
-          .bfs(GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge))
-          .collectAllReachable()
-          .map { result =>
-            result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
-          }
+      db.edges.transaction { tx =>
+        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
+
+        // Use the forward GraphStep
+        val step = GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge)
+        val engine = new BFSEngine(Set(Id[Node]("A")), step, maxDepth = Int.MaxValue)(psTx)
+
+        engine.collectAllReachable().map { result =>
+          result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
+        }
       }
     }
     "traverse graph in reverse from D to find parents" in {
-      db.edges.transaction { implicit tx =>
-        tx.traverse(Id[Node]("D"))
-          .bfs(GraphStep.reverse[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge))
-          .collectAllReachable()
-          .map { result =>
-            result should contain allOf(Id("D"), Id("B"), Id("C"), Id("A"))
-          }
+      db.edges.transaction { tx =>
+        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
+
+        // Use the reverse GraphStep
+        val step = GraphStep.reverse[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge)
+        val engine = new BFSEngine(Set(Id[Node]("D")), step, maxDepth = Int.MaxValue)(psTx)
+
+        engine.collectAllReachable().map { result =>
+          result should contain allOf(Id("B"), Id("C"))
+        }
       }
     }
     "traverse with depth limitation" in {
       val maxDepth = 1
-      db.edges.transaction { implicit tx =>
-        tx.traverse(Set(Id[Node]("A")))
-          .bfs(GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge), maxDepth)
-          .collectAllReachable()
-          .map { result =>
-            result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
-          }
+      db.edges.transaction { tx =>
+        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
+
+        // Use the forward GraphStep with limited depth
+        val step = GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge)
+        val engine = new BFSEngine(Set(Id[Node]("A")), step, maxDepth)(psTx)
+
+        engine.collectAllReachable().map { result =>
+          result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
+        }
+      }
+    }
+    "traverse using the step function approach" in {
+      db.edges.transaction { tx =>
+        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
+
+        // Create a step function using prefixStream
+        val step: Id[Node] => Task[Set[Id[Node]]] = { id =>
+          psTx.prefixStream(id.value)
+            .filter(_._from == id)
+            .map(_._to)
+            .toList
+            .map(_.toSet)
+        }
+
+        // Use BFSEngine.withStepFunction
+        val engine = BFSEngine.withStepFunction(Set(Id[Node]("A")), step, maxDepth = Int.MaxValue)
+
+        engine.collectAllReachable().map { result =>
+          result should contain allOf(Id("B"), Id("C"), Id("D"))
+        }
       }
     }
     "dispose the database" in {
@@ -80,18 +111,18 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
   def dispose(): Task[Unit] = Task.unit
 
-  def storeManager: StoreManager
+  def storeManager: PrefixScanningStoreManager
 
   class DB extends LightDB {
-    override type SM = StoreManager
-    override val storeManager: StoreManager = spec.storeManager
+    override type SM = PrefixScanningStoreManager
+    override val storeManager: SM = spec.storeManager
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val nodes: Store[Node, Node.type] = store(Node)
-    val edges: Store[SimpleEdge, SimpleEdge.type] = store(SimpleEdge)
+    val nodes: S[Node, Node.type] = store[Node, Node.type](Node)
+    val edges: S[SimpleEdge, SimpleEdge.type] = store[SimpleEdge, SimpleEdge.type](SimpleEdge)
   }
 }
 
