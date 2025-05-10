@@ -11,25 +11,21 @@ import rapid.Task
  * @param current The current set of source IDs
  * @param chain The step chain to execute
  */
-class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (
-                                                                         private val current: Set[Id[S]],
-                                                                         private val chain: GraphTraversalEngine.StepLike[S, C]
-                                                                       ) {
+class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (private val current: Set[Id[S]],
+                                                                        private val chain: GraphTraversalEngine.StepLike[S, C]) {
   /**
    * Create a BFS engine for traversing from the current nodes.
    */
-  def bfs[E <: Document[E], M <: DocumentModel[E]](
-                                                    via: GraphStep[E, M, C, C],
-                                                    maxDepth: Int = Int.MaxValue
-                                                  )(implicit tx: PrefixScanningTransaction[E, M]): BFSEngine[C, E, M] =
+  def bfs[E <: Document[E], M <: DocumentModel[E]](via: GraphStep[E, M, C, C],
+                                                   maxDepth: Int = Int.MaxValue)
+                                                  (implicit tx: PrefixScanningTransaction[E, M]): BFSEngine[C, E, M] =
     new BFSEngine(current.asInstanceOf[Set[Id[C]]], via, maxDepth)
 
   /**
    * Add another step to the traversal.
    */
-  def step[E <: Document[E], M <: DocumentModel[E], Next <: Document[Next]](
-                                                                             via: GraphStep[E, M, C, Next]
-                                                                           )(implicit tx: PrefixScanningTransaction[E, M]): GraphTraversalEngine[S, Next] =
+  def step[E <: Document[E], M <: DocumentModel[E], Next <: Document[Next]](via: GraphStep[E, M, C, Next])
+                                                                           (implicit tx: PrefixScanningTransaction[E, M]): GraphTraversalEngine[S, Next] =
     new GraphTraversalEngine(current, GraphTraversalEngine.ChainStep(chain, via))
 
   /**
@@ -37,22 +33,6 @@ class GraphTraversalEngine[S <: Document[S], C <: Document[C]] private (
    */
   def collectAllReachable(): Task[Set[Id[C]]] =
     chain.run(current)
-
-  /**
-   * Convert to a TraversalBuilder
-   */
-  def toTraversalBuilder: TraversalBuilder[Id[C]] = {
-    val root = if (current.nonEmpty) Some(current.head.asInstanceOf[Id[C]]) else None
-
-    TraversalBuilder(
-      root = root,
-      maxDepth = 10,
-      visitedNodes = Set.empty[Any],
-      isConcurrent = false,
-      nodeFilter = (_: Id[C]) => true,
-      childrenFunction = (_: Id[C]) => Task.pure(Seq.empty[Any])
-    )
-  }
 }
 
 object GraphTraversalEngine {
