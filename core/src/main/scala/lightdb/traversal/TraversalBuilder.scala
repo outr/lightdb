@@ -10,15 +10,12 @@ import lightdb.transaction.{PrefixScanningTransaction, Transaction}
  * TraversalBuilder - A utility for traversing object structures
  * Compatible with both Scala 2 and Scala 3
  */
-case class TraversalBuilder[T] private (
-                                         private val root: Option[T],
-                                         private val maxDepth: Int,
-                                         private val visitedNodes: Set[Any],
-                                         private val isConcurrent: Boolean,
-                                         private val nodeFilter: T => Boolean,
-                                         private val childrenFunction: T => Task[Seq[Any]]
-                                       ) {
-
+case class TraversalBuilder[T] private (private val root: Option[T],
+                                        private val maxDepth: Int,
+                                        private val visitedNodes: Set[Any],
+                                        private val isConcurrent: Boolean,
+                                        private val nodeFilter: T => Boolean,
+                                        private val childrenFunction: T => Task[Seq[Any]]) {
   /**
    * Configure maximum depth for traversal
    */

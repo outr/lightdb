@@ -191,7 +191,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
       DB.flights.transaction { tx =>
         // Use the transaction's traversal.bfs API for a deeper search
-        tx.storage.traversal.bfs[Flight, Airport](Set(bis), maxDepth = 2)
+        tx.storage.traversal
+          .bfs[Flight, Airport](Set(bis), maxDepth = 2)
           .through(Flight)
           .map { reachableAirports =>
             // JFK should be reachable from BIS within 2 hops

@@ -3,8 +3,7 @@ package spec
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
-import lightdb.store.{PrefixScanningStoreManager, Store, StoreManager}
-import lightdb.transaction.{PrefixScanningTransaction, Transaction}
+import lightdb.store.PrefixScanningStoreManager
 import lightdb.traversal._
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.LightDB
@@ -45,51 +44,43 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { tx =>
-        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
-
-        // Use the forward GraphStep
-        val step = GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge)
-        val engine = new BFSEngine(Set(Id[Node]("A")), step, maxDepth = Int.MaxValue)(psTx)
-
-        engine.collectAllReachable().map { result =>
-          result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
-        }
+        // Use transaction's bfs method
+        tx.traversal.bfs[SimpleEdge, Node](Id[Node]("A"))
+          .through(SimpleEdge)
+          .map { result =>
+            result should contain allOf(Id("A"), Id("B"), Id("C"), Id("D"))
+          }
       }
     }
     "traverse graph in reverse from D to find parents" in {
       db.edges.transaction { tx =>
-        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
-
-        // Use the reverse GraphStep
+        // Create a GraphStep that traverses in reverse
         val step = GraphStep.reverse[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge)
-        val engine = new BFSEngine(Set(Id[Node]("D")), step, maxDepth = Int.MaxValue)(psTx)
 
-        engine.collectAllReachable().map { result =>
-          result should contain allOf(Id("B"), Id("C"))
-        }
+        // Use the step with the bfs method
+        tx.traversal.bfs[Node](Set(Id[Node]("D")), step)
+          .collectAllReachable()
+          .map { result =>
+            result should contain allOf(Id("B"), Id("C"))
+          }
       }
     }
     "traverse with depth limitation" in {
       val maxDepth = 1
       db.edges.transaction { tx =>
-        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
-
-        // Use the forward GraphStep with limited depth
-        val step = GraphStep.forward[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge)
-        val engine = new BFSEngine(Set(Id[Node]("A")), step, maxDepth)(psTx)
-
-        engine.collectAllReachable().map { result =>
-          result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
-        }
+        // Use transaction's bfs method with depth limit
+        tx.traversal.bfs[SimpleEdge, Node](Id[Node]("A"), maxDepth = maxDepth)
+          .through(SimpleEdge)
+          .map { result =>
+            result should contain theSameElementsAs Set(Id("A"), Id("B"), Id("C"))
+          }
       }
     }
     "traverse using the step function approach" in {
       db.edges.transaction { tx =>
-        val psTx = tx.asInstanceOf[PrefixScanningTransaction[SimpleEdge, SimpleEdge.type]]
-
         // Create a step function using prefixStream
         val step: Id[Node] => Task[Set[Id[Node]]] = { id =>
-          psTx.prefixStream(id.value)
+          tx.prefixStream(id.value)
             .filter(_._from == id)
             .map(_._to)
             .toList
