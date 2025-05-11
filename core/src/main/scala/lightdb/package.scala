@@ -1,11 +1,15 @@
 import lightdb.doc.Document
 import lightdb.id.Id
-import lightdb.traversal.DocumentTraversal
+import lightdb.traversal.{DocumentTraversalBuilder, GraphTraversal}
+//import lightdb.traversal.DocumentTraversal
 
 import scala.language.implicitConversions
 
 package object lightdb {
-  def traverseFrom[Doc <: Document[Doc]](id: Id[Doc]): DocumentTraversal[Doc] = DocumentTraversal(rapid.Stream.emit(id))
+  /**
+   * Convenience method to start a graph traversal directly from the transaction
+   */
+  def traverseFrom[D <: Document[D]](id: Id[D]): DocumentTraversalBuilder[D] = GraphTraversal.from(id)
 
   implicit class NumericOps[A](numeric: Numeric[A]) {
     def map[B](to: A => B)(from: B => A): Numeric[B] = new Numeric[B] {
