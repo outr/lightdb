@@ -1,6 +1,12 @@
+import lightdb.doc.Document
+import lightdb.id.Id
+import lightdb.traversal.DocumentTraversal
+
 import scala.language.implicitConversions
 
 package object lightdb {
+  def traverseFrom[Doc <: Document[Doc]](id: Id[Doc]): DocumentTraversal[Doc] = DocumentTraversal(rapid.Stream.emit(id))
+
   implicit class NumericOps[A](numeric: Numeric[A]) {
     def map[B](to: A => B)(from: B => A): Numeric[B] = new Numeric[B] {
       override def plus(x: B, y: B): B = to(numeric.plus(from(x), from(y)))

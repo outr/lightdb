@@ -10,5 +10,9 @@ case class EdgeTraversal[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Docu
     EdgeTraversal(nextEdges)
   }
 
+  def modifyStream(f: rapid.Stream[E] => rapid.Stream[E]): EdgeTraversal[E, F, T] = copy(f(edges))
+
+  def filter(f: E => Boolean): EdgeTraversal[E, F, T] = modifyStream(_.filter(f))
+
   def documents(tx: Transaction[T, _]): rapid.Stream[T] = edges.evalMap(edge => tx(edge._to))
 }
