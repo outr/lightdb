@@ -63,28 +63,18 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
           db.loadsTo.transaction { loadsTo =>
             db.deliversToCustomer.transaction { deliversToCustomer =>
               db.customers.transaction { customers =>
-                shipsTo.traversal.edgesFor[ShipsTo, Warehouse, Truck](Id[Warehouse]("warehouse1"))
-                  .flatMap { s =>
-                    deliversToDepot.traversal.edgesFor[DeliversToDepot, Truck, Depot](s._to)
-                  }
-                  .flatMap { d =>
-                    loadsTo.traversal.edgesFor[LoadsTo, Depot, Drone](d._to)
-                  }
-                  .flatMap { d =>
-                    deliversToCustomer.traversal.edgesFor[DeliversToCustomer, Drone, Customer](d._to)
-                  }
-                  .evalMap(dtc => customers(dtc._to))
+                val warehouse: Id[Warehouse] = Id("warehouse1")
+                DocumentTraversal[Warehouse](rapid.Stream.emit(warehouse))
+                  .follow[ShipsTo, Truck](shipsTo)
+                  .follow[DeliversToDepot, Depot](deliversToDepot)
+                  .follow[LoadsTo, Drone](loadsTo)
+                  .follow[DeliversToCustomer, Customer](deliversToCustomer)
+                  .documents(customers)
+                  .map(_.name)
                   .toList
-                  .map { customers =>
-                    customers.map(_.name) should be(List("Customer 1"))
+                  .map { names =>
+                    names should be(List("Customer 1"))
                   }
-                //          for {
-                //            customers <- shipsTo.traverse(Id[Warehouse]("warehouse1"))
-                //              .step(GraphStep.forward[DeliversToDepot, DeliversToDepot.type, Truck, Depot](DeliversToDepot))(deliversToDepot)
-                //              .step(GraphStep.forward[LoadsTo, LoadsTo.type, Depot, Drone](LoadsTo))(loadsTo)
-                //              .step(GraphStep.forward[DeliversToCustomer, DeliversToCustomer.type, Drone, Customer](DeliversToCustomer))(deliversToCustomer)
-                //              .collectAllReachable()
-                //          } yield customers should contain only Id("customer1")
               }
             }
           }
