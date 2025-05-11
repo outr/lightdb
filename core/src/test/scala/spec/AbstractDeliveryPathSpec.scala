@@ -23,59 +23,72 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
       db.init.succeed
     }
     "insert delivery chain nodes" in {
-      db.transactions(db.warehouses, db.trucks, db.depots, db.drones, db.customers) {
-        case (warehouses, trucks, depots, drones, customers) =>
-          for {
-            _ <- warehouses.insert(Warehouse("Warehouse 1", Id("warehouse1")))
-            _ <- trucks.insert(Truck("Truck 1", Id("truck1")))
-            _ <- depots.insert(Depot("Depot 1", Id("depot1")))
-            _ <- drones.insert(Drone("Drone 1", Id("drone1")))
-            _ <- customers.insert(Customer("Customer 1", Id("customer1")))
-          } yield succeed
+      db.warehouses.transaction { warehouses =>
+        db.trucks.transaction { trucks =>
+          db.depots.transaction { depots =>
+            db.drones.transaction { drones =>
+              db.customers.transaction { customers =>
+                for {
+                  _ <- warehouses.insert(Warehouse("Warehouse 1", Id("warehouse1")))
+                  _ <- trucks.insert(Truck("Truck 1", Id("truck1")))
+                  _ <- depots.insert(Depot("Depot 1", Id("depot1")))
+                  _ <- drones.insert(Drone("Drone 1", Id("drone1")))
+                  _ <- customers.insert(Customer("Customer 1", Id("customer1")))
+                } yield succeed
+              }
+            }
+          }
+        }
       }
     }
     "insert delivery chain edges" in {
-      db.transactions(db.shipsTo, db.deliversToDepot, db.loadsTo, db.deliversToCustomer) {
-        case (shipsTo, deliversToDepot, loadsTo, deliversToCustomer) =>
-          for {
-            _ <- shipsTo.insert(ShipsTo(Id("warehouse1"), Id("truck1")))
-            _ <- deliversToDepot.insert(DeliversToDepot(Id("truck1"), Id("depot1")))
-            _ <- loadsTo.insert(LoadsTo(Id("depot1"), Id("drone1")))
-            _ <- deliversToCustomer.insert(DeliversToCustomer(Id("drone1"), Id("customer1")))
-          } yield succeed
+      db.shipsTo.transaction { shipsTo =>
+        db.deliversToDepot.transaction { deliversToDepot =>
+          db.loadsTo.transaction { loadsTo =>
+            db.deliversToCustomer.transaction { deliversToCustomer =>
+              for {
+                _ <- shipsTo.insert(ShipsTo(Id("warehouse1"), Id("truck1")))
+                _ <- deliversToDepot.insert(DeliversToDepot(Id("truck1"), Id("depot1")))
+                _ <- loadsTo.insert(LoadsTo(Id("depot1"), Id("drone1")))
+                _ <- deliversToCustomer.insert(DeliversToCustomer(Id("drone1"), Id("customer1")))
+              } yield succeed
+            }
+          }
+        }
       }
     }
     "traverse full delivery path from warehouse to customer" in {
-      db.transactions(
-        db.shipsTo,
-        db.deliversToDepot,
-        db.loadsTo,
-        db.deliversToCustomer,
-        db.customers
-      ) {
-        case (shipsTo, deliversToDepot, loadsTo, deliversToCustomer, customers) =>
-          shipsTo.traversal.edgesFor(Id[Warehouse]("warehouse1"))
-            .flatMap { s =>
-              deliversToDepot.traversal.edgesFor(s._to)
+      db.shipsTo.transaction { shipsTo =>
+        db.deliversToDepot.transaction { deliversToDepot =>
+          db.loadsTo.transaction { loadsTo =>
+            db.deliversToCustomer.transaction { deliversToCustomer =>
+              db.customers.transaction { customers =>
+                shipsTo.traversal.edgesFor[ShipsTo, Warehouse, Truck](Id[Warehouse]("warehouse1"))
+                  .flatMap { s =>
+                    deliversToDepot.traversal.edgesFor[DeliversToDepot, Truck, Depot](s._to)
+                  }
+                  .flatMap { d =>
+                    loadsTo.traversal.edgesFor[LoadsTo, Depot, Drone](d._to)
+                  }
+                  .flatMap { d =>
+                    deliversToCustomer.traversal.edgesFor[DeliversToCustomer, Drone, Customer](d._to)
+                  }
+                  .evalMap(dtc => customers(dtc._to))
+                  .toList
+                  .map { customers =>
+                    customers.map(_.name) should be(List("Customer 1"))
+                  }
+                //          for {
+                //            customers <- shipsTo.traverse(Id[Warehouse]("warehouse1"))
+                //              .step(GraphStep.forward[DeliversToDepot, DeliversToDepot.type, Truck, Depot](DeliversToDepot))(deliversToDepot)
+                //              .step(GraphStep.forward[LoadsTo, LoadsTo.type, Depot, Drone](LoadsTo))(loadsTo)
+                //              .step(GraphStep.forward[DeliversToCustomer, DeliversToCustomer.type, Drone, Customer](DeliversToCustomer))(deliversToCustomer)
+                //              .collectAllReachable()
+                //          } yield customers should contain only Id("customer1")
+              }
             }
-            .flatMap { d =>
-              loadsTo.traversal.edgesFor(d._to)
-            }
-            .flatMap { d =>
-              deliversToCustomer.traversal.edgesFor(d._to)
-            }
-            .evalMap(dtc => customers(dtc._to))
-            .toList
-            .map { customers =>
-              customers.map(_.name) should be(List("Customer 1"))
-            }
-//          for {
-//            customers <- shipsTo.traverse(Id[Warehouse]("warehouse1"))
-//              .step(GraphStep.forward[DeliversToDepot, DeliversToDepot.type, Truck, Depot](DeliversToDepot))(deliversToDepot)
-//              .step(GraphStep.forward[LoadsTo, LoadsTo.type, Depot, Drone](LoadsTo))(loadsTo)
-//              .step(GraphStep.forward[DeliversToCustomer, DeliversToCustomer.type, Drone, Customer](DeliversToCustomer))(deliversToCustomer)
-//              .collectAllReachable()
-//          } yield customers should contain only Id("customer1")
+          }
+        }
       }.succeed
     }
     "truncate the database" in {
