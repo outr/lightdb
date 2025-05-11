@@ -6,10 +6,8 @@ import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.DocNotFoundException
 import lightdb.field.Field.UniqueIndex
-import lightdb.graph.EdgeModel
 import lightdb.id.Id
 import lightdb.store.Store
-import lightdb.traversal.{GraphStep, GraphTraversalEngine}
 import rapid._
 
 trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {

@@ -10,7 +10,6 @@ import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb._
 import lightdb.id.{EdgeId, Id}
-import lightdb.traversal.{GraphStep, GraphTraversalEngine, TraversalBuilder}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
