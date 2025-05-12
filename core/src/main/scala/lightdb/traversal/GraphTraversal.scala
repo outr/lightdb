@@ -241,8 +241,8 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
    *
    * @return A stream of target document IDs
    */
-  def targetIds: Stream[Id[T]] = {
-    val startingIds = fromIds.asInstanceOf[Stream[Id[T]]]
+  def targetIds(implicit ev: F =:= T): Stream[Id[T]] = {
+    val startingIds = fromIds.map(_.coerce[T])
     startingIds.append(edges.map(_._to)).distinct
   }
 
@@ -291,7 +291,6 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
         // Process the current frontier
         val edgesStream = frontier.flatMap { id =>
           tx.prefixStream(id.value)
-            .asInstanceOf[Stream[E]]
             .filter(_._from == id)
             .filter(edgeFilter)
         }

@@ -45,7 +45,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
     def reachableFrom[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](
                                                                                                    from: Id[From],
                                                                                                    maxDepth: Int = Int.MaxValue
-                                                                                                 )(implicit ev: Doc =:= E): Stream[E] = {
+                                                                                                 )(implicit ev: From =:= To): Stream[E] = {
       // Use the new traversal API internally
       GraphTraversal.from(from)
         .withMaxDepth(maxDepth)

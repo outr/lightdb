@@ -11,6 +11,8 @@ trait Id[Doc] extends Any with Ordered[Id[Doc]] {
     b
   }
 
+  def coerce[T](implicit ev: Doc =:= T): Id[T] = Id[T](value)
+
   override def compare(that: Id[Doc]): Int = value.compare(that.value)
 
   override def toString: String = s"${getClass.getSimpleName}($value)"
