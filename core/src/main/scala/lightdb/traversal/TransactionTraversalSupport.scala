@@ -1,10 +1,10 @@
 package lightdb.traversal
 
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.graph.EdgeDocument
+import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.Id
 import lightdb.transaction.PrefixScanningTransaction
-import rapid.Stream
+import rapid.{Stream, Task}
 
 /**
  * Extension methods for transactions to support traversal functionality
@@ -64,89 +64,19 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
     }
 
     /**
-     * Find shortest paths between two nodes using a direct implementation rather than
-     * going through EdgeTraversalBuilder to avoid potential streaming issues
+     * Find shortest paths between two nodes
      */
     def shortestPaths[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](from: Id[From],
                                                                                                   to: Id[To],
                                                                                                   maxDepth: Int = Int.MaxValue,
                                                                                                   bufferSize: Int = 100,
                                                                                                   edgeFilter: E => Boolean = (_: E) => true)
-                                                                                                 (implicit ev: Doc =:= E): Stream[TraversalPath[E, From, To]] = {
-      // Direct implementation for shortestPaths - materialized result
-      import scala.collection.mutable
-
-      // For shortest paths, we use a level-based BFS to find all paths of the same length
-      val result = mutable.ListBuffer.empty[TraversalPath[E, From, To]]
-
-      // Each node can be reached via multiple paths, but we need to ensure
-      // we don't create cycles within a single path
-      case class PathState(node: Id[From], path: List[E], visited: Set[String])
-
-      // Queue for BFS
-      val queue = mutable.Queue.empty[PathState]
-
-      // Track which level we're currently processing
-      var currentLevel = 0
-      var nodesAtCurrentLevel = 1
-      var nodesAtNextLevel = 0
-      var foundTarget = false
-
-      // Start with the initial node
-      queue.enqueue(PathState(from, Nil, Set(from.value)))
-
-      // BFS loop
-      while (queue.nonEmpty && currentLevel <= maxDepth && (!foundTarget || nodesAtCurrentLevel > 0)) {
-        val state = queue.dequeue()
-        nodesAtCurrentLevel -= 1
-
-        // Check if we've reached the target
-        if (state.node.asInstanceOf[Id[To]] == to) {
-          result += new TraversalPath[E, From, To](state.path)
-          foundTarget = true
-        }
-        // Only explore further if we haven't found a target yet
-        // or if we're still processing the current level where we found it
-        else if (currentLevel < maxDepth && !foundTarget) {
-          // Get outgoing edges
-          prefixStream(state.node.value)
-            .map[E](doc => ev(doc))
-            .filter(_._from == state.node)
-            .filter(edgeFilter)
-            .toList.sync()
-            .foreach { edge =>
-              val nextId = edge._to.asInstanceOf[Id[From]]
-
-              // Avoid cycles in the path by checking if this node
-              // is already in the current path
-              if (!state.visited.contains(nextId.value)) {
-                val newPath = state.path :+ edge
-                val newVisited = state.visited + nextId.value
-
-                queue.enqueue(PathState(nextId, newPath, newVisited))
-                nodesAtNextLevel += 1
-              }
-            }
-        }
-
-        // Level transition
-        if (nodesAtCurrentLevel == 0) {
-          // Move to next level if we haven't found the target
-          // or we've processed all nodes at the level where we found it
-          if (foundTarget) {
-            // Stop BFS after this level
-            break()
-          } else {
-            currentLevel += 1
-            nodesAtCurrentLevel = nodesAtNextLevel
-            nodesAtNextLevel = 0
-          }
-        }
-      }
-
-      // Return stream of paths
-      Stream.emits(result)
-    }
+                                                                                                 (implicit ev: Doc =:= E): Stream[TraversalPath[E, From, To]] =
+      GraphTraversal.from(from)
+        .withMaxDepth(maxDepth)
+        .follow[E, To](self.asInstanceOf[PrefixScanningTransaction[E, _]])
+        .filter(edgeFilter)
+        .findShortestPath(to)
 
     /**
      * Create a traversal for BFS with a single starting node
