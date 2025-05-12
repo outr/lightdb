@@ -13,20 +13,19 @@ object GraphTraversal {
   /**
    * Start a traversal from a single document ID
    */
-  def from[D <: Document[D]](id: Id[D]): DocumentTraversalBuilder[D] =
-    new DocumentTraversalBuilder(Stream.emit(id))
+  def from[D <: Document[D]](id: Id[D]): DocumentTraversalBuilder[D] = DocumentTraversalBuilder(Stream.emit(id))
 
   /**
    * Start a traversal from a set of document IDs
    */
   def from[D <: Document[D]](ids: Set[Id[D]]): DocumentTraversalBuilder[D] =
-    new DocumentTraversalBuilder(Stream.emits(ids.toSeq))
+    DocumentTraversalBuilder(Stream.emits(ids.toSeq))
 
   /**
    * Start a traversal from a stream of document IDs
    */
   def fromStream[D <: Document[D]](idStream: Stream[Id[D]]): DocumentTraversalBuilder[D] =
-    new DocumentTraversalBuilder(idStream)
+    DocumentTraversalBuilder(idStream)
 
   // Add this to the GraphTraversal object
 
@@ -42,9 +41,7 @@ object GraphTraversal {
                                           startIds: Set[Id[N]],
                                           step: Id[N] => Task[Set[Id[N]]],
                                           maxDepth: Int = Int.MaxValue
-                                        ): StepFunctionTraversal[N] = {
-    new StepFunctionTraversal[N](startIds, step, maxDepth)
-  }
+                                        ): StepFunctionTraversal[N] = StepFunctionTraversal[N](startIds, step, maxDepth)
 
   /**
    * Create a type-safe step function from an edge type
@@ -53,9 +50,7 @@ object GraphTraversal {
    * @param tx The transaction to use
    * @return A type-safe step function
    */
-  def createEdgeStepFunction[E <: EdgeDocument[E, N, N], N <: Document[N], M <: DocumentModel[E]](
-                                                                                                   tx: PrefixScanningTransaction[E, M]
-                                                                                                 ): Id[N] => Task[Set[Id[N]]] = { id =>
+  def createEdgeStepFunction[E <: EdgeDocument[E, N, N], N <: Document[N], M <: DocumentModel[E]](tx: PrefixScanningTransaction[E, M]): Id[N] => Task[Set[Id[N]]] = { id =>
     // Use the transaction's traversal methods in a type-safe way
     tx.traversal.edgesFor[E, N, N](id)
       .map(_._to)
@@ -67,11 +62,9 @@ object GraphTraversal {
    * A traversal that uses a step function to find neighbors
    * This provides compatibility with legacy code that used BFSEngine.withStepFunction
    */
-  class StepFunctionTraversal[N <: Document[N]](
-                                                 startIds: Set[Id[N]],
-                                                 step: Id[N] => Task[Set[Id[N]]],
-                                                 maxDepth: Int
-                                               ) {
+  case class StepFunctionTraversal[N <: Document[N]](startIds: Set[Id[N]],
+                                                     step: Id[N] => Task[Set[Id[N]]],
+                                                     maxDepth: Int) {
     /**
      * Collect all nodes reachable from the starting nodes
      * This mimics the BFSEngine.StepFunctionBFSEngine.collectAllReachable() method
