@@ -9,39 +9,28 @@ import rapid.{Stream, Task}
 /**
  * Builder for edge traversals
  *
- * @param fromIds The stream of document IDs to start the traversal from
- * @param tx A transaction that supports prefix scanning for the edge type
+ * @param fromIds  The stream of document IDs to start the traversal from
+ * @param tx       A transaction that supports prefix scanning for the edge type
  * @param maxDepth The maximum traversal depth
  */
-class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Document[T]](
-                                                                                            fromIds: Stream[Id[F]],
-                                                                                            tx: PrefixScanningTransaction[E, _],
-                                                                                            maxDepth: Int
-                                                                                          ) {
-  private var edgeFilter: E => Boolean = _ => true
-  private var strategy: TraversalStrategy = TraversalStrategy.BFS
-
+case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Document[T]](fromIds: Stream[Id[F]],
+                                                                                                tx: PrefixScanningTransaction[E, _],
+                                                                                                maxDepth: Int,
+                                                                                                edgeFilter: E => Boolean = (_: E) => true,
+                                                                                                strategy: TraversalStrategy = TraversalStrategy.BFS) {
   /**
    * Configure edge filtering
    *
    * @param predicate A predicate function to filter edges
-   * @return This builder instance
    */
-  def filter(predicate: E => Boolean): EdgeTraversalBuilder[E, F, T] = {
-    edgeFilter = predicate
-    this
-  }
+  def filter(predicate: E => Boolean): EdgeTraversalBuilder[E, F, T] = copy(edgeFilter = predicate)
 
   /**
    * Configure traversal strategy
    *
    * @param traversalStrategy The traversal strategy to use
-   * @return This builder instance
    */
-  def using(traversalStrategy: TraversalStrategy): EdgeTraversalBuilder[E, F, T] = {
-    strategy = traversalStrategy
-    this
-  }
+  def using(traversalStrategy: TraversalStrategy): EdgeTraversalBuilder[E, F, T] = copy(strategy = traversalStrategy)
 
   /**
    * Follow additional edges from the targets of the current traversal
@@ -51,21 +40,17 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
    * @param nextTx A transaction that supports prefix scanning for the next edge type
    * @return A builder for the next edge traversal
    */
-  def follow[E2 <: EdgeDocument[E2, T, T2], T2 <: Document[T2]](nextTx: PrefixScanningTransaction[E2, _]): EdgeTraversalBuilder[E2, T, T2] = {
-    val nextStartIds = edges.map(_._to).distinct
-    new EdgeTraversalBuilder(nextStartIds, nextTx, maxDepth)
-  }
+  def follow[E2 <: EdgeDocument[E2, T, T2], T2 <: Document[T2]](nextTx: PrefixScanningTransaction[E2, _]): EdgeTraversalBuilder[E2, T, T2] =
+    EdgeTraversalBuilder[E2, T, T2](edges.map(_._to).distinct, nextTx, maxDepth)
 
   /**
    * Get the stream of edge documents
    *
    * @return A stream of edge documents
    */
-  def edges: Stream[E] = {
-    strategy match {
-      case TraversalStrategy.BFS => executeBFSEdges()
-      case TraversalStrategy.DFS => executeDFSEdges()
-    }
+  def edges: Stream[E] = strategy match {
+    case TraversalStrategy.BFS => executeBFSEdges()
+    case TraversalStrategy.DFS => executeDFSEdges()
   }
 
   /**
@@ -73,10 +58,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
    *
    * @return A stream of target document IDs
    */
-  def targetIds(implicit ev: F =:= T): Stream[Id[T]] = {
-    val startingIds = fromIds.map(_.coerce[T])
-    startingIds.append(edges.map(_._to)).distinct
-  }
+  def targetIds(implicit ev: F =:= T): Stream[Id[T]] = fromIds.map(_.coerce[T]).append(edges.map(_._to)).distinct
 
   /**
    * Get the stream of target documents
@@ -84,9 +66,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
    * @param docTx A transaction for retrieving target documents
    * @return A stream of target documents
    */
-  def documents(docTx: Transaction[T, _]): Stream[T] = {
-    edges.map(_._to).distinct.evalMap(id => docTx(id))
-  }
+  def documents(docTx: Transaction[T, _]): Stream[T] = edges.map(_._to).distinct.evalMap(id => docTx(id))
 
   /**
    * Find all paths to a target node
@@ -94,9 +74,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
    * @param target The ID of the target node
    * @return A stream of paths to the target node
    */
-  def findPaths(target: Id[T]): Stream[TraversalPath[E, F, T]] = {
-    implementPathFinding(target, findAll = true)
-  }
+  def findPaths(target: Id[T]): Stream[TraversalPath[E, F, T]] = implementPathFinding(target, findAll = true)
 
   /**
    * Find the shortest path to a target node
@@ -104,9 +82,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
    * @param target The ID of the target node
    * @return A stream containing the shortest path to the target node, if any
    */
-  def findShortestPath(target: Id[T]): Stream[TraversalPath[E, F, T]] = {
-    implementPathFinding(target, findAll = false)
-  }
+  def findShortestPath(target: Id[T]): Stream[TraversalPath[E, F, T]] = implementPathFinding(target, findAll = false)
 
   /**
    * Execute a BFS traversal that returns a stream of edges
@@ -129,7 +105,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
 
         // Collect target IDs for the next frontier
         edgesStream.flatMap { edge =>
-          val targetId = edge._to.asInstanceOf[Id[F]]  // Safe cast for reflexive graphs
+          val targetId = edge._to.asInstanceOf[Id[F]] // Safe cast for reflexive graphs
 
           // Emit the edge, and if targetId hasn't been visited, include it in next level
           Stream.emit(edge).append {
@@ -152,8 +128,8 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
     }
 
     // Mark starting nodes as visited and begin traversal with a stream of ids
-    fromIds.evalTap { id =>
-      Task { visited.put(id, true); () }
+    fromIds.foreach { id =>
+      visited.put(id, true)
     }.flatMap { id =>
       processLevel(Stream.emit(id), 1)
     }
@@ -179,7 +155,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
 
         // For each edge, emit it and then visit its target
         edgesFromNode.flatMap { edge =>
-          val targetId = edge._to.asInstanceOf[Id[F]]  // Safe cast for reflexive graphs
+          val targetId = edge._to.asInstanceOf[Id[F]] // Safe cast for reflexive graphs
 
           // Emit the edge, then recursively visit the target if not visited
           Stream.emit(edge).append {
@@ -199,8 +175,8 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
     }
 
     // Mark starting nodes as visited and begin traversal
-    fromIds.evalTap { id =>
-      Task { visited.put(id, true); () }
+    fromIds.foreach { id =>
+      visited.put(id, true)
     }.flatMap { id =>
       dfs(id, 1)
     }
@@ -209,12 +185,11 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
   /**
    * Implement path finding (both all paths and shortest path)
    *
-   * @param target The target node ID
+   * @param target  The target node ID
    * @param findAll Whether to find all paths or just the shortest
    * @return A stream of paths
    */
   private def implementPathFinding(target: Id[T], findAll: Boolean): Stream[TraversalPath[E, F, T]] = {
-    // Use a breadth-first approach to find paths
     import scala.collection.mutable
 
     // Path data includes current node and edges taken to get there
@@ -251,7 +226,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
               .asInstanceOf[Stream[E]]
               .filter(_._from == currentId)
               .filter(edgeFilter)
-              .toList.sync()  // Collect to avoid re-execution
+              .toList.sync() // Collect to avoid re-execution
 
             // Find paths that reach the target
             val completedPaths = outgoingEdges
@@ -268,7 +243,7 @@ class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Do
             if (pathEdges.length < maxDepth) {
               // Add paths to unexplored nodes
               outgoingEdges.foreach { edge =>
-                val targetId = edge._to.asInstanceOf[Id[F]]  // Safe cast for reflexive graphs
+                val targetId = edge._to.asInstanceOf[Id[F]] // Safe cast for reflexive graphs
 
                 // Only follow path if we haven't visited this node in this path
                 // For BFS path finding, we track visited nodes per path

@@ -28,7 +28,7 @@ case class DocumentTraversalBuilder[D <: Document[D]](ids: Stream[Id[D]],
    * @return A builder for edge traversals
    */
   def follow[E <: EdgeDocument[E, D, T], T <: Document[T]](tx: PrefixScanningTransaction[E, _]): EdgeTraversalBuilder[E, D, T] =
-    new EdgeTraversalBuilder(ids, tx, maxDepth)
+    EdgeTraversalBuilder[E, D, T](ids, tx, maxDepth)
 
   /**
    * Get the stream of documents
