@@ -22,7 +22,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
     def edgesFor[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](fromId: Id[From])
                                                                                             (implicit ev: Doc =:= E): Stream[E] = {
       // Use ev to convert the transaction to the correct type
-      prefixStream(fromId.value).map(ev.apply)
+      prefixStream(fromId.value).map[E](doc => ev(doc))
     }
 
     /**
@@ -96,7 +96,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
                                                                            (implicit ev: Doc =:= E): EdgeTraversalBuilder[E, N, T] = {
       GraphTraversal.from(startId)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(BFS)
+        .using(TraversalStrategy.BFS)
     }
 
     /**
@@ -109,7 +109,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
       GraphTraversal.from(startId)
         .withMaxDepth(maxDepth)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(BFS)
+        .using(TraversalStrategy.BFS)
     }
 
     /**
@@ -120,7 +120,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
                                                                            )(implicit ev: Doc =:= E): EdgeTraversalBuilder[E, N, T] = {
       GraphTraversal.from(startIds)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(BFS)
+        .using(TraversalStrategy.BFS)
     }
 
     /**
@@ -133,7 +133,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
       GraphTraversal.from(startIds)
         .withMaxDepth(maxDepth)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(BFS)
+        .using(TraversalStrategy.BFS)
     }
 
     /**
@@ -144,7 +144,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
                                                                            )(implicit ev: Doc =:= E): EdgeTraversalBuilder[E, N, T] = {
       GraphTraversal.from(startId)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(DFS)
+        .using(TraversalStrategy.DFS)
     }
 
     /**
@@ -157,7 +157,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
       GraphTraversal.from(startId)
         .withMaxDepth(maxDepth)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(DFS)
+        .using(TraversalStrategy.DFS)
     }
 
     /**
@@ -168,7 +168,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
                                                                            )(implicit ev: Doc =:= E): EdgeTraversalBuilder[E, N, T] = {
       GraphTraversal.from(startIds)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(DFS)
+        .using(TraversalStrategy.DFS)
     }
 
     /**
@@ -181,7 +181,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
       GraphTraversal.from(startIds)
         .withMaxDepth(maxDepth)
         .follow[E, T](self.asInstanceOf[PrefixScanningTransaction[E, _]])
-        .using(DFS)
+        .using(TraversalStrategy.DFS)
     }
 
     /**
