@@ -184,6 +184,7 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
 
   /**
    * Implement path finding (both all paths and shortest path)
+   * Optimized version with proper shortest path finding
    *
    * @param target  The target node ID
    * @param findAll Whether to find all paths or just the shortest
@@ -197,76 +198,78 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
 
     // We'll use a breadth-first approach but emit paths as they're found
     def findPaths(): Stream[TraversalPath[E, F, T]] = {
-      // Set up mutable state for the search
-      val queue = mutable.Queue[PathData]()
-      val visited = mutable.Set[Id[F]]()
-      var shortestLength: Option[Int] = None
+      // Set up mutable state for the search - use a more efficient queue implementation
+      val queue = new java.util.ArrayDeque[PathData]()
+      // Track visited nodes per path (not globally) for proper path finding
+      val visitedInPath = new mutable.HashMap[PathData, Set[Id[F]]]()
+      var shortestLength = Int.MaxValue
+      var foundPaths = new mutable.ArrayBuffer[TraversalPath[E, F, T]]()
+      var currentDepth = 0
+
+      // Simulate a break statement for early termination
+      def break(): Unit = queue.clear()
 
       // Initialize queue with starting nodes
       fromIds.toList.sync().foreach { id =>
-        queue.enqueue(PathData(id, Nil))
-        visited.add(id)
+        val pathData = PathData(id, Nil)
+        queue.add(pathData)
+        visitedInPath.put(pathData, Set(id))
       }
 
-      // Create a stream that produces paths as they're found
-      def processQueue(): Stream[TraversalPath[E, F, T]] = {
-        if (queue.isEmpty) {
-          Stream.empty
-        } else {
-          // Dequeue the next path to explore
-          val PathData(currentId, pathEdges) = queue.dequeue()
+      // Process queue strictly by level (BFS) to ensure shortest paths
+      while (!queue.isEmpty) {
+        val levelSize = queue.size()
+        var levelHasTarget = false
 
-          // If we're only finding shortest paths and already have a shorter one, skip
-          if (shortestLength.exists(pathEdges.length >= _)) {
-            // Continue with next item in queue
-            processQueue()
-          } else {
+        // Process all nodes at the current level before moving to the next level
+        for (_ <- 0 until levelSize) {
+          val pathData = queue.poll()
+          val currentId = pathData.currentId
+          val currentPath = pathData.edges
+          val currentVisited = visitedInPath.getOrElse(pathData, Set.empty[Id[F]])
+
+          // Check if we've reached the target
+          if (currentId.asInstanceOf[Id[T]] == target) {
+            // We found a path to the target at this level
+            foundPaths += new TraversalPath[E, F, T](currentPath)
+            levelHasTarget = true
+            // For shortest path, we'll finish processing this level and then stop
+          }
+          // Don't explore further if this is a shortest path search and we've found targets at this level
+          else if (currentDepth < maxDepth && (findAll || !levelHasTarget)) {
             // Get edges from current node
-            val outgoingEdges = tx.prefixStream(currentId.value)
+            tx.prefixStream(currentId.value)
               .asInstanceOf[Stream[E]]
               .filter(_._from == currentId)
               .filter(edgeFilter)
-              .toList.sync() // Collect to avoid re-execution
+              .toList.sync()
+              .foreach { edge =>
+                val nextId = edge._to.asInstanceOf[Id[F]]
 
-            // Find paths that reach the target
-            val completedPaths = outgoingEdges
-              .filter(_._to == target)
-              .map(edge => new TraversalPath[E, F, T](pathEdges :+ edge))
+                // Only follow if we haven't visited this node in current path (avoids cycles)
+                if (!currentVisited.contains(nextId)) {
+                  val newPath = currentPath :+ edge
+                  val newPathData = PathData(nextId, newPath)
 
-            // If we found paths to target and only want shortest, update shortestLength
-            if (!findAll && completedPaths.nonEmpty) {
-              val newLength = completedPaths.head.edges.length
-              shortestLength = Some(shortestLength.fold(newLength)(len => math.min(len, newLength)))
-            }
-
-            // If not at max depth, enqueue next level paths
-            if (pathEdges.length < maxDepth) {
-              // Add paths to unexplored nodes
-              outgoingEdges.foreach { edge =>
-                val targetId = edge._to.asInstanceOf[Id[F]] // Safe cast for reflexive graphs
-
-                // Only follow path if we haven't visited this node in this path
-                // For BFS path finding, we track visited nodes per path
-                val pathVisited = pathEdges.exists(_._to == targetId)
-                if (!pathVisited && targetId != target) { // Don't explore beyond target
-                  queue.enqueue(PathData(targetId, pathEdges :+ edge))
+                  // Update visited nodes for this path
+                  visitedInPath.put(newPathData, currentVisited + nextId)
+                  queue.add(newPathData)
                 }
               }
-            }
-
-            // Emit completed paths and continue processing queue
-            if (completedPaths.isEmpty) {
-              processQueue()
-            } else {
-              Stream.emits(completedPaths).append(
-                processQueue()
-              )
-            }
           }
+        }
+
+        // Update current depth after processing the entire level
+        currentDepth += 1
+
+        // If we're only looking for shortest paths and found some at this level, we're done
+        if (!findAll && levelHasTarget) {
+          break()
         }
       }
 
-      processQueue()
+      // Convert found paths to a stream
+      Stream.emits(foundPaths.toSeq)
     }
 
     findPaths()
