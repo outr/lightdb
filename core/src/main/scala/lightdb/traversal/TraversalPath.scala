@@ -9,7 +9,7 @@ import lightdb.id.Id
  *
  * @param edges The edges that make up the path
  */
-class TraversalPath[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](val edges: List[E]) {
+case class TraversalPath[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](edges: List[E]) {
   /**
    * Get the sequence of node IDs in the path
    */
@@ -22,10 +22,4 @@ class TraversalPath[E <: EdgeDocument[E, From, To], From <: Document[From], To <
    * Get the length of the path
    */
   def length: Int = edges.length
-}
-
-object TraversalPath {
-  def apply[E <: EdgeDocument[E, From, To], From <: Document[From], To <: Document[To]](
-                                                                                         edges: List[E]
-                                                                                       ): TraversalPath[E, From, To] = new TraversalPath(edges)
 }
