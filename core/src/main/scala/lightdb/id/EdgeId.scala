@@ -6,7 +6,6 @@ import lightdb.graph.EdgeDocument
 
 case class EdgeId[Doc <: EdgeDocument[Doc, From, To], From <: Document[From], To <: Document[To]](from: Id[From],
                                                                                                   to: Id[To],
-//                                                                                                  prefixes: Set[String],    // TODO: Do this?
                                                                                                   extra: Option[String]) extends Id[Doc] {
   override lazy val value: String = s"${from.value}-${to.value}${extra.map(s => s"-$s").getOrElse("")}"
 }
