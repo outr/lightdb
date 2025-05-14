@@ -84,13 +84,6 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         }
       }
     }
-    //    "validate airport references" in {
-    //      Flight.airportReferences.facet(Airport.id("JFK")).map { facet =>
-    //        facet.count should be(4826)
-    //        facet.ids.size should be(4826)
-    //      }
-    //    }
-    // TODO: Support guided traversals
     "get all airport names reachable directly from LAX following edges" in {
       DB.flights.transaction { tx =>
         val lax = Airport.id("LAX")
@@ -163,11 +156,10 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         }
       }
     }
-    "use tx.storage.traverse.bfs for airport connections" in {
+    "use traverse.bfs for airport connections" in {
       val lax = Airport.id("LAX")
 
       DB.flights.transaction { tx =>
-        // Without BFSEngine, we need to directly collect reachable airports
         for {
           // Get all direct connections from LAX (1-hop)
           directConnections <- tx.storage.traverse.edgesFor[Flight, Airport, Airport](lax)
@@ -186,25 +178,22 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         }
       }
     }
-    "use tx.storage.traverse.bfs for multi-step traversal" in {
+    "find connections up to two hops away" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
 
       DB.flights.transaction { tx =>
-        // Without BFSEngine, collect 2-hop connections
         for {
           // Get all airports reachable from BIS in 1 hop
           oneHopConnections <- tx.storage.traverse.edgesFor[Flight, Airport, Airport](bis)
             .map(_._to)
             .toList
-
           // From those airports, get airports reachable in 1 more hop (total: 2 hops)
           twoHopConnections <- Task.sequence(oneHopConnections.map { airport =>
             tx.storage.traverse.edgesFor[Flight, Airport, Airport](airport)
               .map(_._to)
               .toList
           }).map(_.flatten)
-
           // Combine 1-hop and 2-hop destinations
           allReachable = (oneHopConnections ++ twoHopConnections).distinct
         } yield {
@@ -245,16 +234,11 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         }
       }
     }
-    // TODO: Test ValueStore
-    // TODO: the other stuff
     "dispose" in {
       DB.dispose.succeed
     }
   }
 
-  // HaloDB: 5s (full load: 103s)
-  // RocksDB: 3s (full load: 110s)
-  // ChronicleMap: 4s (full load: 79s)
   object DB extends LightDB {
     override type SM = SplitStoreManager[RocksDBStore.type, LuceneStore.type]
     override val storeManager: SplitStoreManager[RocksDBStore.type, LuceneStore.type] = SplitStoreManager(RocksDBStore, LuceneStore)
@@ -286,7 +270,6 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val lat: F[Double] = field("lat", _.lat)
     val long: F[Double] = field("long", _.long)
     val vip: I[Boolean] = field.index("vip", _.vip)
-    //    val vipKeys: ValueStore[String, Airport] = ValueStore[String, Airport]("vipKeys", doc => if (doc.vip) List(doc._id.value) else Nil, this, persistence = Persistence.Cached)
 
     override def id(value: String = Unique.sync()): Id[Airport] = {
       val index = value.indexOf('/')
@@ -361,14 +344,6 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val flightNum: F[Int] = field("flightNum", _.flightNum)
     val tailNum: F[String] = field("tailNum", _.tailNum)
     val distance: F[Int] = field("distance", _.distance)
-
-    //    val airportReferences: ValueStore[Id[Airport], Flight] = ValueStore[Id[Airport], Flight](
-    //      key = "airportReferences",
-    //      createV = f => List(f.from, f.to),
-    //      collection = this,
-    //      includeIds = true,
-    //      persistence = Persistence.Memory
-    //    )
   }
 
   object DataImportUpgrade extends DatabaseUpgrade {
