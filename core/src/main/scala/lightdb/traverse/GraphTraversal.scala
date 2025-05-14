@@ -52,7 +52,7 @@ object GraphTraversal {
    */
   def createEdgeStepFunction[E <: EdgeDocument[E, N, N], N <: Document[N], M <: DocumentModel[E]](tx: PrefixScanningTransaction[E, M]): Id[N] => Task[Set[Id[N]]] = { id =>
     // Use the transaction's traversal methods in a type-safe way
-    tx.traversal.edgesFor[E, N, N](id)
+    tx.traverse.edgesFor[E, N, N](id)
       .map(_._to)
       .toList
       .map(_.toSet)

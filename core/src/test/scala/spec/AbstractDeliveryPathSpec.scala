@@ -5,8 +5,7 @@ import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.{EdgeId, Id}
-import lightdb.store.{PrefixScanningStoreManager, Store, StoreManager}
-import lightdb.traversal._
+import lightdb.store.PrefixScanningStoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec

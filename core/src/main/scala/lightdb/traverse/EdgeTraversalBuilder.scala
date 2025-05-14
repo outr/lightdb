@@ -19,6 +19,11 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
                                                                                                 edgeFilter: E => Boolean = (_: E) => true,
                                                                                                 strategy: TraversalStrategy = TraversalStrategy.BFS) {
   /**
+   * Configure the maximum traversal depth
+   */
+  def withMaxDepth(depth: Int): EdgeTraversalBuilder[E, F, T] = copy(maxDepth = depth)
+
+  /**
    * Configure edge filtering
    *
    * @param predicate A predicate function to filter edges

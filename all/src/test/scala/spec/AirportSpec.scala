@@ -220,24 +220,28 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         }
       }
     }
-    "compare original traversal with BFS traversal" in {
+    "compare new traverse with BFS traversal" in {
       val lax = Airport.id("LAX")
 
       DB.flights.transaction { tx =>
-        val originalTraversal = tx.storage.traversal
-          .reachableFrom[Flight, Airport](lax)
+        val reachable = traverseFrom(lax)
+          .follow[Flight, Airport](tx.storage)
+          .targetIds
           .toList
-        val newTraversal = tx.storage.traversal
-          .bfs[Flight, Airport](Set(lax))
-          .collectAllReachable()
-        for {
-          original <- originalTraversal
-          newResults <- newTraversal
-        } yield {
-          val originalAirports = original.map(_._to).toSet
 
-          newResults should be(originalAirports)
-          newResults.size should be(286)
+        val bfs = tx.storage.traverse
+          .bfs[Flight, Airport, Airport](lax)
+          .follow[Flight, Airport](tx.storage)
+          .targetIds
+          .toList
+
+        for {
+          viaTraverse <- reachable
+          viaBfs <- bfs.map(_.toSet)
+        } yield {
+          val viaTraverseSet = viaTraverse.toSet
+          viaTraverseSet should be(viaBfs)
+          viaTraverseSet.size should be(286)
         }
       }
     }
