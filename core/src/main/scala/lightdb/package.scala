@@ -1,3 +1,9 @@
+import lightdb.doc.Document
+import lightdb.id.Id
+import lightdb.traverse.{DocumentTraversalBuilder, GraphTraversal}
+
+import scala.language.implicitConversions
+
 package object lightdb {
   implicit class NumericOps[A](numeric: Numeric[A]) {
     def map[B](to: A => B)(from: B => A): Numeric[B] = new Numeric[B] {

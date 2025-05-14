@@ -5,8 +5,7 @@ import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.{EdgeId, Id}
-import lightdb.store.{Store, StoreManager}
-import lightdb.traversal._
+import lightdb.store.PrefixScanningStoreManager
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -23,43 +22,63 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
       db.init.succeed
     }
     "insert delivery chain nodes" in {
-      db.transactions(db.warehouses, db.trucks, db.depots, db.drones, db.customers) {
-        case (warehouses, trucks, depots, drones, customers) =>
-          for {
-            _ <- warehouses.insert(Warehouse("w1", Id("warehouse1")))
-            _ <- trucks.insert(Truck("truck1", Id("truck1")))
-            _ <- depots.insert(Depot("depot1", Id("depot1")))
-            _ <- drones.insert(Drone("drone1", Id("drone1")))
-            _ <- customers.insert(Customer("customer1", Id("customer1")))
-          } yield succeed
+      db.warehouses.transaction { warehouses =>
+        db.trucks.transaction { trucks =>
+          db.depots.transaction { depots =>
+            db.drones.transaction { drones =>
+              db.customers.transaction { customers =>
+                for {
+                  _ <- warehouses.insert(Warehouse("Warehouse 1", Id("warehouse1")))
+                  _ <- trucks.insert(Truck("Truck 1", Id("truck1")))
+                  _ <- depots.insert(Depot("Depot 1", Id("depot1")))
+                  _ <- drones.insert(Drone("Drone 1", Id("drone1")))
+                  _ <- customers.insert(Customer("Customer 1", Id("customer1")))
+                } yield succeed
+              }
+            }
+          }
+        }
       }
     }
     "insert delivery chain edges" in {
-      db.transactions(db.shipsTo, db.deliversToDepot, db.loadsTo, db.deliversToCustomer) {
-        case (shipsTo, deliversToDepot, loadsTo, deliversToCustomer) =>
-          for {
-            _ <- shipsTo.insert(ShipsTo(Id("warehouse1"), Id("truck1")))
-            _ <- deliversToDepot.insert(DeliversToDepot(Id("truck1"), Id("depot1")))
-            _ <- loadsTo.insert(LoadsTo(Id("depot1"), Id("drone1")))
-            _ <- deliversToCustomer.insert(DeliversToCustomer(Id("drone1"), Id("customer1")))
-          } yield succeed
+      db.shipsTo.transaction { shipsTo =>
+        db.deliversToDepot.transaction { deliversToDepot =>
+          db.loadsTo.transaction { loadsTo =>
+            db.deliversToCustomer.transaction { deliversToCustomer =>
+              for {
+                _ <- shipsTo.insert(ShipsTo(Id("warehouse1"), Id("truck1")))
+                _ <- deliversToDepot.insert(DeliversToDepot(Id("truck1"), Id("depot1")))
+                _ <- loadsTo.insert(LoadsTo(Id("depot1"), Id("drone1")))
+                _ <- deliversToCustomer.insert(DeliversToCustomer(Id("drone1"), Id("customer1")))
+              } yield succeed
+            }
+          }
+        }
       }
     }
     "traverse full delivery path from warehouse to customer" in {
-      db.transactions(
-        db.shipsTo,
-        db.deliversToDepot,
-        db.loadsTo,
-        db.deliversToCustomer
-      ) {
-        case (shipsTo, deliversToDepot, loadsTo, deliversToCustomer) =>
-          for {
-            customers <- shipsTo.traverse(Id[Warehouse]("warehouse1"))
-              .step(GraphStep.forward[DeliversToDepot, DeliversToDepot.type, Truck, Depot](DeliversToDepot))(deliversToDepot)
-              .step(GraphStep.forward[LoadsTo, LoadsTo.type, Depot, Drone](LoadsTo))(loadsTo)
-              .step(GraphStep.forward[DeliversToCustomer, DeliversToCustomer.type, Drone, Customer](DeliversToCustomer))(deliversToCustomer)
-              .collectAllReachable()
-          } yield customers should contain only Id("customer1")
+      db.shipsTo.transaction { shipsTo =>
+        db.deliversToDepot.transaction { deliversToDepot =>
+          db.loadsTo.transaction { loadsTo =>
+            db.deliversToCustomer.transaction { deliversToCustomer =>
+              db.customers.transaction { customers =>
+                val warehouse: Id[Warehouse] = Id("warehouse1")
+                traverse
+                  .from(warehouse)
+                  .follow[ShipsTo, Truck](shipsTo)
+                  .follow[DeliversToDepot, Depot](deliversToDepot)
+                  .follow[LoadsTo, Drone](loadsTo)
+                  .follow[DeliversToCustomer, Customer](deliversToCustomer)
+                  .documents(customers)
+                  .map(_.name)
+                  .toList
+                  .map { names =>
+                    names should be(List("Customer 1"))
+                  }
+              }
+            }
+          }
+        }
       }.succeed
     }
     "truncate the database" in {
@@ -71,26 +90,26 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
   }
 
   def dispose(): Task[Unit] = Task.unit
-  def storeManager: StoreManager
+  def storeManager: PrefixScanningStoreManager
 
   class DB extends LightDB {
-    override type SM = StoreManager
-    override val storeManager: StoreManager = spec.storeManager
+    override type SM = PrefixScanningStoreManager
+    override val storeManager: SM = spec.storeManager
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val warehouses: Store[Warehouse, WarehouseModel.type] = store(WarehouseModel)
-    val trucks: Store[Truck, TruckModel.type] = store(TruckModel)
-    val depots: Store[Depot, DepotModel.type] = store(DepotModel)
-    val drones: Store[Drone, DroneModel.type] = store(DroneModel)
-    val customers: Store[Customer, CustomerModel.type] = store(CustomerModel)
+    val warehouses: S[Warehouse, WarehouseModel.type] = store[Warehouse, WarehouseModel.type](WarehouseModel)
+    val trucks: S[Truck, TruckModel.type] = store[Truck, TruckModel.type](TruckModel)
+    val depots: S[Depot, DepotModel.type] = store[Depot, DepotModel.type](DepotModel)
+    val drones: S[Drone, DroneModel.type] = store[Drone, DroneModel.type](DroneModel)
+    val customers: S[Customer, CustomerModel.type] = store[Customer, CustomerModel.type](CustomerModel)
 
-    val shipsTo: Store[ShipsTo, ShipsTo.type] = store(ShipsTo)
-    val deliversToDepot: Store[DeliversToDepot, DeliversToDepot.type] = store(DeliversToDepot)
-    val loadsTo: Store[LoadsTo, LoadsTo.type] = store(LoadsTo)
-    val deliversToCustomer: Store[DeliversToCustomer, DeliversToCustomer.type] = store(DeliversToCustomer)
+    val shipsTo: S[ShipsTo, ShipsTo.type] = store[ShipsTo, ShipsTo.type](ShipsTo)
+    val deliversToDepot: S[DeliversToDepot, DeliversToDepot.type] = store[DeliversToDepot, DeliversToDepot.type](DeliversToDepot)
+    val loadsTo: S[LoadsTo, LoadsTo.type] = store[LoadsTo, LoadsTo.type](LoadsTo)
+    val deliversToCustomer: S[DeliversToCustomer, DeliversToCustomer.type] = store[DeliversToCustomer, DeliversToCustomer.type](DeliversToCustomer)
   }
 }
 
