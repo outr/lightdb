@@ -3,6 +3,7 @@ package lightdb.traversal
 import lightdb.doc.Document
 import lightdb.graph.EdgeDocument
 import lightdb.id.Id
+import lightdb.traverse.TraversalPath
 import rapid.{Pull, Stream, Task}
 
 /**
@@ -77,23 +78,23 @@ object RecursiveTraversal {
                                                                           maxDepth: Int,
                                                                           bufferSize: Int = 100,
                                                                           edgeFilter: E => Boolean = (_: E) => true
-                                                                        )(edgesForFunc: Id[From] => Stream[E]): Stream[TraversalPath[E, From]] = {
+                                                                        )(edgesForFunc: Id[From] => Stream[E]): Stream[TraversalPath[E, From, From]] = {
     import scala.collection.mutable
 
     val queue = mutable.Queue[(Id[From], List[E])]()
     val seen = mutable.Set[List[Id[From]]]()
     queue.enqueue((from, Nil))
 
-    val pull: Pull[TraversalPath[E, From]] = new Pull[TraversalPath[E, From]] {
-      private var buffer: List[TraversalPath[E, From]] = Nil
+    val pull: Pull[TraversalPath[E, From, From]] = new Pull[TraversalPath[E, From, From]] {
+      private var buffer: List[TraversalPath[E, From, From]] = Nil
 
-      override def pull(): Option[TraversalPath[E, From]] = {
+      override def pull(): Option[TraversalPath[E, From, From]] = {
         if (buffer.nonEmpty) {
           val next = buffer.head
           buffer = buffer.tail
           Some(next)
         } else {
-          var collected = List.empty[TraversalPath[E, From]]
+          var collected = List.empty[TraversalPath[E, From, From]]
 
           while (queue.nonEmpty && collected.size < bufferSize) {
             val (currentId, path) = queue.dequeue()
