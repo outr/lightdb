@@ -3,11 +3,13 @@ package spec
 import fabric.rw._
 import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.graph.{EdgeDocument, EdgeModel}
+import lightdb.field.Field
+import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
 import lightdb.id.{EdgeId, Id}
-import lightdb.store.{Store, StoreManager}
-import lightdb.transaction.Transaction
-import lightdb.traversal._
+import lightdb.store.{PrefixScanningStoreManager, Store, StoreManager}
+import lightdb.transaction.{PrefixScanningTransaction, Transaction}
+import lightdb.traverse.GraphTraversal
+import lightdb.trigger.StoreTrigger
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -18,6 +20,13 @@ import java.nio.file.Path
 abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   protected lazy val specName: String = getClass.getSimpleName
   protected lazy val db: DB = new DB
+
+  private val reports = List(
+    ReportsTo(Id("bob"), Id("alice")), // Bob reports to Alice
+    ReportsTo(Id("carol"), Id("bob"))  // Carol reports to Bob
+  )
+
+  private val subordinates = reports.map(rt => ReverseEdgeDocument[ReportsTo, Employee, Employee](rt))
 
   specName should {
     "initialize the database" in {
@@ -35,10 +44,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     }
     "insert reports to edges" in {
       db.reportsTo.transaction { implicit tx =>
-        tx.insert(List(
-          ReportsTo(Id("bob"), Id("alice")), // Bob reports to Alice
-          ReportsTo(Id("carol"), Id("bob"))  // Carol reports to Bob
-        ))
+        tx.insert(reports)
       }.succeed
     }
     "insert collaborates with edges" in {
@@ -49,14 +55,25 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
       }.succeed
     }
     "verify who alice reports to and collaborates with" in {
-      db.collaboratesWith.transaction { implicit ct =>
-        ct.traverse(Set(Id[Employee]("alice")))
-          .bfs(ReportsAndCollaborationStep(db.collaboratesWith))
-          .collectAllReachable()
-          .map { results =>
-            results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))
+      db.collaboratesWith.transaction { collaboratesWith =>
+        db.subordinates.transaction { subordinates =>
+          def reportsAndCollaboratesStep: Id[Employee] => Task[Set[Id[Employee]]] = { id =>
+            for {
+              reports <- subordinates.traverse.edgesFor[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee](id).map(_._to).toList.map(_.toSet)
+              collabs <- collaboratesWith.traverse.edgesFor[CollaboratesWith, Employee, Employee](id).map(_._to).toList.map(_.toSet)
+            } yield reports ++ collabs
           }
-      }.succeed
+
+          val start = Set(Id[Employee]("alice"))
+
+          traverse
+            .withStepFunction(start, reportsAndCollaboratesStep, maxDepth = 10)
+            .collectAllReachable
+            .map { results =>
+              results should contain theSameElementsAs Set(Id("alice"), Id("bob"), Id("carol"), Id("dave"))
+            }
+        }
+      }
     }
     "truncate the database" in {
       db.truncate().succeed
@@ -68,17 +85,20 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
 
   def dispose(): Task[Unit] = Task.unit
 
-  def storeManager: StoreManager
+  def storeManager: PrefixScanningStoreManager
 
   class DB extends LightDB {
-    override type SM = StoreManager
-    override val storeManager: StoreManager = spec.storeManager
+    override type SM = PrefixScanningStoreManager
+    override val storeManager: SM = spec.storeManager
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val employees: Store[Employee, Employee.type] = store(Employee)
-    val reportsTo: Store[ReportsTo, ReportsTo.type] = store(ReportsTo)
-    val collaboratesWith: Store[CollaboratesWith, CollaboratesWith.type] = store(CollaboratesWith)
+    val employees: S[Employee, Employee.type] = store[Employee, Employee.type](Employee)
+    val reportsTo: S[ReportsTo, ReportsTo.type] = store[ReportsTo, ReportsTo.type](ReportsTo)
+    val collaboratesWith: S[CollaboratesWith, CollaboratesWith.type] = store[CollaboratesWith, CollaboratesWith.type](CollaboratesWith)
+
+    val subordinatesModel: EdgeModel[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee] = ReverseEdgeDocument.createModel[ReportsTo, Employee, Employee]("subordinates")
+    val subordinates: S[ReverseEdgeDocument[ReportsTo, Employee, Employee], subordinatesModel.type] = reverseStore[ReportsTo, Employee, Employee, ReportsTo.type, subordinatesModel.type](subordinatesModel, reportsTo)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
@@ -108,13 +128,4 @@ object CollaboratesWith extends EdgeModel[CollaboratesWith, Employee, Employee] 
   override implicit val rw: RW[CollaboratesWith] = RW.gen
 
   def apply(_from: Id[Employee], _to: Id[Employee]): CollaboratesWith = CollaboratesWith(_from, _to, EdgeId(_from, _to))
-}
-
-case class ReportsAndCollaborationStep(collaboratesWith: Store[CollaboratesWith, CollaboratesWith.type]) extends GraphStep[CollaboratesWith, CollaboratesWith.type, Employee, Employee] {
-  override def neighbors(id: Id[Employee])(implicit tx: Transaction[CollaboratesWith, CollaboratesWith.type]): Task[Set[Id[Employee]]] = {
-    for {
-      subordinates <- ReportsTo.reverseEdgesFor(id) // people who report to this ID
-      collabs <- collaboratesWith.model.edgesFor(id)  // people this person collaborates with
-    } yield subordinates ++ collabs
-  }
 }

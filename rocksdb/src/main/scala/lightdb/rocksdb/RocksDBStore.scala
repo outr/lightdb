@@ -2,7 +2,7 @@ package lightdb.rocksdb
 
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{PrefixScanningStore, PrefixScanningStoreManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, FlushOptions, Options, RocksDB}
 import rapid.Task
@@ -18,7 +18,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       sharedStore: Option[RocksDBSharedStoreInstance],
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       lightDB: LightDB,
-                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
+                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX = RocksDBTransaction[Doc, Model]
 
   private[rocksdb] val handle: Option[ColumnFamilyHandle] = sharedStore.map { ss =>
@@ -44,7 +44,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   })
 }
 
-object RocksDBStore extends StoreManager {
+object RocksDBStore extends PrefixScanningStoreManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = RocksDBStore[Doc, Model]
 
   def createRocksDB(directory: Path): (RocksDB, List[ColumnFamilyHandle]) = {

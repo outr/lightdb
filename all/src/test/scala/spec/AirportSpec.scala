@@ -8,18 +8,21 @@ import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.LightDB
+import lightdb._
 import lightdb.id.{EdgeId, Id}
+import lightdb.traverse.{GraphTraversal, TraversalPath}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
 
 import java.nio.file.Path
+import java.time.{Instant, ZoneOffset}
+import java.time.format.DateTimeFormatter
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
-//@EmbeddedTest
+@EmbeddedTest
 class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "AirportSpec" should {
     "initialize the database" in {
@@ -29,11 +32,11 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       DB.stores.map(_.name).toSet should be(Set("_backingStore", "Flight", "Airport"))
       Task.unit.succeed
     }
-//    "query VIP airports" in {
-//      Airport.vipKeys.values.map { keys =>
-//        keys should be(Set("JFK", "ORD", "LAX", "ATL", "AMA", "SFO", "DFW"))
-//      }
-//    }
+    //    "query VIP airports" in {
+    //      Airport.vipKeys.values.map { keys =>
+    //        keys should be(Set("JFK", "ORD", "LAX", "ATL", "AMA", "SFO", "DFW"))
+    //      }
+    //    }
     "query JFK airport" in {
       val jfk = Airport.id("JFK")
       DB.airports.t(jfk).map { airport =>
@@ -65,64 +68,177 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       DB.airports.t.count.map(_ should be(3375))
     }
     "count all connections" in {
-      Flight.edgesStore.t.count.map { count =>
-        count should be(286)
+      DB.flights.t.count.map(_ should be(286463))
+    }
+    "count all connections to JFK" in {
+      DB.flights.transaction { tx =>
+        tx.storage.traverse.edgesFor[Flight, Airport, Airport](Airport.id("JFK")).toList.map { flights =>
+          flights.length should be(4806)
+          flights.map(_._to.value).toSet should be(Set(
+            "LAS", "LAX", "MIA", "SJC", "HDN", "CMH", "PIT", "DCA", "IAD", "FLL", "CLE", "SYR", "STL", "LGB", "ORD",
+            "BUR", "PVD", "STT", "BQN", "RIC", "ATL", "CLT", "BTV", "SEA", "PHX", "SMF", "BUF", "IAH", "ORF", "SRQ",
+            "PDX", "MSP", "CVG", "SAN", "TPA", "SFO", "AUS", "TUS", "RDU", "ROC", "PHL", "PWM", "OAK", "JAX", "SJU",
+            "DFW", "PBI", "BNA", "DTW", "MCO", "DEN", "MSY", "BOS", "PSE", "IND", "HPN", "BWI", "ONT", "BDL", "HOU",
+            "RSW", "SLC"
+          ))
+        }
       }
     }
-//    "validate airport references" in {
-//      Flight.airportReferences.facet(Airport.id("JFK")).map { facet =>
-//        facet.count should be(4826)
-//        facet.ids.size should be(4826)
-//      }
-//    }
-    // TODO: Support guides traversals
     "get all airport names reachable directly from LAX following edges" in {
-      val lax = Airport.id("LAX")
-      Flight.edgesFor(lax).map { airports =>
-        airports.size should be(82)
+      DB.flights.transaction { tx =>
+        val lax = Airport.id("LAX")
+        tx.storage.traverse.edgesFor[Flight, Airport, Airport](lax).toList.map { flights =>
+          flights.map(_._to.value).distinct.length should be(82)
+        }
       }
     }
     "get all airports reachable from LAX" in {
       val lax = Airport.id("LAX")
-      Flight.reachableFrom(lax).map { airports =>
-        airports.size should be(286)
+      DB.flights.transaction { tx =>
+        tx.storage.traverse.reachableFrom[Flight, Airport, Airport](lax).toList.map { flights =>
+          flights.length should be(286463)
+          val airports = flights.map(_._to.value).toSet
+          airports.size should be(286)
+        }
       }
     }
-    "find the shortest path between BIS and JFK" in {
+    "find the shortest paths between BIS and JFK" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
-      Flight.shortestPath(bis, jfk).map { path =>
-        path should be(List(bis, Airport.id("DEN"), jfk))
+      DB.flights.transaction { tx =>
+        tx.storage.traverse.shortestPaths[Flight, Airport, Airport](bis, jfk).map { path =>
+          path.nodes.map(_.value).mkString(" -> ")
+        }.distinct.toList.map { list =>
+          list.toSet should be(Set("BIS -> DEN -> JFK", "BIS -> MSP -> JFK"))
+        }
       }
     }
-    "find all the shortest paths between BIS and JFK" in {
+    "find the shortest paths between BIS and JFK with between an hour and eight between each hop" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
-      Flight.shortestPaths(bis, jfk).map { paths =>
-        paths should be(List(
-          List(bis, Airport.id("DEN"), jfk),
-          List(bis, Airport.id("MSP"), jfk)
-        ))
+
+      DB.flights.transaction { tx =>
+        tx.storage.traverse.shortestPaths[Flight, Airport, Airport](
+          from = bis,
+          to = jfk,
+          edgeFilter = _ => true
+        ).filter { path =>
+          path.edges.sliding(2).forall {
+            case List(f1, f2) =>
+              val gap = f2.departure - f1.arrival
+              gap >= 3600 * 1000 && gap <= 3600 * 8000
+            case _ => true
+          }
+        }.map(path => Trip(path)).toList.map { trips =>
+          trips.minBy(_.totalMillis)
+        }.map { trip =>
+          val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC)
+
+          val hops = trip.path.edges.map { f =>
+            val dep = formatter.format(Instant.ofEpochMilli(f.departure))
+            val arr = formatter.format(Instant.ofEpochMilli(f.arrival))
+            s"${f._from} -> ${f._to} [$dep - $arr]"
+          }.mkString(" | ")
+
+
+          scribe.info(s"Path: $hops | Total trip time: ${trip.totalHours}h ${trip.totalMinutes}m")
+          trip.totalMillis should be(16980000L)
+        }
       }
     }
     "find all paths between BIS and JFK" in {
       val bis = Airport.id("BIS")
       val jfk = Airport.id("JFK")
       val maxPaths = 1_000
-      Flight.allPaths(bis, jfk, maxPaths = maxPaths, maxDepth = 100).map { paths =>
-        paths.length should be(maxPaths)
+      DB.flights.transaction { tx =>
+        tx.storage.traverse.allPaths[Flight, Airport](bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
+          paths.length should be(maxPaths)
+        }
       }
     }
-    // TODO: Test ValueStore
-    // TODO: the other stuff
+    "use traverse.bfs for airport connections" in {
+      val lax = Airport.id("LAX")
+
+      DB.flights.transaction { tx =>
+        for {
+          // Get all direct connections from LAX (1-hop)
+          directConnections <- tx.storage.traverse.edgesFor[Flight, Airport, Airport](lax)
+            .map(_._to)
+            .distinct
+            .toList
+        } yield {
+          // Verify direct connections from LAX
+          directConnections.length should be > 50
+          directConnections should contain(Airport.id("SFO"))
+          directConnections should contain allOf(
+            Airport.id("JFK"),
+            Airport.id("ORD"),
+            Airport.id("DFW")
+          )
+        }
+      }
+    }
+    "find connections up to two hops away" in {
+      val bis = Airport.id("BIS")
+      val jfk = Airport.id("JFK")
+
+      DB.flights.transaction { tx =>
+        for {
+          // Get all airports reachable from BIS in 1 hop
+          oneHopConnections <- tx.storage.traverse.edgesFor[Flight, Airport, Airport](bis)
+            .map(_._to)
+            .toList
+          // From those airports, get airports reachable in 1 more hop (total: 2 hops)
+          twoHopConnections <- Task.sequence(oneHopConnections.map { airport =>
+            tx.storage.traverse.edgesFor[Flight, Airport, Airport](airport)
+              .map(_._to)
+              .toList
+          }).map(_.flatten)
+          // Combine 1-hop and 2-hop destinations
+          allReachable = (oneHopConnections ++ twoHopConnections).distinct
+        } yield {
+          // JFK should be reachable from BIS within 2 hops
+          allReachable should contain(jfk)
+
+          // Verify intermediate connections
+          allReachable should contain allOf(
+            Airport.id("DEN"),
+            Airport.id("MSP")
+          )
+        }
+      }
+    }
+    "compare new traverse with BFS traversal" in {
+      val lax = Airport.id("LAX")
+
+      DB.flights.transaction { tx =>
+        val reachable = traverse
+          .from(lax)
+          .follow[Flight, Airport](tx.storage)
+          .targetIds
+          .toList
+
+        val bfs = tx.storage.traverse
+          .bfs[Flight, Airport, Airport](lax)
+          .follow[Flight, Airport](tx.storage)
+          .targetIds
+          .toList
+
+        for {
+          viaTraverse <- reachable
+          viaBfs <- bfs.map(_.toSet)
+        } yield {
+          val viaTraverseSet = viaTraverse.toSet
+          viaTraverseSet should be(viaBfs)
+          viaTraverseSet.size should be(286)
+        }
+      }
+    }
     "dispose" in {
       DB.dispose.succeed
     }
   }
 
-  // HaloDB: 5s (full load: 103s)
-  // RocksDB: 3s (full load: 110s)
-  // ChronicleMap: 4s (full load: 79s)
   object DB extends LightDB {
     override type SM = SplitStoreManager[RocksDBStore.type, LuceneStore.type]
     override val storeManager: SplitStoreManager[RocksDBStore.type, LuceneStore.type] = SplitStoreManager(RocksDBStore, LuceneStore)
@@ -154,7 +270,6 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val lat: F[Double] = field("lat", _.lat)
     val long: F[Double] = field("long", _.long)
     val vip: I[Boolean] = field.index("vip", _.vip)
-//    val vipKeys: ValueStore[String, Airport] = ValueStore[String, Airport]("vipKeys", doc => if (doc.vip) List(doc._id.value) else Nil, this, persistence = Persistence.Cached)
 
     override def id(value: String = Unique.sync()): Id[Airport] = {
       val index = value.indexOf('/')
@@ -175,8 +290,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
                     dayOfWeek: Int,
                     depTime: Int,
                     arrTime: Int,
-                    depTimeUTC: String,
-                    arrTimeUTC: String,
+                    departure: Long,
+                    arrival: Long,
                     uniqueCarrier: String,
                     flightNum: Int,
                     tailNum: String,
@@ -208,8 +323,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       dayOfWeek = dayOfWeek,
       depTime = depTime,
       arrTime = arrTime,
-      depTimeUTC = depTimeUTC,
-      arrTimeUTC = arrTimeUTC,
+      departure = Instant.parse(depTimeUTC).toEpochMilli,
+      arrival = Instant.parse(arrTimeUTC).toEpochMilli,
       uniqueCarrier = uniqueCarrier,
       flightNum = flightNum,
       tailNum = tailNum,
@@ -223,20 +338,12 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val dayOfWeek: F[Int] = field("dayOfWeek", _.dayOfWeek)
     val depTime: F[Int] = field("depTime", _.depTime)
     val arrTime: F[Int] = field("arrTime", _.arrTime)
-    val depTimeUTC: F[String] = field("depTimeUTC", _.depTimeUTC)
-    val arrTimeUTC: F[String] = field("arrTimeUTC", _.arrTimeUTC)
+    val departure: F[Long] = field("departure", _.departure)
+    val arrival: F[Long] = field("arrival", _.arrival)
     val uniqueCarrier: F[String] = field("uniqueCarrier", _.uniqueCarrier)
     val flightNum: F[Int] = field("flightNum", _.flightNum)
     val tailNum: F[String] = field("tailNum", _.tailNum)
     val distance: F[Int] = field("distance", _.distance)
-
-//    val airportReferences: ValueStore[Id[Airport], Flight] = ValueStore[Id[Airport], Flight](
-//      key = "airportReferences",
-//      createV = f => List(f.from, f.to),
-//      collection = this,
-//      includeIds = true,
-//      persistence = Persistence.Memory
-//    )
   }
 
   object DataImportUpgrade extends DatabaseUpgrade {
@@ -311,15 +418,18 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       }))
       insertedFlights <- DB.flights.transaction { implicit transaction =>
         flights
-          .zipWithIndex
-          .evalForeach {
-            case (flight, index) =>
-              if (index % 10000 == 0) scribe.info(s"Inserting flight $index of 286464")
-              transaction.insert(flight).unit
+          .evalForeach { flight =>
+            transaction.insert(flight).unit
           }
           .count
       }
       _ = insertedFlights should be(286463)
     } yield ()
+  }
+
+  case class Trip(path: TraversalPath[Flight, Airport, Airport]) {
+    val totalMillis: Long = path.edges.last.arrival - path.edges.head.departure
+    val totalHours: Long = totalMillis / (1000 * 60 * 60)
+    val totalMinutes: Long = (totalMillis / (1000 * 60)) % 60
   }
 }
