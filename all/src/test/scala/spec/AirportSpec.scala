@@ -10,7 +10,7 @@ import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb._
 import lightdb.id.{EdgeId, Id}
-import lightdb.traverse.GraphTraversal
+import lightdb.traverse.{GraphTraversal, TraversalPath}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
@@ -136,21 +136,20 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
               gap >= 3600 * 1000 && gap <= 3600 * 8000
             case _ => true
           }
-        }.last.map { path =>
+        }.map(path => Trip(path)).toList.map { trips =>
+          trips.minBy(_.totalMillis)
+        }.map { trip =>
           val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC)
 
-          val hops = path.edges.map { f =>
+          val hops = trip.path.edges.map { f =>
             val dep = formatter.format(Instant.ofEpochMilli(f.departure))
             val arr = formatter.format(Instant.ofEpochMilli(f.arrival))
             s"${f._from} -> ${f._to} [$dep - $arr]"
           }.mkString(" | ")
 
-          val totalMillis = path.edges.last.arrival - path.edges.head.departure
-          val totalHours = totalMillis / (1000 * 60 * 60)
-          val totalMinutes = (totalMillis / (1000 * 60)) % 60
 
-          scribe.info(s"Path: $hops | Total trip time: ${totalHours}h ${totalMinutes}m")
-          totalMillis should be(19920000L)
+          scribe.info(s"Path: $hops | Total trip time: ${trip.totalHours}h ${trip.totalMinutes}m")
+          trip.totalMillis should be(16980000L)
         }
       }
     }
@@ -451,5 +450,11 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       }
       _ = insertedFlights should be(286463)
     } yield ()
+  }
+
+  case class Trip(path: TraversalPath[Flight, Airport, Airport]) {
+    val totalMillis: Long = path.edges.last.arrival - path.edges.head.departure
+    val totalHours: Long = totalMillis / (1000 * 60 * 60)
+    val totalMinutes: Long = (totalMillis / (1000 * 60)) % 60
   }
 }
