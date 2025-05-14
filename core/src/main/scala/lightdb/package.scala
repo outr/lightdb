@@ -5,11 +5,6 @@ import lightdb.traverse.{DocumentTraversalBuilder, GraphTraversal}
 import scala.language.implicitConversions
 
 package object lightdb {
-  /**
-   * Convenience method to start a graph traversal directly from the transaction
-   */
-  def traverseFrom[D <: Document[D]](id: Id[D]): DocumentTraversalBuilder[D] = GraphTraversal.from(id)
-
   implicit class NumericOps[A](numeric: Numeric[A]) {
     def map[B](to: A => B)(from: B => A): Numeric[B] = new Numeric[B] {
       override def plus(x: B, y: B): B = to(numeric.plus(from(x), from(y)))

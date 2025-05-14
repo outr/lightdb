@@ -6,7 +6,7 @@ import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.store.PrefixScanningStoreManager
 import lightdb.traverse._
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.LightDB
+import lightdb.{LightDB, traverse}
 import lightdb.id.{EdgeId, Id}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -81,10 +81,10 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     "traverse using the step function approach" in {
       db.edges.transaction { tx =>
         // Create a type-safe step function using our helper method
-        val step = GraphTraversal.createEdgeStepFunction[SimpleEdge, Node, SimpleEdge.type](tx)
+        val step = traverse.createEdgeStepFunction[SimpleEdge, Node, SimpleEdge.type](tx)
 
         // Use GraphTraversal.withStepFunction which mimics the old BFSEngine.withStepFunction
-        val traversal = GraphTraversal.withStepFunction(Set(Id[Node]("A")), step, maxDepth = Int.MaxValue)
+        val traversal = traverse.withStepFunction(Set(Id[Node]("A")), step, maxDepth = Int.MaxValue)
 
         // This call works the same as engine.collectAllReachable() did
         traversal.collectAllReachable.map { result =>

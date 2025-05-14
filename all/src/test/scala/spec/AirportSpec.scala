@@ -224,7 +224,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val lax = Airport.id("LAX")
 
       DB.flights.transaction { tx =>
-        val reachable = traverseFrom(lax)
+        val reachable = traverse
+          .from(lax)
           .follow[Flight, Airport](tx.storage)
           .targetIds
           .toList
