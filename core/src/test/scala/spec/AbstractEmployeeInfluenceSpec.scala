@@ -3,10 +3,13 @@ package spec
 import fabric.rw._
 import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.field.Field
 import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
 import lightdb.id.{EdgeId, Id}
 import lightdb.store.{PrefixScanningStoreManager, Store, StoreManager}
+import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import lightdb.traverse.GraphTraversal
+import lightdb.trigger.StoreTrigger
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -42,11 +45,6 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     "insert reports to edges" in {
       db.reportsTo.transaction { implicit tx =>
         tx.insert(reports)
-      }.succeed
-    }
-    "insert subordinates (TODO: REPLACE WITH AUTOMATION)" in {
-      db.subordinates.transaction { implicit tx =>
-        tx.insert(subordinates)
       }.succeed
     }
     "insert collaborates with edges" in {
@@ -100,7 +98,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     val collaboratesWith: S[CollaboratesWith, CollaboratesWith.type] = store[CollaboratesWith, CollaboratesWith.type](CollaboratesWith)
 
     val subordinatesModel: EdgeModel[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee] = ReverseEdgeDocument.createModel[ReportsTo, Employee, Employee]("subordinates")
-    val subordinates: S[ReverseEdgeDocument[ReportsTo, Employee, Employee], subordinatesModel.type] = store[ReverseEdgeDocument[ReportsTo, Employee, Employee], subordinatesModel.type](subordinatesModel)
+    val subordinates: S[ReverseEdgeDocument[ReportsTo, Employee, Employee], subordinatesModel.type] = reverseStore[ReportsTo, Employee, Employee, ReportsTo.type, subordinatesModel.type](subordinatesModel, reportsTo)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

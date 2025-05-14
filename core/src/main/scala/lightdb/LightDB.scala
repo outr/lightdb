@@ -3,13 +3,17 @@ package lightdb
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
+import lightdb.field.Field
+import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
 import lightdb.store.{Store, StoreManager, StoreMode}
-import lightdb.transaction.TransactionManager
+import lightdb.transaction.{Transaction, TransactionManager}
+import lightdb.trigger.StoreTrigger
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
 import rapid._
 
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.util.{Failure, Success}
 
@@ -168,6 +172,62 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
                                                                                                    storeManager: SM,
                                                                                                    nameFromKey: Key => String = (k: Key) => k.toString): MultiStore[Key, Doc, Model, SM] =
     MultiStore(model, storeManager, nameFromKey, this)
+
+  def reverseStore[
+    E <: EdgeDocument[E, F, T],
+    F <: Document[F],
+    T <: Document[T],
+    M <: DocumentModel[E],
+    RM <: EdgeModel[ReverseEdgeDocument[E, F, T], T, F]](model: RM,
+                                                         forward: S[E, M]): S[ReverseEdgeDocument[E, F, T], RM] = {
+    val reverse = store[ReverseEdgeDocument[E, F, T], RM](model)
+    forward.trigger += new StoreTrigger[E, M] {
+      private val map = new ConcurrentHashMap[Transaction[E, M], reverse.TX]
+
+      override def transactionStart(transaction: Transaction[E, M]): Task[Unit] = super
+        .transactionStart(transaction)
+        .flatMap { _ =>
+          reverse.transaction.create(None).map { tx =>
+            map.put(transaction, tx)
+          }
+        }
+
+      override def transactionEnd(transaction: Transaction[E, M]): Task[Unit] = super
+        .transactionEnd(transaction)
+        .flatMap { _ =>
+          val tx = map.remove(transaction)
+          reverse.transaction.release(tx)
+        }
+
+      private def tx(transaction: Transaction[E, M]): reverse.TX = map.get(transaction)
+
+      override def insert(doc: E)(implicit transaction: Transaction[E, M]): Task[Unit] = super
+        .insert(doc)
+        .flatTap { _ =>
+          tx(transaction).insert(ReverseEdgeDocument[E, F, T](doc))
+        }
+
+      override def upsert(doc: E)(implicit transaction: Transaction[E, M]): Task[Unit] = super
+        .upsert(doc)
+        .flatTap { _ =>
+          tx(transaction).upsert(ReverseEdgeDocument[E, F, T](doc))
+        }
+
+      override def delete[V](index: Field.UniqueIndex[E, V], value: V)
+                            (implicit transaction: Transaction[E, M]): Task[Unit] = transaction
+        .get(_ => index -> value)
+        .flatTap {
+          case Some(doc) => tx(transaction).delete(ReverseEdgeDocument[E, F, T](doc)._id)
+          case None => Task.unit
+        }
+        .next(super.delete(index, value))
+
+      override def truncate: Task[Unit] = super.truncate.next {
+        reverse.t.truncate.unit
+      }
+    }
+    reverse
+  }
 
   object stored {
     def apply[T](key: String,
