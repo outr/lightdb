@@ -63,7 +63,8 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
             db.deliversToCustomer.transaction { deliversToCustomer =>
               db.customers.transaction { customers =>
                 val warehouse: Id[Warehouse] = Id("warehouse1")
-                traverseFrom(warehouse)
+                traverse
+                  .from(warehouse)
                   .follow[ShipsTo, Truck](shipsTo)
                   .follow[DeliversToDepot, Depot](deliversToDepot)
                   .follow[LoadsTo, Drone](loadsTo)

@@ -5,6 +5,7 @@ import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.Id
 import lightdb.transaction.PrefixScanningTransaction
 import rapid.{Pull, Stream, Task}
+import lightdb.{traverse => GraphTraversal}
 
 /**
  * Extension methods for transactions to support traversal functionality

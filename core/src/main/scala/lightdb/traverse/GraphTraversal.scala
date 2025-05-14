@@ -9,7 +9,7 @@ import rapid.{Stream, Task}
 /**
  * Primary entry point for graph traversals
  */
-object GraphTraversal {
+trait GraphTraversal {
   /**
    * Start a traversal from a single document ID
    */
@@ -33,15 +33,13 @@ object GraphTraversal {
    * Create a traversal using a step function, for compatibility with legacy code
    *
    * @param startIds The set of starting node IDs
-   * @param step The step function that returns neighbors for a node
+   * @param step     The step function that returns neighbors for a node
    * @param maxDepth The maximum traversal depth
    * @return A StepFunctionTraversal instance
    */
-  def withStepFunction[N <: Document[N]](
-                                          startIds: Set[Id[N]],
-                                          step: Id[N] => Task[Set[Id[N]]],
-                                          maxDepth: Int = Int.MaxValue
-                                        ): StepFunctionTraversal[N] = StepFunctionTraversal[N](startIds, step, maxDepth)
+  def withStepFunction[N <: Document[N]](startIds: Set[Id[N]],
+                                         step: Id[N] => Task[Set[Id[N]]],
+                                         maxDepth: Int = Int.MaxValue): StepFunctionTraversal[N] = StepFunctionTraversal[N](startIds, step, maxDepth)
 
   /**
    * Create a type-safe step function from an edge type
