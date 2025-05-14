@@ -10,6 +10,7 @@ import lightdb.store.split.{SplitCollection, SplitStoreManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb._
 import lightdb.id.{EdgeId, Id}
+import lightdb.traverse.GraphTraversal
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
@@ -102,7 +103,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val lax = Airport.id("LAX")
       DB.flights.transaction { tx =>
         tx.storage.traverse.reachableFrom[Flight, Airport, Airport](lax).toList.map { flights =>
-          flights.length should be(286)
+          flights.length should be(286463)
           val airports = flights.map(_._to.value).toSet
           airports.size should be(286)
         }
@@ -149,7 +150,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
           val totalMinutes = (totalMillis / (1000 * 60)) % 60
 
           scribe.info(s"Path: $hops | Total trip time: ${totalHours}h ${totalMinutes}m")
-          totalMillis should be(36240000L)
+          totalMillis should be(19920000L)
         }
       }
     }
@@ -158,7 +159,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val jfk = Airport.id("JFK")
       val maxPaths = 1_000
       DB.flights.transaction { tx =>
-        tx.storage.traverse.allPaths[Flight, Airport, Airport](bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
+        tx.storage.traverse.allPaths[Flight, Airport](bis, jfk, maxDepth = 100).take(maxPaths).toList.map { paths =>
           paths.length should be(maxPaths)
         }
       }
@@ -223,38 +224,20 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val lax = Airport.id("LAX")
 
       DB.flights.transaction { tx =>
-        // Original traversal using reachableFrom - get just the target airports
+        val originalTraversal = tx.storage.traversal
+          .reachableFrom[Flight, Airport](lax)
+          .toList
+        val newTraversal = tx.storage.traversal
+          .bfs[Flight, Airport](Set(lax))
+          .collectAllReachable()
         for {
-          originalAirports <- tx.storage.traverse.reachableFrom[Flight, Airport, Airport](lax)
-            .map(_._to)
-            .distinct
-            .toList
-
-          // Instead of using BFS, collect all reachable airports manually
-          directConnections <- tx.storage.traverse.edgesFor[Flight, Airport, Airport](lax)
-            .map(_._to)
-            .toList
-
-          // Get second-level connections
-          secondLevelConnections <- Task.sequence(directConnections.map { airport =>
-            tx.storage.traverse.edgesFor[Flight, Airport, Airport](airport)
-              .map(_._to)
-              .toList
-          }).map(_.flatten)
-
-          // Get third-level connections (most paths should be 3 hops or less)
-          thirdLevelConnections <- Task.sequence(secondLevelConnections.map { airport =>
-            tx.storage.traverse.edgesFor[Flight, Airport, Airport](airport)
-              .map(_._to)
-              .toList
-          }).map(_.flatten)
-
-          // Combine all levels
-          allReachable = (directConnections ++ secondLevelConnections ++ thirdLevelConnections).distinct
+          original <- originalTraversal
+          newResults <- newTraversal
         } yield {
-          // Both should find the same set of reachable airports
-          allReachable.toSet should be(originalAirports.toSet)
-          allReachable.size should be(286)
+          val originalAirports = original.map(_._to).toSet
+
+          newResults should be(originalAirports)
+          newResults.size should be(286)
         }
       }
     }

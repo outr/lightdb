@@ -4,6 +4,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.Id
 import lightdb.transaction.PrefixScanningTransaction
+import lightdb.traverse.TraversalPath
 import rapid.{Stream, Task}
 
 /**
@@ -41,7 +42,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
                                                                            maxDepth: Int,
                                                                            bufferSize: Int = 100,
                                                                            edgeFilter: E => Boolean = (_: E) => true)
-                                                                          (implicit ev: Doc =:= E): Stream[TraversalPath[E, From]] = {
+                                                                          (implicit ev: Doc =:= E): Stream[TraversalPath[E, From, From]] = {
       RecursiveTraversal.allPaths[E, From](
         from,
         to,
@@ -59,7 +60,7 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
                                                                                 maxDepth: Int = Int.MaxValue,
                                                                                 bufferSize: Int = 100,
                                                                                 edgeFilter: E => Boolean = (_: E) => true)
-                                                                               (implicit ev: Doc =:= E): Stream[TraversalPath[E, From]] = {
+                                                                               (implicit ev: Doc =:= E): Stream[TraversalPath[E, From, From]] = {
       allPaths[E, From](from, to, maxDepth, bufferSize, edgeFilter)
         .takeWhileWithFirst((first, current) => current.edges.length == first.edges.length)
     }

@@ -71,14 +71,4 @@ object BFSEngine {
      */
     def collectAllReachable(): Task[Set[Id[N]]] = loop(startIds, startIds, depth = 1)
   }
-
-  // Add this to your BFSEngine.scala file
-  implicit class BFSEngineOps[N <: Document[N], E <: Document[E], M <: DocumentModel[E]](engine: BFSEngine[N, E, M]) {
-    /**
-     * Execute the BFS traversal and return the reachable nodes
-     */
-    def through(model: EdgeModel[_, N, N]): Task[Set[Id[N]]] = {
-      engine.collectAllReachable()
-    }
-  }
 }
