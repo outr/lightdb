@@ -12,6 +12,7 @@ import org.rocksdb.{RocksIterator, WriteBatch, WriteOptions}
 import rapid.Task
 
 import java.nio.charset.StandardCharsets
+import scala.jdk.CollectionConverters._
 
 case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model],
                                                                                  parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] { tx =>
@@ -51,6 +52,22 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       throw new UnsupportedOperationException(s"RocksDBStore can only get on _id, but ${index.name} was attempted")
     }
   }
+
+  override def getAll(ids: Seq[Id[Doc]]): rapid.Stream[Doc] = rapid.Stream.force(Task {
+    val keyBytes = ids.map(_.bytes).asJava
+    val handle = store.handle.orNull
+
+    val handleList = java.util.Collections.nCopies(ids.size, handle)
+
+    rapid.Stream.fromIterator(Task {
+      val rawResults = store.rocksDB.multiGetAsList(handleList, keyBytes)
+      rawResults
+        .asScala
+        .iterator
+        .filter(_ != null)
+        .map(bytes2Doc)
+    })
+  })
 
   override protected def _insert(doc: Doc): Task[Doc] = _upsert(doc)
 
