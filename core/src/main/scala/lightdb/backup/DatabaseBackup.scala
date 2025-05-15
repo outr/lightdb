@@ -6,6 +6,7 @@ import lightdb.store.Store
 import rapid._
 
 import java.io.{File, FileOutputStream, PrintWriter}
+import java.nio.charset.StandardCharsets
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 object DatabaseBackup {
@@ -28,7 +29,7 @@ object DatabaseBackup {
         out.putNextEntry(entry)
         stream.map { json =>
           val line = JsonFormatter.Compact(json)
-          val bytes = s"$line\n".getBytes("UTF-8")
+          val bytes = s"$line\n".getBytes(StandardCharsets.UTF_8)
           out.write(bytes)
         }.count.guarantee(Task(out.closeEntry()))
       }.flatten

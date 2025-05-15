@@ -6,34 +6,39 @@ import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
+import lightdb.rocksdb.RocksDBTransaction.writeOptions
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
-import org.rocksdb.RocksIterator
+import org.rocksdb.{RocksIterator, WriteBatch, WriteOptions}
 import rapid.Task
 
+import java.nio.charset.StandardCharsets
+
 case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model],
-                                                                                 parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] {
+                                                                                 parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] { tx =>
+  private var iterators = Set.empty[RocksIterator]
+  private def rocksIterator: RocksIterator = {
+    val i = store.handle match {
+      case Some(h) => store.rocksDB.newIterator(h)
+      case None => store.rocksDB.newIterator()
+    }
+    tx.synchronized {
+      iterators += i
+    }
+    i
+  }
+
   private def bytes2Doc(bytes: Array[Byte]): Doc = bytes2Json(bytes).as[Doc](store.model.rw)
 
   private def bytes2Json(bytes: Array[Byte]): Json = {
-    val jsonString = new String(bytes, "UTF-8")
+    val jsonString = new String(bytes, StandardCharsets.UTF_8)
     JsonParser(jsonString)
   }
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream
-    .fromIterator(Task(iterator({
-      store.handle match {
-        case Some(h) => store.rocksDB.newIterator(h)
-        case None => store.rocksDB.newIterator()
-      }
-    }, prefix = Some(prefix)))).map(bytes2Json)
+    .fromIterator(Task(iterator(rocksIterator, prefix = Some(prefix)))).map(bytes2Json)
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream
-    .fromIterator(Task(iterator {
-      store.handle match {
-        case Some(h) => store.rocksDB.newIterator(h)
-        case None => store.rocksDB.newIterator()
-      }
-    })).map(bytes2Json)
+    .fromIterator(Task(iterator(rocksIterator))).map(bytes2Json)
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
     if (index == store.idField) {
@@ -51,10 +56,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val json = doc.json(store.model.rw)
-    val bytes = JsonFormatter.Compact(json).getBytes("UTF-8")
+    val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
     store.handle match {
-      case Some(h) => store.rocksDB.put(h, doc._id.bytes, bytes)
-      case None => store.rocksDB.put(doc._id.bytes, bytes)
+      case Some(h) => store.rocksDB.put(h, writeOptions, doc._id.bytes, bytes)
+      case None => store.rocksDB.put(writeOptions, doc._id.bytes, bytes)
     }
     doc
   }
@@ -67,17 +72,18 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   override protected def _count: Task[Int] = Task {
-    iterator(store.handle match {
-      case Some(h) => store.rocksDB.newIterator(h)
-      case None => store.rocksDB.newIterator()
-    }).size
+    iterator(rocksIterator).size
+  }
+
+  def estimatedCount: Task[Int] = Task {
+    store.rocksDB.getLongProperty(store.handle.orNull, "rocksdb.estimate-num-keys").toInt
   }
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val bytes = value.asInstanceOf[Id[Doc]].bytes
     store.handle match {
-      case Some(h) => store.rocksDB.delete(h, bytes)
-      case None => store.rocksDB.delete(bytes)
+      case Some(h) => store.rocksDB.delete(h, writeOptions, bytes)
+      case None => store.rocksDB.delete(writeOptions, bytes)
     }
     true
   }
@@ -86,26 +92,62 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override protected def _rollback: Task[Unit] = Task.unit
 
-  override protected def _close: Task[Unit] = Task.unit
+  override protected def _close: Task[Unit] = Task {
+    iterators.foreach(_.close())
+    iterators = Set.empty
+  }
 
-  override def truncate: Task[Int] = Task {
-    (store.handle match {
-      case Some(h) => iterator(store.rocksDB.newIterator(h), value = false).map(a => store.rocksDB.delete(h, a))
-      case None => iterator(store.rocksDB.newIterator(), value = false).map(store.rocksDB.delete)
-    }).size
+  override def truncate: Task[Int] = Task.defer {
+    truncateManual
+    // TODO: Revisit column family dropping - it's causing issues right now
+    /*store.handle match {
+      case Some(h) => count.map { size =>
+        store.rocksDB.dropColumnFamily(h)
+        store.resetHandle()
+        size
+      }
+      case None => truncateManual
+    }*/
+  }
+
+  private def truncateManual: Task[Int] = Task {
+    val iter = rocksIterator
+    val batch = new WriteBatch()
+    var count = 0
+
+    val delete = store.handle match {
+      case Some(h) => (key: Array[Byte]) => batch.delete(h, key)
+      case None => (key: Array[Byte]) => batch.delete(key)
+    }
+
+    iter.seekToFirst()
+    while (iter.isValid) {
+      delete(iter.key())
+      count += 1
+      iter.next()
+    }
+    store.rocksDB.write(writeOptions, batch)
+    count
   }
 
   private def iterator(rocksIterator: RocksIterator,
                        value: Boolean = true,
                        prefix: Option[String] = None): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
     prefix match {
-      case Some(s) => rocksIterator.seek(s.getBytes("UTF-8"))     // Initialize the iterator to the prefix
+      case Some(s) => rocksIterator.seek(s.getBytes(StandardCharsets.UTF_8))     // Initialize the iterator to the prefix
       case None => rocksIterator.seekToFirst()                    // Seek to the provided value as the start position
     }
 
-    val isValid: () => Boolean = prefix match {
-      case Some(s) => () => rocksIterator.isValid && new String(rocksIterator.key(), "UTF-8").startsWith(s)
-      case None => () => rocksIterator.isValid
+    val prefixBytes: Option[Array[Byte]] = prefix.map(_.getBytes(StandardCharsets.UTF_8))
+
+    val isValid: () => Boolean = prefixBytes match {
+      case Some(pBytes) =>
+        () => rocksIterator.isValid && {
+          val key = rocksIterator.key()
+          key.length >= pBytes.length && java.util.Arrays.equals(key.take(pBytes.length), pBytes)
+        }
+      case None =>
+        () => rocksIterator.isValid
     }
 
     override def hasNext: Boolean = isValid()
@@ -124,4 +166,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       result
     }
   }
+}
+
+object RocksDBTransaction {
+  val writeOptions: WriteOptions = new WriteOptions()
+    .setSync(false)
+    .setDisableWAL(false)
 }

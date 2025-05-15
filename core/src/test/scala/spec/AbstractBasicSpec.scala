@@ -220,7 +220,6 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         transaction.count.map(_ should be(24))
       }
     }
-    // TODO: Fix same transaction modifying the same record concurrently
     "modify a record" in {
       db.people.transaction { implicit transaction =>
         transaction.modify(adam._id) {
