@@ -6,6 +6,7 @@ import lightdb.store.{StoreManager, StoreMode}
 import org.rocksdb.{ColumnFamilyHandle, RocksDB}
 import rapid.Task
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 
 case class RocksDBSharedStore(directory: Path) extends StoreManager {
@@ -16,7 +17,7 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager {
   val (rocksDB: RocksDB, existingHandles: List[ColumnFamilyHandle]) = RocksDBStore.createRocksDB(directory)
 
   val existingHandlesMap: Map[String, ColumnFamilyHandle] = existingHandles.map { h =>
-    new String(h.getName, "UTF-8") -> h
+    new String(h.getName, StandardCharsets.UTF_8) -> h
   }.toMap
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

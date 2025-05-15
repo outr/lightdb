@@ -7,6 +7,7 @@ import lightdb.transaction.Transaction
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, FlushOptions, Options, RocksDB}
 import rapid.Task
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util
 import scala.jdk.CollectionConverters.CollectionHasAsScala
@@ -21,10 +22,13 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX = RocksDBTransaction[Doc, Model]
 
-  private[rocksdb] val handle: Option[ColumnFamilyHandle] = sharedStore.map { ss =>
+  private[rocksdb] var handle: Option[ColumnFamilyHandle] = None
+  resetHandle()
+
+  private[rocksdb] def resetHandle(): Unit = handle = sharedStore.map { ss =>
     ss.existingHandle match {
       case Some(handle) => handle
-      case None => rocksDB.createColumnFamily(new ColumnFamilyDescriptor(ss.handle.getBytes("UTF-8")))
+      case None => rocksDB.createColumnFamily(new ColumnFamilyDescriptor(ss.handle.getBytes(StandardCharsets.UTF_8)))
     }
   }
 

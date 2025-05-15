@@ -12,6 +12,7 @@ import org.lmdbjava.{Env, PutFlags, Txn}
 import rapid._
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LMDBStore[Doc, Model],
                                                                               env: Env[ByteBuffer],
@@ -102,7 +103,7 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
   private def b2j(bb: ByteBuffer): Json = {
     val bytes = new Array[Byte](bb.remaining())
     bb.get(bytes)
-    val jsonString = new String(bytes, "UTF-8")
+    val jsonString = new String(bytes, StandardCharsets.UTF_8)
     if (jsonString.isEmpty) {
       Null
     } else {

@@ -7,8 +7,9 @@ import lightdb.store.Store
 import rapid._
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.zip.ZipFile
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 object DatabaseRestore {
   def archive(db: LightDB,
@@ -20,7 +21,7 @@ object DatabaseRestore {
       Option(zip.getEntry(fileName))
         .map { zipEntry =>
           val input = zip.getInputStream(zipEntry)
-          Source.fromInputStream(input, "UTF-8")
+          Source.fromInputStream(input)(Codec(StandardCharsets.UTF_8))
         }
     }.guarantee(Task(zip.close()))
   }

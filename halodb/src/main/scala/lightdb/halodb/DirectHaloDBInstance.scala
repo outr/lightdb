@@ -6,6 +6,7 @@ import fabric.{Json, Null}
 import lightdb.id.Id
 import rapid.Task
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -25,13 +26,13 @@ class DirectHaloDBInstance(directory: Path,
 
   val db: HaloDB = create()
 
-  private implicit def json2Bytes(json: Json): Array[Byte] = JsonFormatter.Compact(json).getBytes("UTF-8")
+  private implicit def json2Bytes(json: Json): Array[Byte] = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
 
   private implicit def bytes2Json(bytes: Array[Byte]): Json = {
     if (bytes == null) {
       Null
     } else {
-      val jsonString = new String(bytes, "UTF-8")
+      val jsonString = new String(bytes, StandardCharsets.UTF_8)
       JsonParser(jsonString)
     }
   }
