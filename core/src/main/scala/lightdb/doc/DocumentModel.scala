@@ -1,7 +1,6 @@
 package lightdb.doc
 
 import fabric.rw._
-import lightdb._
 import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.field.Field._
 import lightdb.field.{Field, FieldGetter}

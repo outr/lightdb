@@ -2,7 +2,6 @@ package spec
 
 import fabric.rw._
 import lightdb.chroniclemap.ChronicleMapStore
-import lightdb.chroniclemap.ChronicleMapStore.S
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.upgrade.DatabaseUpgrade

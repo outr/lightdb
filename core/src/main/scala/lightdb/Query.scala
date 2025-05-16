@@ -13,7 +13,7 @@ import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.store.{Collection, Conversion}
-import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.transaction.CollectionTransaction
 import rapid.{Forge, Grouped, Pull, Task}
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transaction: CollectionTransaction[Doc, Model],

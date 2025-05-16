@@ -2,7 +2,7 @@ package lightdb.rocksdb
 
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.{PrefixScanningStore, PrefixScanningStoreManager, Store, StoreManager, StoreMode}
+import lightdb.store._
 import lightdb.transaction.Transaction
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, FlushOptions, Options, RocksDB}
 import rapid.Task

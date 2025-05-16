@@ -4,7 +4,6 @@ import fabric._
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
-import lightdb._
 import lightdb.doc.Document
 import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}

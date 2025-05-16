@@ -1,16 +1,16 @@
 package lightdb.store
 
 import fabric.define.DefType
+import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.ModelMissingFieldsException
 import lightdb.field.Field
 import lightdb.field.Field._
+import lightdb.id.Id
 import lightdb.lock.LockManager
 import lightdb.transaction.Transaction
 import lightdb.trigger.StoreTriggers
 import lightdb.util.{Disposable, Initializable}
-import lightdb.LightDB
-import lightdb.id.Id
 import rapid._
 
 import java.io.File

@@ -2,13 +2,13 @@ package spec
 
 import fabric.io.JsonParser
 import fabric.rw._
+import lightdb.LightDB
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.id.Id
 import lightdb.spatial.Geo
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.LightDB
-import lightdb.id.Id
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec

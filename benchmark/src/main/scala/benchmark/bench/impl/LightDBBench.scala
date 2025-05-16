@@ -2,12 +2,12 @@ package benchmark.bench.impl
 
 import benchmark.bench.Bench
 import fabric.rw._
+import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.id.Id
 import lightdb.sql.SQLConversion
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.LightDB
-import lightdb.id.Id
 import rapid.Task
 
 import java.nio.file.Path

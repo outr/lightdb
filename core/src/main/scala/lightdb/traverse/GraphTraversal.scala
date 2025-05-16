@@ -3,7 +3,7 @@ package lightdb.traverse
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.graph.EdgeDocument
 import lightdb.id.Id
-import lightdb.transaction.{PrefixScanningTransaction, Transaction}
+import lightdb.transaction.PrefixScanningTransaction
 import rapid.{Stream, Task}
 
 /**
