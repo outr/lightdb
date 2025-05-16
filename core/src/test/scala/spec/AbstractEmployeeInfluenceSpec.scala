@@ -33,7 +33,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
       db.init.succeed
     }
     "insert employees" in {
-      db.employees.transaction { implicit tx =>
+      db.employees.transaction { tx =>
         tx.insert(List(
           Employee("Alice", Id("alice")),
           Employee("Bob", Id("bob")),
@@ -43,12 +43,12 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
       }.succeed
     }
     "insert reports to edges" in {
-      db.reportsTo.transaction { implicit tx =>
+      db.reportsTo.transaction { tx =>
         tx.insert(reports)
       }.succeed
     }
     "insert collaborates with edges" in {
-      db.collaboratesWith.transaction { implicit tx =>
+      db.collaboratesWith.transaction { tx =>
         tx.insert(List(
           CollaboratesWith(Id("carol"), Id("dave")) // Carol collaborates with Dave
         ))

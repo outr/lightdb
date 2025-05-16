@@ -25,12 +25,12 @@
 //    "properly handle pagination when merging results from multiple shards" in {
 //      val docs = (1 to 300).map(i => TestDoc(value = i)).toList
 //
-//      db.docs.transaction { implicit transaction =>
+//      db.docs.transaction { transaction =>
 //        db.docs.insert(docs).succeed
 //      }
 //    }
 //    "verify the proper counts per shard" in {
-//      db.docs.transaction { implicit transaction =>
+//      db.docs.transaction { transaction =>
 //        db.docs.asInstanceOf[ShardedStore[TestDoc, TestDoc.type]].shardCounts.map { counts =>
 //          counts should be(Vector(
 //            100, 100, 100
@@ -39,7 +39,7 @@
 //      }
 //    }
 //    "verify all docs were inserted" in {
-//      db.docs.transaction { implicit transaction =>
+//      db.docs.transaction { transaction =>
 //        db.docs.count.flatMap { count =>
 //          count should be(300)
 //
@@ -51,7 +51,7 @@
 //      }
 //    }
 //    "properly handle offset when merging results from multiple shards" in {
-//      db.docs.transaction { implicit transaction =>
+//      db.docs.transaction { transaction =>
 //        db.docs.query.sort(Sort.ByField(db.docs.model.value, SortDirection.Ascending)).offset(100).limit(100).toList.map { results =>
 //          results.size should be(100)
 //          results.map(_.value) should be((101 to 200).toList)
@@ -59,7 +59,7 @@
 //      }
 //    }
 //    "properly handle sorting when merging results from multiple shards" in {
-//      db.docs.transaction { implicit transaction =>
+//      db.docs.transaction { transaction =>
 //        db.docs.query.sort(Sort.ByField(db.docs.model.value, SortDirection.Descending)).limit(100).toList.map { results =>
 //          results.size should be(100)
 //          results.map(_.value) should be((300 to 201 by -1).toList)
@@ -70,7 +70,7 @@
 //      db.truncate().succeed
 //    }
 //    "verify the count is now empty" in {
-//      db.docs.transaction { implicit transaction =>
+//      db.docs.transaction { transaction =>
 //        db.docs.count.map(_ should be(0))
 //      }
 //    }

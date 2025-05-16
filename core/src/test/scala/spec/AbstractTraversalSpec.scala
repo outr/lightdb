@@ -24,7 +24,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "insert graph nodes and edges" in {
       for {
-        _ <- db.nodes.transaction { implicit tx =>
+        _ <- db.nodes.transaction { tx =>
           tx.insert(List(
             Node("A", Id("A")),
             Node("B", Id("B")),
@@ -32,7 +32,7 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
             Node("D", Id("D"))
           ))
         }
-        _ <- db.edges.transaction { implicit tx =>
+        _ <- db.edges.transaction { tx =>
           tx.insert(List(
             SimpleEdge(Id("A"), Id("B"), "A to B"),
             SimpleEdge(Id("A"), Id("C"), "A to C"),

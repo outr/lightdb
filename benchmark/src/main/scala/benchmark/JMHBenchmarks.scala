@@ -46,7 +46,7 @@
 //  @annotations.BenchmarkMode(Array(annotations.Mode.Throughput))
 //  @annotations.OutputTimeUnit(TimeUnit.MILLISECONDS)
 //  @annotations.OperationsPerInvocation(1000)
-//  def records1InsertLightDB(): Unit = DB.records.transaction { implicit transaction =>
+//  def records1InsertLightDB(): Unit = DB.records.transaction { transaction =>
 //    val records = (0 until Iterations).map(_ => Record.generate())
 //    DB.records.set(records)
 //  }
@@ -55,7 +55,7 @@
 //  @annotations.BenchmarkMode(Array(annotations.Mode.Throughput))
 //  @annotations.OutputTimeUnit(TimeUnit.MILLISECONDS)
 //  @annotations.OperationsPerInvocation(1000)
-//  def records2CountLightDB(): Unit = DB.records.transaction { implicit transaction =>
+//  def records2CountLightDB(): Unit = DB.records.transaction { transaction =>
 //    val count = DB.records.count
 //    scribe.info(s"LightDB Count: $count")
 //  }
@@ -64,7 +64,7 @@
 //  @annotations.BenchmarkMode(Array(annotations.Mode.Throughput))
 //  @annotations.OutputTimeUnit(TimeUnit.MILLISECONDS)
 //  @annotations.OperationsPerInvocation(1000)
-//  def records3ReadLightDB(): Unit = DB.records.transaction { implicit transaction =>
+//  def records3ReadLightDB(): Unit = DB.records.transaction { transaction =>
 //    val total = DB.records.iterator.map(_.number).fold(0)((total, _) => total + 1)
 //    scribe.info(s"LightDB Total: $total")
 //  }

@@ -5,7 +5,7 @@ import rapid.Task
 
 import java.nio.ByteBuffer
 
-class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
+case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
   private val keyPool = new ByteBufferPool(512)
   private val valuePool = new ByteBufferPool(512)
 

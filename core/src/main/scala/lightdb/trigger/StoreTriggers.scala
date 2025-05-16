@@ -24,14 +24,14 @@ class StoreTriggers[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends S
   override def transactionEnd(transaction: Transaction[Doc, Model]): Task[Unit] =
     list.map(_.transactionEnd(transaction)).tasks.unit
 
-  override def insert(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit] =
-    list.map(_.insert(doc)).tasks.unit
+  override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] =
+    list.map(_.insert(doc, transaction)).tasks.unit
 
-  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit] =
-    list.map(_.upsert(doc)).tasks.unit
+  override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] =
+    list.map(_.upsert(doc, transaction)).tasks.unit
 
-  override def delete[V](index: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc, Model]): Task[Unit] =
-    list.map(_.delete(index, value)).tasks.unit
+  override def delete[V](index: UniqueIndex[Doc, V], value: V, transaction: Transaction[Doc, Model]): Task[Unit] =
+    list.map(_.delete(index, value, transaction)).tasks.unit
 
   override def truncate: Task[Unit] =
     list.map(_.truncate).tasks.unit

@@ -184,8 +184,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   def process(establishLock: Boolean = true,
               deleteOnNone: Boolean = true,
               safeModify: Boolean = true)
-             (f: Forge[Doc, Option[Doc]])
-             (implicit transaction: Transaction[Doc, Model]): Unit = docs.stream
+             (f: Forge[Doc, Option[Doc]]): Unit = docs.stream
     .evalMap { doc =>
       if (safeModify) {
         transaction.modify(doc._id, establishLock, deleteOnNone) {
@@ -203,20 +202,19 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
     }
     .drain
 
-  def toList(implicit transaction: Transaction[Doc, Model]): Task[List[V]] = stream.toList
+  def toList: Task[List[V]] = stream.toList
 
-  def first(implicit transaction: Transaction[Doc, Model]): Task[V] = limit(1).stream.first
+  def first: Task[V] = limit(1).stream.first
 
-  def firstOption(implicit transaction: Transaction[Doc, Model]): Task[Option[V]] = limit(1).stream.firstOption
+  def firstOption: Task[Option[V]] = limit(1).stream.firstOption
 
-  def count(implicit transaction: Transaction[Doc, Model]): Task[Int] = limit(1).countTotal(true).search.map(_.total.get)
+  def count: Task[Int] = limit(1).countTotal(true).search.map(_.total.get)
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
     AggregateQuery(this, f(model))
 
   def grouped[F](f: Model => Field[Doc, F],
-                 direction: SortDirection = SortDirection.Ascending)
-                (implicit transaction: Transaction[Doc, Model]): rapid.Stream[Grouped[F, Doc]] = {
+                 direction: SortDirection = SortDirection.Ascending): rapid.Stream[Grouped[F, Doc]] = {
     val field = f(model)
     val state = new IndexingState
     sort(Sort.ByField(field, direction)).docs.stream.groupSequential(doc => field.get(doc, field, state))

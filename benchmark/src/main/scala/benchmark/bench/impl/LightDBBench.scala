@@ -23,18 +23,18 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
 
   def toP(person: Person): P = P(person.name, person.age, person._id.value)
 
-  override protected def insertRecords(iterator: Iterator[P]): Unit = DB.people.transaction { implicit transaction =>
+  override protected def insertRecords(iterator: Iterator[P]): Unit = DB.people.transaction { transaction =>
     rapid.Stream.fromIterator(Task(iterator))
       .evalMap(p => DB.people.insert(p))
       .drain
   }.sync()
 
-  override protected def streamRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
+  override protected def streamRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { transaction =>
 //    f(DB.people.iterator.map(toP))
     ???
   }
 
-  override protected def getEachRecord(idIterator: Iterator[String]): Unit = DB.people.transaction { implicit transaction =>
+  override protected def getEachRecord(idIterator: Iterator[String]): Unit = DB.people.transaction { transaction =>
     /*idIterator.foreach { idString =>
       val id = Person.id(idString)
       DB.people.get(id) match {
@@ -48,7 +48,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     ???
   }
 
-  override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = DB.people.transaction { implicit transaction =>
+  override protected def searchEachRecord(ageIterator: Iterator[Int]): Unit = DB.people.transaction { transaction =>
     /*ageIterator.foreach { age =>
       try {
         val list = DB.people.query.filter(_.age === age).search.docs.list
@@ -66,7 +66,7 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     ???
   }
 
-  override protected def searchAllRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { implicit transaction =>
+  override protected def searchAllRecords(f: Iterator[P] => Unit): Unit = DB.people.transaction { transaction =>
 //    val iterator = DB.people.query.search.docs.iterator.map(toP)
 //    f(iterator)
     ???

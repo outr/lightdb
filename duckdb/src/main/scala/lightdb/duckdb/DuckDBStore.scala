@@ -26,7 +26,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   }
 
   // TODO: Use DuckDB's Appender for better performance
-  /*override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Unit = {
+  /*override def insert(doc: Doc)(transaction: Transaction[Doc]): Unit = {
     fields.zipWithIndex.foreach {
       case (field, index) =>
         val c = connectionManager.getConnection.asInstanceOf[DuckDBConnection]

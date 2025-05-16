@@ -43,5 +43,5 @@ case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](que
   def stream: rapid.Stream[MaterializedAggregate[Doc, Model]] =
     query.transaction.aggregate(this)
 
-  def toList(implicit transaction: Transaction[Doc, Model]): Task[List[MaterializedAggregate[Doc, Model]]] = stream.toList
+  def toList: Task[List[MaterializedAggregate[Doc, Model]]] = stream.toList
 }

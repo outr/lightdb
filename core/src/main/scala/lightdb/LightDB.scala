@@ -201,26 +201,25 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
 
       private def tx(transaction: Transaction[E, M]): reverse.TX = map.get(transaction)
 
-      override def insert(doc: E)(implicit transaction: Transaction[E, M]): Task[Unit] = super
-        .insert(doc)
+      override def insert(doc: E, transaction: Transaction[E, M]): Task[Unit] = super
+        .insert(doc, transaction)
         .flatTap { _ =>
           tx(transaction).insert(ReverseEdgeDocument[E, F, T](doc))
         }
 
-      override def upsert(doc: E)(implicit transaction: Transaction[E, M]): Task[Unit] = super
-        .upsert(doc)
+      override def upsert(doc: E, transaction: Transaction[E, M]): Task[Unit] = super
+        .upsert(doc, transaction)
         .flatTap { _ =>
           tx(transaction).upsert(ReverseEdgeDocument[E, F, T](doc))
         }
 
-      override def delete[V](index: Field.UniqueIndex[E, V], value: V)
-                            (implicit transaction: Transaction[E, M]): Task[Unit] = transaction
+      override def delete[V](index: Field.UniqueIndex[E, V], value: V, transaction: Transaction[E, M]): Task[Unit] = transaction
         .get(_ => index -> value)
         .flatTap {
           case Some(doc) => tx(transaction).delete(ReverseEdgeDocument[E, F, T](doc)._id)
           case None => Task.unit
         }
-        .next(super.delete(index, value))
+        .next(super.delete(index, value, transaction))
 
       override def truncate: Task[Unit] = super.truncate.next {
         reverse.t.truncate.unit

@@ -19,7 +19,7 @@ case class StoredValue[T](key: String,
       val t = default()
       cached = Some(t)
       Task.pure(t)
-    case None => store.transaction { implicit transaction =>
+    case None => store.transaction { transaction =>
       transaction.get(id).map {
         case Some(kv) => kv.json.as[T]
         case None => default()
@@ -32,7 +32,7 @@ case class StoredValue[T](key: String,
     }
   }
 
-  def exists(): Task[Boolean] = store.transaction { implicit transaction =>
+  def exists(): Task[Boolean] = store.transaction { transaction =>
     transaction.get(id).map(_.nonEmpty)
   }
 
@@ -40,7 +40,7 @@ case class StoredValue[T](key: String,
     cached = Some(value)
     Task.pure(value)
   } else {
-    store.transaction { implicit transaction =>
+    store.transaction { transaction =>
       transaction.upsert(KeyValue(id, value.asJson)).map { _ =>
         if (persistence != Persistence.Stored) {
           cached = Some(value)
@@ -58,7 +58,7 @@ case class StoredValue[T](key: String,
     }
   }
 
-  def clear(): Task[Unit] = store.transaction { implicit transaction =>
+  def clear(): Task[Unit] = store.transaction { transaction =>
     transaction.delete(_._id -> id).map {
       case true => cached = None
       case false => // Nothing

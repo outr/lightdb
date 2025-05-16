@@ -13,7 +13,7 @@
 //case class BalancedShardManager[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
 //                                                                                   shards: Vector[Collection[Doc, Model]]) extends ShardManagerInstance[Doc, Model] {
 //  private lazy val counters: Vector[AtomicInteger] = shards.map { store =>
-//    store.transaction { implicit transaction =>
+//    store.transaction { transaction =>
 //      store.count
 //    }
 //  }.tasks.map { counts =>
@@ -22,7 +22,7 @@
 //    }
 //  }.sync()
 //
-//  private def updateCounterFor(shard: Store[Doc, Model], delta: Int)(implicit transaction: Transaction[Doc]): Task[Unit] = Task.defer {
+//  private def updateCounterFor(shard: Store[Doc, Model], delta: Int)(transaction: Transaction[Doc]): Task[Unit] = Task.defer {
 //    val index = shards.indexOf(shard)
 //    counters(index).addAndGet(delta)
 //    Task.unit
@@ -37,7 +37,7 @@
 //
 //  override def shardFor(id: Id[Doc]): Option[Store[Doc, Model]] = None
 //
-//  override def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
+//  override def insert(doc: Doc)(transaction: Transaction[Doc]): Task[Doc] = {
 //    nextShard().flatMap { shard =>
 //      shard.insert(doc).flatTap { _ =>
 //        updateCounterFor(shard, 1)
@@ -45,7 +45,7 @@
 //    }
 //  }
 //
-//  override def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = {
+//  override def upsert(doc: Doc)(transaction: Transaction[Doc]): Task[Doc] = {
 //    nextShard().flatMap { shard =>
 //      shard.upsert(doc).flatTap { _ =>
 //        updateCounterFor(shard, 1)
@@ -53,7 +53,7 @@
 //    }
 //  }
 //
-//  override def delete[V](field: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Store[Doc, Model]]] = super.delete(field, value).map {
+//  override def delete[V](field: Field.UniqueIndex[Doc, V], value: V)(transaction: Transaction[Doc]): Task[Option[Store[Doc, Model]]] = super.delete(field, value).map {
 //    case Some(store) =>
 //      updateCounterFor(store, -1)
 //      Some(store)

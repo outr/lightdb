@@ -64,51 +64,51 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
       db.init.succeed
     }
     "verify the database is empty" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.count.map(_ should be(0))
       }
     }
     "insert the user records" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.insert(names).map(_ should not be None)
       }
     }
     "insert the address records" in {
-      db.addresses.transaction { implicit transaction =>
+      db.addresses.transaction { transaction =>
         transaction.insert(addresses).map(_ should not be None)
       }
     }
     "retrieve the first record by _id -> id" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction(_._id -> adam._id).map(_ should be(adam))
       }
     }
     "retrieve the first record by id" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction(adam._id).map(_ should be(adam))
       }
     }
     "count the records in the database" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.count.map(_ should be(26))
       }
     }
     "stream the records in the database" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.stream.map(_.age).toList.map(_.toSet).map { ages =>
           ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
         }
       }
     }
     "verify the correct addresses" in {
-      db.addresses.transaction { implicit transaction =>
+      db.addresses.transaction { transaction =>
         transaction.stream.map(_.userId).toList.map { ids =>
           ids.sorted should be(addresses.map(_.userId).sorted)
         }
       }
     }
     "delete some records" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         for {
           d1 <- transaction.delete(_._id -> linda._id)
           d2 <- transaction.delete(_._id -> yuri._id)
@@ -119,12 +119,12 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
       }
     }
     "verify the records were deleted" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.count.map(_ should be(24))
       }
     }
     "modify a record" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.modify(adam._id) {
           case Some(p) => Task.pure(Some(p.copy(name = "Allan")))
           case None => fail("Adam was not found!")
@@ -135,12 +135,12 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
       }
     }
     "verify the record has been renamed" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction(_._id -> adam._id).map(_.name should be("Allan"))
       }
     }
     "insert a lot more names" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         val p = (1 to CreateRecords).toList.map { index =>
           User(
             name = s"Unique Snowflake $index",
@@ -151,17 +151,17 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
       }
     }
     "verify the correct number of people exist in the database" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.count.map(_ should be(CreateRecords + 24))
       }
     }
     "truncate the store again" in {
-      db.users.transaction { implicit transaction =>
+      db.users.transaction { transaction =>
         transaction.truncate.map(_ should be(CreateRecords + 24))
       }
     }
     "truncate the addresses store" in {
-      db.addresses.transaction { implicit transaction =>
+      db.addresses.transaction { transaction =>
         transaction.truncate.map(_ should be(3))
       }
     }
