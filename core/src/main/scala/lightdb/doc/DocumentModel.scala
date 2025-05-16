@@ -8,7 +8,9 @@ import lightdb.filter.FilterBuilder
 import lightdb.id.{Id, StringId}
 import lightdb.store.Store
 import rapid.{Task, Unique}
+import sourcecode.Name
 
+import scala.language.experimental.macros
 import scala.language.implicitConversions
 
 trait DocumentModel[Doc <: Document[Doc]] {
@@ -77,11 +79,15 @@ trait DocumentModel[Doc <: Document[Doc]] {
       add[V, Field[Doc, V]](Field(name, FieldGetter.func(get)))
     }
 
+    def apply[V: RW](get: Doc => V)(implicit name: Name): Field[Doc, V] = apply(name.value, get)
+
     def index[V: RW](name: String, get: FieldGetter[Doc, V]): Indexed[Doc, V] =
       add[V, Indexed[Doc, V]](Field.indexed(name, get))
 
     def index[V: RW](name: String, get: Doc => V): Indexed[Doc, V] =
       add[V, Indexed[Doc, V]](Field.indexed(name, FieldGetter.func(get)))
+
+    def index[V: RW](get: Doc => V)(implicit name: Name): Indexed[Doc, V] = index(name.value, get)
 
     def unique[V: RW](name: String, get: FieldGetter[Doc, V]): UniqueIndex[Doc, V] =
       add[V, UniqueIndex[Doc, V]](Field.unique(name, get))
@@ -89,11 +95,15 @@ trait DocumentModel[Doc <: Document[Doc]] {
     def unique[V: RW](name: String, get: Doc => V): UniqueIndex[Doc, V] =
       add[V, UniqueIndex[Doc, V]](Field.unique(name, FieldGetter.func(get)))
 
+    def unique[V: RW](get: Doc => V)(implicit name: Name): UniqueIndex[Doc, V] = unique(name.value, get)
+
     def tokenized(name: String, get: FieldGetter[Doc, String]): Tokenized[Doc] =
       add[String, Tokenized[Doc]](Field.tokenized(name, get))
 
     def tokenized(name: String, get: Doc => String): Tokenized[Doc] =
       add[String, Tokenized[Doc]](Field.tokenized(name, FieldGetter.func(get)))
+
+    def tokenized(get: Doc => String)(implicit name: Name): Tokenized[Doc] = tokenized(name.value, get)
 
     def facet(name: String,
               get: FieldGetter[Doc, List[FacetValue]],

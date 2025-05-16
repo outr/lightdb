@@ -131,21 +131,21 @@ case class Depot(name: String, _id: Id[Depot] = Id()) extends Document[Depot]
 object DepotModel extends DocumentModel[Depot] with JsonConversion[Depot] {
   override implicit val rw: RW[Depot] = RW.gen
 
-  val name: F[String] = field("name", _.name)
+  val name: F[String] = field(_.name)
 }
 
 case class Drone(name: String, _id: Id[Drone] = Id()) extends Document[Drone]
 object DroneModel extends DocumentModel[Drone] with JsonConversion[Drone] {
   override implicit val rw: RW[Drone] = RW.gen
 
-  val name: F[String] = field("name", _.name)
+  val name: F[String] = field(_.name)
 }
 
 case class Customer(name: String, _id: Id[Customer] = Id()) extends Document[Customer]
 object CustomerModel extends DocumentModel[Customer] with JsonConversion[Customer] {
   override implicit val rw: RW[Customer] = RW.gen
 
-  val name: F[String] = field("name", _.name)
+  val name: F[String] = field(_.name)
 }
 
 case class ShipsTo(_from: Id[Warehouse], _to: Id[Truck], _id: EdgeId[ShipsTo, Warehouse, Truck]) extends EdgeDocument[ShipsTo, Warehouse, Truck] with Document[ShipsTo]
