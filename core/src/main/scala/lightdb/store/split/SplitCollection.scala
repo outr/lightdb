@@ -34,29 +34,29 @@ class SplitCollection[
     _ = t._searching = t2.asInstanceOf[t.store.searching.TX]
   } yield t
 
-  override def verify(): Task[Boolean] = transaction { implicit transaction =>
+  override def verify(): Task[Boolean] = transaction { transaction =>
     for {
       storageCount <- transaction.storage.count
       searchCount <- transaction.searching.count
       shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1
       _ <- logger.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
-        .next(reIndexInternal())
+        .next(reIndexInternal(transaction))
         .next(logger.info(s"$name re-indexed successfully!"))
         .when(shouldReIndex)
     } yield shouldReIndex
   }
 
-  override def reIndex(): Task[Boolean] = transaction { implicit transaction =>
-    reIndexInternal().map(_ => true)
+  override def reIndex(): Task[Boolean] = transaction { transaction =>
+    reIndexInternal(transaction).map(_ => true)
   }
 
-  override def reIndex(doc: Doc): Task[Boolean] = transaction { implicit transaction =>
+  override def reIndex(doc: Doc): Task[Boolean] = transaction { transaction =>
     transaction.upsert(doc).map(_ => true)
   }
 
   override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
 
-  private def reIndexInternal()(implicit transaction: TX): Task[Unit] = transaction
+  private def reIndexInternal(transaction: TX): Task[Unit] = transaction
     .searching
     .truncate
     .flatMap { _ =>

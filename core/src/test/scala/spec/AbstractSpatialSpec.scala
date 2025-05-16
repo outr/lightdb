@@ -69,17 +69,17 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
       DB.init.succeed
     }
     "store three people" in {
-      DB.people.transaction { implicit transaction =>
+      DB.people.transaction { transaction =>
         transaction.insert(List(p1, p2, p3)).map(_.length should be(3))
       }
     }
     "verify exactly three people exist" in {
-      DB.people.transaction { implicit transaction =>
+      DB.people.transaction { transaction =>
         transaction.count.map(_ should be(3))
       }
     }
     "sort by distance from Oklahoma City" in {
-      DB.people.transaction { implicit transaction =>
+      DB.people.transaction { transaction =>
         transaction.query.distance(
           _.point.list,
           from = oklahomaCity,
@@ -97,7 +97,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
       }
     }
     "sort by distance from Noble using geo" in {
-      DB.people.transaction { implicit transaction =>
+      DB.people.transaction { transaction =>
         transaction.query.distance(
           _.geo,
           from = noble,
@@ -115,7 +115,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
       }
     }
     "parse and insert from a GeometryCollection" in {
-      DB.people.transaction { implicit transaction =>
+      DB.people.transaction { transaction =>
         val json = JsonParser("""{"crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::4269"}}, "type": "GeometryCollection", "geometries": [{"type": "LineString", "coordinates": [[-103.79558, 32.30492], [-103.793467263, 32.331700182]]}]}""")
         val geo = Geo.parseMulti(json)
         transaction.insert(Person(

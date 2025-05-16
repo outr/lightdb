@@ -32,7 +32,7 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
 
   object json {
     def insert(stream: rapid.Stream[Json],
-               disableSearchUpdates: Boolean): Task[Int] = store.transaction { implicit transaction =>
+               disableSearchUpdates: Boolean): Task[Int] = store.transaction { transaction =>
       if (disableSearchUpdates) {
         transaction match {
           case t: SplitCollectionTransaction[_, _, _, _] => t.applySearchUpdates = false

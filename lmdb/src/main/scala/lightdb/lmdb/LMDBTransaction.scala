@@ -64,7 +64,7 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     store.instance.dbi.stat(readTxn).entries.toInt
   }
 
-  /*override def _exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = Task {
+  /*override def _exists(id: Id[Doc])(transaction: Transaction[Doc]): Task[Boolean] = Task {
     val cursor = instance.dbi.openCursor(transaction)
     try {
       cursor.get(key(id), GetOp.MDB_SET_KEY)

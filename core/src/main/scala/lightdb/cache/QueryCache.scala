@@ -47,8 +47,7 @@ trait QueryCache {
    * Retrieve or start the search for `query`. If it's already in the map,
    * we update its usage (increment reference count, update timestamp).
    */
-  def apply(key: Key, query: Query[Doc, Model, V])
-           (implicit transaction: Transaction[Doc, Model]): Task[SearchResults[Doc, Model, V]] = if (!enabled) {
+  def apply(key: Key, query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = if (!enabled) {
     query.search
   } else if (onlyFirstPage && query.offset > 0) {
     query.search

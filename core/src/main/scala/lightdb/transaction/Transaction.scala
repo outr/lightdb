@@ -14,11 +14,11 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def store: Store[Doc, Model]
   def parent: Option[Transaction[Doc, Model]]
 
-  final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc)(this).flatMap { _ =>
+  final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this).flatMap { _ =>
     _insert(doc)
   }
   def insert(docs: Seq[Doc]): Task[Seq[Doc]] = docs.map(insert).tasks
-  final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc)(this).flatMap { _ =>
+  final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this).flatMap { _ =>
     _upsert(doc)
   }
   def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = docs.map(upsert).tasks
@@ -26,7 +26,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   final def count: Task[Int] = _count
   final def delete[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Boolean] = {
     val (field, value) = f(store.model)
-    store.trigger.delete(field, value)(this).flatMap(_ => _delete(field, value))
+    store.trigger.delete(field, value, this).flatMap(_ => _delete(field, value))
   }
   final def commit: Task[Unit] = _commit
   final def rollback: Task[Unit] = _rollback

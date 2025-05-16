@@ -71,67 +71,67 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.init.succeed
     }
     "verify the database is empty" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.count.map(_ should be(0))
       }
     }
     "insert the records" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.insert(names).map(_ should not be None)
       }
     }
     "retrieve the first record by _id -> id" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction(_._id -> adam._id).map(_ should be(adam))
       }
     }
     "retrieve the first record by id" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction(adam._id).map(_ should be(adam))
       }
     }
     "count the records in the database" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.count.map(_ should be(26))
       }
     }
     "stream the ids in the database" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.id.stream.toList.map(_.toSet).map { ids =>
           ids should be(names.map(_._id).toSet)
         }
       }
     }
     "stream the records in the database" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.stream.map(_.age).toList.map(_.toSet).map { ages =>
           ages should be(Set(101, 42, 89, 102, 53, 13, 2, 22, 12, 81, 35, 63, 99, 23, 30, 4, 21, 33, 11, 72, 15, 62))
         }
       }
     }
     "verify starts with matches" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name.startsWith("Ver")).toList.map { list =>
           list.map(_.name) should be(List("Veronica"))
         }
       }
     }
     "verify ends with matches" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name.endsWith("nica")).toList.map { list =>
           list.map(_.name) should be(List("Veronica"))
         }
       }
     }
     "verify exactly matches" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name.exactly("Veronica")).toList.map { list =>
           list.map(_.name) should be(List("Veronica"))
         }
       }
     }
     "verify regex matches" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name.regex(".*ron.*")).toList.map { list =>
           list.map(_.name) should be(List("Veronica"))
         }
@@ -142,7 +142,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "query with aggregate functions" in {
       if (aggregationSupported) {
-        db.people.transaction { implicit transaction =>
+        db.people.transaction { transaction =>
           transaction.query
             .aggregate(p => List(
               p.age.min,
@@ -163,28 +163,28 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "search by age range" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.age BETWEEN 19 -> 22).value(_._id).stream.toList.map { ids =>
           ids.toSet should be(Set(adam._id, nancy._id, oscar._id, uba._id))
         }
       }
     }
     "search excluding age 30" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.age !== 30).toList.map(_.map(_.name).toSet).map { names =>
           names should be(Set("Linda", "Ruth", "Nancy", "Jenna", "Hanna", "Diana", "Ian", "Zoey", "Quintin", "Uba", "Oscar", "Kevin", "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Adam", "Xena", "Fiona", "Greg", "Veronica"))
         }
       }
     }
     "sort by age" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.sort(Sort.ByField(Person.age).descending).toList.map { people =>
           people.map(_.name).take(3) should be(List("Ruth", "Zoey", "Quintin"))
         }
       }
     }
     "group by age" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.grouped(_.age).toList.map { list =>
           list.map(_.group) should be(List(2, 4, 11, 12, 13, 15, 21, 22, 23, 30, 33, 35, 42, 53, 62, 63, 72, 81, 89, 99, 101, 102))
           list.map(_.results.map(_.name).toSet) should be(List(
@@ -197,14 +197,14 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "delete some records" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.delete(_._id -> linda._id).and(transaction.delete(_._id -> yuri._id)).map { t =>
           t should be(true -> true)
         }
       }
     }
     "query with multiple nots" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         val query = transaction.query.filter { ref =>
           ref.builder
             .mustNot(_.age < 30)
@@ -216,12 +216,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "verify the records were deleted" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.count.map(_ should be(24))
       }
     }
     "modify a record" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.modify(adam._id) {
           case Some(p) => Task.pure(Some(p.copy(name = "Allan")))
           case None => fail("Adam was not found!")
@@ -232,7 +232,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "verify the record has been renamed" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction(_._id -> adam._id).map(_.name should be("Allan"))
       }
     }
@@ -251,7 +251,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "query the database to verify records were persisted properly" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.stream.toList.map(_.map(_.name).toSet).map { set =>
           set should be(Set(
             "Tori", "Ruth", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin",
@@ -261,7 +261,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "search using tokenized data and a parsed query" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.search.words("nica 13", matchEndsWith = true)).toList.map { people =>
           people.map(_.name) should be(List("Veronica"))
         }
@@ -269,7 +269,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "search using Filter.Builder and scoring" in {
       if (filterBuilderSupported) {
-        db.people.transaction { implicit transaction =>
+        db.people.transaction { transaction =>
           transaction.query.scored.filter(_
             .builder
             .minShould(0)
@@ -290,28 +290,28 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "search where city is not set" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.city === None).toList.map { people =>
           people.map(_.name).toSet should be(Set("Tori", "Ruth", "Sam", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin", "Penny", "Charlie", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg", "Veronica"))
         }
       }
     }
     "search where city is set" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.builder.mustNot(_.city === None)).toList.map { people =>
           people.map(_.name) should be(List("Evan"))
         }
       }
     }
     "update the city for a user" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction(zoey._id).flatMap { p =>
           transaction.upsert(p.copy(city = Some(City("Los Angeles"))))
         }
       }.succeed
     }
     "modify a record within a transaction and see it post-commit" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         for {
           original <- transaction.query.filter(_.name === "Ruth").first
           _ <- transaction.upsert(original.copy(
@@ -323,14 +323,14 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "query with single-value nicknames" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.nicknames has "Grouchy").toList.map { people =>
           people.map(_.name) should be(List("Oscar"))
         }
       }
     }
     "query with indexes" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name in List("Allan", "Brenda", "Charlie")).indexes.search.flatMap(_.list).map { results =>
           results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
           results.map(_(_.doc).name).toSet should be(Set("Allan", "Brenda", "Charlie"))
@@ -338,7 +338,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "query with doc and indexes" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name in List("Allan", "Brenda", "Charlie")).docAndIndexes.stream.toList.map { results =>
           results.map(_(_.name)).toSet should be(Set("Allan", "Brenda", "Charlie"))
           results.map(_.doc.name).toSet should be(Set("Allan", "Brenda", "Charlie"))
@@ -346,7 +346,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "query with multi-value nicknames" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query
           .filter(_.nicknames has "Nica")
           .filter(_.nicknames has "Vera")
@@ -357,14 +357,14 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "query name with regex match" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name ~* "Han.+").toList.map { people =>
           people.map(_.name) should be(List("Hanna"))
         }
       }
     }
     "query nicknames that contain ica" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query
           .filter(_.nicknames.contains("ica"))
           .toList
@@ -375,13 +375,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     // TODO: Fix support in SQL
     /*"query all names that start with t" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         val people = transaction.query.filter(_.allNames.startsWith("t")).toList
         people.map(_.name).toSet should be(Set("Tori"))
       }
     }*/
     "query nicknames with regex match" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query
           .filter(_.nicknames ~* ".+chy")
           .toList
@@ -391,14 +391,14 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "materialize empty nicknames" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.name === "Ian").materialized(p => List(p.nicknames)).toList.map { people =>
           people.map(m => m(_.nicknames)) should be(List(Set.empty))
         }
       }
     }
     "query with single-value, multiple nicknames" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query
           .filter(_.nicknames has "Nica")
           .toList
@@ -408,7 +408,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "sort by name and page through results" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         val q = transaction.query.sort(Sort.ByField(Person.name)).limit(10)
         for {
           l1 <- q.offset(0).docs.search.flatMap(_.list).map(_.map(_.name))
@@ -422,28 +422,28 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "sort by age and verify top results" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.sort(Sort.ByField(Person.age).desc).limit(5).toList.map { people =>
           people.map(_.name) should be(List("Not Ruth", "Zoey", "Quintin", "Ian", "Sam"))
         }
       }
     }
     "sort by age double and verify top results" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.sort(Sort.ByField(Person.ageDouble).desc).limit(5).toList.map { people =>
           people.map(_.name) should be(List("Not Ruth", "Zoey", "Quintin", "Ian", "Sam"))
         }
       }
     }
     "filter by created after" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.filter(_.created >= start).toList.map { people =>
           people.map(_.name).toSet should be(Set("Brenda", "Charlie", "Diana", "Evan", "Fiona", "Greg", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Sam", "Tori", "Uba", "Veronica", "Wyatt", "Xena", "Allan", "Zoey", "Not Ruth"))
         }
       }
     }
     "filter by list of friend ids" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         val q = transaction.query.filter(_
           .builder
           .should(_.friends has fiona._id)
@@ -468,7 +468,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       DatabaseBackup.archive(db.stores, new File(s"backups/$specName.zip")).map(_ should be(49))
     }
     "insert a lot more names" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         val p = (1 to CreateRecords).toList.map { index =>
           Person(
             name = s"Unique Snowflake $index",
@@ -481,12 +481,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "verify the correct number of people exist in the database" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.count.map(_ should be(CreateRecords + 24))
       }
     }
     "verify id count matches total count" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.countTotal(true).id.search.flatMap { results =>
           results.list.map { list =>
             results.total should be(Some(CreateRecords + 24))
@@ -496,14 +496,14 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "verify total ids returned is correct" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query.countTotal(true).id.stream.toList.map { ids =>
           ids.length should be(CreateRecords + 24)
         }
       }
     }
     "verify the correct count in query total" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query
           .filter(_.nicknames.has("robot"))
           .sort(Sort.ByField(Person.age).descending)
@@ -521,7 +521,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "verify the correct count in query total with offset" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.query
           .filter(_.nicknames has "robot")
           .limit(100)
@@ -539,12 +539,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "truncate the collection" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.truncate.map(_ should be(CreateRecords + 24))
       }
     }
     "verify the collection is empty" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.count.map(_ should be(0))
       }
     }
@@ -552,12 +552,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       DatabaseRestore.archive(db, new File(s"backups/$specName.zip")).map(_ should be(49))
     }
     "verify the correct number of records exist" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         transaction.count.map(_ should be(24))
       }
     }
     /*"insert an invalid record via JSON" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         db.people.t.json.insert(List(
           obj(
             "name" -> "Invalid",
@@ -567,7 +567,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "get the invalid JSON object" in {
-      db.people.transaction { implicit transaction =>
+      db.people.transaction { transaction =>
         val results = transaction.query.filter(_._id === Person.id("invalid-test")).search.json(_.fields)
         results.list.length should be(1)
         results.list.head should be(obj(
@@ -664,7 +664,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     def id(age: Int): Id[AgeLinks] = Id(age.toString)
 
-    override protected def process(list: List[List[DocState[Person]]]): Task[Unit] = db.ageLinks.transaction { implicit transaction =>
+    override protected def process(list: List[List[DocState[Person]]]): Task[Unit] = db.ageLinks.transaction { transaction =>
       Task {
         list.groupBy(_.head.doc.age).foreach {
           case (age, states) =>

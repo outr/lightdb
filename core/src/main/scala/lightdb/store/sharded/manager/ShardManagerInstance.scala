@@ -15,7 +15,7 @@
 //
 //  def shardFor(id: Id[Doc]): Option[Store[Doc, Model]]
 //
-//  def findDocShard(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Option[Store[Doc, Model]]] = firstMatch { store =>
+//  def findDocShard(id: Id[Doc])(transaction: Transaction[Doc]): Task[Option[Store[Doc, Model]]] = firstMatch { store =>
 //    store.get(id).map(_.map(_ => store))
 //  }
 //
@@ -36,13 +36,13 @@
 //    recurse(shards)
 //  }
 //
-//  def insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardFor(doc)
+//  def insert(doc: Doc)(transaction: Transaction[Doc]): Task[Doc] = shardFor(doc)
 //    .insert(doc)
 //
-//  def upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardFor(doc)
+//  def upsert(doc: Doc)(transaction: Transaction[Doc]): Task[Doc] = shardFor(doc)
 //    .upsert(doc)
 //
-//  def delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Option[Store[Doc, Model]]] = {
+//  def delete[V](field: UniqueIndex[Doc, V], value: V)(transaction: Transaction[Doc]): Task[Option[Store[Doc, Model]]] = {
 //    val deleteFirst = () => shards.foldLeft(Task.pure(Option.empty[Store[Doc, Model]])) { (task, shard) =>
 //      task.flatMap { result =>
 //        if (result.nonEmpty) {
@@ -69,7 +69,7 @@
 //    }
 //  }
 //
-//  def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = shardFor(id) match {
+//  def exists(id: Id[Doc])(transaction: Transaction[Doc]): Task[Boolean] = shardFor(id) match {
 //    case Some(store) => store.exists(id)
 //    case None => firstMatch { store =>
 //      store.exists(id).map {
@@ -79,7 +79,7 @@
 //    }.map(_.getOrElse(false))
 //  }
 //
-//  def reIndex(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Boolean] = shardFor(doc._id) match {
+//  def reIndex(doc: Doc)(transaction: Transaction[Doc]): Task[Boolean] = shardFor(doc._id) match {
 //    case Some(store) => store.reIndex(doc)
 //    case None => findDocShard(doc._id).flatMap {
 //      case Some(store) => store.reIndex(doc)

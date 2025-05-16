@@ -11,27 +11,27 @@ import scala.annotation.unchecked.uncheckedVariance
 trait BasicStoreTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends StoreTrigger[Doc, Model] {
   def store: Store[Doc, Model @uncheckedVariance]
 
-  protected def adding(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit]
+  protected def adding(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit]
 
-  protected def modifying(oldDoc: Doc, newDoc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit]
+  protected def modifying(oldDoc: Doc, newDoc: Doc, transaction: Transaction[Doc, Model]): Task[Unit]
 
-  protected def removing(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit]
+  protected def removing(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit]
 
-  override final def insert(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit] = adding(doc)
+  override final def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = adding(doc, transaction)
 
-  override final def upsert(doc: Doc)(implicit transaction: Transaction[Doc, Model]): Task[Unit] =
+  override final def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] =
     transaction.get(doc._id).map {
-      case Some(current) => modifying(current, doc)
-      case None => adding(doc)
+      case Some(current) => modifying(current, doc, transaction)
+      case None => adding(doc, transaction)
     }
 
-  override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc, Model]): Task[Unit] = {
+  override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V, transaction: Transaction[Doc, Model]): Task[Unit] = {
     transaction(_ => index -> value).flatMap { doc =>
-      removing(doc)
+      removing(doc, transaction)
     }
   }
 
-  override final def truncate: Task[Unit] = store.transaction { implicit transaction =>
-    transaction.stream.map(doc => removing(doc)(transaction)).drain
+  override final def truncate: Task[Unit] = store.transaction { transaction =>
+    transaction.stream.map(doc => removing(doc, transaction)).drain
   }
 }

@@ -45,14 +45,14 @@
 //    }
 //  }
 //
-//  override protected def _insert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.insert(doc)
+//  override protected def _insert(doc: Doc)(transaction: Transaction[Doc]): Task[Doc] = shardManager.insert(doc)
 //
-//  override protected def _upsert(doc: Doc)(implicit transaction: Transaction[Doc]): Task[Doc] = shardManager.upsert(doc)
+//  override protected def _upsert(doc: Doc)(transaction: Transaction[Doc]): Task[Doc] = shardManager.upsert(doc)
 //
-//  override def exists(id: Id[Doc])(implicit transaction: Transaction[Doc]): Task[Boolean] = shardManager.exists(id)
+//  override def exists(id: Id[Doc])(transaction: Transaction[Doc]): Task[Boolean] = shardManager.exists(id)
 //
 //  override protected def _get[V](field: UniqueIndex[Doc, V], value: V)
-//                     (implicit transaction: Transaction[Doc]): Task[Option[Doc]] = {
+//                     (transaction: Transaction[Doc]): Task[Option[Doc]] = {
 //    val findFirst = () => shardManager.shards.foldLeft(Task.pure(Option.empty[Doc])) { (task, shard) =>
 //      task.flatMap {
 //        case Some(doc) => Task.pure(Some(doc))
@@ -70,27 +70,27 @@
 //    }
 //  }
 //
-//  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)(implicit transaction: Transaction[Doc]): Task[Boolean] =
+//  override protected def _delete[V](field: UniqueIndex[Doc, V], value: V)(transaction: Transaction[Doc]): Task[Boolean] =
 //    shardManager.delete(field, value).map(_.nonEmpty)
 //
-//  override def count(implicit transaction: Transaction[Doc]): Task[Int] =
+//  override def count(transaction: Transaction[Doc]): Task[Int] =
 //    shardManager.shards.foldLeft(Task.pure(0)) { (task, shard) =>
 //      task.flatMap { count =>
 //        shard.count.map(_ + count)
 //      }
 //    }
 //
-//  def shardCounts(implicit transaction: Transaction[Doc]): Task[Vector[Int]] =
+//  def shardCounts(transaction: Transaction[Doc]): Task[Vector[Int]] =
 //    shardManager.shards.map(_.count).tasks.map(_.toVector)
 //
-//  override def stream(implicit transaction: Transaction[Doc]): Stream[Doc] =
+//  override def stream(transaction: Transaction[Doc]): Stream[Doc] =
 //    Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.stream)
 //
-//  override def jsonStream(implicit transaction: Transaction[Doc]): Stream[Json] =
+//  override def jsonStream(transaction: Transaction[Doc]): Stream[Json] =
 //    Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.jsonStream)
 //
 //  override def doSearch[V](query: Query[Doc, Model, V])
-//                          (implicit transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
+//                          (transaction: Transaction[Doc]): Task[SearchResults[Doc, Model, V]] = {
 //    // TODO: Optimize this to more efficiently query
 //    val offset = 0
 //    val limit = query.limit.map(l => query.offset + l)
@@ -234,14 +234,14 @@
 //  }
 //
 //  override def aggregate(query: AggregateQuery[Doc, Model])
-//                        (implicit transaction: Transaction[Doc]): Stream[MaterializedAggregate[Doc, Model]] = {
+//                        (transaction: Transaction[Doc]): Stream[MaterializedAggregate[Doc, Model]] = {
 //    // Aggregate across all shards
 //    // Note: This is a simplified implementation that concatenates the aggregation results from all shards
 //    // A more complete implementation would merge the aggregation results
 //    Stream.fromIterator(Task.pure(shardManager.shards.iterator)).flatMap(_.aggregate(query))
 //  }
 //
-//  override def aggregateCount(query: AggregateQuery[Doc, Model])(implicit transaction: Transaction[Doc]): Task[Int] = {
+//  override def aggregateCount(query: AggregateQuery[Doc, Model])(transaction: Transaction[Doc]): Task[Int] = {
 //    // Sum the aggregation counts from all shards
 //    shardManager.shards.foldLeft(Task.pure(0)) { (task, shard) =>
 //      task.flatMap { count =>
@@ -250,7 +250,7 @@
 //    }
 //  }
 //
-//  override def truncate()(implicit transaction: Transaction[Doc]): Task[Int] = {
+//  override def truncate()(transaction: Transaction[Doc]): Task[Int] = {
 //    // Truncate all shards and sum the counts
 //    shardManager.shards.foldLeft(Task.pure(0)) { (task, shard) =>
 //      task.flatMap { count =>
@@ -276,7 +276,7 @@
 //    store.reIndex()
 //  }.tasks.map(_ => true)
 //
-//  override def reIndex(doc: Doc): Task[Boolean] = transaction { implicit transaction =>
+//  override def reIndex(doc: Doc): Task[Boolean] = transaction { transaction =>
 //    shardManager.reIndex(doc)
 //  }
 //

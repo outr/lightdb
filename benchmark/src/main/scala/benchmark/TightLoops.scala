@@ -50,7 +50,7 @@
 //      dbDir.mkdirs()
 //
 //      db.init
-//      DB.people.transaction { implicit transaction =>
+//      DB.people.transaction { transaction =>
 //        val insertTime = elapsed(insertRecords())
 //        scribe.info(s"Inserted in $insertTime")
 //        val countTime = elapsed {
@@ -83,7 +83,7 @@
 //    sys.exit(0)
 //  }
 //
-//  def insertRecords()(implicit transaction: Transaction[Person]): Unit = {
+//  def insertRecords()(transaction: Transaction[Person]): Unit = {
 //    var count = 0
 //    (0 until RecordCount)
 //      .iterator
@@ -98,7 +98,7 @@
 //    scribe.info(s"Inserted $count records")
 //  }
 //
-//  def countRecords()(implicit transaction: Transaction[Person]): Int = {
+//  def countRecords()(transaction: Transaction[Person]): Int = {
 //    var count = -1
 //    (0 until CountIterations)
 //      .iterator
@@ -106,7 +106,7 @@
 //    count
 //  }
 //
-//  def countIndexes()(implicit transaction: Transaction[Person]): Int = {
+//  def countIndexes()(transaction: Transaction[Person]): Int = {
 //    var count = -1
 //    (0 until CountIterations)
 //      .iterator
@@ -114,13 +114,13 @@
 //    count
 //  }
 //
-//  def streamRecords()(implicit transaction: Transaction[Person]): Unit = ParRange(0, StreamIterations, 1, inclusive = false)
+//  def streamRecords()(transaction: Transaction[Person]): Unit = ParRange(0, StreamIterations, 1, inclusive = false)
 //    .foreach { _ =>
 //      val count = DB.people.iterator.size
 //      scribe.info(s"Streamed: $count")
 //    }
 //
-//  def searchRecords()(implicit transaction: Transaction[Person]): Unit = Range(0, SearchIterations, 1)
+//  def searchRecords()(transaction: Transaction[Person]): Unit = Range(0, SearchIterations, 1)
 //    .foreach { _ =>
 //      ParRange(0, RecordCount, 1, inclusive = false)
 //        .foreach { age =>
@@ -134,7 +134,7 @@
 //        }
 //    }
 //
-//  def searchAndCountRecords()(implicit transaction: Transaction[Person]): Int = DB.people.query
+//  def searchAndCountRecords()(transaction: Transaction[Person]): Int = DB.people.query
 //    .search
 //    .docs
 //    .iterator
