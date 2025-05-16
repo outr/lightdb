@@ -1,11 +1,11 @@
 package spec
 
 import fabric.rw._
+import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.id.Id
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.LightDB
-import lightdb.id.Id
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}

@@ -2,7 +2,6 @@ package lightdb.cache
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
-import lightdb.transaction.Transaction
 import lightdb.{Query, SearchResults, Timestamp}
 import rapid.{Fiber, Task}
 

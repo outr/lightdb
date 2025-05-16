@@ -3,7 +3,7 @@ package lightdb.graph
 import fabric._
 import fabric.define.DefType
 import fabric.rw._
-import lightdb.doc.{Document, JsonConversion}
+import lightdb.doc.Document
 import lightdb.id.{EdgeId, Id}
 
 final case class ReverseEdgeDocument[

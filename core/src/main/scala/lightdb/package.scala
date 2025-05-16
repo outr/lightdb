@@ -1,7 +1,3 @@
-import lightdb.doc.Document
-import lightdb.id.Id
-import lightdb.traverse.{DocumentTraversalBuilder, GraphTraversal}
-
 import scala.language.implicitConversions
 
 package object lightdb {

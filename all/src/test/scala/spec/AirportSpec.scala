@@ -1,23 +1,22 @@
 package spec
 
 import fabric.rw._
+import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
-import lightdb.halodb.HaloDBStore
+import lightdb.id.{EdgeId, Id}
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
-import lightdb.store.split.{SplitCollection, SplitStoreManager}
+import lightdb.store.split.SplitStoreManager
+import lightdb.traverse.TraversalPath
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb._
-import lightdb.id.{EdgeId, Id}
-import lightdb.traverse.{GraphTraversal, TraversalPath}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task, Unique, logger}
 
 import java.nio.file.Path
-import java.time.{Instant, ZoneOffset}
 import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneOffset}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source

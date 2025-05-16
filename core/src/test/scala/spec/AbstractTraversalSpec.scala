@@ -3,11 +3,10 @@ package spec
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
+import lightdb.id.{EdgeId, Id}
 import lightdb.store.PrefixScanningStoreManager
-import lightdb.traverse._
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB, traverse}
-import lightdb.id.{EdgeId, Id}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid._

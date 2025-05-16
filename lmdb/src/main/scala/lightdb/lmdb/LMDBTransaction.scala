@@ -6,10 +6,9 @@ import fabric.{Json, Null}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
-import lightdb.lmdb.LMDBTransaction.pool
-import lightdb.store.{BufferedWritingTransaction, WriteBuffer, WriteOp}
+import lightdb.store.{BufferedWritingTransaction, WriteOp}
 import lightdb.transaction.Transaction
-import org.lmdbjava.{Env, PutFlags, Txn}
+import org.lmdbjava.Txn
 import rapid._
 
 import java.nio.ByteBuffer

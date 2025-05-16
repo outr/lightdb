@@ -1,13 +1,8 @@
 package lightdb.graph
 
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field
 import lightdb.field.Field.UniqueIndex
 import lightdb.id.Id
-import lightdb.store.{Store, StoreMode}
-import lightdb.transaction.Transaction
-import lightdb.trigger.StoreTrigger
-import rapid.{Task, logger}
 
 import scala.language.implicitConversions
 

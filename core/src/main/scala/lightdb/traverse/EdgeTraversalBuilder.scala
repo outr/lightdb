@@ -4,7 +4,7 @@ import lightdb.doc.Document
 import lightdb.graph.EdgeDocument
 import lightdb.id.Id
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
-import rapid.{Stream, Task}
+import rapid.Stream
 
 /**
  * Builder for edge traversals

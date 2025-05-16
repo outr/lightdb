@@ -2,7 +2,6 @@ package lightdb.aggregate
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.materialized.MaterializedAggregate
-import lightdb.transaction.Transaction
 import lightdb.{Query, SortDirection}
 import rapid.Task
 
