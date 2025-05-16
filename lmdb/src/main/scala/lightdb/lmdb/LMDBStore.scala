@@ -20,13 +20,11 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   override type TX = LMDBTransaction[Doc, Model]
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
-    LMDBTransaction(this, instance.env, parent)
+    LMDBTransaction(this, instance, parent)
   }
 
   override protected def doDispose(): Task[Unit] = super.doDispose().map { _ =>
-    instance.env.sync(true)
-    instance.dbi.close()
-    instance.env.close()
+    instance.close()
   }
 }
 
@@ -47,9 +45,6 @@ object LMDBStore extends StoreManager {
    * Max Readers. Defaults to 128
    */
   var MaxReaders: Int = 128
-
-  private[lmdb] val keyBufferPool = new ByteBufferPool(512)
-  private[lmdb] val valueBufferPool = new ByteBufferPool(512)
 
   private var instances = Map.empty[LightDB, LMDBInstance]
 
