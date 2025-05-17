@@ -1,6 +1,6 @@
 // Scala versions
 val scala213 = "2.13.16"
-val scala3 = "3.6.4"
+val scala3 = "3.7.0"
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
@@ -75,7 +75,7 @@ val jtsVersion: String = "1.20.0"
 
 val haloDBVersion: String = "0.5.7"
 
-val rocksDBVersion: String = "10.0.1"
+val rocksDBVersion: String = "10.2.1"
 
 val mapdbVersion: String = "3.1.0"
 
