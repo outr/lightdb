@@ -13,8 +13,8 @@ trait BenchmarkImplementation {
   def map2TitleAka(map: Map[String, String]): TitleAka
   def map2TitleBasics(map: Map[String, String]): TitleBasics
 
-  def persistTitleAka(t: TitleAka): Task[Unit]
-  def persistTitleBasics(t: TitleBasics): Task[Unit]
+  def persistTitleAka(stream: rapid.Stream[TitleAka]): Task[Unit]
+  def persistTitleBasics(stream: rapid.Stream[TitleBasics]): Task[Unit]
 
   def flush(): Task[Unit]
 
