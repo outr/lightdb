@@ -1,4 +1,4 @@
-package benchmark.bench.impl
+/*package benchmark.bench.impl
 
 import benchmark.bench.Bench
 import rapid.Unique
@@ -107,4 +107,4 @@ object DerbyBench extends Bench {
   }
 
   case class Person(name: String, age: Int, id: String = Unique())
-}
+}*/

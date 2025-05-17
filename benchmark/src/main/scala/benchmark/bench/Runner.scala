@@ -1,3 +1,4 @@
+/*
 package benchmark.bench
 
 import benchmark.bench.impl._
@@ -83,3 +84,4 @@ object Runner {
     }
   }
 }
+*/

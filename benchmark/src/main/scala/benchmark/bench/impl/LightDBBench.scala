@@ -1,4 +1,4 @@
-package benchmark.bench.impl
+/*package benchmark.bench.impl
 
 import benchmark.bench.Bench
 import fabric.rw._
@@ -101,4 +101,4 @@ case class LightDBBench(storeManager: StoreManager) extends Bench { bench =>
     val name: F[String] = field("name", _.name)
     val age: I[Int] = field.index("age", _.age)
   }
-}
+}*/
