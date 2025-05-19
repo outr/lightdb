@@ -1,3 +1,4 @@
+/*
 package benchmark.imdb
 
 import cats.effect.IO
@@ -160,3 +161,4 @@ object LightDBImplementation extends BenchmarkImplementation {
     val genres: F[List[String]] = field(_.genres)
   }
 }
+*/

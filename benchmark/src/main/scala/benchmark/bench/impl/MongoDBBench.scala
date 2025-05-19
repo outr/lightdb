@@ -1,4 +1,3 @@
-/*
 package benchmark.bench.impl
 
 import benchmark.bench.Bench
@@ -79,4 +78,3 @@ object MongoDBBench extends Bench {
 
   override def dispose(): Unit = client.close()
 }
-*/

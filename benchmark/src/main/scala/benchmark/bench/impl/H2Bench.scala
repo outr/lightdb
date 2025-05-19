@@ -1,4 +1,4 @@
-/*package benchmark.bench.impl
+package benchmark.bench.impl
 
 import benchmark.bench.Bench
 import rapid.Unique
@@ -96,4 +96,4 @@ object H2Bench extends Bench {
   }
 
   case class Person(name: String, age: Int, id: String = Unique())
-}*/
+}

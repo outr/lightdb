@@ -15,16 +15,16 @@ trait Bench {
   val SearchAllAsyncIterations: Int = 8
   val SearchIterations: Int = 1
 
-  val tasks: List[Task] = List(
-    Task("Insert Records", RecordCount, insertRecordsTask),
-    Task("Stream Records", RecordCount, streamRecordsTask),
-    Task("Stream Records Multi", RecordCount * StreamAsyncIterations, streamRecordsAsyncTask),
-    Task("Get Each Record", RecordCount, getEachRecordTask),
-    Task("Get Each Record Multi", RecordCount * GetAsyncIterations, getEachRecordAsyncTask),
-    Task("Search Each Record", RecordCount, searchEachRecordTask),
-    Task("Search Each Record Multi", RecordCount * SearchEachAsyncIterations, searchEachRecordAsyncTask),
-    Task("Search All Records", RecordCount, searchAllRecordsTask),
-    Task("Search All Records Multi", RecordCount, searchAllRecordsAsyncTask)
+  val tasks: List[TaskState] = List(
+    TaskState("Insert Records", RecordCount, insertRecordsTask),
+    TaskState("Stream Records", RecordCount, streamRecordsTask),
+    TaskState("Stream Records Multi", RecordCount * StreamAsyncIterations, streamRecordsAsyncTask),
+    TaskState("Get Each Record", RecordCount, getEachRecordTask),
+    TaskState("Get Each Record Multi", RecordCount * GetAsyncIterations, getEachRecordAsyncTask),
+    TaskState("Search Each Record", RecordCount, searchEachRecordTask),
+    TaskState("Search Each Record Multi", RecordCount * SearchEachAsyncIterations, searchEachRecordAsyncTask),
+    TaskState("Search All Records", RecordCount, searchAllRecordsTask),
+    TaskState("Search All Records Multi", RecordCount, searchAllRecordsAsyncTask)
   )
 
   def name: String
