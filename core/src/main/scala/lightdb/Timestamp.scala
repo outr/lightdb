@@ -16,6 +16,12 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
   def second: Int = value.t.secondOfMinute
   def millisecond: Int = value.t.milliOfSecond
 
+  def toMidnight: Timestamp = Timestamp.of(
+    year = year,
+    month = month,
+    day = day
+  )
+
   def isExpired(timeout: FiniteDuration): Boolean = {
     val now = System.currentTimeMillis()
     value + timeout.toMillis < now
