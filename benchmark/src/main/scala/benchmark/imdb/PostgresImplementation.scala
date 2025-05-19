@@ -100,9 +100,11 @@ object PostgresImplementation extends BenchmarkImplementation {
     genres = map.value("genres")
   )
 
-  override def persistTitleAka(t: TitleAka): Task[Unit] = backlogAka.enqueue(t.id, t).map(_ => ())
+  override def persistTitleAka(stream: rapid.Stream[TitleAka]): Task[Unit] = 
+    stream.evalMap(t => backlogAka.enqueue(t.id, t).map(_ => ())).drain
 
-  override def persistTitleBasics(t: TitleBasicsPG): Task[Unit] = backlogBasics.enqueue(t.id, t).map(_ => ())
+  override def persistTitleBasics(stream: rapid.Stream[TitleBasics]): Task[Unit] = 
+    stream.evalMap(t => backlogBasics.enqueue(t.id, t).map(_ => ())).drain
 
   private def fromRS(rs: ResultSet): TitleAkaPG = TitleAkaPG(
     id = rs.getString("id"),

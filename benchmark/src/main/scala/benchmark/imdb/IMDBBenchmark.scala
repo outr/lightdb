@@ -1,4 +1,4 @@
-package benchmark.imdb
+/*package benchmark.imdb
 
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
@@ -340,4 +340,4 @@ object Limit {
     override def name: String = ""
     override def value: Int = -1
   }
-}
+}*/

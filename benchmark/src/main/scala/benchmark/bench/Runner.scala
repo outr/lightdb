@@ -1,4 +1,3 @@
-/*
 package benchmark.bench
 
 import benchmark.bench.impl._
@@ -33,7 +32,7 @@ object Runner {
     "LightDB-RocksDB-Lucene" -> LightDBBench(SplitStoreManager(RocksDBStore, LuceneStore)),
     "LightDB-H2" -> LightDBBench(H2Store),
     "LightDB-HaloDB-H2" -> LightDBBench(SplitStoreManager(HaloDBStore, H2Store)),
-    "LightDB-LMDB-Lucene" -> LightDBBench(LMDBStore), // SplitStoreManager(LMDBStore, LuceneStore)),
+//    "LightDB-LMDB-Lucene" -> LightDBBench(SplitStoreManager(LMDBStore, LuceneStore)),
 //    "LightDB-PostgreSQL" -> LightDBBench(PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
 //      jdbcUrl = s"jdbc:postgresql://localhost:5432/basic",
 //      username = Some("postgres"),
@@ -84,4 +83,3 @@ object Runner {
     }
   }
 }
-*/

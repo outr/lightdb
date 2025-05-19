@@ -74,9 +74,11 @@ object MongoDBImplementation extends BenchmarkImplementation {
     titleAka.createIndex(Indexes.ascending("titleId"))
   }
 
-  override def persistTitleAka(t: Document): Task[Unit] = backlogAka.enqueue(t.getString("_id"), t).map(_ => ())
+  override def persistTitleAka(stream: rapid.Stream[Document]): Task[Unit] = 
+    stream.evalMap(t => backlogAka.enqueue(t.getString("_id"), t).map(_ => ())).drain
 
-  override def persistTitleBasics(t: Document): Task[Unit] = backlogBasics.enqueue(t.getString("_id"), t).map(_ => ())
+  override def persistTitleBasics(stream: rapid.Stream[Document]): Task[Unit] = 
+    stream.evalMap(t => backlogBasics.enqueue(t.getString("_id"), t).map(_ => ())).drain
 
   override def streamTitleAka(): rapid.Stream[Document] = {
     val iterator: Iterator[Document] = titleAka.find().iterator().asScala
