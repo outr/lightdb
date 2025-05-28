@@ -51,5 +51,20 @@ object Timestamp {
     fromCalendar(c)
   }
 
+  def month(s: String): Int = s.toLowerCase match {
+    case "january" | "jan" => 1
+    case "february" | "feb" => 2
+    case "march" | "mar" => 3
+    case "april" | "apr" => 4
+    case "may" => 5
+    case "june" | "jun" => 6
+    case "july" | "jul" => 7
+    case "august" | "aug" => 8
+    case "september" | "sep" | "sept" => 9
+    case "october" | "oct" => 10
+    case "november" | "nov" => 11
+    case "december" | "dec" => 12
+  }
+
   def now: Timestamp = Timestamp()
 }
