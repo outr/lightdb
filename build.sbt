@@ -99,7 +99,7 @@ val duckdbVersion: String = "1.2.2.0"
 
 val h2Version: String = "2.3.232"
 
-val postgresqlVersion: String = "42.7.5"
+val postgresqlVersion: String = "42.7.6"
 
 val chronicleMapVersion: String = "3.27ea0"
 
