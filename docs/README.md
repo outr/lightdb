@@ -82,6 +82,7 @@ LightDB uses **Document** and **DocumentModel** for schema definitions. Here's a
 
 ```scala mdoc
 import lightdb._
+import lightdb.id._
 import lightdb.store._
 import lightdb.doc._
 import fabric.rw._
@@ -154,8 +155,8 @@ Add records to the database:
 
 ```scala mdoc
 val adam = Person(name = "Adam", age = 21)
-db.people.transaction { implicit transaction =>
-  db.people.insert(adam)
+db.people.transaction { implicit txn =>
+  txn.insert(adam)
 }.sync()
 ```
 
@@ -164,8 +165,8 @@ db.people.transaction { implicit transaction =>
 Retrieve records using filters:
 
 ```scala mdoc
-db.people.transaction { implicit transaction =>
-  db.people.query.filter(_.age BETWEEN 20 -> 29).toList.map { peopleIn20s =>
+db.people.transaction { txn =>
+  txn.query.filter(_.age BETWEEN 20 -> 29).toList.map { peopleIn20s =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
@@ -197,8 +198,8 @@ db.people.transaction { implicit transaction =>
 ### Aggregations
 
 ```scala mdoc
-db.people.transaction { implicit transaction =>
-  db.people.query
+db.people.transaction { txn =>
+  txn.query
     .aggregate(p => List(p.age.min, p.age.max, p.age.avg, p.age.sum))
     .toList
     .map { results =>
@@ -210,8 +211,8 @@ db.people.transaction { implicit transaction =>
 ### Grouping
 
 ```scala mdoc
-db.people.transaction { implicit transaction =>
-  db.people.query.grouped(_.age).toList.map { grouped =>
+db.people.transaction { txn =>
+  txn.query.grouped(_.age).toList.map { grouped =>
     println(s"Grouped: $grouped")
   }
 }.sync()
