@@ -11,13 +11,13 @@ case class SharedHaloDBInstance(direct: DirectHaloDBInstance, prefix: String) ex
 
   private def addPrefix(json: Json): Json = {
     json.merge(obj(
-      "_id" -> s"$prefix${json("_id").asString}"
+      "_id" -> str(s"$prefix${json("_id").asString}")
     ))
   }
 
   private def removePrefix(json: Json): Json = {
     json.merge(obj(
-      "_id" -> json("_id").asString.substring(prefix.length)
+      "_id" -> str(json("_id").asString.substring(prefix.length))
     ))
   }
 

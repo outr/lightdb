@@ -10,8 +10,8 @@ sealed trait Geo {
 
 object Geo {
   implicit lazy val pRW: RW[Point] = RW.gen[Point]
-    .withPreWrite(_.merge(obj("type" -> "Point")))
-    .withPostRead((_, json) => json.merge(obj("type" -> "Point")))
+    .withPreWrite(_.merge(obj("type" -> str("Point"))))
+    .withPostRead((_, json) => json.merge(obj("type" -> str("Point"))))
   private implicit lazy val mpRW: RW[MultiPoint] = RW.gen
   private implicit lazy val lsRW: RW[Line] = RW.gen
   private implicit lazy val mlsRW: RW[MultiLine] = RW.gen
@@ -50,7 +50,7 @@ object Geo {
   def parse(json: Json): Geo = json("type").asString match {
     case "Point" =>
       val v = json("coordinates").asVector.map(_.asDouble)
-      Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
+      Geo.Point(latitude = v(1), longitude = v(0)).fixed
     case "LineString" => Line(
       json("coordinates").asVector.toList.map { p =>
         val v = p.asVector

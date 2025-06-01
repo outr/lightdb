@@ -47,7 +47,7 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "verify the storage of data is correct" in {
       DB.specialOne.transaction { transaction =>
         transaction.query.sort(Sort.ByField(SpecialOne.name).asc).json(ref => List(ref._id)).toList.map { list =>
-          list should be(List(obj("_id" -> "first"), obj("_id" -> "second")))
+          list should be(List(obj("_id" -> str("first")), obj("_id" -> str("second"))))
         }
       }
     }
