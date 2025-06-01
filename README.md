@@ -43,6 +43,10 @@ libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.0.0"
 ## Videos
 Watch this [Java User Group demonstration of LightDB](https://www.youtube.com/live/E_5fwgbF4rc?si=cxyb0Br3oCEQInTW)
 
+## Why LightDB?
+
+For a more detailed explanation of the purpose of LightDB and a more general overview of concepts, check out [Why LightDB?](why-lightdb.md)
+
 ## Getting Started
 
 This guide will walk you through setting up and using **LightDB**, a high-performance computational database. We'll use a sample application to explore its key features.
