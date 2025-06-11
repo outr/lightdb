@@ -125,7 +125,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     var extraFields = List.empty[SQLPart]
     val fields = query.conversion match {
       case Conversion.Value(field) => List(field)
-      case Conversion.Doc() | Conversion.Converted(_) => store.fields
+      case Conversion.Doc() => store.fields
+      case Conversion.Converted(_) => store.fields
       case Conversion.Materialized(fields) => fields
       case Conversion.DocAndIndexes() => if (store.storeMode.isIndexes) {
         store.fields.filter(_.indexed)

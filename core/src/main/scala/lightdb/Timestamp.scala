@@ -26,6 +26,8 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
     val now = System.currentTimeMillis()
     value + timeout.toMillis < now
   }
+
+  override def toString: String = s"${value.t.D} ${value.t.T}"
 }
 
 object Timestamp {
