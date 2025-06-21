@@ -87,7 +87,7 @@ val fabricVersion: String = "1.17.2"
 
 val scribeVersion: String = "3.16.1"
 
-val luceneVersion: String = "10.2.1"
+val luceneVersion: String = "10.2.2"
 
 val hikariCPVersion: String = "6.3.0"
 
