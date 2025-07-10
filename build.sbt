@@ -101,7 +101,7 @@ val h2Version: String = "2.3.232"
 
 val postgresqlVersion: String = "42.7.7"
 
-val chronicleMapVersion: String = "3.27ea0"
+val chronicleMapVersion: String = "3.27ea1"
 
 val rapidVersion: String = "0.15.0"
 
