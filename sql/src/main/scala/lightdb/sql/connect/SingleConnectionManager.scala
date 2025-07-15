@@ -24,7 +24,7 @@ case class SingleConnectionManager(connectionCreator: () => java.sql.Connection)
   override protected def doDispose(): Task[Unit] = Task {
     if (!connection.getAutoCommit) connection.commit()
     connection.close()
-  }.when(!connection.isClosed)
+  }.when(!connection.isClosed).unit
 }
 
 object SingleConnectionManager {

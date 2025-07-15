@@ -121,7 +121,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   override protected def doDispose(): Task[Unit] = transaction.releaseAll().flatMap { transactions =>
     logger.warn(s"Released $transactions active transactions").when(transactions > 0)
-  }.guarantee(trigger.dispose)
+  }.guarantee(trigger.dispose).unit
 }
 
 object Store {
