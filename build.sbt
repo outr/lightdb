@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.0.3"
+ThisBuild / version := "4.0.5"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -26,8 +26,10 @@ ThisBuild / scalacOptions ++= {
 	else Nil
 }
 
+
+publishMavenStyle := true
+
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
-ThisBuild / publishMavenStyle := true
 ThisBuild / publishTo := sonatypePublishToBundle.value
 ThisBuild / sonatypeProfileName := org
 ThisBuild / licenses := Seq("MIT" -> url(s"https://github.com/$githubOrg/$projectName/blob/master/LICENSE"))
@@ -67,7 +69,7 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.13.0"
 
-val reactifyVersion: String = "4.1.2"
+val reactifyVersion: String = "4.1.5"
 
 val spatial4JVersion: String = "0.8"
 
@@ -83,7 +85,7 @@ val lmdbVersion: String = "0.9.1"
 
 val jedisVersion: String = "6.0.0"
 
-val fabricVersion: String = "1.17.2"
+val fabricVersion: String = "1.18.2"
 
 val scribeVersion: String = "3.17.0"
 
