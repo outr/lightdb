@@ -32,12 +32,12 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.0.3"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.0.5"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.0.3"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.0.5"
 ```
 
 ## Videos
@@ -69,7 +69,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.0.3"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.0.5"
 ```
 
 ---
@@ -161,7 +161,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId(value = "vQK4xuV0nuZPjCZLcP2aOP9d0Kq0216Q")
+//   _id = StringId(value = "2ozhMJbWjLuu3OXTgqx6SsHRb0Wf43kr")
 // )
 db.people.transaction { implicit txn =>
   txn.insert(adam)
@@ -172,7 +172,7 @@ db.people.transaction { implicit txn =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId(value = "vQK4xuV0nuZPjCZLcP2aOP9d0Kq0216Q")
+//   _id = StringId(value = "2ozhMJbWjLuu3OXTgqx6SsHRb0Wf43kr")
 // )
 ```
 
@@ -186,7 +186,7 @@ db.people.transaction { txn =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj)), Person(Adam,21,None,Set(),List(),StringId(D41g9MV8JBY5w3j2dSbcITvbUqqMMV9b)), Person(Adam,21,None,Set(),List(),StringId(MeJiHSHvAQ6z3KaVoU2pmmNnODArxrvF)), Person(Adam,21,None,Set(),List(),StringId(Y81Ax0W5hN5GdknRGoNNEig0M0vvGDvB)), Person(Adam,21,None,Set(),List(),StringId(vQK4xuV0nuZPjCZLcP2aOP9d0Kq0216Q)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj)), Person(Adam,21,None,Set(),List(),StringId(D41g9MV8JBY5w3j2dSbcITvbUqqMMV9b)), Person(Adam,21,None,Set(),List(),StringId(MeJiHSHvAQ6z3KaVoU2pmmNnODArxrvF)), Person(Adam,21,None,Set(),List(),StringId(Y81Ax0W5hN5GdknRGoNNEig0M0vvGDvB)), Person(Adam,21,None,Set(),List(),StringId(vQK4xuV0nuZPjCZLcP2aOP9d0Kq0216Q)), Person(Adam,21,None,Set(),List(),StringId(KQF0wsatLpGvl1ubfteujz0wL94fFG05)), Person(Adam,21,None,Set(),List(),StringId(2ozhMJbWjLuu3OXTgqx6SsHRb0Wf43kr)))
 ```
 
 ---
@@ -223,7 +223,7 @@ db.people.transaction { txn =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 105},repl.MdocSession$MdocApp$Person$@31754cb0))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 147},repl.MdocSession$MdocApp$Person$@cc253a9))
 ```
 
 ### Grouping
@@ -234,7 +234,7 @@ db.people.transaction { txn =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj)), Person(Adam,21,None,Set(),List(),StringId(D41g9MV8JBY5w3j2dSbcITvbUqqMMV9b)), Person(Adam,21,None,Set(),List(),StringId(MeJiHSHvAQ6z3KaVoU2pmmNnODArxrvF)), Person(Adam,21,None,Set(),List(),StringId(Y81Ax0W5hN5GdknRGoNNEig0M0vvGDvB)), Person(Adam,21,None,Set(),List(),StringId(vQK4xuV0nuZPjCZLcP2aOP9d0Kq0216Q)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(N8eiyZnq9xOMjVW49sZlBgPbVI0mvJlj)), Person(Adam,21,None,Set(),List(),StringId(D41g9MV8JBY5w3j2dSbcITvbUqqMMV9b)), Person(Adam,21,None,Set(),List(),StringId(MeJiHSHvAQ6z3KaVoU2pmmNnODArxrvF)), Person(Adam,21,None,Set(),List(),StringId(Y81Ax0W5hN5GdknRGoNNEig0M0vvGDvB)), Person(Adam,21,None,Set(),List(),StringId(vQK4xuV0nuZPjCZLcP2aOP9d0Kq0216Q)), Person(Adam,21,None,Set(),List(),StringId(KQF0wsatLpGvl1ubfteujz0wL94fFG05)), Person(Adam,21,None,Set(),List(),StringId(2ozhMJbWjLuu3OXTgqx6SsHRb0Wf43kr)))))
 ```
 
 ---
@@ -248,14 +248,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
-// res5: Int = 6
+// res5: Int = 8
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res6: Int = 6
+// res6: Int = 8
 ```
 
 ---
