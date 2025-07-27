@@ -17,9 +17,12 @@ import org.apache.lucene.document._
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermInSetQuery, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.util.BytesRef
 import org.apache.lucene.util.automaton.RegExp
 import rapid.Task
+
+import scala.jdk.CollectionConverters._
 
 class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
                                                                              model: Model,
@@ -223,13 +226,24 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.build()
         case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression), RegExp.ALL, 10_000_000)
         case f: Filter.In[Doc, _] =>
-          val queries = f.getJson(model).map(json => exactQuery(f.field(model), json))
-          val b = new BooleanQuery.Builder
-          b.setMinimumNumberShouldMatch(1)
-          queries.foreach { q =>
-            b.add(q, BooleanClause.Occur.SHOULD)
+          val values = f.getJson(model)
+          val fieldName = f.field(model).name
+          val bytesRefs = values.collect {
+            case Str(s, _) => new BytesRef(s)
+            case NumInt(i, _) => new BytesRef(i.toString)
+            case NumDec(d, _) => new BytesRef(d.toString)
+            case Bool(b, _) => new BytesRef(if (b) "1" else "0")
           }
-          b.build()
+          if (bytesRefs.size == values.size) {
+            // All simple string IDs → use TermInSetQuery to avoid overflow
+            new TermInSetQuery(fieldName, bytesRefs.asJava)
+          } else {
+            // fallback to BooleanQuery for mixed types
+            val queries = values.map(json => exactQuery(f.field(model), json))
+            val b = new BooleanQuery.Builder().setMinimumNumberShouldMatch(1)
+            queries.foreach(q => b.add(q, BooleanClause.Occur.SHOULD))
+            b.build()
+          }
         case Filter.RangeLong(fieldName, from, to) => LongField.newRangeQuery(fieldName, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
         case Filter.RangeDouble(fieldName, from, to) => DoubleField.newRangeQuery(fieldName, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
         case Filter.StartsWith(fieldName, query) => new RegexpQuery(new Term(fieldName, s"${LuceneStore.escapeRegexLiteral(query)}.*"))
