@@ -60,8 +60,20 @@ class SplitCollection[
     .searching
     .truncate
     .flatMap { _ =>
-      transaction.storage.stream.evalMap(transaction.searching.insert).drain
+      transaction
+        .storage
+        .stream
+        .chunk(SplitCollection.ReIndexChunkSize)
+        .par(SplitCollection.ReIndexMaxThreads) { docs =>
+          transaction.searching.insert(docs)
+        }
+        .drain
     }
 
   override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).next(super.doDispose())
+}
+
+object SplitCollection {
+  var ReIndexMaxThreads: Int = 32
+  var ReIndexChunkSize: Int = 128
 }

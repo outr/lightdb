@@ -5,7 +5,7 @@ import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
 import lightdb.id.Id
-import lightdb.store.split.SplitCollectionTransaction
+import lightdb.store.split.{SearchUpdateHandler, SplitCollectionTransaction}
 import rapid.{Forge, Task}
 
 /**
@@ -35,7 +35,7 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                disableSearchUpdates: Boolean): Task[Int] = store.transaction { transaction =>
       if (disableSearchUpdates) {
         transaction match {
-          case t: SplitCollectionTransaction[_, _, _, _] => t.applySearchUpdates = false
+          case t: SplitCollectionTransaction[_, _, _, _] => t.disableSearchUpdate()
           case _ => // Ignore others
         }
       }
