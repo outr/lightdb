@@ -69,6 +69,7 @@ case class SplitCollectionTransaction[
 
   override protected def _close: Task[Unit] = for {
     _ <- store.storage.transaction.release(storage)
+    _ <- searchUpdateHandler.close
     _ <- store.searching.transaction.release(searching)
   } yield ()
 
