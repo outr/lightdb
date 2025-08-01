@@ -67,14 +67,19 @@ object SearchUpdateHandler {
   ](txn: SplitCollectionTransaction[Doc, Model, Storage, Searching],
     maxCache: Int = 5_000,
     monitorDelay: FiniteDuration = 250.millis) extends SearchUpdateHandler[Doc, Model, Storage, Searching] {
-    private var keepAlive = true
+    @volatile private var keepAlive = true
     private val cached = new AtomicInteger(0)
     private val queue = new ConcurrentLinkedQueue[Task[Unit]]
 
     Task {
       while (keepAlive || !queue.isEmpty) {
         Option(queue.poll()) match {
-          case Some(task) => task.function(cached.decrementAndGet()).sync()
+          case Some(task) =>
+            try {
+              task.function(cached.decrementAndGet()).sync()
+            } catch {
+              case t: Throwable => logger.error("Error processing search update", t)
+            }
           case None => Task.sleep(monitorDelay).sync()
         }
       }
@@ -169,7 +174,7 @@ object SearchUpdateHandler {
           case Some(doc) => txn.searching.upsert(doc)
           case None => logger.warn(s"Failed to find $id")
         }
-        case QueuedDelta.Delete(id) => txn.storage.delete(id)
+        case QueuedDelta.Delete(id) => txn.searching.delete(id)
       }
       .drain
       .map(_ => deltas.clear())
