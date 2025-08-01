@@ -26,15 +26,11 @@ case class SplitCollectionTransaction[
   def searching: store.searching.TX = _searching
 
   /**
-   * Set this to false to ignore data changes in this transaction not applying changes to the searching transaction.
-   *
-   * This is useful for large modifications of data to avoid massive slowdowns, but leads to indexing getting out of
-   * sync. It is recommended when using this to reIndex immediately after finalizing the transaction when this is set
-   * to false.
-   *
-   * Defaults to true.
+   * Defines the mode for how updates apply to the search collection. Defaults to Immediate.
    */
-  var applySearchUpdates: Boolean = true
+  var searchUpdateHandler: SearchUpdateHandler[Doc, Model, Storage, Searching] = SearchUpdateHandler.Immediate(this)
+
+  def disableSearchUpdate(): Unit = searchUpdateHandler = SearchUpdateHandler.Disabled(this)
 
   override def jsonStream: rapid.Stream[Json] = storage.jsonStream
 
@@ -45,11 +41,11 @@ case class SplitCollectionTransaction[
   }
 
   override protected def _insert(doc: Doc): Task[Doc] = storage.insert(doc).flatTap { _ =>
-    searching.insert(doc).when(applySearchUpdates)
+    searchUpdateHandler.insert(doc)
   }
 
   override protected def _upsert(doc: Doc): Task[Doc] = storage.upsert(doc).flatTap { _ =>
-    searching.upsert(doc).when(applySearchUpdates)
+    searchUpdateHandler.upsert(doc)
   }
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = storage.exists(id)
@@ -58,22 +54,22 @@ case class SplitCollectionTransaction[
 
   override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] =
     storage.delete(_ => index -> value).flatTap { _ =>
-      searching.delete(_ => index -> value).when(applySearchUpdates)
+      searchUpdateHandler.delete(index, value)
     }
 
   override protected def _commit: Task[Unit] = for {
     _ <- storage.commit
-    _ <- searching.commit.when(applySearchUpdates)
+    _ <- searchUpdateHandler.commit
   } yield ()
 
   override protected def _rollback: Task[Unit] = for {
     _ <- storage.rollback
-    _ <- searching.rollback.when(applySearchUpdates)
+    _ <- searchUpdateHandler.rollback
   } yield ()
 
   override protected def _close: Task[Unit] = for {
-    _ <- store.storage.transaction.release(storage.asInstanceOf[store.storage.TX])
-    _ <- store.searching.transaction.release(searching.asInstanceOf[store.searching.TX])
+    _ <- store.storage.transaction.release(storage)
+    _ <- store.searching.transaction.release(searching)
   } yield ()
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
@@ -86,6 +82,6 @@ case class SplitCollectionTransaction[
     searching.aggregateCount(query)
 
   override def truncate: Task[Int] = storage.truncate.flatTap { _ =>
-    searching.truncate.when(applySearchUpdates)
+    searchUpdateHandler.truncate
   }
 }
