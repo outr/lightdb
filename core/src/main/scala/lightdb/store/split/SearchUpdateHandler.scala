@@ -25,6 +25,7 @@ trait SearchUpdateHandler[
   def commit: Task[Unit]
   def rollback: Task[Unit]
   def truncate: Task[Unit]
+  def close: Task[Unit]
 }
 
 /**
@@ -49,6 +50,7 @@ object SearchUpdateHandler {
     override def commit: Task[Unit] = txn.searching.commit
     override def rollback: Task[Unit] = txn.searching.rollback
     override def truncate: Task[Unit] = txn.searching.truncate.unit
+    override def close: Task[Unit] = Task.unit
   }
 
   /**
@@ -99,25 +101,13 @@ object SearchUpdateHandler {
     override def upsert(doc: Doc): Task[Unit] = add(txn.searching.upsert(doc).unit)
     override def delete[V](index: UniqueIndex[Doc, V], value: V): Task[Unit] =
       add(txn.searching.delete(_ => index -> value).unit)
-    override def commit: Task[Unit] = {
-      add(txn.searching.commit).next {
-        keepAlive = false
-
-        val condition = Task {
-          cached.get() <= 0
-        }
-
-        // TODO: Remove this once Rapid 1.7 is released
-        def recurse: Task[Unit] = condition.flatMap {
-          case true => Task.unit
-          case false => Task.sleep(250.millis).next(recurse)
-        }
-
-        recurse
-      }
-    }
+    override def commit: Task[Unit] = add(txn.searching.commit)
+      .condition(Task(cached.get() <= 0))
     override def rollback: Task[Unit] = add(txn.searching.rollback)
     override def truncate: Task[Unit] = add(txn.searching.truncate.unit)
+    override def close: Task[Unit] = Task.function {
+      keepAlive = false
+    }.condition(Task(cached.get() <= 0)).next(txn.searching.commit)
   }
 
   /**
@@ -184,6 +174,8 @@ object SearchUpdateHandler {
     }
     override def truncate: Task[Unit] = txn.searching.truncate.unit
 
+    override def close: Task[Unit] = Task.unit
+
     sealed trait QueuedDelta
 
     object QueuedDelta {
@@ -211,5 +203,6 @@ object SearchUpdateHandler {
     override def commit: Task[Unit] = Task.unit
     override def rollback: Task[Unit] = Task.unit
     override def truncate: Task[Unit] = Task.unit
+    override def close: Task[Unit] = Task.unit
   }
 }
