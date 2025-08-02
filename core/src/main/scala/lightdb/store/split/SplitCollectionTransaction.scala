@@ -28,9 +28,9 @@ case class SplitCollectionTransaction[
   /**
    * Defines the mode for how updates apply to the search collection. Defaults to Immediate.
    */
-  var searchUpdateHandler: SearchUpdateHandler[Doc, Model, Storage, Searching] = SearchUpdateHandler.Immediate(this)
+  var searchUpdateHandler: SearchUpdateHandler[Doc, Model, Storage, Searching] = ImmediateUpdateHandler(this)
 
-  def disableSearchUpdate(): Unit = searchUpdateHandler = SearchUpdateHandler.Disabled(this)
+  def disableSearchUpdate(): Unit = searchUpdateHandler = DisabledUpdateHandler(this)
 
   override def jsonStream: rapid.Stream[Json] = storage.jsonStream
 
