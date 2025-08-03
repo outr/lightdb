@@ -1,8 +1,10 @@
 package lightdb.sql.query
 
-import fabric.Json
+import fabric._
+import fabric.io.JsonFormatter
 
 import java.nio.file.{Files, Path}
+import java.sql.{PreparedStatement, Types}
 import scala.collection.mutable
 
 case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
@@ -43,7 +45,9 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
   def fragment(sql: String): SQLQuery = withParts(SQLPart.Fragment(sql))
   def placeholder(): SQLQuery = withParts(SQLPart.Placeholder(None))
   def placeholder(name: String): SQLQuery = withParts(SQLPart.Placeholder(Some(name)))
-  def bind(name: String, value: Json): SQLQuery = withParts(SQLPart.Bind(name, value))
+  def bind(bindings: (String, Json)*): SQLQuery = withParts(bindings.map {
+    case (name, value) => SQLPart.Bind(name, value)
+  }: _*)
   def arg(value: Json): SQLQuery = withParts(SQLPart.Arg(value))
 
   def fillPlaceholder(value: Json): SQLQuery = {
@@ -70,6 +74,18 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     if (!found)
       throw new RuntimeException(s"No placeholders found for named bind '$name'")
     SQLQuery(updated)
+  }
+
+  def populate(ps: PreparedStatement): Unit = args.zipWithIndex.foreach {
+    case (arg, index) => arg match {
+      case Null => ps.setNull(index + 1, Types.NULL)
+      case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))
+      case a: Arr => ps.setString(index + 1, JsonFormatter.Compact(a))
+      case Str(s, _) => ps.setString(index + 1, s)
+      case Bool(b, _) => ps.setBoolean(index + 1, b)
+      case NumInt(l, _) => ps.setLong(index + 1, l)
+      case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
+    }
   }
 }
 
