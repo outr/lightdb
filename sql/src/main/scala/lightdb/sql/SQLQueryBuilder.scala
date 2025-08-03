@@ -12,8 +12,8 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               having: List[SQLPart] = Nil,
                                                                               sort: List[SQLPart] = Nil,
                                                                               limit: Option[Int] = None,
-                                                                              offset: Int) {
-  lazy val sql: String = {
+                                                                              offset: Int) extends SQL {
+  override lazy val sql: String = {
     val b = new StringBuilder
     b.append("SELECT\n")
     b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
@@ -58,43 +58,19 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     b.toString()
   }
 
-  lazy val args: List[SQLArg] = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
+  override lazy val args: List[SQLArg] = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
 
-  def queryTotal(): Int = {
+  lazy val totalQuery: SQL = {
     val b = copy(
       sort = Nil,
       limit = None,
       offset = 0
     )
-    val results = b.executeInternal("SELECT COUNT(*) FROM (", ") AS innerQuery")
-    val rs = results.rs
-    try {
-      rs.next()
-      rs.getInt(1)
-    } finally {
-      rs.close()
-      results.release(state)
-    }
+    val pre = "SELECT COUNT(*) FROM ("
+    val post = ") AS innerQuery"
+    SQLPart(
+      sql = s"$pre${b.sql}$post",
+      args = b.args
+    )
   }
-
-  def execute(): SQLResults = executeInternal()
-
-  private def executeInternal(pre: String = "", post: String = ""): SQLResults = {
-    if (SQLQueryBuilder.LogQueries) scribe.info(s"Executing Query: $sql (${args.mkString(", ")})")
-    val combinedSql = s"$pre$sql$post"
-    try {
-      state.withPreparedStatement(combinedSql) { ps =>
-        args.zipWithIndex.foreach {
-          case (value, index) => value.set(ps, index + 1)
-        }
-        SQLResults(ps.executeQuery(), combinedSql, ps)
-      }
-    } catch {
-      case t: Throwable => throw new SQLException(s"Error executing query: $combinedSql (params: ${args.mkString(" | ")})", t)
-    }
-  }
-}
-
-object SQLQueryBuilder {
-  var LogQueries: Boolean = false
 }

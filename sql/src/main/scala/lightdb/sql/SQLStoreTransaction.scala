@@ -19,10 +19,11 @@ import lightdb.util.ActionIterator
 import lightdb.{Query, SearchResults, Sort, SortDirection}
 import rapid.Task
 
-import java.sql.{PreparedStatement, ResultSet}
+import java.sql.{PreparedStatement, ResultSet, SQLException}
 
 trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] {
   override def store: SQLStore[Doc, Model]
+
   def state: SQLState[Doc, Model]
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
@@ -46,7 +47,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       limit = Some(1),
       offset = 0
     )
-    val results = b.execute()
+    val results = resultsFor(b)
     val rs = results.rs
     try {
       if (rs.next()) {
@@ -121,7 +122,99 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override protected def _close: Task[Unit] = state.close
 
-  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task {
+  def resultsFor(sql: SQL): SQLResults = {
+    if (SQLStoreTransaction.LogQueries) scribe.info(s"Executing Query: ${sql.sql} (${sql.args.mkString(", ")})")
+    try {
+      state.withPreparedStatement(sql.sql) { ps =>
+        sql.args.zipWithIndex.foreach {
+          case (value, index) => value.set(ps, index + 1)
+        }
+        SQLResults(ps.executeQuery(), sql.sql, ps)
+      }
+    } catch {
+      case t: Throwable => throw new SQLException(s"Error executing query: ${sql.sql} (params: ${sql.args.mkString(" | ")})", t)
+    }
+  }
+
+  private def queryTotal(sql: SQL): Int = {
+    val results = resultsFor(sql)
+    val rs = results.rs
+    try {
+      rs.next()
+      rs.getInt(1)
+    } finally {
+      rs.close()
+      results.release(state)
+    }
+  }
+
+  def search[V](sql: SQL)(implicit rw: RW[V]): rapid.Stream[V] = {
+    val results = resultsFor(sql)
+    state.register(results.rs)
+    rapid.Stream.fromIterator[V](Task {
+      val iterator = new Iterator[V] {
+        private lazy val fieldNames: List[String] = {
+          val metaData = results.rs.getMetaData
+          val count = metaData.getColumnCount
+          (1 to count).toList.map { index =>
+            metaData.getTableName(index)
+          }
+        }
+
+        override def hasNext: Boolean = results.rs.next()
+
+        override def next(): V = {
+          val fieldValues = fieldNames.map { name =>
+            val obj = results.rs.getObject(name)
+            obj2Value(obj) match {
+              case null => Null
+              case s: String => str(s)
+              case b: Boolean => bool(b)
+              case i: Int => num(i)
+              case f: Float => num(f)
+              case d: Double => num(d)
+              case bd: BigDecimal => num(bd)
+              case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
+            }
+          }
+          val json = obj(fieldNames.zip(fieldValues): _*)
+          json.as[V]
+        }
+      }
+      val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
+      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.sql, ps))
+    })
+  }
+
+  private def execute[V](sql: SQL,
+                         offset: Int,
+                         limit: Option[Int],
+                         conversion: Conversion[Doc, V],
+                         totalQuery: Option[SQL] = None): Task[SearchResults[Doc, Model, V]] = Task {
+    val results = resultsFor(sql)
+
+    val rs = results.rs
+    state.register(rs)
+    val total = totalQuery.map { sql =>
+      queryTotal(sql)
+    }
+    val stream = rapid.Stream.fromIterator[(V, Double)](Task {
+      val iterator = rs2Iterator(rs, conversion)
+      val ps = rs.getStatement.asInstanceOf[PreparedStatement]
+      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(sql.sql, ps))
+    })
+    SearchResults(
+      model = store.model,
+      offset = offset,
+      limit = limit,
+      total = total,
+      streamWithScore = stream,
+      facetResults = Map.empty,
+      transaction = this
+    )
+  }
+
+  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
     var extraFields = List.empty[SQLPart]
     val fields = query.conversion match {
       case Conversion.Value(field) => List(field)
@@ -154,35 +247,16 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       limit = query.limit.orElse(Some(query.pageSize)),
       offset = query.offset
     )
-    val results = b.execute()
-    val rs = results.rs
-    state.register(rs)
-    val total = if (query.countTotal) {
-      Some(b.queryTotal())
-    } else {
-      None
-    }
-    val stream = rapid.Stream.fromIterator[(V, Double)](Task {
-      val iterator = rs2Iterator(rs, query.conversion)
-      val ps = rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(b.sql, ps))
-    })
-    SearchResults(
-      model = store.model,
-      offset = query.offset,
-      limit = query.limit,
-      total = total,
-      streamWithScore = stream,
-      facetResults = Map.empty,
-      transaction = this
-    )
+
+    execute[V](b, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
   }
 
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
     val b = aggregate2SQLQuery(query)
-    val results = b.execute()
+    val results = resultsFor(b)
     val rs = results.rs
     state.register(rs)
+
     def createStream[R](f: ResultSet => R): rapid.Stream[R] = rapid.Stream.fromIterator(Task {
       val iterator = new Iterator[R] {
         private var checkedNext = false
@@ -206,6 +280,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       }
       iterator
     })
+
     createStream[MaterializedAggregate[Doc, Model]] { rs =>
       val json = obj(query.functions.map { f =>
         val o = rs.getObject(f.name)
@@ -275,7 +350,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] = Task {
     val b = aggregate2SQLQuery(query)
-    b.queryTotal()
+    queryTotal(b.totalQuery)
   }
 
   override def truncate: Task[Int] = Task {
@@ -324,6 +399,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     override def next(): V = {
       def jsonFromFields(fields: List[Field[Doc, _]]): Json =
         obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
+
       conversion match {
         case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
         case Conversion.Doc() => getDoc(rs).asInstanceOf[V]
@@ -503,4 +579,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   protected def extraFieldsForDistance(conversion: Conversion.Distance[Doc, _]): List[SQLPart] =
     throw new UnsupportedOperationException("Distance conversions not supported")
+}
+
+object SQLStoreTransaction {
+  var LogQueries: Boolean = false
 }
