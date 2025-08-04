@@ -48,18 +48,19 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
   def bind(bindings: (String, Json)*): SQLQuery = withParts(bindings.map {
     case (name, value) => SQLPart.Bind(name, value)
   }: _*)
-  def arg(value: Json): SQLQuery = withParts(SQLPart.Arg(value))
+  def arg(values: Json*): SQLQuery = withParts(values.map(value => SQLPart.Arg(value)): _*)
 
-  def fillPlaceholder(value: Json): SQLQuery = {
-    var found = false
+  def fillPlaceholder(values: Json*): SQLQuery = {
+    var remaining = values.toList
     val updated = parts.map {
-      case SQLPart.Placeholder(None) if !found =>
-        found = true
+      case SQLPart.Placeholder(None) if remaining.nonEmpty =>
+        val value = remaining.head
+        remaining = remaining.tail
         SQLPart.Arg(value)
       case part => part
     }
-    if (!found)
-      throw new RuntimeException("No unnamed placeholder found to fill!")
+    if (remaining.nonEmpty)
+      throw new RuntimeException(s"No unnamed placeholder found to fill for remaining values: $remaining")
     SQLQuery(updated)
   }
 
@@ -77,21 +78,23 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
   }
 
   def populate(ps: PreparedStatement): Unit = args.zipWithIndex.foreach {
-    case (arg, index) => arg match {
-      case Null => ps.setNull(index + 1, Types.NULL)
-      case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))
-      case a: Arr => ps.setString(index + 1, JsonFormatter.Compact(a))
-      case Str(s, _) => ps.setString(index + 1, s)
-      case Bool(b, _) => ps.setBoolean(index + 1, b)
-      case NumInt(l, _) => ps.setLong(index + 1, l)
-      case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
-    }
+    case (arg, index) => SQLQuery.set(ps, arg, index)
   }
 }
 
 object SQLQuery {
   private val PlaceholderPattern =
     raw"(:[a-zA-Z_][a-zA-Z0-9_]*)|\?".r // matches either named (e.g. :name) or positional (?)
+
+  def set(ps: PreparedStatement, arg: Json, index: Int): Unit = arg match {
+    case Null => ps.setNull(index + 1, Types.NULL)
+    case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))
+    case a: Arr => ps.setString(index + 1, JsonFormatter.Compact(a))
+    case Str(s, _) => ps.setString(index + 1, s)
+    case Bool(b, _) => ps.setBoolean(index + 1, b)
+    case NumInt(l, _) => ps.setLong(index + 1, l)
+    case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
+  }
 
   def load(path: Path): SQLQuery = parse(Files.readString(path))
 

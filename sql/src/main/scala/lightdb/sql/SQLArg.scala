@@ -13,28 +13,30 @@ import lightdb.spatial.Geo
 import java.sql.{PreparedStatement, Types}
 
 trait SQLArg {
-  def set(ps: PreparedStatement, index: Int): Unit
+//  def set(ps: PreparedStatement, index: Int): Unit
+
+  def json: Json
 }
 
 object SQLArg {
   case class FieldArg[Doc <: Document[Doc], F](field: Field[Doc, F], value: F) extends SQLArg {
-    private def setInternal(ps: PreparedStatement, index: Int, value: Any): Unit = {
-      scribe.trace(s"SQLArg: $index / $value (${if (value != null) value.getClass.getName else "null"})")
+    private def jsonInternal(value: Any): Json = {
+      scribe.trace(s"SQLArg: $value (${if (value != null) value.getClass.getName else "null"})")
       value match {
-        case null | None => ps.setNull(index, Types.NULL)
+        case null | None => Null
         case _ if field.isInstanceOf[Tokenized[_]] =>
           val s = value.toString
-          ps.setString(index, s.toLowerCase.split("\\s+").filterNot(_.isEmpty).mkString(" "))
-        case Some(value) => setInternal(ps, index, value)
-        case id: Id[_] => ps.setString(index, id.value)
-        case s: String => ps.setString(index, s)
-        case b: Boolean => ps.setInt(index, if (b) 1 else 0)
-        case i: Int => ps.setInt(index, i)
-        case l: Long => ps.setLong(index, l)
-        case f: Float => ps.setFloat(index, f)
-        case d: Double => ps.setDouble(index, d)
-        case bd: BigDecimal => ps.setDouble(index, bd.toDouble)
-        case json: Json => ps.setString(index, JsonFormatter.Compact(json))
+          str(s.toLowerCase.split("\\s+").filterNot(_.isEmpty).mkString(" "))
+        case Some(value) => jsonInternal(value)
+        case id: Id[_] => str(id.value)
+        case s: String => str(s)
+        case b: Boolean => num(if (b) 1 else 0)
+        case i: Int => num(i)
+        case l: Long => num(l)
+        case f: Float => num(f)
+        case d: Double => num(d)
+        case bd: BigDecimal => num(bd.toDouble)
+        case json: Json => str(JsonFormatter.Compact(json))
 //        case point: Geo.Point => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
         case _ =>
           val json = if (field.rw.definition.isOpt) {
@@ -47,11 +49,13 @@ object SQLArg {
           } else {
             JsonFormatter.Compact(json)
           }
-          ps.setString(index, string)
+          str(string)
       }
     }
 
-    override def set(ps: PreparedStatement, index: Int): Unit = setInternal(ps, index, value)
+    override def json: Json = jsonInternal(value)
+
+    //    override def set(ps: PreparedStatement, index: Int): Unit = setInternal(ps, index, value)
 
     override def toString: String = s"FieldArg(field = ${field.name}, value = $value (${value.getClass.getName}))"
   }
@@ -63,22 +67,30 @@ object SQLArg {
   }
 
   case class StringArg(s: String) extends SQLArg {
-    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, s)
+//    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, s)
+
+    override def json: Json = str(s)
   }
 
   case class LongArg(long: Long) extends SQLArg {
-    override def set(ps: PreparedStatement, index: Int): Unit = ps.setLong(index, long)
+//    override def set(ps: PreparedStatement, index: Int): Unit = ps.setLong(index, long)
+
+    override def json: Json = num(long)
   }
 
   case class DoubleArg(double: Double) extends SQLArg {
-    override def set(ps: PreparedStatement, index: Int): Unit = ps.setDouble(index, double)
+//    override def set(ps: PreparedStatement, index: Int): Unit = ps.setDouble(index, double)
+
+    override def json: Json = num(double)
   }
 
   case class JsonArg(json: Json) extends SQLArg {
-    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, JsonFormatter.Compact(json))
+//    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, JsonFormatter.Compact(json))
   }
 
   case class GeoPointArg(point: Geo.Point) extends SQLArg {
-    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
+//    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
+
+    override def json: Json = str(s"POINT(${point.longitude} ${point.latitude})")
   }
 }

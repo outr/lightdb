@@ -13,6 +13,7 @@ import lightdb.filter.{Condition, Filter}
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
+import lightdb.sql.query.SQLQuery
 import lightdb.store.{Conversion, Store}
 import lightdb.transaction.CollectionTransaction
 import lightdb.util.ActionIterator
@@ -47,7 +48,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       limit = Some(1),
       offset = 0
     )
-    val results = resultsFor(b)
+    val results = resultsFor(b.toQuery)
     val rs = results.rs
     try {
       if (rs.next()) {
@@ -65,7 +66,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val indexingState = new IndexingState
     state.withInsertPreparedStatement { ps =>
       store.fields.zipWithIndex.foreach {
-        case (field, index) => SQLArg.FieldArg(doc, field, indexingState).set(ps, index + 1)
+        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
@@ -80,8 +81,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val indexingState = new IndexingState
     state.withUpsertPreparedStatement { ps =>
+
       store.fields.zipWithIndex.foreach {
-        case (field, index) => SQLArg.FieldArg(doc, field, indexingState).set(ps, index + 1)
+        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
@@ -107,9 +109,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val connection = state.connectionManager.getConnection(state)
-    val ps = connection.prepareStatement(s"DELETE FROM ${store.name} WHERE ${index.name} = ?")
+    val sql = SQLQuery.parse(s"DELETE FROM ${store.name} WHERE ${index.name} = ?")
+    val ps = connection.prepareStatement(sql.query)
     try {
-      SQLArg.FieldArg(index, value).set(ps, 1)
+      sql.fillPlaceholder(SQLArg.FieldArg(index, value).json).populate(ps)
       ps.executeUpdate() > 0
     } finally {
       ps.close()
@@ -122,21 +125,19 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override protected def _close: Task[Unit] = state.close
 
-  def resultsFor(sql: SQL): SQLResults = {
-    if (SQLStoreTransaction.LogQueries) scribe.info(s"Executing Query: ${sql.sql} (${sql.args.mkString(", ")})")
+  def resultsFor(sql: SQLQuery): SQLResults = {
+    if (SQLStoreTransaction.LogQueries) scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
     try {
-      state.withPreparedStatement(sql.sql) { ps =>
-        sql.args.zipWithIndex.foreach {
-          case (value, index) => value.set(ps, index + 1)
-        }
-        SQLResults(ps.executeQuery(), sql.sql, ps)
+      state.withPreparedStatement(sql.query) { ps =>
+        sql.populate(ps)
+        SQLResults(ps.executeQuery(), sql.query, ps)
       }
     } catch {
-      case t: Throwable => throw new SQLException(s"Error executing query: ${sql.sql} (params: ${sql.args.mkString(" | ")})", t)
+      case t: Throwable => throw new SQLException(s"Error executing query: ${sql.query} (params: ${sql.args.mkString(" | ")})", t)
     }
   }
 
-  private def queryTotal(sql: SQL): Int = {
+  private def queryTotal(sql: SQLQuery): Int = {
     val results = resultsFor(sql)
     val rs = results.rs
     try {
@@ -148,7 +149,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
   }
 
-  def search[V](sql: SQL)(implicit rw: RW[V]): rapid.Stream[V] = {
+  def search[V](sql: SQLQuery)(implicit rw: RW[V]): rapid.Stream[V] = {
     val results = resultsFor(sql)
     state.register(results.rs)
     rapid.Stream.fromIterator[V](Task {
@@ -157,7 +158,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
           val metaData = results.rs.getMetaData
           val count = metaData.getColumnCount
           (1 to count).toList.map { index =>
-            metaData.getTableName(index)
+            metaData.getColumnName(index)
           }
         }
 
@@ -182,15 +183,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         }
       }
       val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.sql, ps))
+      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.query, ps))
     })
   }
 
-  private def execute[V](sql: SQL,
+  private def execute[V](sql: SQLQuery,
                          offset: Int,
                          limit: Option[Int],
                          conversion: Conversion[Doc, V],
-                         totalQuery: Option[SQL] = None): Task[SearchResults[Doc, Model, V]] = Task {
+                         totalQuery: Option[SQLQuery] = None): Task[SearchResults[Doc, Model, V]] = Task {
     val results = resultsFor(sql)
 
     val rs = results.rs
@@ -201,7 +202,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val stream = rapid.Stream.fromIterator[(V, Double)](Task {
       val iterator = rs2Iterator(rs, conversion)
       val ps = rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(sql.sql, ps))
+      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(sql.query, ps))
     })
     SearchResults(
       model = store.model,
@@ -248,12 +249,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       offset = query.offset
     )
 
-    execute[V](b, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
+    execute[V](b.toQuery, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
   }
 
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
     val b = aggregate2SQLQuery(query)
-    val results = resultsFor(b)
+    val results = resultsFor(b.toQuery)
     val rs = results.rs
     state.register(rs)
 

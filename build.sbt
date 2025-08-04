@@ -168,7 +168,7 @@ lazy val sql = project.in(file("sql"))
 	)
 
 lazy val sqlite = project.in(file("sqlite"))
-	.dependsOn(sql, core.jvm % "test->test")
+	.dependsOn(sql, sql % "test->test")
 	.settings(
 		name := s"$projectName-sqlite",
 		fork := true,

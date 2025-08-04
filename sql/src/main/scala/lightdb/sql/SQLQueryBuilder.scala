@@ -1,6 +1,7 @@
 package lightdb.sql
 
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.sql.query.SQLQuery
 
 import java.sql.SQLException
 
@@ -12,8 +13,8 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               having: List[SQLPart] = Nil,
                                                                               sort: List[SQLPart] = Nil,
                                                                               limit: Option[Int] = None,
-                                                                              offset: Int) extends SQL {
-  override lazy val sql: String = {
+                                                                              offset: Int) {
+  lazy val sql: String = {
     val b = new StringBuilder
     b.append("SELECT\n")
     b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
@@ -58,9 +59,9 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     b.toString()
   }
 
-  override lazy val args: List[SQLArg] = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
+  lazy val args: List[SQLArg] = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
 
-  lazy val totalQuery: SQL = {
+  lazy val totalQuery: SQLQuery = {
     val b = copy(
       sort = Nil,
       limit = None,
@@ -68,9 +69,8 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     )
     val pre = "SELECT COUNT(*) FROM ("
     val post = ") AS innerQuery"
-    SQLPart(
-      sql = s"$pre${b.sql}$post",
-      args = b.args
-    )
+    SQLQuery.parse(s"$pre${b.sql}$post").fillPlaceholder(b.args.map(_.json): _*)
   }
+
+  def toQuery: SQLQuery = SQLQuery.parse(sql).fillPlaceholder(args.map(_.json): _*)
 }

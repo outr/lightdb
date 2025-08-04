@@ -1,6 +1,6 @@
 package lightdb.sql
 
-case class SQLPart(sql: String, args: List[SQLArg] = Nil) extends SQL
+case class SQLPart(sql: String, args: List[SQLArg] = Nil)
 
 object SQLPart {
   def merge(parts: SQLPart*): SQLPart = SQLPart(
