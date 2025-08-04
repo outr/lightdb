@@ -149,10 +149,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
   }
 
-  def search[V](sql: SQLQuery)(implicit rw: RW[V]): rapid.Stream[V] = {
+  def search[V](sql: SQLQuery)(implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task {
     val results = resultsFor(sql)
     state.register(results.rs)
-    rapid.Stream.fromIterator[V](Task {
+    val stream = rapid.Stream.fromIterator[V](Task {
       val iterator = new Iterator[V] {
         private lazy val fieldNames: List[String] = {
           val metaData = results.rs.getMetaData
@@ -185,6 +185,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
       ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.query, ps))
     })
+    SearchResults(
+      model = store.model,
+      offset = 0,
+      limit = None,
+      total = None,
+      streamWithScore = stream.map(v => v -> 0.0),
+      facetResults = Map.empty,
+      transaction = this
+    )
   }
 
   private def execute[V](sql: SQLQuery,

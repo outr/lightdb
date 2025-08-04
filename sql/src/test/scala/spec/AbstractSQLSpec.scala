@@ -47,8 +47,8 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
             |FROM
             | Person
             |WHERE
-            | name = :name""".stripMargin).bind("name" -> str("Adam"))
-        txn.search[Name](query).toList.map { names =>
+            | name = :name""".stripMargin).values("name" -> "Adam")
+        txn.search[Name](query).flatMap(_.list).map { names =>
           names should be(List(Name("Adam")))
         }
       }
