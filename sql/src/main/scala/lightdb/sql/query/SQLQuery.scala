@@ -2,6 +2,7 @@ package lightdb.sql.query
 
 import fabric._
 import fabric.io.JsonFormatter
+import lightdb.id.Id
 
 import java.nio.file.{Files, Path}
 import java.sql.{PreparedStatement, Types}
@@ -48,6 +49,12 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
   def bind(bindings: (String, Json)*): SQLQuery = withParts(bindings.map {
     case (name, value) => SQLPart.Bind(name, value)
   }: _*)
+  def values(bindings: (String, Any)*): SQLQuery = {
+    val jsonBindings = bindings.map {
+      case (name, value) => name -> SQLQuery.toJson(value)
+    }
+    bind(jsonBindings: _*)
+  }
   def arg(values: Json*): SQLQuery = withParts(values.map(value => SQLPart.Arg(value)): _*)
 
   def fillPlaceholder(values: Json*): SQLQuery = {
@@ -94,6 +101,21 @@ object SQLQuery {
     case Bool(b, _) => ps.setBoolean(index + 1, b)
     case NumInt(l, _) => ps.setLong(index + 1, l)
     case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
+  }
+
+  def toJson(value: Any): Json = value match {
+    case null | None => Null
+    case Some(value) => toJson(value)
+    case id: Id[_] => str(id.value)
+    case s: String => str(s)
+    case b: Boolean => num(if (b) 1 else 0)
+    case i: Int => num(i)
+    case l: Long => num(l)
+    case f: Float => num(f)
+    case d: Double => num(d)
+    case bd: BigDecimal => num(bd.toDouble)
+    case json: Json => str(JsonFormatter.Compact(json))
+    case _ => throw new RuntimeException(s"Unsupported value: $value (${value.getClass.getName})")
   }
 
   def load(path: Path): SQLQuery = parse(Files.readString(path))
