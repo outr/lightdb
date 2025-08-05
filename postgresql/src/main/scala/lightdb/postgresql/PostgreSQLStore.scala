@@ -1,5 +1,6 @@
 package lightdb.postgresql
 
+import fabric.define.DefType
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
@@ -41,6 +42,11 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     } finally {
       ps.close()
     }
+  }
+
+  override protected def def2Type(name: String, d: DefType): String = d match {
+    case DefType.Dec => "DOUBLE PRECISION"
+    case _ => super.def2Type(name, d)
   }
 
   override protected def createUpsertSQL(): String = {

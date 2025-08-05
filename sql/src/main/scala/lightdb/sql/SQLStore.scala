@@ -39,7 +39,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     executeUpdate(s"CREATE TABLE IF NOT EXISTS $name($entries)", tx)
   }
 
-  private def def2Type(name: String, d: DefType): String = d match {
+  protected def def2Type(name: String, d: DefType): String = d match {
     case DefType.Str | DefType.Json | DefType.Obj(_, _) | DefType.Arr(_) | DefType.Poly(_, _) | DefType.Enum(_, _) =>
       "VARCHAR"
     case DefType.Int => "BIGINT"

@@ -20,40 +20,7 @@ trait SQLArg {
 
 object SQLArg {
   case class FieldArg[Doc <: Document[Doc], F](field: Field[Doc, F], value: F) extends SQLArg {
-    private def jsonInternal(value: Any): Json = {
-      scribe.trace(s"SQLArg: $value (${if (value != null) value.getClass.getName else "null"})")
-      value match {
-        case null | None => Null
-        case _ if field.isInstanceOf[Tokenized[_]] =>
-          val s = value.toString
-          str(s.toLowerCase.split("\\s+").filterNot(_.isEmpty).mkString(" "))
-        case Some(value) => jsonInternal(value)
-        case id: Id[_] => str(id.value)
-        case s: String => str(s)
-        case b: Boolean => num(if (b) 1 else 0)
-        case i: Int => num(i)
-        case l: Long => num(l)
-        case f: Float => num(f)
-        case d: Double => num(d)
-        case bd: BigDecimal => num(bd.toDouble)
-        case json: Json => str(JsonFormatter.Compact(json))
-//        case point: Geo.Point => ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
-        case _ =>
-          val json = if (field.rw.definition.isOpt) {
-            Some(value).asInstanceOf[F].json(field.rw)
-          } else {
-            value.asInstanceOf[F].json(field.rw)
-          }
-          val string = if (field.rw.definition == DefType.Str) {
-            json.asString
-          } else {
-            JsonFormatter.Compact(json)
-          }
-          str(string)
-      }
-    }
-
-    override def json: Json = jsonInternal(value)
+    override def json: Json = field.rw.read(value)
 
     //    override def set(ps: PreparedStatement, index: Int): Unit = setInternal(ps, index, value)
 

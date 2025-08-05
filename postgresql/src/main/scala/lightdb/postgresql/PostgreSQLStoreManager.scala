@@ -3,11 +3,11 @@ package lightdb.postgresql
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store.{StoreManager, StoreMode}
+import lightdb.store.{CollectionManager, StoreMode}
 
 import java.nio.file.Path
 
-case class PostgreSQLStoreManager(connectionManager: ConnectionManager) extends StoreManager {
+case class PostgreSQLStoreManager(connectionManager: ConnectionManager) extends CollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = PostgreSQLStore[Doc, Model]
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

@@ -13,7 +13,7 @@ import lightdb.transaction.Transaction
 import org.sqlite.Collation
 import rapid._
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import java.sql.Connection
 import java.util.regex.Pattern
 
@@ -98,14 +98,14 @@ object SQLiteStore extends CollectionManager {
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
     val path = file match {
       case Some(f) =>
+        Files.createDirectories(f)
         val file = f.toFile
-        Option(file.getParentFile).foreach(_.mkdirs())
         file.getCanonicalPath
       case None => ":memory:"
     }
 
     SingleConnectionManager(SQLConfig(
-      jdbcUrl = s"jdbc:sqlite:$path"
+      jdbcUrl = s"jdbc:sqlite:$path/db.sqlite"
     ))
   }
 
