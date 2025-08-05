@@ -30,9 +30,13 @@ case class SingleConnectionManager(connectionCreator: () => java.sql.Connection)
 object SingleConnectionManager {
   def apply(config: SQLConfig): SingleConnectionManager = {
     SingleConnectionManager(() => {
-      val c = DriverManager.getConnection(config.jdbcUrl, config.username.orNull, config.password.orNull)
-      c.setAutoCommit(config.autoCommit)
-      c
+      try {
+        val c = DriverManager.getConnection(config.jdbcUrl, config.username.orNull, config.password.orNull)
+        c.setAutoCommit(config.autoCommit)
+        c
+      } catch {
+        case t: Throwable => throw new RuntimeException(s"Failed to connect to ${config.jdbcUrl}.", t)
+      }
     })
   }
 }

@@ -91,14 +91,14 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
 
 object SQLQuery {
   private val PlaceholderPattern =
-    raw"(:[a-zA-Z_][a-zA-Z0-9_]*)|\?".r // matches either named (e.g. :name) or positional (?)
+    raw"(:[a-zA-Z_][a-zA-Z0-9_]*)|\?".r
 
   def set(ps: PreparedStatement, arg: Json, index: Int): Unit = arg match {
     case Null => ps.setNull(index + 1, Types.NULL)
     case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))
     case a: Arr => ps.setString(index + 1, JsonFormatter.Compact(a))
     case Str(s, _) => ps.setString(index + 1, s)
-    case Bool(b, _) => ps.setBoolean(index + 1, b)
+    case Bool(b, _) => ps.setInt(index + 1, if (b) 1 else 0)
     case NumInt(l, _) => ps.setLong(index + 1, l)
     case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
   }
