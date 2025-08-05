@@ -66,7 +66,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val indexingState = new IndexingState
     state.withInsertPreparedStatement { ps =>
       store.fields.zipWithIndex.foreach {
-        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
+        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index, store.booleanAsNumber)
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
@@ -83,7 +83,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     state.withUpsertPreparedStatement { ps =>
 
       store.fields.zipWithIndex.foreach {
-        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
+        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index, store.booleanAsNumber)
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
@@ -109,10 +109,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val connection = state.connectionManager.getConnection(state)
-    val sql = SQLQuery.parse(s"DELETE FROM ${store.name} WHERE ${index.name} = ?")
+    val sql = SQLQuery.parse(s"DELETE FROM ${store.name} WHERE ${index.name} = ?", store.booleanAsNumber)
     val ps = connection.prepareStatement(sql.query)
     try {
-      sql.fillPlaceholder(SQLArg.FieldArg(index, value).json).populate(ps)
+      sql.fillPlaceholder(SQLArg.FieldArg(index, value).json).populate(ps, store.booleanAsNumber)
       ps.executeUpdate() > 0
     } finally {
       ps.close()
@@ -129,7 +129,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     if (SQLStoreTransaction.LogQueries) scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
     try {
       state.withPreparedStatement(sql.query) { ps =>
-        sql.populate(ps)
+        sql.populate(ps, store.booleanAsNumber)
         SQLResults(ps.executeQuery(), sql.query, ps)
       }
     } catch {
@@ -437,7 +437,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     case s: String => rw.definition match {
       case DefType.Str => str(s)
       case DefType.Opt(DefType.Str) => str(s)
+      case DefType.Opt(DefType.Enum(_, _)) => str(s)
       case DefType.Json => JsonParser(s)
+      case DefType.Enum(_, _) => str(s)
       case _ => try {
         JsonParser(s)
       } catch {
@@ -593,4 +595,5 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
 object SQLStoreTransaction {
   var LogQueries: Boolean = false
+  var FetchSize: Int = 10_000
 }

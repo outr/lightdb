@@ -126,7 +126,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
 object Store {
   var CacheQueries: Boolean = false
-  var MaxInsertBatch: Int = 1_000_000
+  var MaxInsertBatch: Int = 100_000
   var LogTransactions: Boolean = false
 
   def determineSize(file: File): Long = if (file.isDirectory) {

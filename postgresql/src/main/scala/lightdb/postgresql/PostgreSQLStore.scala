@@ -21,6 +21,8 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                                          storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = PostgreSQLTransaction[Doc, Model]
 
+  override def booleanAsNumber: Boolean = false
+
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
     PostgreSQLTransaction(this, state, parent)
@@ -46,6 +48,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   override protected def def2Type(name: String, d: DefType): String = d match {
     case DefType.Dec => "DOUBLE PRECISION"
+    case DefType.Bool => "BOOLEAN"
     case _ => super.def2Type(name, d)
   }
 
