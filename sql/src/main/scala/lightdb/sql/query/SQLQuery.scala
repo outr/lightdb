@@ -8,7 +8,7 @@ import java.nio.file.{Files, Path}
 import java.sql.{PreparedStatement, Types}
 import scala.collection.mutable
 
-case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
+case class SQLQuery(parts: List[SQLPart], booleanAsNumber: Boolean) extends SQLPart {
   lazy val flatParts: List[SQLPart] = parts.flatMap {
     case subQuery: SQLQuery => subQuery.flatParts
     case part => List(part)
@@ -51,7 +51,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
   }: _*)
   def values(bindings: (String, Any)*): SQLQuery = {
     val jsonBindings = bindings.map {
-      case (name, value) => name -> SQLQuery.toJson(value)
+      case (name, value) => name -> SQLQuery.toJson(value, booleanAsNumber)
     }
     bind(jsonBindings: _*)
   }
@@ -68,7 +68,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     }
     if (remaining.nonEmpty)
       throw new RuntimeException(s"No unnamed placeholder found to fill for remaining values: $remaining")
-    SQLQuery(updated)
+    copy(updated)
   }
 
   def fillPlaceholder(name: String, value: Json): SQLQuery = {
@@ -81,11 +81,11 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     }
     if (!found)
       throw new RuntimeException(s"No placeholders found for named bind '$name'")
-    SQLQuery(updated)
+    copy(updated)
   }
 
-  def populate(ps: PreparedStatement): Unit = args.zipWithIndex.foreach {
-    case (arg, index) => SQLQuery.set(ps, arg, index)
+  def populate(ps: PreparedStatement, booleanAsNumber: Boolean): Unit = args.zipWithIndex.foreach {
+    case (arg, index) => SQLQuery.set(ps, arg, index, booleanAsNumber)
   }
 }
 
@@ -93,22 +93,24 @@ object SQLQuery {
   private val PlaceholderPattern =
     raw"(:[a-zA-Z_][a-zA-Z0-9_]*)|\?".r
 
-  def set(ps: PreparedStatement, arg: Json, index: Int): Unit = arg match {
+  def set(ps: PreparedStatement, arg: Json, index: Int, booleanAsNumber: Boolean): Unit = arg match {
     case Null => ps.setNull(index + 1, Types.NULL)
     case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))
     case a: Arr => ps.setString(index + 1, JsonFormatter.Compact(a))
     case Str(s, _) => ps.setString(index + 1, s)
-    case Bool(b, _) => ps.setInt(index + 1, if (b) 1 else 0)
+    case Bool(b, _) if booleanAsNumber => ps.setInt(index + 1, if (b) 1 else 0)
+    case Bool(b, _) => ps.setBoolean(index + 1, b)
     case NumInt(l, _) => ps.setLong(index + 1, l)
     case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
   }
 
-  def toJson(value: Any): Json = value match {
+  def toJson(value: Any, booleanAsNumber: Boolean): Json = value match {
     case null | None => Null
-    case Some(value) => toJson(value)
+    case Some(value) => toJson(value, booleanAsNumber)
     case id: Id[_] => str(id.value)
     case s: String => str(s)
-    case b: Boolean => num(if (b) 1 else 0)
+    case b: Boolean if booleanAsNumber => num(if (b) 1 else 0)
+    case b: Boolean => bool(b)
     case i: Int => num(i)
     case l: Long => num(l)
     case f: Float => num(f)
@@ -118,9 +120,9 @@ object SQLQuery {
     case _ => throw new RuntimeException(s"Unsupported value: $value (${value.getClass.getName})")
   }
 
-  def load(path: Path): SQLQuery = parse(Files.readString(path))
+  def load(path: Path, booleanAsNumber: Boolean): SQLQuery = parse(Files.readString(path), booleanAsNumber)
 
-  def parse(sql: String): SQLQuery = {
+  def parse(sql: String, booleanAsNumber: Boolean): SQLQuery = {
     val parts = mutable.ListBuffer.empty[SQLPart]
     var lastIndex = 0
 
@@ -145,7 +147,7 @@ object SQLQuery {
       parts += SQLPart.Fragment(sql.substring(lastIndex))
     }
 
-    SQLQuery(parts.toList)
+    SQLQuery(parts.toList, booleanAsNumber)
   }
 }
 

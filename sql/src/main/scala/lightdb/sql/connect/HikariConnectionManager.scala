@@ -3,6 +3,8 @@ package lightdb.sql.connect
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import rapid.Task
 
+import scala.concurrent.duration.DurationInt
+
 case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnectionManager {
   protected lazy val dataSource: HikariDataSource = {
     val hc = new HikariConfig
@@ -15,6 +17,10 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     hc.addDataSourceProperty("cachePrepStmts", "true")
     hc.addDataSourceProperty("prepStmtCacheSize", "250")
     hc.addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
+    hc.setMaximumPoolSize(8)
+    hc.setMinimumIdle(2)
+    hc.setIdleTimeout(60.seconds.toMillis)
+    hc.setConnectionTimeout(30.seconds.toMillis)
     new HikariDataSource(hc)
   }
 

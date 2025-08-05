@@ -28,6 +28,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
 
     def createPs(): PreparedStatement = {
       val ps = connection.prepareStatement(sql)
+      ps.setFetchSize(SQLStoreTransaction.FetchSize)
       register(ps)
       ps
     }

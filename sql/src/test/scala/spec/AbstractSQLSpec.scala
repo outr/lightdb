@@ -16,9 +16,27 @@ import rapid.AsyncTaskSpec
 import java.nio.file.Path
 
 abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
-  private val adam = Person("Adam", 21, _id = Person.id("adam"))
-  private val brenda = Person("Brenda", 11, _id = Person.id("brenda"))
-  private val charlie = Person("Charlie", 35, _id = Person.id("charlie"))
+  private val adam = Person(
+    name = "Adam",
+    organDonor = false,
+    age = 21,
+    gender = Gender.Male,
+    _id = Person.id("adam")
+  )
+  private val brenda = Person(
+    name = "Brenda",
+    organDonor = true,
+    age = 11,
+    gender = Gender.Female,
+    _id = Person.id("brenda")
+  )
+  private val charlie = Person(
+    name = "Charlie",
+    organDonor = false,
+    age = 35,
+    gender = Gender.Male,
+    _id = Person.id("charlie")
+  )
 
   protected lazy val specName: String = getClass.getSimpleName
 
@@ -47,9 +65,17 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
             |FROM
             | Person
             |WHERE
-            | name = :name""".stripMargin).values("name" -> "Adam")
+            | name = :name""".stripMargin, booleanAsNumber = false).values("name" -> "Adam")
         txn.search[Name](query).flatMap(_.list).map { names =>
           names should be(List(Name("Adam")))
+        }
+      }
+    }
+    "get Adam directly" in {
+      db.people.transaction { transaction =>
+        transaction(adam._id).map { person =>
+          person.age should be(21)
+          person.gender should be(Gender.Male)
         }
       }
     }
@@ -75,7 +101,9 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
   }
 
   case class Person(name: String,
+                    organDonor: Boolean,
                     age: Int,
+                    gender: Gender,
                     city: Option[City] = None,
                     nicknames: Set[String] = Set.empty,
                     friends: List[Id[Person]] = Nil,
@@ -87,7 +115,9 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     override implicit val rw: RW[Person] = RW.gen
 
     val name: I[String] = field.index(_.name)
+    val organDonor: I[Boolean] = field.index(_.organDonor)
     val age: I[Int] = field.index(_.age)
+    val gender: I[Gender] = field.index(_.gender)
     val city: I[Option[City]] = field.index(_.city)
     val nicknames: I[Set[String]] = field.index(_.nicknames)
     val friends: I[List[Id[Person]]] = field.index(_.friends)
@@ -95,6 +125,15 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     val search: T = field.tokenized((doc: Person) => s"${doc.name} ${doc.age}")
     val doc: I[Person] = field.index(identity)
     val ageDouble: I[Double] = field.index(_.age.toDouble)
+  }
+
+  sealed trait Gender
+
+  object Gender {
+    implicit val rw: RW[Gender] = RW.enumeration(List(Male, Female))
+
+    case object Male extends Gender
+    case object Female extends Gender
   }
 
   case class City(name: String)

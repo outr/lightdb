@@ -20,6 +20,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX <: SQLStoreTransaction[Doc, Model]
 
+  def booleanAsNumber: Boolean = true
+
   protected def connectionManager: ConnectionManager
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task.next {
