@@ -180,7 +180,7 @@ lazy val sqlite = project.in(file("sqlite"))
 	)
 
 lazy val h2 = project.in(file("h2"))
-	.dependsOn(sql, core.jvm % "test->test")
+	.dependsOn(sql, sql % "test->test")
 	.settings(
 		name := s"$projectName-h2",
 		fork := true,
@@ -192,7 +192,7 @@ lazy val h2 = project.in(file("h2"))
 	)
 
 lazy val postgresql = project.in(file("postgresql"))
-	.dependsOn(sql, core.jvm % "test->test")
+	.dependsOn(sql, sql % "test->test")
 	.settings(
 		name := s"$projectName-postgresql",
 		fork := true,
@@ -204,7 +204,7 @@ lazy val postgresql = project.in(file("postgresql"))
 	)
 
 lazy val duckdb = project.in(file("duckdb"))
-	.dependsOn(sql, core.jvm % "test->test")
+	.dependsOn(sql, sql % "test->test")
 	.settings(
 		name := s"$projectName-duckdb",
 		fork := true,
