@@ -8,7 +8,8 @@ import java.nio.file.{Files, Path}
 import java.sql.{PreparedStatement, Types}
 import scala.collection.mutable
 
-case class SQLQuery(parts: List[SQLPart], booleanAsNumber: Boolean) extends SQLPart {
+case class SQLQuery(parts: List[SQLPart],
+                    booleanAsNumber: Boolean) extends SQLPart {
   lazy val flatParts: List[SQLPart] = parts.flatMap {
     case subQuery: SQLQuery => subQuery.flatParts
     case part => List(part)

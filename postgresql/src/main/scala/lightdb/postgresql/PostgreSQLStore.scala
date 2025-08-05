@@ -21,6 +21,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                                          storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = PostgreSQLTransaction[Doc, Model]
 
+  override def supportsSchemas: Boolean = true
   override def booleanAsNumber: Boolean = false
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
@@ -29,8 +30,9 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   protected def tables(connection: Connection): Set[String] = {
-    val ps = connection.prepareStatement("SELECT * FROM information_schema.tables;")
+    val ps = connection.prepareStatement("SELECT * FROM information_schema.tables WHERE table_schema = ?;")
     try {
+      ps.setString(1, lightDB.name)
       val rs = ps.executeQuery()
       try {
         var set = Set.empty[String]
@@ -55,7 +57,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   override protected def createUpsertSQL(): String = {
     val fieldNames = fields.map(_.name)
     val values = fields.map(field2Value)
-    s"""MERGE INTO $name target
+    s"""MERGE INTO $fqn target
        |USING (VALUES (${values.mkString(", ")})) AS source (${fieldNames.mkString(", ")})
        |ON target._id = source._id
        |WHEN MATCHED THEN
