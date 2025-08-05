@@ -9,4 +9,6 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                                                                                     parent: Option[Transaction[Doc, Model]]) extends SQLStoreTransaction[Doc, Model] {
   override protected def regexpPart(name: String, expression: String): SQLPart =
     SQLPart(s"$name ~ ?", List(SQLArg.StringArg(expression)))
+
+  override protected def concatPrefix: String = "STRING_AGG"
 }
