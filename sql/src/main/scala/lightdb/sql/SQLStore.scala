@@ -20,13 +20,24 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX <: SQLStoreTransaction[Doc, Model]
 
+  def supportsSchemas: Boolean = false
   def booleanAsNumber: Boolean = true
+
+  lazy val fqn: String = if (supportsSchemas) {
+    s"${lightDB.name}.$name"
+  } else {
+    name
+  }
 
   protected def connectionManager: ConnectionManager
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task.next {
     transaction(initTransaction)
   })
+
+  protected def createSchema(tx: TX): Unit = {
+    executeUpdate(s"CREATE SCHEMA IF NOT EXISTS ${lightDB.name}", tx)
+  }
 
   protected def createTable(tx: TX): Unit = {
     val entries = fields.collect {
@@ -38,7 +49,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
           s"${field.name} $t"
         }
     }.mkString(", ")
-    executeUpdate(s"CREATE TABLE IF NOT EXISTS $name($entries)", tx)
+    executeUpdate(s"CREATE TABLE IF NOT EXISTS $fqn($entries)", tx)
   }
 
   protected def def2Type(name: String, d: DefType): String = d match {
@@ -52,13 +63,16 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   protected def addColumn(field: Field[Doc, _], tx: TX): Unit = {
-    scribe.info(s"Adding column $name.${field.name}")
-    executeUpdate(s"ALTER TABLE $name ADD COLUMN ${field.name} ${def2Type(field.name, field.rw.definition)}", tx)
+    scribe.info(s"Adding column $fqn.${field.name}")
+    executeUpdate(s"ALTER TABLE $fqn ADD COLUMN ${field.name} ${def2Type(field.name, field.rw.definition)}", tx)
   }
 
   protected def initTransaction(tx: TX): Task[Unit] = Task {
     connectionManager.active()
     val connection = tx.state.connectionManager.getConnection(tx.state)
+    if (supportsSchemas) {
+      createSchema(tx)
+    }
     val existingTables = tables(connection)
     if (!existingTables.contains(name.toLowerCase)) {
       createTable(tx)
@@ -70,8 +84,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     // Drop columns
     existingColumns.foreach { name =>
       if (!fieldNames.contains(name.toLowerCase)) {
-        scribe.info(s"Removing column ${this.name}.$name (existing: ${existingColumns.mkString(", ")}, expected: ${fieldNames.mkString(", ")}).")
-        executeUpdate(s"ALTER TABLE ${this.name} DROP COLUMN $name", tx)
+        scribe.info(s"Removing column $fqn.$name (existing: ${existingColumns.mkString(", ")}, expected: ${fieldNames.mkString(", ")}).")
+        executeUpdate(s"ALTER TABLE $fqn DROP COLUMN $name", tx)
       }
     }
     // Add columns
@@ -86,9 +100,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     fields.foreach {
       case index: UniqueIndex[Doc, _] if index.name == "_id" => // Ignore _id
       case index: UniqueIndex[Doc, _] =>
-        executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON $name(${index.name})", tx)
+        executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})", tx)
       case index: Indexed[Doc, _] =>
-        executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON $name(${index.name})", tx)
+        executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})", tx)
       case _: Field[Doc, _] => // Nothing to do
     }
   }
@@ -96,7 +110,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   protected def tables(connection: Connection): Set[String]
 
   private def columns(connection: Connection): Set[String] = {
-    val ps = connection.prepareStatement(s"SELECT * FROM $name LIMIT 1")
+    val ps = connection.prepareStatement(s"SELECT * FROM $fqn LIMIT 1")
     try {
       val rs = ps.executeQuery()
       val meta = rs.getMetaData
@@ -116,12 +130,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def createInsertSQL(): String = {
     val values = fields.map(field2Value)
-    s"$insertPrefix INTO $name(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+    s"$insertPrefix INTO $fqn(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
   }
 
   protected def createUpsertSQL(): String = {
     val values = fields.map(field2Value)
-    s"$upsertPrefix INTO $name(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+    s"$upsertPrefix INTO $fqn(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
   }
 
   private[sql] lazy val insertSQL: String = createInsertSQL()

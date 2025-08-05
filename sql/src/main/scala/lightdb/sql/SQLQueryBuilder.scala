@@ -19,7 +19,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     b.append("SELECT\n")
     b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
     b.append("FROM\n")
-    b.append(s"\t${store.name}\n")
+    b.append(s"\t${store.fqn}\n")
     filters.zipWithIndex.foreach {
       case (f, index) =>
         if (index == 0) {

@@ -72,6 +72,8 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     override type SM = CollectionManager
     override val storeManager: CollectionManager = spec.storeManager
 
+    override def name: String = specName
+
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val specialOne: Collection[SpecialOne, SpecialOne.type] = store(SpecialOne)

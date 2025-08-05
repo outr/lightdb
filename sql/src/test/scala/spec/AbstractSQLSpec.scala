@@ -59,14 +59,17 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "query with an arbitrary query" in {
       db.people.transaction { transaction =>
         val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
-        val query = SQLQuery.parse(
-          """SELECT
-            | name
-            |FROM
-            | Person
-            |WHERE
-            | name = :name""".stripMargin, booleanAsNumber = false).values("name" -> "Adam")
-        txn.search[Name](query).flatMap(_.list).map { names =>
+        /*
+          // TODO: Support DSL for query building
+          txn.sql
+            .columns(p => p.name)
+            .where(p => p.name === "Adam")
+            .as[Name]
+            .stream
+         */
+        txn.sql[Name](s"SELECT name FROM ${txn.fqn} WHERE name = :name") { q =>
+          q.values("name" -> "Adam")
+        }.flatMap(_.list).map { names =>
           names should be(List(Name("Adam")))
         }
       }
@@ -92,6 +95,8 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
   class DB extends LightDB {
     override type SM = CollectionManager
     override val storeManager: CollectionManager = spec.storeManager
+
+    override def name: String = specName
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 

@@ -606,6 +606,8 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     override type SM = CollectionManager
     override val storeManager: CollectionManager = spec.storeManager
 
+    override def name: String = specName
+
     spec.features.foreach {
       case (key, value) =>
         put(key, value)

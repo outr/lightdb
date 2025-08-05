@@ -27,11 +27,13 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   def state: SQLState[Doc, Model]
 
+  def fqn: String = store.fqn
+
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     val connection = state.connectionManager.getConnection(state)
     val s = connection.createStatement()
     state.register(s)
-    val rs = s.executeQuery(s"SELECT * FROM ${store.name}")
+    val rs = s.executeQuery(s"SELECT * FROM ${store.fqn}")
     state.register(rs)
     rs2Iterator(rs, Conversion.Json(store.fields))
   })
@@ -98,7 +100,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   override protected def _exists(id: Id[Doc]): Task[Boolean] = get(id).map(_.nonEmpty)
 
   override protected def _count: Task[Int] = Task {
-    val rs = executeQuery(s"SELECT COUNT(*) FROM ${store.name}")
+    val rs = executeQuery(s"SELECT COUNT(*) FROM ${store.fqn}")
     try {
       rs.next()
       rs.getInt(1)
@@ -109,7 +111,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val connection = state.connectionManager.getConnection(state)
-    val sql = SQLQuery.parse(s"DELETE FROM ${store.name} WHERE ${index.name} = ?", store.booleanAsNumber)
+    val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${index.name} = ?", store.booleanAsNumber)
     val ps = connection.prepareStatement(sql.query)
     try {
       sql.fillPlaceholder(SQLArg.FieldArg(index, value).json).populate(ps, store.booleanAsNumber)
@@ -149,7 +151,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
   }
 
-  def search[V](sql: SQLQuery)(implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task {
+  def sql[V](query: String)
+            (builder: SQLQuery => SQLQuery)
+            (implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
+    val sql = SQLQuery.parse(query, store.booleanAsNumber)
+    val updated = builder(sql)
+    search[V](updated)
+  }
+
+  private def search[V](sql: SQLQuery)(implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task {
     val results = resultsFor(sql)
     state.register(results.rs)
     val stream = rapid.Stream.fromIterator[V](Task {
@@ -365,7 +375,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override def truncate: Task[Int] = Task {
     val connection = state.connectionManager.getConnection(state)
-    val ps = connection.prepareStatement(s"DELETE FROM ${store.name}")
+    val ps = connection.prepareStatement(s"DELETE FROM ${store.fqn}")
     try {
       ps.executeUpdate()
     } finally {
@@ -489,7 +499,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         } catch {
           case t: Throwable =>
             val columnNames = getColumnNames(rs).mkString(", ")
-            throw new RuntimeException(s"Unable to get ${store.name}.${field.name} from [$columnNames]", t)
+            throw new RuntimeException(s"Unable to get ${store.fqn}.${field.name} from [$columnNames]", t)
         }
       }
       c.convertFromJson(obj(values: _*))
