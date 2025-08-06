@@ -3,6 +3,7 @@ package lightdb.postgresql
 import fabric.define.DefType
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.sql.connect.ConnectionManager
 import lightdb.sql.{SQLState, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
@@ -23,6 +24,25 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   override def supportsSchemas: Boolean = true
   override def booleanAsNumber: Boolean = false
+
+  override protected def initConnection(connection: Connection): Unit = {
+    super.initConnection(connection)
+
+    val s = connection.createStatement()
+    try {
+      // Create pg_trgm to support extremely large columns with efficient filtering
+      s.executeUpdate("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    } finally {
+      s.close()
+    }
+  }
+
+  override protected def createIndexSQL(index: Field.Indexed[Doc, _]): String = if (index.isArr) {
+    // Use pg_trgm gin for arrays
+    s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn USING gin (${index.name} gin_trgm_ops)"
+  } else {
+    super.createIndexSQL(index)
+  }
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
