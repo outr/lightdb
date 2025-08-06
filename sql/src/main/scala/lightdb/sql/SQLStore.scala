@@ -67,9 +67,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     executeUpdate(s"ALTER TABLE $fqn ADD COLUMN ${field.name} ${def2Type(field.name, field.rw.definition)}", tx)
   }
 
+  protected def initConnection(connection: Connection): Unit = {}
+
   protected def initTransaction(tx: TX): Task[Unit] = Task {
     connectionManager.active()
     val connection = tx.state.connectionManager.getConnection(tx.state)
+    initConnection(connection)
     if (supportsSchemas) {
       createSchema(tx)
     }
@@ -100,12 +103,18 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     fields.foreach {
       case index: UniqueIndex[Doc, _] if index.name == "_id" => // Ignore _id
       case index: UniqueIndex[Doc, _] =>
-        executeUpdate(s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})", tx)
+        executeUpdate(createUniqueIndexSQL(index), tx)
       case index: Indexed[Doc, _] =>
-        executeUpdate(s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})", tx)
+        executeUpdate(createIndexSQL(index), tx)
       case _: Field[Doc, _] => // Nothing to do
     }
   }
+
+  protected def createUniqueIndexSQL(index: UniqueIndex[Doc, _]): String =
+    s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})"
+
+  protected def createIndexSQL(index: Indexed[Doc, _]): String =
+    s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})"
 
   protected def tables(connection: Connection): Set[String]
 
