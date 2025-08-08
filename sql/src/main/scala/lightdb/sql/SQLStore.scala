@@ -21,7 +21,6 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   override type TX <: SQLStoreTransaction[Doc, Model]
 
   def supportsSchemas: Boolean = false
-  def booleanAsNumber: Boolean = true
 
   lazy val fqn: String = if (supportsSchemas) {
     s"${lightDB.name}.$name"

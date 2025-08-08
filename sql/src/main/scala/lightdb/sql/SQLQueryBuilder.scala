@@ -69,8 +69,8 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     )
     val pre = "SELECT COUNT(*) FROM ("
     val post = ") AS innerQuery"
-    SQLQuery.parse(s"$pre${b.sql}$post", store.booleanAsNumber).fillPlaceholder(b.args.map(_.json): _*)
+    SQLQuery.parse(s"$pre${b.sql}$post").fillPlaceholder(b.args.map(_.json): _*)
   }
 
-  def toQuery: SQLQuery = SQLQuery.parse(sql, store.booleanAsNumber).fillPlaceholder(args.map(_.json): _*)
+  def toQuery: SQLQuery = SQLQuery.parse(sql).fillPlaceholder(args.map(_.json): _*)
 }
