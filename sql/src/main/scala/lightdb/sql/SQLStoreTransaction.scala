@@ -3,7 +3,7 @@ package lightdb.sql
 import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw._
-import fabric.{Json, Null, arr, bool, num, obj, str}
+import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str, arr, bool, num, obj, str}
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
@@ -20,7 +20,7 @@ import lightdb.util.ActionIterator
 import lightdb.{Query, SearchResults, Sort, SortDirection}
 import rapid.Task
 
-import java.sql.{PreparedStatement, ResultSet, SQLException}
+import java.sql.{PreparedStatement, ResultSet, SQLException, Types}
 
 trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] {
   override def store: SQLStore[Doc, Model]
@@ -37,6 +37,16 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     state.register(rs)
     rs2Iterator(rs, Conversion.Json(store.fields))
   })
+
+  def populate(ps: PreparedStatement, arg: Json, index: Int): Unit = arg match {
+    case Null => ps.setNull(index + 1, Types.NULL)
+    case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))
+    case a: Arr => ps.setString(index + 1, JsonFormatter.Compact(a))
+    case Str(s, _) => ps.setString(index + 1, s)
+    case Bool(b, _) => ps.setInt(index + 1, if (b) 1 else 0)
+    case NumInt(l, _) => ps.setLong(index + 1, l)
+    case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
+  }
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
     val b = new SQLQueryBuilder[Doc, Model](
@@ -68,7 +78,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val indexingState = new IndexingState
     state.withInsertPreparedStatement { ps =>
       store.fields.zipWithIndex.foreach {
-        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index, store.booleanAsNumber)
+        case (field, index) => populate(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
@@ -85,7 +95,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     state.withUpsertPreparedStatement { ps =>
 
       store.fields.zipWithIndex.foreach {
-        case (field, index) => SQLQuery.set(ps, SQLArg.FieldArg(doc, field, indexingState).json, index, store.booleanAsNumber)
+        case (field, index) => populate(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
@@ -111,10 +121,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val connection = state.connectionManager.getConnection(state)
-    val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${index.name} = ?", store.booleanAsNumber)
+    val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${index.name} = ?")
     val ps = connection.prepareStatement(sql.query)
     try {
-      sql.fillPlaceholder(SQLArg.FieldArg(index, value).json).populate(ps, store.booleanAsNumber)
+      sql.fillPlaceholder(SQLArg.FieldArg(index, value).json).populate(ps, this)
       ps.executeUpdate() > 0
     } finally {
       ps.close()
@@ -131,7 +141,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     if (SQLStoreTransaction.LogQueries) scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
     try {
       state.withPreparedStatement(sql.query) { ps =>
-        sql.populate(ps, store.booleanAsNumber)
+        sql.populate(ps, this)
         SQLResults(ps.executeQuery(), sql.query, ps)
       }
     } catch {
@@ -154,7 +164,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   def sql[V](query: String)
             (builder: SQLQuery => SQLQuery)
             (implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
-    val sql = SQLQuery.parse(query, store.booleanAsNumber)
+    val sql = SQLQuery.parse(query)
     val updated = builder(sql)
     search[V](updated)
   }

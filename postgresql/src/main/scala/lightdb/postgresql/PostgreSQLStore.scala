@@ -23,7 +23,6 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   override type TX = PostgreSQLTransaction[Doc, Model]
 
   override def supportsSchemas: Boolean = true
-  override def booleanAsNumber: Boolean = false
 
   override protected def initConnection(connection: Connection): Unit = {
     super.initConnection(connection)
