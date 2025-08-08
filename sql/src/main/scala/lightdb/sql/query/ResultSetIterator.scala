@@ -1,25 +1,24 @@
 package lightdb.sql.query
 
 import lightdb.util.ActionIterator
-import rapid.Opt
 
 import java.sql.ResultSet
 
 class ResultSetIterator private(rs: ResultSet) extends Iterator[ResultSet] {
-  private var hasNextOption: Opt[Boolean] = Opt.Empty
+  private var hasNextOption: Option[Boolean] = None
 
   override def hasNext: Boolean = hasNextOption match {
-    case Opt.Value(b) => b
-    case Opt.Empty =>
+    case Some(b) => b
+    case None =>
       val b = rs.next()
-      hasNextOption = Opt(b)
+      hasNextOption = Some(b)
       b
   }
 
   override def next(): ResultSet = try {
     rs
   } finally {
-    hasNextOption = Opt.Empty
+    hasNextOption = None
   }
 }
 
