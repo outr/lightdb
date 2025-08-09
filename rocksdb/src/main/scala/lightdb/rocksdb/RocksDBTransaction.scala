@@ -149,39 +149,42 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def iterator(rocksIterator: RocksIterator,
                        value: Boolean = true,
-                       prefix: Option[String] = None): Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
-    prefix match {
-      case Some(s) => rocksIterator.seek(s.getBytes(StandardCharsets.UTF_8))     // Initialize the iterator to the prefix
-      case None => rocksIterator.seekToFirst()                    // Seek to the provided value as the start position
-    }
-
-    val prefixBytes: Option[Array[Byte]] = prefix.map(_.getBytes(StandardCharsets.UTF_8))
-
-    val isValid: () => Boolean = prefixBytes match {
-      case Some(pBytes) =>
-        () => rocksIterator.isValid && {
-          val key = rocksIterator.key()
-          key.length >= pBytes.length && java.util.Arrays.equals(key.take(pBytes.length), pBytes)
-        }
-      case None =>
-        () => rocksIterator.isValid
-    }
-
-    override def hasNext: Boolean = isValid()
-
-    override def next(): Array[Byte] = {
-      if (!hasNext) throw new NoSuchElementException("No more elements in the RocksDB iterator")
-
-      val result = if (value) {
-        rocksIterator.value()
-      } else {
-        rocksIterator.key()
+                       prefix: Option[String] = None): Iterator[Array[Byte]] = {
+    val iterator: Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
+      prefix match {
+        case Some(s) => rocksIterator.seek(s.getBytes(StandardCharsets.UTF_8))     // Initialize the iterator to the prefix
+        case None => rocksIterator.seekToFirst()                    // Seek to the provided value as the start position
       }
 
-      // Move to the next entry after retrieving the current value or key
-      rocksIterator.next()
-      result
+      val prefixBytes: Option[Array[Byte]] = prefix.map(_.getBytes(StandardCharsets.UTF_8))
+
+      val isValid: () => Boolean = prefixBytes match {
+        case Some(pBytes) =>
+          () => rocksIterator.isValid && {
+            val key = rocksIterator.key()
+            key.length >= pBytes.length && java.util.Arrays.equals(key.take(pBytes.length), pBytes)
+          }
+        case None =>
+          () => rocksIterator.isValid
+      }
+
+      override def hasNext: Boolean = isValid()
+
+      override def next(): Array[Byte] = {
+        if (!hasNext) throw new NoSuchElementException("No more elements in the RocksDB iterator")
+
+        val result = if (value) {
+          rocksIterator.value()
+        } else {
+          rocksIterator.key()
+        }
+
+        // Move to the next entry after retrieving the current value or key
+        rocksIterator.next()
+        result
+      }
     }
+    new ThreadConfinedBufferedIterator[Array[Byte]](iterator)
   }
 }
 
