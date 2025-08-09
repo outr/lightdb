@@ -16,18 +16,6 @@ import scala.jdk.CollectionConverters._
 
 case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model],
                                                                                  parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] { tx =>
-  private var iterators = Set.empty[RocksIterator]
-  private def rocksIterator: RocksIterator = {
-    val i = store.handle match {
-      case Some(h) => store.rocksDB.newIterator(h)
-      case None => store.rocksDB.newIterator()
-    }
-    tx.synchronized {
-      iterators += i
-    }
-    i
-  }
-
   private def bytes2Doc(bytes: Array[Byte]): Doc = bytes2Json(bytes).as[Doc](store.model.rw)
 
   private def bytes2Json(bytes: Array[Byte]): Json = {
@@ -36,10 +24,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream
-    .fromIterator(Task(iterator(rocksIterator, prefix = Some(prefix)))).map(bytes2Json)
+    .fromIterator(Task(iterator(prefix = Some(prefix)))).map(bytes2Json)
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream
-    .fromIterator(Task(iterator(rocksIterator))).map(bytes2Json)
+    .fromIterator(Task(iterator())).map(bytes2Json)
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
     if (index == store.idField) {
@@ -89,7 +77,12 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   override protected def _count: Task[Int] = Task {
-    iterator(rocksIterator).size
+    val i = iterator(value = false)
+    try {
+      i.size
+    } finally {
+      i.close()
+    }
   }
 
   def estimatedCount: Task[Int] = Task {
@@ -109,10 +102,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override protected def _rollback: Task[Unit] = Task.unit
 
-  override protected def _close: Task[Unit] = Task {
-    iterators.foreach(_.close())
-    iterators = Set.empty
-  }
+  override protected def _close: Task[Unit] = Task.unit
 
   override def truncate: Task[Int] = Task.defer {
     truncateManual
@@ -128,7 +118,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   private def truncateManual: Task[Int] = Task {
-    val iter = rocksIterator
+    val iter = store.handle match {
+      case Some(h) => store.rocksDB.newIterator(h)
+      case None => store.rocksDB.newIterator()
+    }
     val batch = new WriteBatch()
     var count = 0
 
@@ -147,10 +140,17 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     count
   }
 
-  private def iterator(rocksIterator: RocksIterator,
-                       value: Boolean = true,
-                       prefix: Option[String] = None): Iterator[Array[Byte]] = {
-    val iterator: Iterator[Array[Byte]] = new Iterator[Array[Byte]] {
+  private def iterator(value: Boolean = true,
+                       prefix: Option[String] = None): Iterator[Array[Byte]] with AutoCloseable = {
+    new ThreadConfinedBufferedIterator[Array[Byte]](new Iterator[Array[Byte]] with AutoCloseable {
+      private lazy val rocksIterator = {
+        val i = store.handle match {
+          case Some(h) => store.rocksDB.newIterator(h)
+          case None => store.rocksDB.newIterator()
+        }
+        i
+      }
+
       prefix match {
         case Some(s) => rocksIterator.seek(s.getBytes(StandardCharsets.UTF_8))     // Initialize the iterator to the prefix
         case None => rocksIterator.seekToFirst()                    // Seek to the provided value as the start position
@@ -183,8 +183,9 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         rocksIterator.next()
         result
       }
-    }
-    new ThreadConfinedBufferedIterator[Array[Byte]](iterator)
+
+      override def close(): Unit = rocksIterator.close()
+    })
   }
 }
 
