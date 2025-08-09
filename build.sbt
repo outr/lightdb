@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.3.0"
+ThisBuild / version := "4.3.1-SNAPSHOT"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -71,7 +71,7 @@ val collectionCompatVersion: String = "2.13.0"
 
 val reactifyVersion: String = "4.1.5"
 
-val rapidVersion: String = "0.18.0"
+val rapidVersion: String = "0.19.0"
 
 val spatial4JVersion: String = "0.8"
 
