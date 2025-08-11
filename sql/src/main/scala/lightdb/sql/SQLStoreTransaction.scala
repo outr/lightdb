@@ -526,68 +526,74 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     (1 to count).toList.map(index => meta.getColumnName(index))
   }
 
-  private def filter2Part(f: Filter[Doc]): SQLPart = f match {
-    case f: Filter.DrillDownFacetFilter[Doc] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
-    case f: Filter.Equals[Doc, _] if f.field(store.model).isArr =>
-      val values = f.getJson(store.model).asVector
-      val parts = values.map { json =>
-        val jsonString = JsonFormatter.Compact(json)
-        SQLPart(s"${f.fieldName} LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
-      }
-      SQLPart.merge(parts: _*)
-    case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
-    case f: Filter.Equals[Doc, _] => SQLPart(s"${f.fieldName} = ?", List(SQLArg.FieldArg(f.field(store.model), f.value)))
-    case f: Filter.NotEquals[Doc, _] if f.field(store.model).isArr =>
-      val values = f.getJson(store.model).asVector
-      val parts = values.map { json =>
-        val jsonString = JsonFormatter.Compact(json)
-        SQLPart(s"${f.fieldName} NOT LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
-      }
-      SQLPart.merge(parts: _*)
-    case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
-    case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.fieldName} != ?", List(SQLArg.FieldArg(f.field(store.model), f.value)))
-    case f: Filter.Regex[Doc, _] => regexpPart(f.fieldName, f.expression)
-    case f: Filter.In[Doc, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field(store.model), v)))
-    case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
-      case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.LongArg(to)))
-      case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.LongArg(from)))
-      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
-    }
-    case f: Filter.RangeDouble[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
-      case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.DoubleArg(to)))
-      case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.DoubleArg(from)))
-      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
-    }
-    case Filter.StartsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"$query%")))
-    case Filter.EndsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query")))
-    case Filter.Contains(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query%")))
-    case Filter.Exact(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(query)))
-    case f: Filter.Distance[Doc] => distanceFilter(f)
-    case f: Filter.Multi[Doc] =>
-      val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
-      if (f.minShould != 1 && shoulds.nonEmpty) {
-        throw new UnsupportedOperationException("Should filtering only works in SQL for exactly one condition")
-      }
-      val shouldParts = shoulds.map(fc => filter2Part(fc.filter)) match {
-        case Nil => Nil
-        case list => List(SQLPart(
-          sql = list.map(_.sql).mkString("(", " OR ", ")"),
-          args = list.flatMap(_.args)
-        ))
-      }
-      val parts = others.map { fc =>
-        if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
-        fc.condition match {
-          case Condition.Must => filter2Part(fc.filter)
-          case Condition.MustNot =>
-            val p = filter2Part(fc.filter)
-            p.copy(s"NOT(${p.sql})")
-          case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")
+  private def filter2Part(f: Filter[Doc]): SQLPart = {
+    val fields = f.fields(store.model)
+    f match {
+      case f: Filter.DrillDownFacetFilter[Doc] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
+      case f: Filter.Equals[Doc, _] if f.field(store.model).isArr =>
+        val values = f.getJson(store.model).asVector
+        val parts = values.map { json =>
+          val jsonString = JsonFormatter.Compact(json)
+          SQLPart(s"${f.fieldName} LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
         }
+        SQLPart.merge(parts: _*)
+      case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
+      case f: Filter.Equals[Doc, _] => SQLPart(s"${f.fieldName} = ?", List(SQLArg.FieldArg(f.field(store.model), f.value)))
+      case f: Filter.NotEquals[Doc, _] if f.field(store.model).isArr =>
+        val values = f.getJson(store.model).asVector
+        val parts = values.map { json =>
+          val jsonString = JsonFormatter.Compact(json)
+          SQLPart(s"${f.fieldName} NOT LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
+        }
+        SQLPart.merge(parts: _*)
+      case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
+      case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.fieldName} != ?", List(SQLArg.FieldArg(f.field(store.model), f.value)))
+      case f: Filter.Regex[Doc, _] => regexpPart(f.fieldName, f.expression)
+      case f: Filter.In[Doc, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field(store.model), v)))
+      case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
+        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
+        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.LongArg(to)))
+        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.LongArg(from)))
+        case _ => throw new UnsupportedOperationException(s"Invalid: $f")
       }
-      SQLPart.merge(parts ::: shouldParts: _*)
+      case f: Filter.RangeDouble[Doc] => (f.from, f.to) match {
+        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
+        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.DoubleArg(to)))
+        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.DoubleArg(from)))
+        case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+      }
+      case Filter.StartsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%\"$query%")))
+      case Filter.StartsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"$query%")))
+      case Filter.EndsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query\"%")))
+      case Filter.EndsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query")))
+      case Filter.Contains(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query%")))
+      case Filter.Exact(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%\"$query\"%")))
+      case Filter.Exact(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(query)))
+      case f: Filter.Distance[Doc] => distanceFilter(f)
+      case f: Filter.Multi[Doc] =>
+        val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
+        if (f.minShould != 1 && shoulds.nonEmpty) {
+          throw new UnsupportedOperationException("Should filtering only works in SQL for exactly one condition")
+        }
+        val shouldParts = shoulds.map(fc => filter2Part(fc.filter)) match {
+          case Nil => Nil
+          case list => List(SQLPart(
+            sql = list.map(_.sql).mkString("(", " OR ", ")"),
+            args = list.flatMap(_.args)
+          ))
+        }
+        val parts = others.map { fc =>
+          if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
+          fc.condition match {
+            case Condition.Must => filter2Part(fc.filter)
+            case Condition.MustNot =>
+              val p = filter2Part(fc.filter)
+              p.copy(s"NOT(${p.sql})")
+            case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")
+          }
+        }
+        SQLPart.merge(parts ::: shouldParts: _*)
+    }
   }
 
   private def executeQuery(sql: String): ResultSet = {
