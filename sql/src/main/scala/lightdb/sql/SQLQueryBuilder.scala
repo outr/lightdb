@@ -1,6 +1,7 @@
 package lightdb.sql
 
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.FieldAndValue
 import lightdb.sql.query.SQLQuery
 
 import java.sql.SQLException
@@ -70,6 +71,45 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     val pre = "SELECT COUNT(*) FROM ("
     val post = ") AS innerQuery"
     SQLQuery.parse(s"$pre${b.sql}$post").fillPlaceholder(b.args.map(_.json): _*)
+  }
+
+  def updateQuery(fields: List[FieldAndValue[Doc, _]]): SQLQuery = {
+    require(fields.nonEmpty, "Update requires at least one field to update")
+
+    val b = copy(
+      sort = Nil,
+      fields = List(SQLPart("_id"))
+    )
+    val assignments = fields.map { fv => s"${fv.field.name} = ?" }.mkString(", ")
+    val query =
+      s"""UPDATE ${store.fqn}
+         |SET $assignments
+         |WHERE _id IN (
+         |  SELECT s._id
+         |  FROM (
+         |    ${b.sql}
+         |  ) AS s
+         |)
+         |""".stripMargin
+    val args = fields.map(fv => fv.json) ::: b.args.map(_.json)
+    SQLQuery.parse(query).fillPlaceholder(args: _*)
+  }
+
+  lazy val deleteQuery: SQLQuery = {
+    val b = copy(
+      sort = Nil,
+      fields = List(SQLPart("_id"))
+    )
+    val query =
+      s"""DELETE FROM ${store.fqn}
+         |WHERE _id IN (
+         |  SELECT s._id
+         |  FROM (
+         |    ${b.sql}
+         |  ) AS s
+         |)
+         |""".stripMargin
+    SQLQuery.parse(query).fillPlaceholder(b.args.map(_.json): _*)
   }
 
   def toQuery: SQLQuery = SQLQuery.parse(sql).fillPlaceholder(args.map(_.json): _*)
