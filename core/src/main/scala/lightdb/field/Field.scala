@@ -41,6 +41,8 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   def getJson(doc: Doc, state: IndexingState): Json = get(doc, this, state).json
 
+  def apply(value: V): FieldAndValue[Doc, V] = FieldAndValue(this, value)
+
   override def is(value: V): Filter[Doc] = Filter.Equals(name, value)
 
   override def !==(value: V): Filter[Doc] = Filter.NotEquals(name, value)

@@ -7,7 +7,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.FacetQuery
 import lightdb.field.Field._
-import lightdb.field.{Field, IndexingState}
+import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter._
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
@@ -146,6 +146,16 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
     }
     transaction.doSearch(q)
   }
+
+  /**
+   * Uses the query to find and delete all the documents that match the criteria in this collection.
+   */
+  def delete: Task[Int] = transaction.doDelete(this)
+
+  /**
+   * Updates all the records that match the criteria in this collection with the fields and values.
+   */
+  def update(f: => Model => List[FieldAndValue[Doc, _]]): Task[Int] = transaction.doUpdate(query, f(model))
 
   def streamPage: rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
 

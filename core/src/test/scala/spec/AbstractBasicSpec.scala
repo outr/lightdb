@@ -374,12 +374,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     // TODO: Fix support in SQL
-    /*"query all names that start with t" in {
+    "query all names that start with t" in {
       db.people.transaction { transaction =>
-        val people = transaction.query.filter(_.allNames.startsWith("t")).toList
-        people.map(_.name).toSet should be(Set("Tori"))
+        transaction.query.filter(_.allNames.startsWith("t")).toList.map { people =>
+          people.map(_.name).toSet should be(Set("Tori"))
+        }
       }
-    }*/
+    }
     "query nicknames with regex match" in {
       db.people.transaction { transaction =>
         transaction.query
@@ -591,6 +592,32 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       ))
 
       QueryOptimizer.optimize(query) should be(optimized)
+    }
+    "update multiple records via query" in {
+      db.people.transaction { txn =>
+        txn.query.filter(_.age > 70).update(p => List(p.age(70))).map { updated =>
+          updated should be(5)
+        }
+      }
+    }
+    "verify multiple records were updated via query" in {
+      db.people.transaction { txn =>
+        txn.query.filter(_.age === 70).toList.map { people =>
+          people.map(_.name).toSet should be(Set("Zoey", "Not Ruth", "Ian", "Quintin", "Sam"))
+        }
+      }
+    }
+    "delete several records by query" in {
+      db.people.transaction { txn =>
+        txn.query.filter(_.age === 70).delete.map { deleted =>
+          deleted should be(5)
+        }
+      }
+    }
+    "count the remaining records to make sure they were deleted" in {
+      db.people.t.count.map { remaining =>
+        remaining should be(19)
+      }
     }
     "truncate the database" in {
       db.truncate().succeed
