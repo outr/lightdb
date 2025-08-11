@@ -8,7 +8,7 @@ import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, Ag
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.Field.Tokenized
-import lightdb.field.{Field, IndexingState}
+import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
@@ -149,6 +149,21 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
   }
 
+  def executeUpdate(sql: SQLQuery): Int = {
+    try {
+      state.withPreparedStatement(sql.query) { ps =>
+        try {
+          sql.populate(ps, this)
+          ps.executeUpdate()
+        } finally {
+          state.returnPreparedStatement(sql.query, ps)
+        }
+      }
+    } catch {
+      case t: Throwable => throw new SQLException(s"Error executing update: ${sql.query} (params: ${sql.args.mkString(" | ")})", t)
+    }
+  }
+
   private def queryTotal(sql: SQLQuery): Int = {
     val results = resultsFor(sql)
     val rs = results.rs
@@ -244,7 +259,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     )
   }
 
-  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
+  private def qb[V](query: Query[Doc, Model, V]) = {
     var extraFields = List.empty[SQLPart]
     val fields = query.conversion match {
       case Conversion.Value(field) => List(field)
@@ -261,7 +276,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         extraFields = extraFields ::: extraFieldsForDistance(d)
         store.fields
     }
-    val b = SQLQueryBuilder(
+    SQLQueryBuilder(
       store = store,
       state = state,
       fields = fields.map(f => fieldPart(f)) ::: extraFields,
@@ -277,8 +292,23 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       limit = query.limit.orElse(Some(query.pageSize)),
       offset = query.offset
     )
+  }
 
+  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
+    val b = qb[V](query)
     execute[V](b.toQuery, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
+  }
+
+  override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] = Task {
+    val b = qb[V](query)
+    val q = b.updateQuery(updates)
+    executeUpdate(q)
+  }
+
+  override def doDelete[V](query: Query[Doc, Model, V]): Task[Int] = Task {
+    val b = qb[V](query)
+    val q = b.deleteQuery
+    executeUpdate(q)
   }
 
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
