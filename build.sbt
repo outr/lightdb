@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.4.0"
+ThisBuild / version := "4.4.1"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -52,6 +52,7 @@ ThisBuild / javaOptions ++= Seq(
 	"--add-opens=java.base/java.nio=ALL-UNNAMED",
 	"--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
 	"--add-modules", "jdk.incubator.vector",
+  "--illegal-access=permit",
 	"--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
 	"--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
 	"--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
@@ -71,7 +72,7 @@ val collectionCompatVersion: String = "2.13.0"
 
 val reactifyVersion: String = "4.1.5"
 
-val rapidVersion: String = "0.19.0"
+val rapidVersion: String = "1.0.0"
 
 val spatial4JVersion: String = "0.8"
 
