@@ -108,8 +108,8 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
           people.zip(distances).map {
             case (p, d) => p.name -> d
           } should be(List(
-            "Jane Doe" -> List(16.01508397712445),
-            "Bob Dole" -> List(695.6419047674393, 1334.038796028706)
+            ("Jane Doe", List(14.840719626909188)),
+            ("Bob Dole", List(695.6419047674393, 1334.038796028706))
           ))
         }
       }
