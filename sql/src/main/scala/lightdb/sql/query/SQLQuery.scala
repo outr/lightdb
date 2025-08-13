@@ -94,7 +94,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
 
 object SQLQuery {
   private val PlaceholderPattern =
-    raw"(:[a-zA-Z_][a-zA-Z0-9_]*)|\?".r
+    raw":(?!:)([a-zA-Z_][a-zA-Z0-9_]*)|\?".r
 
   def toJson(value: Any): Json = value match {
     case null | None => Null
