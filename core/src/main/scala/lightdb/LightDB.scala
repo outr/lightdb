@@ -106,7 +106,10 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     // Get applied database upgrades
     applied <- appliedUpgrades.get()
     // Determine upgrades that need to be applied
-    upgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label))
+    allUpgrades = this.upgrades.filter(u => u.alwaysRun || !applied.contains(u.label))
+    blockingUpgrades = allUpgrades.filter(_.blockStartup)
+    asyncUpgrades = allUpgrades.filterNot(_.blockStartup)
+    upgrades = blockingUpgrades ::: asyncUpgrades
     _ <- logger.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
       .when(upgrades.nonEmpty)
     _ <- doUpgrades(upgrades, dbInitialized = dbInitialized, stillBlocking = true).when(upgrades.nonEmpty)
