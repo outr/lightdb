@@ -263,8 +263,11 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       val runUpgrade = dbInitialized || upgrade.applyToNew
       val continueBlocking = upgrades.exists(u => u.blockStartup && (dbInitialized || u.applyToNew))
 
-      val task = upgrade
-        .upgrade(this)
+      val task = logger.info(s"Starting ${upgrade.label} database upgrade...")
+        .next(upgrade.upgrade(this))
+        .elapsed.flatMap {
+          case (_, elapsed) => logger.info(s"Finished ${upgrade.label} database upgrade in $elapsed seconds")
+        }
         .flatMap { _ =>
           appliedUpgrades.modify(_ + upgrade.label)
         }
