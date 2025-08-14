@@ -165,8 +165,12 @@ object Geo {
 
   def parse(json: Json): Geo = json("type").asString match {
     case "Point" =>
-      val v = json("coordinates").asVector.map(_.asDouble)
-      Geo.Point(latitude = v(1), longitude = v(0)).fixed
+      json.get("coordinates") match {
+        case Some(coordinates) =>
+          val v = coordinates.asVector.map(_.asDouble)
+          Geo.Point(latitude = v(1), longitude = v(0)).fixed
+        case None => Geo.Point(latitude = json("latitude").asDouble, longitude = json("longitude").asDouble)
+      }
     case "LineString" => Line(
       json("coordinates").asVector.toList.map { p =>
         val v = p.asVector
