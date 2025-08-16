@@ -73,13 +73,21 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     copy(updated)
   }
 
-  def fillPlaceholder(name: String, value: Json): SQLQuery = {
+  /**
+   * Generally, only a single value is supplied to replace a named value. However, if multiple values are provided, it
+   * converts this into a multi-argument replacement.
+   *
+   * @param name the name of the placeholder variable
+   * @param values the values to replace it with
+   * @return
+   */
+  def fillPlaceholder(name: String, values: Json*): SQLQuery = {
     var found = false
-    val updated = parts.map {
+    val updated = parts.flatMap {
       case SQLPart.Placeholder(Some(n)) if n == name =>
         found = true
-        SQLPart.Arg(value)
-      case part => part
+        values.toList.map(json => SQLPart.Arg(json))
+      case part => List(part)
     }
     if (!found)
       throw new RuntimeException(s"No placeholders found for named bind '$name'")
