@@ -207,6 +207,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
               case s: String => str(s)
               case b: Boolean => bool(b)
               case i: Int => num(i)
+              case l: Long => num(l)
               case f: Float => num(f)
               case d: Double => num(d)
               case bd: BigDecimal => num(bd)
