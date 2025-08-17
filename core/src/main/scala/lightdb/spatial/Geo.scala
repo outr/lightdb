@@ -63,45 +63,45 @@ object Geo {
         Enum(values = List(str(name)), className = Some("java.lang.String"))
 
       val pointDef: DefType =
-        Obj(className = None,
+        Obj(className = Some("lightdb.spatial.Geo.Point"),
           "type" -> typeIs("Point"),
           "coordinates" -> position
         )
 
       val multiPointDef: DefType =
-        Obj(className = None,
+        Obj(className = Some("lightdb.spatial.Geo.MultiPoint"),
           "type" -> typeIs("MultiPoint"),
           "coordinates" -> multiPointCoords
         )
 
       val lineStringDef: DefType =
-        Obj(className = None,
+        Obj(className = Some("lightdb.spatial.Geo.Line"),
           "type" -> typeIs("LineString"),
           "coordinates" -> lineCoords
         )
 
       val multiLineStringDef: DefType =
-        Obj(className = None,
+        Obj(className = Some("lightdb.spatial.Geo.MultiLine"),
           "type" -> typeIs("MultiLineString"),
           "coordinates" -> multiLineCoords
         )
 
       val polygonDef: DefType =
-        Obj(className = None,
+        Obj(className = Some("lightdb.spatial.Geo.Polygon"),
           "type" -> typeIs("Polygon"),
           "coordinates" -> polygonCoords
         )
 
       val multiPolygonDef: DefType =
-        Obj(className = None,
+        Obj(className = Some("lightdb.spatial.Geo.MultiPolygon"),
           "type" -> typeIs("MultiPolygon"),
           "coordinates" -> multiPolygonCoords
         )
 
       val geometryCollectionDef: DefType =
-        Obj(className = None,
+        Obj(className = Some("lightdb.spatial.Geo.GeometryCollection"),
           "type" -> typeIs("GeometryCollection"),
-          "geometries" -> Arr(Json) // array of geometries; each will be one of the poly variants at runtime
+          "geometries" -> Arr(Json)
         )
 
       Poly(
