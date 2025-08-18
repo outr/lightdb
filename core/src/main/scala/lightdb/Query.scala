@@ -11,7 +11,7 @@ import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter._
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
-import lightdb.spatial.{DistanceAndDoc, Geo}
+import lightdb.spatial.{DistanceAndDoc, Geo, Point}
 import lightdb.store.{Collection, Conversion}
 import lightdb.transaction.CollectionTransaction
 import rapid.{Forge, Grouped, Pull, Task}
@@ -115,7 +115,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   def indexes: Query[Doc, Model, MaterializedIndex[Doc, Model]] = materialized()
   def docAndIndexes: Query[Doc, Model, MaterializedAndDoc[Doc, Model]] = conversion(Conversion.DocAndIndexes())
   def distance[G <: Geo](f: Model => Field[Doc, List[G]],
-                         from: Geo.Point,
+                         from: Point,
                          sort: Boolean = true,
                          radius: Option[Distance] = None): Query[Doc, Model, DistanceAndDoc[Doc]] =
     conversion(Conversion.Distance(

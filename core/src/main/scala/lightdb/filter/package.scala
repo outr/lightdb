@@ -5,9 +5,16 @@ import lightdb.doc.Document
 import scala.language.implicitConversions
 
 package object filter {
-  implicit class ListFilterExtras[V, Doc, Filter](fs: FilterSupport[List[V], Doc, Filter]) {
+  implicit class ListFilterExtras[V, Doc <: Document[Doc], Filter](fs: FilterSupport[List[V], Doc, Filter]) {
     def has(value: V): Filter = fs.is(List(value))
-    def hasAny(values: List[V]): Filter = fs.is(values)
+    def hasAny(values: List[V]): Filter = {
+      fs.group(
+        minShould = 1,
+        filters = values.map { v =>
+          has(v) -> Condition.Should
+        }: _*
+      )
+    }
   }
   implicit class SetFilterExtras[V, Doc, Filter](fs: FilterSupport[Set[V], Doc, Filter]) {
     def has(value: V): Filter = fs.is(Set(value))

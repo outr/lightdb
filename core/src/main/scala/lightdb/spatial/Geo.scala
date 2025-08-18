@@ -1,14 +1,13 @@
 package lightdb.spatial
 
 import fabric._
-import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw._
 
-sealed trait Geo {
+trait Geo {
   import Geo._
 
-  def center: Geo.Point
+  def center: Point
 
   def toJson: Json
 
@@ -49,7 +48,7 @@ object Geo {
     d = {
       import fabric._
       import fabric.define.DefType
-      import fabric.define.DefType.{Arr, Dec, Enum, Obj, Json, Poly}
+      import fabric.define.DefType.{Arr, Dec, Enum, Json, Obj, Poly}
 
       val position: DefType = Arr(Dec)
       val ring: DefType = Arr(position)
@@ -63,43 +62,43 @@ object Geo {
         Enum(values = List(str(name)), className = Some("java.lang.String"))
 
       val pointDef: DefType =
-        Obj(className = Some("lightdb.spatial.Geo.Point"),
+        Obj(className = Some("lightdb.spatial.Point"),
           "type" -> typeIs("Point"),
           "coordinates" -> position
         )
 
       val multiPointDef: DefType =
-        Obj(className = Some("lightdb.spatial.Geo.MultiPoint"),
+        Obj(className = Some("lightdb.spatial.MultiPoint"),
           "type" -> typeIs("MultiPoint"),
           "coordinates" -> multiPointCoords
         )
 
       val lineStringDef: DefType =
-        Obj(className = Some("lightdb.spatial.Geo.Line"),
+        Obj(className = Some("lightdb.spatial.Line"),
           "type" -> typeIs("LineString"),
           "coordinates" -> lineCoords
         )
 
       val multiLineStringDef: DefType =
-        Obj(className = Some("lightdb.spatial.Geo.MultiLine"),
+        Obj(className = Some("lightdb.spatial.MultiLine"),
           "type" -> typeIs("MultiLineString"),
           "coordinates" -> multiLineCoords
         )
 
       val polygonDef: DefType =
-        Obj(className = Some("lightdb.spatial.Geo.Polygon"),
+        Obj(className = Some("lightdb.spatial.Polygon"),
           "type" -> typeIs("Polygon"),
           "coordinates" -> polygonCoords
         )
 
       val multiPolygonDef: DefType =
-        Obj(className = Some("lightdb.spatial.Geo.MultiPolygon"),
+        Obj(className = Some("lightdb.spatial.MultiPolygon"),
           "type" -> typeIs("MultiPolygon"),
           "coordinates" -> multiPolygonCoords
         )
 
       val geometryCollectionDef: DefType =
-        Obj(className = Some("lightdb.spatial.Geo.GeometryCollection"),
+        Obj(className = Some("lightdb.spatial.GeometryCollection"),
           "type" -> typeIs("GeometryCollection"),
           "geometries" -> Arr(Json)
         )
@@ -124,7 +123,7 @@ object Geo {
 
   def parseString(s: String): Geo = s.trim match {
     case PointStringRegex(lon, lat) =>
-      Geo.Point(latitude = lat.toDouble, longitude = lon.toDouble)
+      Point(latitude = lat.toDouble, longitude = lon.toDouble)
 
     case PolygonRegex(firstRing) =>
       parsePolyRing(firstRing)
@@ -139,13 +138,13 @@ object Geo {
         val firstRing = poly.split("""\)\s*,\s*\(""", 2).head
         parsePolyRing(firstRing)
       }
-      Geo.MultiPolygon(polygons)
+      MultiPolygon(polygons)
 
     case _ =>
       throw new RuntimeException(s"Unsupported GeoString: $s")
   }
 
-  private def parsePolyRing(ring: String): Geo.Polygon = {
+  private def parsePolyRing(ring: String): Polygon = {
     val cleaned = ring.replace("(", "").replace(")", "").trim
     val pts = cleaned.split("""\s*,\s*""").toList.map { p =>
       val parts = p.trim.split("""\s+""")
@@ -153,9 +152,9 @@ object Geo {
         throw new RuntimeException(s"Bad coordinate: '$p' in ring '$ring'")
       val lon = parts(0).toDouble
       val lat = parts(1).toDouble
-      Geo.Point(latitude = lat, longitude = lon)
+      Point(latitude = lat, longitude = lon)
     }
-    Geo.Polygon(pts)
+    Polygon(pts)
   }
 
   def parseMulti(json: Json): List[Geo] = parse(json) match {
@@ -168,25 +167,25 @@ object Geo {
       json.get("coordinates") match {
         case Some(coordinates) =>
           val v = coordinates.asVector.map(_.asDouble)
-          Geo.Point(latitude = v(1), longitude = v(0)).fixed
-        case None => Geo.Point(latitude = json("latitude").asDouble, longitude = json("longitude").asDouble)
+          Point(latitude = v(1), longitude = v(0)).fixed
+        case None => Point(latitude = json("latitude").asDouble, longitude = json("longitude").asDouble)
       }
     case "LineString" => Line(
       json("coordinates").asVector.toList.map { p =>
         val v = p.asVector
-        Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
+        Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
       }
     )
     case "Polygon" => Polygon(
       json("coordinates").asVector.head.asVector.toList.map { p =>
         val v = p.asVector
-        Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
+        Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
       }
     )
     case "MultiPolygon" => MultiPolygon(
       json("coordinates").asVector.toList.map { p =>
         p.asVector.head.asVector.toList.map(_.asVector.toList).map { v =>
-          Geo.Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
+          Point(latitude = v(1).asDouble, longitude = v(0).asDouble).fixed
         }
       }.map(list => Polygon(list))
     )
@@ -214,89 +213,5 @@ object Geo {
     val latitude = min.latitude + (max.latitude - min.latitude) / 2.0
     val longitude = min.longitude + (max.longitude - min.longitude) / 2.0
     Point(latitude, longitude)
-  }
-
-  case class Point(latitude: Double, longitude: Double) extends Geo {
-    override def center: Point = this
-
-    def fixed: Point = if (latitude < -90.0 || latitude > 90.0) {
-      Point(longitude, latitude)
-    } else {
-      this
-    }
-
-    override def toJson: Json = obj(
-      "type" -> str("Point"),
-      "coordinates" -> coord(this)
-    )
-  }
-
-  object Point {
-    implicit val rw: RW[Point] = Geo.rw.asInstanceOf[RW[Point]]
-  }
-
-  case class MultiPoint(points: List[Point]) extends Geo {
-    lazy val center: Point = Geo.center(points)
-
-    override def toJson: Json = obj(
-      "type" -> str("MultiPoint"),
-      "coordinates" -> multiPointCoords(this)
-    )
-  }
-
-  case class Line(points: List[Point]) extends Geo {
-    lazy val center: Point = Geo.center(points)
-
-    override def toJson: Json = obj(
-      "type" -> str("LineString"),
-      "coordinates" -> lineCoords(this)
-    )
-  }
-
-  case class MultiLine(lines: List[Line]) extends Geo {
-    lazy val center: Point = Geo.center(lines.flatMap(_.points))
-
-    override def toJson: Json = obj(
-      "type" -> str("MultiLineString"),
-      "coordinates" -> multiLineCoords(this)
-    )
-  }
-
-  case class Polygon(points: List[Point]) extends Geo {
-    lazy val center: Point = Geo.center(points)
-
-    override def toJson: Json = obj(
-      "type" -> str("Polygon"),
-      "coordinates" -> polygonCoords(this)
-    )
-  }
-
-  object Polygon {
-    def lonLat(points: Double*): Polygon = Polygon(points.grouped(2).map { p =>
-      Point(p.last, p.head)
-    }.toList)
-  }
-
-  case class MultiPolygon(polygons: List[Polygon]) extends Geo {
-    lazy val center: Point = Geo.center(polygons.flatMap(_.points))
-
-    override def toJson: Json = obj(
-      "type" -> str("MultiPolygon"),
-      "coordinates" -> multiPolygonCoords(this)
-    )
-  }
-
-  case class GeometryCollection(geometries: List[Geo]) extends Geo {
-    lazy val center: Point = Geo.center(geometries.map(_.center))
-
-    lazy val normalized: Geo = geometries match {
-      case geo :: Nil => geo
-      case _ => this
-    }
-
-    override def toJson: Json = obj(
-      "type" -> str("GeometryCollection"),
-      "geometries" -> arr(geometries.map(_.toJson): _*)
-    )
   }
 }

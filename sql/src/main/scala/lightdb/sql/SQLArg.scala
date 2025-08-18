@@ -8,7 +8,7 @@ import lightdb.doc.Document
 import lightdb.field.Field._
 import lightdb.field.{Field, IndexingState}
 import lightdb.id.Id
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, Point}
 
 import java.sql.{PreparedStatement, Types}
 
@@ -55,7 +55,7 @@ object SQLArg {
 //    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, JsonFormatter.Compact(json))
   }
 
-  case class GeoPointArg(point: Geo.Point) extends SQLArg {
+  case class GeoPointArg(point: Point) extends SQLArg {
 //    override def set(ps: PreparedStatement, index: Int): Unit = ps.setString(index, s"POINT(${point.longitude} ${point.latitude})")
 
     override def json: Json = str(s"POINT(${point.longitude} ${point.latitude})")

@@ -3,7 +3,7 @@ package lightdb.filter
 import fabric.rw.{Convertible, RW}
 import fabric.{NumDec, NumInt}
 import lightdb.distance.Distance
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, Point}
 
 trait FilterSupport[F, Doc, Filter] {
   implicit def rw: RW[F]
@@ -27,6 +27,8 @@ trait FilterSupport[F, Doc, Filter] {
   def endsWith(value: String): Filter
   def contains(value: String): Filter
   def exactly(value: String): Filter
+
+  def group(minShould: Int, filters: (Filter, Condition)*): Filter
 
   def BETWEEN(tuple: (F, F))(implicit num: Numeric[F]): Filter = range(Some(tuple._1), Some(tuple._2))
   def <=>(tuple: (F, F))(implicit num: Numeric[F]): Filter = range(Some(tuple._1), Some(tuple._2))
@@ -64,7 +66,7 @@ trait FilterSupport[F, Doc, Filter] {
             matchStartsWith: Boolean = true,
             matchEndsWith: Boolean = false): Filter
 
-  def distance(from: Geo.Point, radius: Distance): Filter
+  def distance(from: Point, radius: Distance): Filter
 }
 
 object FilterSupport {

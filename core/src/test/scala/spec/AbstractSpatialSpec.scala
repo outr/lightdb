@@ -6,7 +6,7 @@ import lightdb.LightDB
 import lightdb.distance._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, Point, Polygon}
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -22,13 +22,13 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
   private val id2 = Id[Person]("jane")
   private val id3 = Id[Person]("bob")
 
-  private val newYorkCity = Geo.Point(40.7142, -74.0119)
-  private val chicago = Geo.Point(41.8119, -87.6873)
-  private val noble = Geo.Point(35.1417, -97.3409)
-  private val oklahomaCity = Geo.Point(35.5514, -97.4075)
-  private val yonkers = Geo.Point(40.9461, -73.8669)
+  private val newYorkCity = Point(40.7142, -74.0119)
+  private val chicago = Point(41.8119, -87.6873)
+  private val noble = Point(35.1417, -97.3409)
+  private val oklahomaCity = Point(35.5514, -97.4075)
+  private val yonkers = Point(40.9461, -73.8669)
 
-  private val moorePolygon = Geo.Polygon.lonLat(
+  private val moorePolygon = Polygon.lonLat(
     -97.51995284659067, 35.31659661477283,
     -97.50983688600051, 35.29708140953622,
     -97.42966767585344, 35.29494585205129,
@@ -149,7 +149,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
 
   case class Person(name: String,
                     age: Int,
-                    point: Geo.Point,
+                    point: Point,
                     geo: List[Geo],
                     _id: Id[Person] = Person.id()) extends Document[Person]
 
@@ -158,7 +158,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
 
     val name: F[String] = field("name", (p: Person) => p.name)
     val age: F[Int] = field("age", (p: Person) => p.age)
-    val point: I[Geo.Point] = field.index("point", (p: Person) => p.point)
+    val point: I[Point] = field.index("point", (p: Person) => p.point)
     val geo: I[List[Geo]] = field.index("geo", (p: Person) => p.geo)
   }
 }
