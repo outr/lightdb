@@ -620,7 +620,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         }
         val shouldParts = shoulds.map(fc => filter2Part(fc.filter)) match {
           case Nil => Nil
-          case list => SQLPart.Fragment("(") :: list.intersperse(SQLPart.Fragment(" OR ")) ::: List(SQLPart.Fragment(")"))
+          case list => List(SQLQuery(SQLPart.Fragment("(") :: list.intersperse(SQLPart.Fragment(" OR ")) ::: List(SQLPart.Fragment(")"))))
         }
         val parts: List[SQLPart] = others.flatMap { fc =>
           if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
@@ -628,11 +628,21 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
             case Condition.Must => List(filter2Part(fc.filter))
             case Condition.MustNot =>
               val p = filter2Part(fc.filter)
-              SQLPart.Fragment("NOT(") :: p :: List(SQLPart.Fragment(")"))
+              // Create a proper SQLQuery for NOT conditions to avoid flattening issues
+              List(SQLQuery(List(SQLPart.Fragment("NOT("), p, SQLPart.Fragment(")"))))
             case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")
           }
         }
-        SQLQuery((parts ::: shouldParts).intersperse(SQLPart.Fragment(" AND ")))
+        // Filter out any empty or invalid parts before creating the SQL
+        val validParts = (parts ::: shouldParts).filter {
+          case SQLPart.Fragment("") => false
+          case _ => true
+        }
+        if (validParts.isEmpty) {
+          SQLPart.Fragment("1=1") // Always true condition as fallback
+        } else {
+          SQLQuery(validParts.intersperse(SQLPart.Fragment(" AND ")))
+        }
     }
   }
 
