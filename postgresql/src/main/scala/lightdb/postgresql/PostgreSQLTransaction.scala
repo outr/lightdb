@@ -1,8 +1,10 @@
 package lightdb.postgresql
 
 import fabric._
+import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.sql.{SQLArg, SQLPart, SQLState, SQLStoreTransaction}
+import lightdb.sql.query.SQLPart
+import lightdb.sql.{SQLState, SQLStoreTransaction}
 import lightdb.transaction.Transaction
 
 import java.sql.PreparedStatement
@@ -11,7 +13,7 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                                                                                     state: SQLState[Doc, Model],
                                                                                     parent: Option[Transaction[Doc, Model]]) extends SQLStoreTransaction[Doc, Model] {
   override protected def regexpPart(name: String, expression: String): SQLPart =
-    SQLPart(s"$name ~ ?", List(SQLArg.StringArg(expression)))
+    SQLPart(s"$name ~ ?", expression.json)
 
   override protected def concatPrefix: String = "STRING_AGG"
 

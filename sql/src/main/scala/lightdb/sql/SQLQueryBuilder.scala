@@ -17,7 +17,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               offset: Int) {
   lazy val parts: List[SQLPart] = List(
     List(SQLPart.Fragment("SELECT\n\t")),
-    fields.intersperse(SQLPart.Fragment(", ")),
+    if (fields.nonEmpty) fields.intersperse(SQLPart.Fragment(", ")) else List(SQLPart.Fragment("*")),
     List(SQLPart.Fragment(s"\nFROM\n\t${store.fqn}\n")),
     if (filters.nonEmpty) {
       SQLPart.Fragment("WHERE\n") :: filters.intersperse(SQLPart.Fragment("\nAND\n"))
@@ -68,9 +68,17 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
       sort = Nil,
       fields = List(SQLPart.Fragment("_id"))
     )
-    val assignments: List[SQLPart] = fields.flatMap { fv =>
+    
+    val assignments: List[SQLPart] = if (fields.length == 1) {
+      // Single field - no need for comma separators
+      val fv = fields.head
       List(SQLPart.Fragment(s"${fv.field.name} = "), SQLPart.Arg(fv.json))
-    }.intersperse(SQLPart.Fragment(", "))
+    } else {
+      // Multiple fields - need comma separators between them
+      fields.flatMap { fv =>
+        List(SQLPart.Fragment(s"${fv.field.name} = "), SQLPart.Arg(fv.json))
+      }.intersperse(SQLPart.Fragment(", "))
+    }
 
     SQLQuery(
       parts = List(
