@@ -15,13 +15,15 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               sort: List[SQLPart] = Nil,
                                                                               limit: Option[Int] = None,
                                                                               offset: Int) {
+  lazy val whereClauses: List[SQLPart] = filters.filter(p => p.sql.nonEmpty || p.args.nonEmpty)
+
   lazy val sql: String = {
     val b = new StringBuilder
     b.append("SELECT\n")
     b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
     b.append("FROM\n")
     b.append(s"\t${store.fqn}\n")
-    filters.filter(p => p.sql.nonEmpty || p.args.nonEmpty).zipWithIndex.foreach {
+    whereClauses.zipWithIndex.foreach {
       case (f, index) =>
         if (index == 0) {
           b.append("WHERE\n")
