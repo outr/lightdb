@@ -10,10 +10,11 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.Field.Tokenized
 import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter.{Condition, Filter}
+import lightdb._
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
-import lightdb.sql.query.SQLQuery
+import lightdb.sql.query.{SQLPart, SQLQuery}
 import lightdb.store.{Conversion, Store}
 import lightdb.transaction.CollectionTransaction
 import lightdb.util.ActionIterator
@@ -52,7 +53,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val b = new SQLQueryBuilder[Doc, Model](
       store = store,
       state = state,
-      fields = store.fields.map(f => SQLPart(f.name)),
+      fields = store.fields.map(f => SQLPart.Fragment(f.name)),
       filters = List(filter2Part(index === value)),
       group = Nil,
       having = Nil,
@@ -60,7 +61,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       limit = Some(1),
       offset = 0
     )
-    val results = resultsFor(b.toQuery)
+    val results = resultsFor(b.query)
     val rs = results.rs
     try {
       if (rs.next()) {
@@ -78,7 +79,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val indexingState = new IndexingState
     state.withInsertPreparedStatement { ps =>
       store.fields.zipWithIndex.foreach {
-        case (field, index) => populate(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
+        case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
@@ -95,7 +96,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     state.withUpsertPreparedStatement { ps =>
 
       store.fields.zipWithIndex.foreach {
-        case (field, index) => populate(ps, SQLArg.FieldArg(doc, field, indexingState).json, index)
+        case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
@@ -124,7 +125,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${index.name} = ?")
     val ps = connection.prepareStatement(sql.query)
     try {
-      sql.fillPlaceholder(SQLArg.FieldArg(index, value).json).populate(ps, this)
+      sql.fillPlaceholder(index.rw.read(value)).populate(ps, this)
       ps.executeUpdate() > 0
     } finally {
       ps.close()
@@ -287,7 +288,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       sort = query.sort.collect {
         case Sort.ByField(index, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-          SQLPart(s"${index.name} $dir")
+          SQLPart.Fragment(s"${index.name} $dir")
         case Sort.ByDistance(field, _, direction) => sortByDistance(field, direction)
       },
       limit = query.limit.orElse(Some(query.pageSize)),
@@ -297,7 +298,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
     val b = toSQL[V](query)
-    execute[V](b.toQuery, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
+    execute[V](b.query, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
   }
 
   override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] = Task {
@@ -314,7 +315,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
     val b = aggregate2SQLQuery(query)
-    val results = resultsFor(b.toQuery)
+    val results = resultsFor(b.query)
     val rs = results.rs
     state.register(rs)
 
@@ -382,18 +383,18 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
           s"$s($pre${f.field.name}$post)"
         case None => f.field.name
       }
-      SQLPart(s"$fieldName AS ${f.name}", Nil)
+      SQLPart.Fragment(s"$fieldName AS ${f.name}")
     }
     val filters = query.query.filter.map(filter2Part).toList
-    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct.map(s => SQLPart(s, Nil))
+    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct.map(s => SQLPart.Fragment(s))
     val having = query.filter.map(af2Part).toList
     val sort = (query.sort ::: query.query.sort).map {
       case Sort.ByField(field, direction) =>
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-        SQLPart(s"${field.name} $dir", Nil)
+        SQLPart.Fragment(s"${field.name} $dir")
       case (AggregateFunction(name, _, _), direction: SortDirection) =>
         val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-        SQLPart(s"$name $dir", Nil)
+        SQLPart.Fragment(s"$name $dir")
       case t => throw new UnsupportedOperationException(s"Unsupported sort: $t")
     }
     SQLQueryBuilder(
@@ -424,33 +425,44 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
   }
 
-  protected def regexpPart(name: String, expression: String): SQLPart =
-    SQLPart(s"$name REGEXP ?", List(SQLArg.StringArg(expression)))
+  protected def regexpPart(name: String, expression: String): SQLPart = SQLQuery(List(
+    SQLPart.Fragment(s"$name REGEXP "), SQLPart.Arg(expression.json)
+  ))
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {
-    case f: AggregateFilter.Equals[Doc, _] => SQLPart(s"${f.name} = ?", List(SQLArg.FieldArg(f.field, f.value)))
-    case f: AggregateFilter.NotEquals[Doc, _] => SQLPart(s"${f.name} != ?", List(SQLArg.FieldArg(f.field, f.value)))
+    case f: AggregateFilter.Equals[Doc, _] => SQLQuery(List(
+      SQLPart.Fragment(s"${f.name} = "), SQLPart.Arg(f.field.rw.read(f.value))
+    ))
+    case f: AggregateFilter.NotEquals[Doc, _] =>
+      SQLQuery(List(
+        SQLPart.Fragment(s"${f.name} != "), SQLPart.Arg(f.field.rw.read(f.value))
+      ))
     case f: AggregateFilter.Regex[Doc, _] => regexpPart(f.name, f.expression)
-    case f: AggregateFilter.In[Doc, _] => SQLPart(s"${f.name} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field, v)))
+    case f: AggregateFilter.In[Doc, _] =>
+      SQLQuery(
+        SQLPart.Fragment(s"${f.name} IN (") ::
+          f.values.toList.map[SQLPart](v => SQLPart.Arg(f.field.rw.read(v))).intersperse(SQLPart.Fragment(", ")) :::
+          List(SQLPart.Fragment(")"))
+      )
     case f: AggregateFilter.Combined[Doc] =>
       val parts = f.filters.map(f => af2Part(f))
-      SQLPart(parts.map(_.sql).mkString(" AND "), parts.flatMap(_.args))
+      SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
     case f: AggregateFilter.RangeLong[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
-      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(SQLArg.LongArg(to)))
-      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(SQLArg.LongArg(from)))
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", from.json, to.json)
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", to.json)
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", from.json)
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
     case f: AggregateFilter.RangeDouble[_] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
-      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", List(SQLArg.DoubleArg(to)))
-      case (Some(from), None) => SQLPart(s"${f.name} >= ?", List(SQLArg.DoubleArg(from)))
+      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", from.json, to.json)
+      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", to.json)
+      case (Some(from), None) => SQLPart(s"${f.name} >= ?", from.json)
       case _ => throw new UnsupportedOperationException(s"Invalid: $f")
     }
-    case AggregateFilter.StartsWith(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(s"$query%")))
-    case AggregateFilter.EndsWith(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(s"%$query")))
-    case AggregateFilter.Contains(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(s"%$query%")))
-    case AggregateFilter.Exact(name, _, query) => SQLPart(s"$name LIKE ?", List(SQLArg.StringArg(query)))
+    case AggregateFilter.StartsWith(name, _, query) => SQLPart(s"$name LIKE ?", s"$query%".json)
+    case AggregateFilter.EndsWith(name, _, query) => SQLPart(s"$name LIKE ?", s"%$query".json)
+    case AggregateFilter.Contains(name, _, query) => SQLPart(s"$name LIKE ?", s"%$query%".json)
+    case AggregateFilter.Exact(name, _, query) => SQLPart(s"$name LIKE ?", query.json)
     case f: AggregateFilter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
   }
 
@@ -563,43 +575,43 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case f: Filter.DrillDownFacetFilter[Doc] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
       case f: Filter.Equals[Doc, _] if f.field(store.model).isArr =>
         val values = f.getJson(store.model).asVector
-        val parts = values.map { json =>
+        val parts = values.toList.map { json =>
           val jsonString = JsonFormatter.Compact(json)
-          SQLPart(s"${f.fieldName} LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
+          SQLPart(s"${f.fieldName} LIKE ?", s"%$jsonString%".json)
         }
-        SQLPart.merge(parts: _*)
+        SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
       case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
-      case f: Filter.Equals[Doc, _] => SQLPart(s"${f.fieldName} = ?", List(SQLArg.FieldArg(f.field(store.model), f.value)))
+      case f: Filter.Equals[Doc, _] => SQLPart(s"${f.fieldName} = ?", f.field(store.model).rw.read(f.value))
       case f: Filter.NotEquals[Doc, _] if f.field(store.model).isArr =>
         val values = f.getJson(store.model).asVector
-        val parts = values.map { json =>
+        val parts = values.toList.map { json =>
           val jsonString = JsonFormatter.Compact(json)
-          SQLPart(s"${f.fieldName} NOT LIKE ?", List(SQLArg.StringArg(s"%$jsonString%")))
+          SQLPart(s"${f.fieldName} NOT LIKE ?", s"%$jsonString%".json)
         }
-        SQLPart.merge(parts: _*)
+        SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
       case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
-      case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.fieldName} != ?", List(SQLArg.FieldArg(f.field(store.model), f.value)))
+      case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.fieldName} != ?", f.field(store.model).rw.read(f.value))
       case f: Filter.Regex[Doc, _] => regexpPart(f.fieldName, f.expression)
-      case f: Filter.In[Doc, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => SQLArg.FieldArg(f.field(store.model), v)))
+      case f: Filter.In[Doc, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => f.field(store.model).rw.read(v)): _*)
       case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
-        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.LongArg(from), SQLArg.LongArg(to)))
-        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.LongArg(to)))
-        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.LongArg(from)))
+        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", from.json, to.json)
+        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", to.json)
+        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", from.json)
         case _ => throw new UnsupportedOperationException(s"Invalid: $f")
       }
       case f: Filter.RangeDouble[Doc] => (f.from, f.to) match {
-        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", List(SQLArg.DoubleArg(from), SQLArg.DoubleArg(to)))
-        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", List(SQLArg.DoubleArg(to)))
-        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", List(SQLArg.DoubleArg(from)))
+        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", from.json, to.json)
+        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", to.json)
+        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", from.json)
         case _ => throw new UnsupportedOperationException(s"Invalid: $f")
       }
-      case Filter.StartsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%\"$query%")))
-      case Filter.StartsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"$query%")))
-      case Filter.EndsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query\"%")))
-      case Filter.EndsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query")))
-      case Filter.Contains(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%$query%")))
-      case Filter.Exact(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(s"%\"$query\"%")))
-      case Filter.Exact(fieldName, query) => SQLPart(s"$fieldName LIKE ?", List(SQLArg.StringArg(query)))
+      case Filter.StartsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", s"%\"$query%".json)
+      case Filter.StartsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", s"$query%".json)
+      case Filter.EndsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", s"%$query\"%".json)
+      case Filter.EndsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", s"%$query".json)
+      case Filter.Contains(fieldName, query) => SQLPart(s"$fieldName LIKE ?", s"%$query%".json)
+      case Filter.Exact(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", s"%\"$query\"%".json)
+      case Filter.Exact(fieldName, query) => SQLPart(s"$fieldName LIKE ?", query.json)
       case f: Filter.Distance[Doc] => distanceFilter(f)
       case f: Filter.Multi[Doc] =>
         val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
@@ -608,22 +620,19 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         }
         val shouldParts = shoulds.map(fc => filter2Part(fc.filter)) match {
           case Nil => Nil
-          case list => List(SQLPart(
-            sql = list.map(_.sql).mkString("(", " OR ", ")"),
-            args = list.flatMap(_.args)
-          ))
+          case list => SQLPart.Fragment("(") :: list.intersperse(SQLPart.Fragment(" OR ")) ::: List(SQLPart.Fragment(")"))
         }
-        val parts = others.map { fc =>
+        val parts: List[SQLPart] = others.flatMap { fc =>
           if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
           fc.condition match {
-            case Condition.Must => filter2Part(fc.filter)
+            case Condition.Must => List(filter2Part(fc.filter))
             case Condition.MustNot =>
               val p = filter2Part(fc.filter)
-              p.copy(s"NOT(${p.sql})")
+              SQLPart.Fragment("NOT(") :: p :: List(SQLPart.Fragment(")"))
             case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")
           }
         }
-        SQLPart.merge(parts ::: shouldParts: _*)
+        SQLQuery((parts ::: shouldParts).intersperse(SQLPart.Fragment(" AND ")))
     }
   }
 
@@ -636,10 +645,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
     val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-    SQLPart(s"${field.name}Distance $dir")
+    SQLPart.Fragment(s"${field.name}Distance $dir")
   }
 
-  protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart(field.name)
+  protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart.Fragment(field.name)
 
   protected def concatPrefix: String = "GROUP_CONCAT"
 

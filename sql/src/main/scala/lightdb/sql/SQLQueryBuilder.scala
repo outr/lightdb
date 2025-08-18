@@ -1,10 +1,10 @@
 package lightdb.sql
 
+import fabric.rw._
+import lightdb._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.FieldAndValue
-import lightdb.sql.query.SQLQuery
-
-import java.sql.SQLException
+import lightdb.sql.query.{SQLPart, SQLQuery}
 
 case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SQLStore[Doc, Model],
                                                                               state: SQLState[Doc, Model],
@@ -15,54 +15,40 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               sort: List[SQLPart] = Nil,
                                                                               limit: Option[Int] = None,
                                                                               offset: Int) {
-  lazy val whereClauses: List[SQLPart] = filters.filter(p => p.sql.nonEmpty || p.args.nonEmpty)
-
-  lazy val sql: String = {
-    val b = new StringBuilder
-    b.append("SELECT\n")
-    b.append(s"\t${fields.map(_.sql).mkString(", ")}\n")
-    b.append("FROM\n")
-    b.append(s"\t${store.fqn}\n")
-    whereClauses.zipWithIndex.foreach {
-      case (f, index) =>
-        if (index == 0) {
-          b.append("WHERE\n")
-        } else {
-          b.append("AND\n")
-        }
-        b.append(s"\t${f.sql}\n")
-    }
+  lazy val parts: List[SQLPart] = List(
+    List(SQLPart.Fragment("SELECT\n\t")),
+    fields.intersperse(SQLPart.Fragment(", ")),
+    List(SQLPart.Fragment(s"\nFROM\n\t${store.fqn}\n")),
+    if (filters.nonEmpty) {
+      SQLPart.Fragment("WHERE\n") :: filters.intersperse(SQLPart.Fragment("\nAND\n"))
+    } else {
+      Nil
+    },
     if (group.nonEmpty) {
-      b.append("GROUP BY\n\t")
-      b.append(group.map(_.sql).mkString(", "))
-      b.append('\n')
-    }
-    having.zipWithIndex.foreach {
-      case (f, index) =>
-        if (index == 0) {
-          b.append("HAVING\n")
-        } else {
-          b.append("AND\n")
-        }
-        b.append(s"\t${f.sql}\n")
-    }
+      SQLPart.Fragment("\nGROUP BY\n") :: group.intersperse(SQLPart.Fragment(", "))
+    } else {
+      Nil
+    },
+    if (having.nonEmpty) {
+      SQLPart.Fragment("\nHAVING\n") :: having.intersperse(SQLPart.Fragment("\nAND\n"))
+    } else {
+      Nil
+    },
     if (sort.nonEmpty) {
-      b.append("ORDER BY\n\t")
-      b.append(sort.map(_.sql).mkString(", "))
-      b.append('\n')
-    }
-    limit.foreach { l =>
-      b.append("LIMIT\n")
-      b.append(s"\t$l\n")
-    }
-    if (offset > 0) {
-      b.append("OFFSET\n")
-      b.append(s"\t$offset\n")
-    }
-    b.toString()
-  }
+      SQLPart.Fragment("\nORDER BY\n\t") :: sort.intersperse(SQLPart.Fragment(", "))
+    } else {
+      Nil
+    },
+    limit match {
+      case Some(l) => List(SQLPart.Fragment("\nLIMIT "), SQLPart.Arg(l.json))
+      case None => Nil
+    },
+    if (offset != 0) List(SQLPart.Fragment(s"\nOFFSET $offset")) else Nil
+  ).flatten
 
-  lazy val args: List[SQLArg] = (fields ::: filters ::: group ::: having ::: sort).flatMap(_.args)
+  lazy val query: SQLQuery = SQLQuery(parts)
+
+  lazy val sql: String = query.query
 
   lazy val totalQuery: SQLQuery = {
     val b = copy(
@@ -70,9 +56,9 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
       limit = None,
       offset = 0
     )
-    val pre = "SELECT COUNT(*) FROM ("
-    val post = ") AS innerQuery"
-    SQLQuery.parse(s"$pre${b.sql}$post").fillPlaceholder(b.args.map(_.json): _*)
+    val pre = SQLPart.Fragment("SELECT COUNT(*) FROM (")
+    val post = SQLPart.Fragment(") AS innerQuery")
+    SQLQuery(pre :: b.parts ::: List(post))
   }
 
   def updateQuery(fields: List[FieldAndValue[Doc, _]]): SQLQuery = {
@@ -80,39 +66,45 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
 
     val b = copy(
       sort = Nil,
-      fields = List(SQLPart("_id"))
+      fields = List(SQLPart.Fragment("_id"))
     )
-    val assignments = fields.map { fv => s"${fv.field.name} = ?" }.mkString(", ")
-    val query =
-      s"""UPDATE ${store.fqn}
-         |SET $assignments
-         |WHERE _id IN (
-         |  SELECT s._id
-         |  FROM (
-         |    ${b.sql}
-         |  ) AS s
-         |)
-         |""".stripMargin
-    val args = fields.map(fv => fv.json) ::: b.args.map(_.json)
-    SQLQuery.parse(query).fillPlaceholder(args: _*)
+    val assignments: List[SQLPart] = fields.flatMap { fv =>
+      List(SQLPart.Fragment(s"${fv.field.name} = "), SQLPart.Arg(fv.json))
+    }.intersperse(SQLPart.Fragment(", "))
+
+    SQLQuery(
+      parts = List(
+        List(SQLPart.Fragment(s"UPDATE ${store.fqn}\n")),
+        SQLPart.Fragment("SET ") :: assignments,
+        List(
+          SQLPart.Fragment("\nWHERE _id IN ("),
+          SQLPart.Fragment("\n\tSELECT s._id"),
+          SQLPart.Fragment("\n\tFROM (\n\t")
+        ),
+        b.parts,
+        List(
+          SQLPart.Fragment("\n\t) AS s"),
+          SQLPart.Fragment("\n)")
+        )
+      ).flatten
+    )
   }
 
   lazy val deleteQuery: SQLQuery = {
     val b = copy(
       sort = Nil,
-      fields = List(SQLPart("_id"))
+      fields = List(SQLPart.Fragment("_id"))
     )
-    val query =
-      s"""DELETE FROM ${store.fqn}
-         |WHERE _id IN (
-         |  SELECT s._id
-         |  FROM (
-         |    ${b.sql}
-         |  ) AS s
-         |)
-         |""".stripMargin
-    SQLQuery.parse(query).fillPlaceholder(b.args.map(_.json): _*)
+    SQLQuery(
+      parts = List(
+        SQLPart.Fragment(s"DELETE FROM ${store.fqn}\n"),
+        SQLPart.Fragment("WHERE _id IN (\n"),
+        SQLPart.Fragment("\tSELECT s._id\n"),
+        SQLPart.Fragment("\tFROM (\n\t\t")
+      ) ::: b.parts ::: List(
+        SQLPart.Fragment("\n\t) AS s\n"),
+        SQLPart.Fragment(")")
+      )
+    )
   }
-
-  def toQuery: SQLQuery = SQLQuery.parse(sql).fillPlaceholder(args.map(_.json): _*)
 }

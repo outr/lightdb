@@ -153,6 +153,8 @@ object SQLQuery {
 sealed trait SQLPart
 
 object SQLPart {
+  def apply(query: String, args: Json*): SQLPart = SQLQuery.parse(query).fillPlaceholder(args: _*)
+
   case class Fragment(value: String) extends SQLPart
   case class Placeholder(name: Option[String]) extends SQLPart
   case class Bind(name: String, value: Json) extends SQLPart

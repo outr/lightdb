@@ -16,4 +16,11 @@ package object lightdb {
       override def parseString(str: String): Option[B] = numeric.parseString(str).map(to)
     }
   }
+
+  implicit class ListExtras[T](list: List[T]) {
+    def intersperse(sep: T): List[T] = list match {
+      case Nil => Nil
+      case head :: tail => head :: tail.flatMap(t => sep :: t :: Nil)
+    }
+  }
 }
