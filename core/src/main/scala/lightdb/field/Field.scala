@@ -11,7 +11,7 @@ import lightdb.facet.FacetValue
 import lightdb.filter.Filter.DrillDownFacetFilter
 import lightdb.filter.{Condition, Filter, FilterClause, FilterSupport}
 import lightdb.materialized.Materializable
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, Point}
 
 sealed class Field[Doc <: Document[Doc], V](val name: String,
                                             val get: FieldGetter[Doc, V],
@@ -67,6 +67,13 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   override def contains(value: String): Filter[Doc] = Filter.Contains(name, value)
   override def exactly(value: String): Filter[Doc] = Filter.Exact(name, value)
 
+  override def group(minShould: Int, filters: (Filter[Doc], Condition)*): Filter[Doc] = Filter.Multi(
+    minShould = minShould,
+    filters = filters.map {
+      case (filter, condition) => FilterClause(filter, condition, None)
+    }.toList
+  )
+
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): Filter[Doc] = {
     val words = s.split("\\s+").map { w =>
       if (matchStartsWith && matchEndsWith) {
@@ -91,7 +98,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
     case (doc, _, state) => List(get(doc, this, state))
   }, () => implicitly[RW[List[V]]], indexed)
 
-  override def distance(from: Geo.Point, radius: Distance): Filter[Doc] =
+  override def distance(from: Point, radius: Distance): Filter[Doc] =
     Filter.Distance(name, from, radius)
 
   override def toString: String = s"Field(name = $name)"

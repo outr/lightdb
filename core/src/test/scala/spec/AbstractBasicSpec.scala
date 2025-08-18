@@ -137,6 +137,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         }
       }
     }
+    "verify hasAny" in {
+      db.people.transaction { txn =>
+        txn.query.filter(_.allNames.hasAny(List("greg", "hanna", "grouchy"))).toList.map { list =>
+          list.map(_.name) should be(List("Greg", "Hanna", "Oscar"))
+        }
+      }
+    }
     "verify the AgeLinks is properly updated" in {
       db.ageLinks.t.get(AgeLinks.id(30)).map(_.map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori")))))
     }

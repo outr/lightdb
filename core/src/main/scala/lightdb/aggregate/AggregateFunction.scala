@@ -4,9 +4,9 @@ import fabric.rw._
 import lightdb.distance.Distance
 import lightdb.doc.Document
 import lightdb.field.Field
-import lightdb.filter.FilterSupport
+import lightdb.filter.{Condition, Filter, FilterClause, FilterSupport}
 import lightdb.materialized.Materializable
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, Point}
 
 case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Field[Doc, V], `type`: AggregateType)
                                        (implicit val tRW: RW[T]) extends FilterSupport[V, Doc, AggregateFilter[Doc]] with Materializable[Doc, V] {
@@ -33,6 +33,8 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
   override def contains(value: String): AggregateFilter[Doc] = AggregateFilter.Contains(name, field, value)
   override def exactly(value: String): AggregateFilter[Doc] = AggregateFilter.Exact(name, field, value)
 
+  override def group(minShould: Int, filters: (AggregateFilter[Doc], Condition)*): AggregateFilter[Doc] = ???
+
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): AggregateFilter[Doc] = {
     val words = s.split("\\s+").map { w =>
       if (matchStartsWith && matchEndsWith) {
@@ -48,6 +50,6 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
     AggregateFilter.Combined(words)
   }
 
-  override def distance(from: Geo.Point, radius: Distance): AggregateFilter[Doc] =
-    AggregateFilter.Distance(name, this.asInstanceOf[Field[Doc, Geo.Point]], from, radius)
+  override def distance(from: Point, radius: Distance): AggregateFilter[Doc] =
+    AggregateFilter.Distance(name, this.asInstanceOf[Field[Doc, Point]], from, radius)
 }

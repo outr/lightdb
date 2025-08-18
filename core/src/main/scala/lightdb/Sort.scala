@@ -2,7 +2,7 @@ package lightdb
 
 import lightdb.doc.Document
 import lightdb.field.Field
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, Point}
 
 trait Sort
 
@@ -26,7 +26,7 @@ object Sort {
   }
 
   case class ByDistance[Doc <: Document[Doc], G <: Geo](field: Field[Doc, List[G]],
-                             from: Geo.Point,
+                             from: Point,
                              direction: SortDirection = SortDirection.Ascending) extends Sort {
     def direction(direction: SortDirection): ByDistance[Doc, G] = copy(direction = direction)
     def ascending: ByDistance[Doc, G] = direction(SortDirection.Ascending)

@@ -11,14 +11,14 @@ import lightdb.field.{Field, IndexingState}
 import lightdb.filter.Filter
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
 import lightdb.store.Conversion
 import lightdb.transaction.{CollectionTransaction, Transaction}
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults}
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
-import org.apache.lucene.geo.{Line, Polygon}
+import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
 import org.apache.lucene.index.Term
 import org.apache.lucene.search.MatchAllDocsQuery
 import org.apache.lucene.util.BytesRef
@@ -166,29 +166,29 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                               add: LuceneField => Unit): Unit = {
     field.className match {
       case _ =>
-        def indexPoint(p: Geo.Point): Unit = try {
+        def indexPoint(p: Point): Unit = try {
           LatLonShape.createIndexableFields(field.name, p.latitude, p.longitude)
         } catch {
           case t: Throwable => throw new RuntimeException(s"Failed to add LatLonPoint.createIndexableFields(${field.name}, ${p.latitude}, ${p.longitude}): ${JsonFormatter.Default(json)}", t)
         }
-        def indexLine(l: Geo.Line): Unit = {
-          val line = new Line(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray)
+        def indexLine(l: Line): Unit = {
+          val line = new LuceneLine(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray)
           LatLonShape.createIndexableFields(field.name, line)
         }
-        def indexPolygon(p: Geo.Polygon): Unit = {
-          def convert(p: Geo.Polygon): Polygon =
-            new Polygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray)
+        def indexPolygon(p: Polygon): Unit = {
+          def convert(p: Polygon): LucenePolygon =
+            new LucenePolygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray)
           val polygon = convert(p)
           LatLonShape.createIndexableFields(field.name, polygon)
         }
         def indexGeo(geo: Geo): Unit = geo match {
-          case p: Geo.Point => indexPoint(p)
-          case Geo.MultiPoint(points) => points.foreach(indexPoint)
-          case l: Geo.Line => indexLine(l)
-          case Geo.MultiLine(lines) => lines.foreach(indexLine)
-          case p: Geo.Polygon => indexPolygon(p)
-          case Geo.MultiPolygon(polygons) => polygons.foreach(indexPolygon)
-          case Geo.GeometryCollection(geometries) => geometries.foreach(indexGeo)
+          case p: Point => indexPoint(p)
+          case MultiPoint(points) => points.foreach(indexPoint)
+          case l: Line => indexLine(l)
+          case MultiLine(lines) => lines.foreach(indexLine)
+          case p: Polygon => indexPolygon(p)
+          case MultiPolygon(polygons) => polygons.foreach(indexPolygon)
+          case GeometryCollection(geometries) => geometries.foreach(indexGeo)
         }
         val list = json match {
           case Arr(value, _) => value.toList.map(_.as[Geo])

@@ -3,7 +3,7 @@ package lightdb.aggregate
 import fabric.{Json, Str}
 import lightdb.doc.Document
 import lightdb.field.Field
-import lightdb.spatial.Geo
+import lightdb.spatial.{Geo, Point}
 
 sealed trait AggregateFilter[Doc <: Document[Doc]] {
   def &&(that: AggregateFilter[Doc]): AggregateFilter[Doc] = (this, that) match {
@@ -45,5 +45,5 @@ object AggregateFilter {
   case class Contains[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], query: String) extends AggregateFilter[Doc]
   case class Exact[Doc <: Document[Doc], F](name: String, field: Field[Doc, F], query: String) extends AggregateFilter[Doc]
 
-  case class Distance[Doc <: Document[Doc]](name: String, field: Field[Doc, Geo.Point], from: Geo.Point, radius: lightdb.distance.Distance) extends AggregateFilter[Doc]
+  case class Distance[Doc <: Document[Doc]](name: String, field: Field[Doc, Point], from: Point, radius: lightdb.distance.Distance) extends AggregateFilter[Doc]
 }

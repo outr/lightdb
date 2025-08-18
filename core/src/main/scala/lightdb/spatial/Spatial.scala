@@ -1,7 +1,8 @@
 package lightdb.spatial
 
+import lightdb.spatial.Polygon
 import lightdb.distance._
-import org.locationtech.jts.geom._
+import org.locationtech.jts.geom.{Coordinate, Geometry, GeometryFactory, LineString, Polygon => JTSPolygon}
 import org.locationtech.spatial4j.context.jts.JtsSpatialContext
 import org.locationtech.spatial4j.distance.DistanceUtils
 import org.locationtech.spatial4j.shape
@@ -20,35 +21,35 @@ object Spatial {
     distance.kilometers
   }
 
-  private def line2Builder(line: Geo.Line): LineStringBuilder =
+  private def line2Builder(line: Line): LineStringBuilder =
     line.points.foldLeft(context.getShapeFactory.lineString())((b, p) =>
       b.pointLatLon(p.latitude, p.longitude)
     )
 
-  private def polygon2Builder(polygon: Geo.Polygon): PolygonBuilder =
+  private def polygon2Builder(polygon: Polygon): PolygonBuilder =
     polygon.points.foldLeft(context.getShapeFactory.polygon())((b, p) =>
       b.pointLatLon(p.latitude, p.longitude)
     )
 
   private def toShape(g: Geo): Geometry = g match {
-    case Geo.Point(lat, lon) => factory.createPoint(new Coordinate(lon, lat))
-    case Geo.MultiPoint(points) =>
+    case Point(lat, lon) => factory.createPoint(new Coordinate(lon, lat))
+    case MultiPoint(points) =>
       factory.createMultiPoint(points.map {
-        case Geo.Point(lat, lon) => factory.createPoint(new Coordinate(lon, lat))
+        case Point(lat, lon) => factory.createPoint(new Coordinate(lon, lat))
       }.toArray)
-    case line: Geo.Line => factory.createLineString(line.points.map {
-      case Geo.Point(lat, lon) => new Coordinate(lon, lat)
+    case line: Line => factory.createLineString(line.points.map {
+      case Point(lat, lon) => new Coordinate(lon, lat)
     }.toArray)
-    case Geo.MultiLine(lines) => factory.createMultiLineString(lines.map(toShape).map {
+    case MultiLine(lines) => factory.createMultiLineString(lines.map(toShape).map {
       case l: LineString => l
     }.toArray)
-    case polygon: Geo.Polygon => factory.createPolygon(polygon.points.map {
-      case Geo.Point(lat, lon) => new Coordinate(lon, lat)
+    case polygon: Polygon => factory.createPolygon(polygon.points.map {
+      case Point(lat, lon) => new Coordinate(lon, lat)
     }.toArray)
-    case Geo.MultiPolygon(polygons) => factory.createMultiPolygon(polygons.map(toShape).map {
-      case p: Polygon => p
+    case MultiPolygon(polygons) => factory.createMultiPolygon(polygons.map(toShape).map {
+      case p: JTSPolygon => p
     }.toArray)
-    case Geo.GeometryCollection(list) => factory.createGeometryCollection(
+    case GeometryCollection(list) => factory.createGeometryCollection(
       list.map(toShape).toArray
     )
   }
