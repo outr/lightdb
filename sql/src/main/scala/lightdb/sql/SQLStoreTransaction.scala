@@ -260,7 +260,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     )
   }
 
-  private def qb[V](query: Query[Doc, Model, V]) = {
+  def toSQL[V](query: Query[Doc, Model, V]): SQLQueryBuilder[Doc, Model] = {
     var extraFields = List.empty[SQLPart]
     val fields = query.conversion match {
       case Conversion.Value(field) => List(field)
@@ -296,18 +296,18 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   }
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
-    val b = qb[V](query)
+    val b = toSQL[V](query)
     execute[V](b.toQuery, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
   }
 
   override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] = Task {
-    val b = qb[V](query)
+    val b = toSQL[V](query)
     val q = b.updateQuery(updates)
     executeUpdate(q)
   }
 
   override def doDelete[V](query: Query[Doc, Model, V]): Task[Int] = Task {
-    val b = qb[V](query)
+    val b = toSQL[V](query)
     val q = b.deleteQuery
     executeUpdate(q)
   }
