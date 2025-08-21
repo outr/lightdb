@@ -429,6 +429,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     SQLPart.Fragment(s"$name REGEXP "), SQLPart.Arg(expression.json)
   ))
 
+  protected def likePart(name: String, pattern: String): SQLPart =
+    SQLPart(s"$name LIKE ?", pattern.json)
+
+  protected def notLikePart(name: String, pattern: String): SQLPart =
+    SQLPart(s"$name NOT LIKE ?", pattern.json)
+
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {
     case f: AggregateFilter.Equals[Doc, _] => SQLQuery(List(
       SQLPart.Fragment(s"${f.name} = "), SQLPart.Arg(f.field.rw.read(f.value))
@@ -573,20 +579,41 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val fields = f.fields(store.model)
     f match {
       case f: Filter.DrillDownFacetFilter[Doc] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
+      // Tokenized fields: equality is interpreted as matching all whitespace-separated tokens (AND semantics)
+      case f: Filter.Equals[Doc, _] if f.value != null && f.value != None && f.field(store.model).isTokenized =>
+        f.getJson(store.model) match {
+          case Str(s, _) =>
+            val tokens = s.split("\\s+").toList.filter(_.nonEmpty)
+            val parts = tokens.map(t => likePart(f.fieldName, s"%$t%"))
+            if (parts.isEmpty) SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
+          case _ => throw new UnsupportedOperationException(s"Unsupported tokenized equality value for ${f.fieldName}")
+        }
       case f: Filter.Equals[Doc, _] if f.field(store.model).isArr =>
         val values = f.getJson(store.model).asVector
         val parts = values.toList.map { json =>
           val jsonString = JsonFormatter.Compact(json)
-          SQLPart(s"${f.fieldName} LIKE ?", s"%$jsonString%".json)
+          likePart(f.fieldName, s"%$jsonString%")
         }
         SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
       case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
       case f: Filter.Equals[Doc, _] => SQLPart(s"${f.fieldName} = ?", f.field(store.model).rw.read(f.value))
+      // Tokenized fields: not equals is interpreted as NOT(all tokens present)
+      case f: Filter.NotEquals[Doc, _] if f.value != null && f.value != None && f.field(store.model).isTokenized =>
+        f.getJson(store.model) match {
+          case Str(s, _) =>
+            val tokens = s.split("\\s+").toList.filter(_.nonEmpty)
+            val inner = if (tokens.isEmpty) SQLPart.Fragment("1=1") else {
+              val parts = tokens.map(t => likePart(f.fieldName, s"%$t%"))
+              SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
+            }
+            SQLQuery(List(SQLPart.Fragment("NOT("), inner, SQLPart.Fragment(")")))
+          case _ => throw new UnsupportedOperationException(s"Unsupported tokenized inequality value for ${f.fieldName}")
+        }
       case f: Filter.NotEquals[Doc, _] if f.field(store.model).isArr =>
         val values = f.getJson(store.model).asVector
         val parts = values.toList.map { json =>
           val jsonString = JsonFormatter.Compact(json)
-          SQLPart(s"${f.fieldName} NOT LIKE ?", s"%$jsonString%".json)
+          notLikePart(f.fieldName, s"%$jsonString%")
         }
         SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
       case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
@@ -605,13 +632,13 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", from.json)
         case _ => throw new UnsupportedOperationException(s"Invalid: $f")
       }
-      case Filter.StartsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", s"%\"$query%".json)
-      case Filter.StartsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", s"$query%".json)
-      case Filter.EndsWith(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", s"%$query\"%".json)
-      case Filter.EndsWith(fieldName, query) => SQLPart(s"$fieldName LIKE ?", s"%$query".json)
-      case Filter.Contains(fieldName, query) => SQLPart(s"$fieldName LIKE ?", s"%$query%".json)
-      case Filter.Exact(fieldName, query) if fields.head.isArr => SQLPart(s"$fieldName LIKE ?", s"%\"$query\"%".json)
-      case Filter.Exact(fieldName, query) => SQLPart(s"$fieldName LIKE ?", query.json)
+      case Filter.StartsWith(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%\"$query%")
+      case Filter.StartsWith(fieldName, query) => likePart(fieldName, s"$query%")
+      case Filter.EndsWith(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%$query\"%")
+      case Filter.EndsWith(fieldName, query) => likePart(fieldName, s"%$query")
+      case Filter.Contains(fieldName, query) => likePart(fieldName, s"%$query%")
+      case Filter.Exact(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%\"$query\"%")
+      case Filter.Exact(fieldName, query) => likePart(fieldName, s"$query")
       case f: Filter.Distance[Doc] => distanceFilter(f)
       case f: Filter.Multi[Doc] =>
         val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
