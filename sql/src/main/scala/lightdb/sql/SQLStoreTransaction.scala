@@ -302,13 +302,17 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   }
 
   override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] = Task {
-    val b = toSQL[V](query)
+    val b = toSQL[V](query).copy(
+      limit = query.limit     // Fix arbitrary limits for normal queries
+    )
     val q = b.updateQuery(updates)
     executeUpdate(q)
   }
 
   override def doDelete[V](query: Query[Doc, Model, V]): Task[Int] = Task {
-    val b = toSQL[V](query)
+    val b = toSQL[V](query).copy(
+      limit = query.limit     // Fix arbitrary limits for normal queries
+    )
     val q = b.deleteQuery
     executeUpdate(q)
   }
