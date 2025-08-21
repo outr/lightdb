@@ -15,15 +15,17 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               sort: List[SQLPart] = Nil,
                                                                               limit: Option[Int] = None,
                                                                               offset: Int) {
+  lazy val whereClause: List[SQLPart] = if (filters.nonEmpty) {
+    SQLPart.Fragment("WHERE\n") :: filters.intersperse(SQLPart.Fragment("\nAND\n"))
+  } else {
+    Nil
+  }
+
   lazy val parts: List[SQLPart] = List(
     List(SQLPart.Fragment("SELECT\n\t")),
     if (fields.nonEmpty) fields.intersperse(SQLPart.Fragment(", ")) else List(SQLPart.Fragment("*")),
     List(SQLPart.Fragment(s"\nFROM\n\t${store.fqn}\n")),
-    if (filters.nonEmpty) {
-      SQLPart.Fragment("WHERE\n") :: filters.intersperse(SQLPart.Fragment("\nAND\n"))
-    } else {
-      Nil
-    },
+    whereClause,
     if (group.nonEmpty) {
       SQLPart.Fragment("\nGROUP BY\n") :: group.intersperse(SQLPart.Fragment(", "))
     } else {

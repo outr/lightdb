@@ -165,7 +165,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
   }
 
-  private def queryTotal(sql: SQLQuery): Int = {
+  def queryTotal(sql: SQLQuery): Int = {
     val results = resultsFor(sql)
     val rs = results.rs
     try {
@@ -185,7 +185,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     search[V](updated)
   }
 
-  private def search[V](sql: SQLQuery)(implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task {
+  def search[V](sql: SQLQuery)(implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task {
     val results = resultsFor(sql)
     state.register(results.rs)
     val stream = rapid.Stream.fromIterator[V](Task {
