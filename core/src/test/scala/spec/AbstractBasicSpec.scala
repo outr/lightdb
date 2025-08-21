@@ -274,6 +274,23 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         }
       }
     }
+    "fulltext equals on tokenized search" in {
+      db.people.transaction { transaction =>
+        transaction.query.filter(_.search === "Veronica 13").toList.map { people =>
+          people.map(_.name) should be(List("Veronica"))
+        }
+      }
+    }
+    "fulltext not equals on tokenized search" in {
+      db.people.transaction { transaction =>
+        transaction.query.filter(_.search !== "Veronica 13").toList.map { people =>
+          people.map(_.name).toSet should be(Set(
+            "Tori", "Ruth", "Nancy", "Jenna", "Hanna", "Wyatt", "Diana", "Ian", "Quintin", "Uba", "Oscar", "Kevin",
+            "Penny", "Charlie", "Evan", "Sam", "Mike", "Brenda", "Zoey", "Allan", "Xena", "Fiona", "Greg"
+          ))
+        }
+      }
+    }
     "search using Filter.Builder and scoring" in {
       if (filterBuilderSupported) {
         db.people.transaction { transaction =>

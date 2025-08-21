@@ -293,7 +293,10 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
   private def exactQuery(field: Field[Doc, _], json: Json): LuceneQuery = json match {
     case Str(s, _) if field.isInstanceOf[Tokenized[_]] =>
       val b = new BooleanQuery.Builder
-      s.split("\\s+").foreach(s => b.add(new TermQuery(new Term(field.name, s)), BooleanClause.Occur.MUST))
+      s.split("\\s+").foreach { token =>
+        val normalized = token.toLowerCase
+        b.add(new TermQuery(new Term(field.name, normalized)), BooleanClause.Occur.MUST)
+      }
       b.build()
     case Str(s, _) => new TermQuery(new Term(field.name, s))
     case Bool(b, _) => IntPoint.newExactQuery(field.name, if (b) 1 else 0)
