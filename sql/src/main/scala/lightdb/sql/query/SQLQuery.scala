@@ -79,7 +79,6 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
    *
    * @param name the name of the placeholder variable
    * @param values the values to replace it with
-   * @return
    */
   def fillPlaceholder(name: String, values: Json*): SQLQuery = {
     var found = false
@@ -94,6 +93,26 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     copy(updated)
   }
 
+  /**
+   * Replaces a placeholder value with a SQLPart. This is useful for templating when SQL needs to be generated at
+   * runtime to populate sections of SQL.
+   *
+   * @param name the name of the placeholder variable
+   * @param part the part to replace it with
+   */
+  def replacePlaceholder(name: String, part: SQLPart): SQLQuery = {
+    var found = false
+    val updated = parts.map {
+      case SQLPart.Placeholder(Some(n)) if n == name =>
+        found = true
+        part
+      case part => part
+    }
+    if (!found)
+      throw new RuntimeException(s"No placeholders found for named bind '$name'")
+    copy(updated)
+  }
+
   def populate[Doc <: Document[Doc], Model <: DocumentModel[Doc]](ps: PreparedStatement,
                                                                   transaction: SQLStoreTransaction[Doc, Model]): Unit = args.zipWithIndex.foreach {
     case (arg, index) => transaction.populate(ps, arg, index)
@@ -102,7 +121,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
 
 object SQLQuery {
   private val PlaceholderPattern =
-    raw":(?!:)([a-zA-Z_][a-zA-Z0-9_]*)|\?".r
+    raw"(?:(?<!:):(?!:)([A-Za-z_][A-Za-z0-9_]*)\b|\?)".r
 
   def toJson(value: Any): Json = value match {
     case null | None => Null

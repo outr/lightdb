@@ -21,9 +21,14 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     hc.setMinimumIdle(2)
     hc.setIdleTimeout(60.seconds.toMillis)
     hc.setConnectionTimeout(5.minutes.toMillis)
-    hc.setLeakDetectionThreshold(30.seconds.toMillis)
+    hc.setConnectionInitSql("SET statement_timeout = 0; SET idle_in_transaction_session_timeout = 0;")
+    hc.setLeakDetectionThreshold(if (HikariConnectionManager.EnableLeakDetection) 5.minutes.toMillis else 1.hour.toMillis)
     new HikariDataSource(hc)
   }
 
   override protected def doDispose(): Task[Unit] = Task.unit
+}
+
+object HikariConnectionManager {
+  val EnableLeakDetection = false
 }
