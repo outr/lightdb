@@ -16,6 +16,8 @@ import rapid.{AsyncTaskSpec, Task}
 
 import java.io.File
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration.DurationInt
 
 abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   val CreateRecords = 10_000
@@ -642,6 +644,17 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.people.t.count.map { remaining =>
         remaining should be(19)
       }
+    }
+    "utilize shared transaction" in {
+      val counter = new AtomicInteger(0)
+      (0 until 10).foreach { _ =>
+        db.people.transaction.shared("Test", 2.seconds) { tx =>
+          tx.count.map { count =>
+            counter.addAndGet(count)
+          }
+        }.startAndForget()
+      }
+      Task.condition(Task(counter.get() == 19 * 10 && db.people.transaction.active == 0), timeout = 1.minute).succeed
     }
     "truncate the database" in {
       db.truncate().succeed
