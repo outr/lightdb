@@ -253,6 +253,9 @@ lazy val rocksdb = project.in(file("rocksdb"))
 		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.rocksdb" % "rocksdbjni" % rocksDBVersion,
+			"org.rocksdb" % "rocksdbjni" % rocksDBVersion classifier "linux64",
+			"org.rocksdb" % "rocksdbjni" % rocksDBVersion classifier "osx",
+			"org.rocksdb" % "rocksdbjni" % rocksDBVersion classifier "win64",
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
