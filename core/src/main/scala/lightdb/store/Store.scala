@@ -16,6 +16,8 @@ import rapid._
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
@@ -88,11 +90,29 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   object transaction {
     private val set = ConcurrentHashMap.newKeySet[TX]
+    private val sharedMap = new ConcurrentHashMap[String, Shared]()
 
     def active: Int = set.size()
 
     def apply[Return](f: TX => Task[Return]): Task[Return] = create(None).flatMap { transaction =>
       f(transaction).guarantee(release(transaction))
+    }
+
+    def shared[Return](name: String,
+                       timeout: FiniteDuration,
+                       parent: Option[Transaction[Doc, Model]] = None)
+                      (f: TX => Task[Return]): Task[Return] = Task.defer {
+      val s = sharedMap.computeIfAbsent(name, _ => {
+        scribe.info(s"Creating Shared Transaction: $name")
+        val tx = create(parent).sync()
+        Shared(name, tx, timeout)
+      })
+      s.active.incrementAndGet()
+      s.lastUsed.set(System.currentTimeMillis())
+      f(s.tx).guarantee(Task {
+        s.active.decrementAndGet()
+        s.lastUsed.set(System.currentTimeMillis())
+      })
     }
 
     def create(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
@@ -116,6 +136,32 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         release(transaction)
       }
       list.size
+    }
+
+    private case class Shared(name: String, tx: TX, timeout: FiniteDuration) {
+      val active = new AtomicInteger(0)
+      val lastUsed = new AtomicLong(0L)
+
+      private val timeoutMillis = timeout.toMillis
+
+      private def recurse(): Task[Unit] = Task.defer {
+        val nextPossibleTimeout: Long = if (active.get() > 0) {
+          timeoutMillis
+        } else {
+          (lastUsed.get() + timeoutMillis) - System.currentTimeMillis()
+        }
+        Task.sleep(nextPossibleTimeout.millis).next {
+          if (active.get() == 0 && lastUsed.get() < System.currentTimeMillis() - timeoutMillis) {
+            scribe.info(s"Releasing Shared Transaction: $name")
+            sharedMap.remove(name)
+            release(tx)
+          } else {
+            recurse()
+          }
+        }
+      }
+
+      recurse().start()
     }
   }
 
