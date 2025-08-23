@@ -692,6 +692,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
                     city: Option[City] = None,
                     nicknames: Set[String] = Set.empty,
                     friends: List[Id[Person]] = Nil,
+                    gpa: Option[Double] = None,
                     created: Timestamp = Timestamp(),
                     modified: Timestamp = Timestamp(),
                     _id: Id[Person] = Person.id()) extends RecordDocument[Person]
@@ -704,6 +705,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val city: I[Option[City]] = field.index(_.city)
     val nicknames: I[Set[String]] = field.index(_.nicknames)
     val friends: I[List[Id[Person]]] = field.index(_.friends)
+    val gpa: I[Option[Double]] = field.index(_.gpa)
     val allNames: I[List[String]] = field.index(p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized((doc: Person) => s"${doc.name} ${doc.age}")
     val doc: I[Person] = field.index(identity)

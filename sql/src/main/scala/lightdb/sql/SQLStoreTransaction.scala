@@ -94,7 +94,6 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val indexingState = new IndexingState
     state.withUpsertPreparedStatement { ps =>
-
       store.fields.zipWithIndex.foreach {
         case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
       }

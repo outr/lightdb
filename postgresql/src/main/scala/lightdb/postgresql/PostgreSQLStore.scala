@@ -90,4 +90,15 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
        |    INSERT (${fieldNames.mkString(", ")}) VALUES (${fieldNames.map(f => s"source.$f").mkString(", ")});
        |""".stripMargin
   }
+
+  override protected def field2Value(field: Field[Doc, _]): String = {
+    def lookup(definition: DefType): String = definition match {
+      case DefType.Opt(dt) => lookup(dt)
+      case DefType.Dec => "?::double precision"
+      case DefType.Int => "?::bigint"
+      case DefType.Bool => "?::boolean"
+      case _ => "?"
+    }
+    lookup(field.getRW().definition)
+  }
 }
