@@ -26,7 +26,6 @@ ThisBuild / scalacOptions ++= {
 	else Nil
 }
 
-
 publishMavenStyle := true
 
 ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
@@ -46,6 +45,9 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / outputStrategy := Some(StdoutOutput)
+
+Global / excludeFilter := (Global / excludeFilter).value ||
+  HiddenFileFilter || "db" || "upload" || "logs" || "target" || "data" || "benchmark" || GlobFilter("*.csv")
 
 ThisBuild / javaOptions ++= Seq(
 	"--enable-native-access=ALL-UNNAMED",
