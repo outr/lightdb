@@ -15,7 +15,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.6.0"
+ThisBuild / version := "4.6.1"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -47,7 +47,7 @@ ThisBuild / developers := List(
 ThisBuild / outputStrategy := Some(StdoutOutput)
 
 Global / excludeFilter := (Global / excludeFilter).value ||
-  HiddenFileFilter || "db" || "upload" || "logs" || "target" || "data" || "benchmark" || GlobFilter("*.csv")
+  HiddenFileFilter || "db" || "upload" || "logs" || "target" || "data" || "benchmark"
 
 ThisBuild / javaOptions ++= Seq(
 	"--enable-native-access=ALL-UNNAMED",
@@ -90,7 +90,7 @@ val lmdbVersion: String = "0.9.1"
 
 val jedisVersion: String = "6.1.0"
 
-val fabricVersion: String = "1.18.2"
+val fabricVersion: String = "1.18.3"
 
 val scribeVersion: String = "3.17.0"
 
