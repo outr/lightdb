@@ -22,7 +22,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
                                                                        sort: List[Sort] = Nil,
                                                                        offset: Int = 0,
                                                                        limit: Option[Int] = None,
-                                                                       pageSize: Int = 1000,
+                                                                       pageSize: Option[Int] = Some(1000),
                                                                        countTotal: Boolean = false,
                                                                        scoreDocs: Boolean = false,
                                                                        minDocScore: Option[Double] = None,
@@ -85,7 +85,9 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
 
   def clearLimit: Q = copy(limit = None)
 
-  def pageSize(size: Int): Q = copy(pageSize = pageSize)
+  def clearPageSize: Q = copy(pageSize = None)
+
+  def pageSize(size: Int): Q = copy(pageSize = Some(size))
 
   def countTotal(b: Boolean): Q = copy(countTotal = b)
 
@@ -165,20 +167,24 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   def stream: rapid.Stream[V] = streamScored.map(_._1)
 
   def streamScored: rapid.Stream[(V, Double)] = {
-    rapid.Stream.merge {
-      Task.defer {
-        copy(limit = Some(1), countTotal = true).search.map(_.total.get).map { total =>
-          val end = limit match {
-            case Some(l) => math.min(l, total)
-            case None => total
+    if (query.pageSize.nonEmpty) {
+      rapid.Stream.merge {
+        Task.defer {
+          copy(limit = Some(1), countTotal = true).search.map(_.total.get).map { total =>
+            val end = limit match {
+              case Some(l) => math.min(l, total)
+              case None => total
+            }
+            val pages = query.offset to end by query.pageSize.get
+            val iterator = pages.iterator.map { offset =>
+              rapid.Stream.force(copy(offset = offset).search.map(_.streamWithScore))
+            }
+            Pull.fromIterator(iterator)
           }
-          val pages = query.offset to end by query.pageSize
-          val iterator = pages.iterator.map { offset =>
-            rapid.Stream.force(copy(offset = offset).search.map(_.streamWithScore))
-          }
-          Pull.fromIterator(iterator)
         }
       }
+    } else {      // No pageSize defined...one stream
+      rapid.Stream.force(search.map(_.streamWithScore))
     }
   }
 
