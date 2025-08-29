@@ -9,6 +9,7 @@ import lightdb.sql.query.SQLQuery
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB, StoredValue, Timestamp}
+import lightdb.filter._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
@@ -21,6 +22,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     organDonor = false,
     age = 21,
     gender = Gender.Male,
+    city = Some(City("Somewhere")),
     _id = Person.id("adam")
   )
   private val brenda = Person(
@@ -78,8 +80,25 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
       db.people.transaction { transaction =>
         Task {
           val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
-          val sql = txn.toSQL(txn.query.clearPageSize).query.query
-          sql should not include "LIMIT"
+          val sql = txn
+            .toSQL(txn.query.clearPageSize).query.query
+            .replaceAll("\\s+", " ")
+            .replaceAll("\\S+Person", "Person")
+            .trim
+          sql should be("SELECT _id, created, modified, name, organDonor, age, gender, city, nicknames, friends, allNames, search, doc, ageDouble FROM Person")
+        }
+      }
+    }
+    "verify queryFull populates arguments" in {
+      db.people.transaction { transaction =>
+        Task {
+          val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+          val sql = txn
+            .toSQL(txn.query.clearPageSize.filter(p => p.name === "Adam" && p.age === 21 && p.city === Some(City("Somewhere")))).query.queryFull
+            .replaceAll("\\s+", " ")
+            .replaceAll("\\S+Person", "Person")
+            .trim
+          sql should be("""SELECT _id, created, modified, name, organDonor, age, gender, city, nicknames, friends, allNames, search, doc, ageDouble FROM Person WHERE name = "Adam" AND age = 21 AND city = "{\"name\":\"Somewhere\"}"""")
         }
       }
     }
