@@ -290,7 +290,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
           SQLPart.Fragment(s"${index.name} $dir")
         case Sort.ByDistance(field, _, direction) => sortByDistance(field, direction)
       },
-      limit = query.limit.orElse(Some(query.pageSize)),
+      limit = query.limit.orElse(query.pageSize),
       offset = query.offset
     )
   }
@@ -408,7 +408,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       group = group,
       having = having,
       sort = sort,
-      limit = query.query.limit.orElse(Some(query.query.pageSize)),
+      limit = query.query.limit.orElse(query.query.pageSize),
       offset = query.query.offset
     )
   }

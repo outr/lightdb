@@ -11,7 +11,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB, StoredValue, Timestamp}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import rapid.AsyncTaskSpec
+import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path
 
@@ -71,6 +71,15 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
           q.values("name" -> "Adam")
         }.flatMap(_.list).map { names =>
           names should be(List(Name("Adam")))
+        }
+      }
+    }
+    "verify generated SQL query contains no limit" in {
+      db.people.transaction { transaction =>
+        Task {
+          val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+          val sql = txn.toSQL(txn.query.clearPageSize).query.query
+          sql should not include "LIMIT"
         }
       }
     }
