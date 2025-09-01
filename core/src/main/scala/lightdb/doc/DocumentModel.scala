@@ -1,6 +1,7 @@
 package lightdb.doc
 
 import fabric.rw._
+import lightdb.CompositeIndex
 import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.field.Field._
 import lightdb.field.{Field, FieldGetter}
@@ -13,10 +14,11 @@ import sourcecode.Name
 import scala.language.experimental.macros
 import scala.language.implicitConversions
 
-trait DocumentModel[Doc <: Document[Doc]] {
+trait DocumentModel[Doc <: Document[Doc]] { model =>
   implicit def rw: RW[Doc]
 
   private var _fields = List.empty[Field[Doc, _]]
+  private var _compositeIndexes = List.empty[CompositeIndex[Doc]]
 
   val _id: UniqueIndex[Doc, Id[Doc]] = field.unique("_id", (doc: Doc) => doc._id)
 
@@ -51,6 +53,8 @@ trait DocumentModel[Doc <: Document[Doc]] {
   def map2Doc(map: Map[String, Any]): Doc
 
   def fields: List[Field[Doc, _]] = _fields
+
+  def compositeIndexes: List[CompositeIndex[Doc]] = _compositeIndexes
 
   def indexedFields: List[Field[Doc, _]] = fields.filter(_.indexed)
 
@@ -88,6 +92,16 @@ trait DocumentModel[Doc <: Document[Doc]] {
       add[V, Indexed[Doc, V]](Field.indexed(name, FieldGetter.func(get)))
 
     def index[V: RW](get: Doc => V)(implicit name: Name): Indexed[Doc, V] = index(name.value, get)
+
+    def indexComposite(fields: Field[Doc, _]*)(implicit name: Name): CompositeIndex[Doc] = synchronized {
+      val index = CompositeIndex(
+        name = name.value,
+        model = model,
+        fields = fields.toList
+      )
+      _compositeIndexes = _compositeIndexes ::: List(index)
+      index
+    }
 
     def unique[V: RW](name: String, get: FieldGetter[Doc, V]): UniqueIndex[Doc, V] =
       add[V, UniqueIndex[Doc, V]](Field.unique(name, get))
