@@ -40,10 +40,10 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     index match {
       case _: Field.Tokenized[Doc @unchecked] =>
         // Use trigram GIN index for tokenized fields to accelerate ILIKE/LIKE searches
-        s"CREATE INDEX IF NOT EXISTS ${index.name}_trgm_idx ON $fqn USING gin (${index.name} gin_trgm_ops)"
+        s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_trgm_idx ON $fqn USING gin (${index.name} gin_trgm_ops)"
       case _ if index.isArr =>
         // Use pg_trgm gin for arrays
-        s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn USING gin (${index.name} gin_trgm_ops)"
+        s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn USING gin (${index.name} gin_trgm_ops)"
       case _ => super.createIndexSQL(index)
     }
   }
