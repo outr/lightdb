@@ -105,6 +105,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       case index: Indexed[Doc, _] => executeUpdate(createIndexSQL(index), tx)
       case _: Field[Doc, _] => // Nothing to do
     }
+
+    // Add composite indexes
+    model.compositeIndexes.foreach { compositeIndex =>
+      executeUpdate(createCompositeIndexSQL(compositeIndex), tx)
+    }
   }
 
   protected def createUniqueIndexSQL(index: UniqueIndex[Doc, _]): String =
@@ -112,6 +117,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def createIndexSQL(index: Indexed[Doc, _]): String =
     s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn(${index.name})"
+
+  protected def createCompositeIndexSQL(compositeIndex: CompositeIndex[Doc]): String =
+    s"CREATE INDEX IF NOT EXISTS ${name}_${compositeIndex.name}_idx ON $fqn(${compositeIndex.fields.map(_.name).mkString(", ")})"
 
   protected def tables(connection: Connection): Set[String]
 

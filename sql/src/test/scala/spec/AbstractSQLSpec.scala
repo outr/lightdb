@@ -8,7 +8,7 @@ import lightdb.sql.SQLStoreTransaction
 import lightdb.sql.query.SQLQuery
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{LightDB, StoredValue, Timestamp}
+import lightdb.{CompositeIndex, LightDB, StoredValue, Timestamp}
 import lightdb.filter._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -158,6 +158,8 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     val search: T = field.tokenized((doc: Person) => s"${doc.name} ${doc.age}")
     val doc: I[Person] = field.index(identity)
     val ageDouble: I[Double] = field.index(_.age.toDouble)
+
+    val ageAndGender: CompositeIndex[Person] = field.indexComposite(age, gender)
   }
 
   sealed trait Gender
