@@ -101,19 +101,17 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     // Add indexes
     fields.foreach {
       case index: UniqueIndex[Doc, _] if index.name == "_id" => // Ignore _id
-      case index: UniqueIndex[Doc, _] =>
-        executeUpdate(createUniqueIndexSQL(index), tx)
-      case index: Indexed[Doc, _] =>
-        executeUpdate(createIndexSQL(index), tx)
+      case index: UniqueIndex[Doc, _] => executeUpdate(createUniqueIndexSQL(index), tx)
+      case index: Indexed[Doc, _] => executeUpdate(createIndexSQL(index), tx)
       case _: Field[Doc, _] => // Nothing to do
     }
   }
 
   protected def createUniqueIndexSQL(index: UniqueIndex[Doc, _]): String =
-    s"CREATE UNIQUE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})"
+    s"CREATE UNIQUE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn(${index.name})"
 
   protected def createIndexSQL(index: Indexed[Doc, _]): String =
-    s"CREATE INDEX IF NOT EXISTS ${index.name}_idx ON $fqn(${index.name})"
+    s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn(${index.name})"
 
   protected def tables(connection: Connection): Set[String]
 
