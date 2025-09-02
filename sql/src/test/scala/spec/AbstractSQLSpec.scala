@@ -98,7 +98,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
             .replaceAll("\\s+", " ")
             .replaceAll("\\S+Person", "Person")
             .trim
-          sql should be("""SELECT _id, created, modified, name, organDonor, age, gender, city, nicknames, friends, allNames, search, doc, ageDouble FROM Person WHERE name = 'Adam' AND age = 21 AND city = "{\"name\":\"Somewhere\"}"""")
+          sql should be("""SELECT _id, created, modified, name, organDonor, age, gender, city, nicknames, friends, allNames, search, doc, ageDouble FROM Person WHERE name = 'Adam' AND age = 21 AND city = '{\"name\":\"Somewhere\"}'""")
         }
       }
     }
