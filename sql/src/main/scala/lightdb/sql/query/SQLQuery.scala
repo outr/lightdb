@@ -2,6 +2,7 @@ package lightdb.sql.query
 
 import fabric._
 import fabric.io.JsonFormatter
+import lightdb._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
 import lightdb.sql.SQLStoreTransaction
@@ -104,7 +105,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     val updated = parts.flatMap {
       case SQLPart.Placeholder(Some(n)) if n == name =>
         found = true
-        values.toList.map(json => SQLPart.Arg(json))
+        values.toList.map[SQLPart](json => SQLPart.Arg(json)).intersperse(SQLPart.Fragment(", "))
       case part => List(part)
     }
     if (!found)
