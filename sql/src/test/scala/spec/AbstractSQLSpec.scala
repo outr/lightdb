@@ -110,6 +110,16 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         }
       }
     }
+    "query with multiple args" in {
+      db.people.transaction { transaction =>
+        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        txn.sql[Name](s"SELECT name FROM ${txn.fqn} WHERE name IN (:names)") { query =>
+          query.fillPlaceholder("names", "Adam".json, "Charlie".json)
+        }.flatMap(_.list).map { people =>
+          people.map(_.name).toSet should be(Set("Adam", "Charlie"))
+        }
+      }
+    }
     "truncate the database" in {
       db.truncate().succeed
     }
