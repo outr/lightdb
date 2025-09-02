@@ -118,8 +118,13 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   protected def createIndexSQL(index: Indexed[Doc, _]): String =
     s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn(${index.name})"
 
-  protected def createCompositeIndexSQL(compositeIndex: CompositeIndex[Doc]): String =
-    s"CREATE INDEX IF NOT EXISTS ${name}_${compositeIndex.name}_idx ON $fqn(${compositeIndex.fields.map(_.name).mkString(", ")})"
+  protected def createCompositeIndexSQL(compositeIndex: CompositeIndex[Doc]): String = {
+    val include = compositeIndex.include match {
+      case Nil => ""
+      case list => s" INCLUDE(${list.map(_.name).mkString(", ")})"
+    }
+    s"CREATE INDEX IF NOT EXISTS ${name}_${compositeIndex.name}_idx ON $fqn(${compositeIndex.fields.map(_.name).mkString(", ")})$include"
+  }
 
   protected def tables(connection: Connection): Set[String]
 

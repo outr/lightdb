@@ -55,12 +55,7 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   override protected def rangeDouble(from: Option[Double], to: Option[Double]): Filter[Doc] =
     Filter.RangeDouble(name, from, to)
 
-  override def in(values: Seq[V]): Filter[Doc] = {
-    Field.MaxIn.foreach { max =>
-      if (values.size > max) throw new RuntimeException(s"Attempting to specify ${values.size} values for IN clause in $name, but maximum is ${Field.MaxIn}.")
-    }
-    Filter.In(name, values)
-  }
+  override def in(values: Seq[V]): Filter[Doc] = Filter.In(name, values)
 
   override def startsWith(value: String): Filter[Doc] = Filter.StartsWith(name, value)
   override def endsWith(value: String): Filter[Doc] = Filter.EndsWith(name, value)
@@ -106,8 +101,6 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
 object Field {
   val NullString: String = "||NULL||"
-
-  var MaxIn: Option[Int] = Some(1000)
 
   def apply[Doc <: Document[Doc], V](name: String, get: FieldGetter[Doc, V])(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
     name = name,

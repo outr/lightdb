@@ -94,7 +94,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         Task {
           val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
           val sql = txn
-            .toSQL(txn.query.clearPageSize.filter(p => p.name === "Adam" && p.age === 21 && p.city === Some(City("Somewhere")))).query.queryFull
+            .toSQL(txn.query.clearPageSize.filter(p => p.name === "Adam" && p.age === 21 && p.city === Some(City("Somewhere")))).query.queryLiteral
             .replaceAll("\\s+", " ")
             .replaceAll("\\S+Person", "Person")
             .trim
@@ -159,7 +159,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     val doc: I[Person] = field.index(identity)
     val ageDouble: I[Double] = field.index(_.age.toDouble)
 
-    val ageAndGender: CompositeIndex[Person] = field.indexComposite(age, gender)
+    val ageAndGender: CompositeIndex[Person] = field.indexComposite(fields = List(age, gender))
   }
 
   sealed trait Gender
