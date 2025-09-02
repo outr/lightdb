@@ -22,17 +22,23 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     case SQLPart.Arg(_) => "?"
   }.mkString
 
-  lazy val queryFull: String = flatParts.collect {
+  lazy val queryLiteral: String = flatParts.collect {
     case SQLPart.Fragment(value) => value
     case SQLPart.Placeholder(name) => throw new RuntimeException(s"Placeholder found: $name")
-    case SQLPart.Arg(json) => json match {
-      case Null => "NULL"
-      case Bool(b, _) => if (b) "1" else "0"
-      case NumInt(l, _) => l.toString
-      case NumDec(bd, _) => bd.toString
-      case s: Str => JsonFormatter.Compact(s)
-      case _ => JsonFormatter.Compact(str(JsonFormatter.Compact(json)))
-    }
+    case SQLPart.Arg(json) =>
+      val literal = json match {
+        case Null => "NULL"
+        case Bool(b, _) => if (b) "1" else "0"
+        case NumInt(l, _) => l.toString
+        case NumDec(bd, _) => bd.toString
+        case s: Str => JsonFormatter.Compact(s)
+        case _ => JsonFormatter.Compact(str(JsonFormatter.Compact(json)))
+      }
+      if (literal.startsWith("\"") && literal.endsWith("\"")) {
+        s"'${literal.substring(1, literal.length - 1)}'"
+      } else {
+        literal
+      }
   }.mkString
 
   lazy val bindMap: Map[String, Json] = flatParts.collect {

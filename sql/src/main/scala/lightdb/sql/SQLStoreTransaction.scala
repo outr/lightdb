@@ -622,6 +622,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
       case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.fieldName} != ?", f.field(store.model).rw.read(f.value))
       case f: Filter.Regex[Doc, _] => regexpPart(f.fieldName, f.expression)
+      // TODO: Support fieldName = ANY (?::text[])
       case f: Filter.In[Doc, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => f.field(store.model).rw.read(v)): _*)
       case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
         case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", from.json, to.json)

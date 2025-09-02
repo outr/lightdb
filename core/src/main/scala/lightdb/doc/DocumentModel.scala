@@ -93,11 +93,14 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
     def index[V: RW](get: Doc => V)(implicit name: Name): Indexed[Doc, V] = index(name.value, get)
 
-    def indexComposite(fields: Field[Doc, _]*)(implicit name: Name): CompositeIndex[Doc] = synchronized {
+    def indexComposite(fields: List[Field[Doc, _]],
+                       include: List[Field[Doc, _]] = Nil)
+                      (implicit name: Name): CompositeIndex[Doc] = synchronized {
       val index = CompositeIndex(
         name = name.value,
         model = model,
-        fields = fields.toList
+        fields = fields,
+        include = include
       )
       _compositeIndexes = _compositeIndexes ::: List(index)
       index
