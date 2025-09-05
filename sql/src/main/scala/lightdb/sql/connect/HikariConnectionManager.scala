@@ -17,7 +17,7 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     hc.addDataSourceProperty("cachePrepStmts", "true")
     hc.addDataSourceProperty("prepStmtCacheSize", "250")
     hc.addDataSourceProperty("prepStmtCacheSqlLimit", "2048")
-    hc.setMaximumPoolSize(32)
+    hc.setMaximumPoolSize(128)
     hc.setMinimumIdle(2)
     hc.setIdleTimeout(60.seconds.toMillis)
     hc.setConnectionTimeout(5.minutes.toMillis)
