@@ -90,7 +90,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   /**
    * Backing key/value store used for persistent internal settings, StoredValues, and general key/value storage.
    */
-  lazy val backingStore: Store[KeyValue, KeyValue.type] = store(KeyValue, name = Some("_backingStore"))
+  lazy val backingStore: S[KeyValue, KeyValue.type] = store(KeyValue, name = Some("_backingStore"))
 
   lazy val transactions: TransactionManager = new TransactionManager
 

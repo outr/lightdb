@@ -22,6 +22,7 @@ import lightdb.{Query, SearchResults, Sort, SortDirection}
 import rapid.Task
 
 import java.sql.{PreparedStatement, ResultSet, SQLException, Types}
+import scala.util.Try
 
 trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] {
   override def store: SQLStore[Doc, Model]
@@ -247,7 +248,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val stream = rapid.Stream.fromIterator[(V, Double)](Task {
       val iterator = rs2Iterator(rs, conversion)
       val ps = rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => state.returnPreparedStatement(sql.query, ps))
+      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => {
+        Try(rs.close())
+        state.returnPreparedStatement(sql.query, ps)
+      })
     })
     SearchResults(
       model = store.model,
@@ -702,5 +706,5 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
 object SQLStoreTransaction {
   var LogQueries: Boolean = false
-  var FetchSize: Int = 10_000
+  var FetchSize: Int = 1_000
 }

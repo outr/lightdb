@@ -2,6 +2,7 @@ package lightdb.sql
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.ConnectionManager
+import lightdb.store.Store
 import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
@@ -48,24 +49,26 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
 
   def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = if (caching) {
     cache.get(sql).add(ps)
+  } else {
+    ps.close()
   }
 
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
-    if (psInsert == null) {
-      val connection = connectionManager.getConnection(this)
-      psInsert = connection.prepareStatement(store.insertSQL)
-    }
-    dirty = true
-    f(psInsert)
+      if (psInsert == null) {
+        val connection = connectionManager.getConnection(this)
+        psInsert = connection.prepareStatement(store.insertSQL)
+      }
+      dirty = true
+      f(psInsert)
   }
 
   def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
-    if (psUpsert == null) {
-      val connection = connectionManager.getConnection(this)
-      psUpsert = connection.prepareStatement(store.upsertSQL)
-    }
-    dirty = true
-    f(psUpsert)
+      if (psUpsert == null) {
+        val connection = connectionManager.getConnection(this)
+        psUpsert = connection.prepareStatement(store.upsertSQL)
+      }
+      dirty = true
+      f(psUpsert)
   }
 
   def register(s: Statement): Unit = synchronized {
@@ -86,9 +89,13 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
         psUpsert.executeBatch()
       }
       dirty = false
-      Try(connectionManager.getConnection(this).commit()).failed.foreach { t =>
-        scribe.warn(s"Commit failed: ${t.getMessage}")
-      }
+      commitInternal()
+    }
+  }
+
+  private def commitInternal(): Unit = {
+    Try(connectionManager.getConnection(this).commit()).failed.foreach { t =>
+      scribe.warn(s"Commit failed: ${t.getMessage}")
     }
   }
 

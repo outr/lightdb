@@ -2,9 +2,30 @@ package lightdb.transaction
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.Store
-import rapid.Task
+import rapid._
 
 class TransactionManager {
+  def apply[
+    Doc <: Document[Doc],
+    Model <: DocumentModel[Doc],
+    Tx,
+    S <: Store[Doc, Model] { type TX = Tx },
+    Return
+  ](list: List[S])(f: List[Tx] => Task[Return]): Task[Return] = {
+    final case class Acquired(tx: Tx, release: Task[Unit])
+
+    for {
+      acquired <- list.map { s =>
+        s.transaction.create(None).map { tx0 =>
+          Acquired(tx = tx0, release = s.transaction.release(tx0))
+        }
+      }.tasks
+      r <- f(acquired.map(_.tx))
+        // always release (reverse order is safer for nested locks)
+        .guarantee(acquired.reverse.map(_.release).tasks.unit)
+    } yield r
+  }
+
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
     D2 <: Document[D2], M2 <: DocumentModel[D2], S2 <: Store[D2, M2],

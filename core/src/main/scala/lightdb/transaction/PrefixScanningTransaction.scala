@@ -3,7 +3,7 @@ package lightdb.transaction
 import fabric._
 import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.PrefixScanningStore
+import lightdb.store.prefix.PrefixScanningStore
 import lightdb.traverse.TransactionTraversalSupport
 
 trait PrefixScanningTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Transaction[Doc, Model] with TransactionTraversalSupport[Doc, Model] {

@@ -3,6 +3,7 @@ package lightdb.rocksdb
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store._
+import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.transaction.Transaction
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, FlushOptions, Options, RocksDB}
 import rapid.Task
@@ -66,6 +67,7 @@ object RocksDBStore extends PrefixScanningStoreManager {
     val handles = new util.ArrayList[ColumnFamilyHandle]()
     val options = new DBOptions()
       .setCreateIfMissing(true)
+      .setMaxBackgroundJobs(Runtime.getRuntime().availableProcessors() * 2)
     RocksDB.open(options, path, columnFamilies, handles) -> handles.asScala.toList
   }
 
