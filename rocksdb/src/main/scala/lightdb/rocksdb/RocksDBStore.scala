@@ -67,6 +67,13 @@ object RocksDBStore extends PrefixScanningStoreManager {
     val handles = new util.ArrayList[ColumnFamilyHandle]()
     val options = new DBOptions()
       .setCreateIfMissing(true)
+      .setIncreaseParallelism(math.max(4, Runtime.getRuntime().availableProcessors() / 2))
+      .setMaxSubcompactions(4)
+      .setBytesPerSync(1 << 20) // 1 MiB
+      .setWalBytesPerSync(1 << 20) // 1 MiB
+      .setUseDirectReads(true)
+      .setUseDirectIoForFlushAndCompaction(true)
+      .setMaxOpenFiles(-1)
       .setMaxBackgroundJobs(Runtime.getRuntime().availableProcessors() * 2)
     RocksDB.open(options, path, columnFamilies, handles) -> handles.asScala.toList
   }
