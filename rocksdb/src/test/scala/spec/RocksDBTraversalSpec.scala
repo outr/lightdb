@@ -1,7 +1,7 @@
 package spec
 
 import lightdb.rocksdb.RocksDBStore
-import lightdb.store.PrefixScanningStoreManager
+import lightdb.store.prefix.PrefixScanningStoreManager
 
 @EmbeddedTest
 class RocksDBTraversalSpec extends AbstractTraversalSpec {
