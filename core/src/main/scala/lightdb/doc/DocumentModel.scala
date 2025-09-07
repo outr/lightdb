@@ -85,13 +85,16 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
     def apply[V: RW](get: Doc => V)(implicit name: Name): Field[Doc, V] = apply(name.value, get)
 
-    def index[V: RW](name: String, get: FieldGetter[Doc, V]): Indexed[Doc, V] =
-      add[V, Indexed[Doc, V]](Field.indexed(name, get))
+    def index[V: RW](name: String, get: FieldGetter[Doc, V]): Indexed[Doc, V] = index[V](name, get, stored = true)
+    def index[V: RW](name: String, get: FieldGetter[Doc, V], stored: Boolean): Indexed[Doc, V] =
+      add[V, Indexed[Doc, V]](Field.indexed(name, get, stored))
 
-    def index[V: RW](name: String, get: Doc => V): Indexed[Doc, V] =
-      add[V, Indexed[Doc, V]](Field.indexed(name, FieldGetter.func(get)))
+    def index[V: RW](name: String, get: Doc => V): Indexed[Doc, V] = index[V](name, get, stored = true)
+    def index[V: RW](name: String, get: Doc => V, stored: Boolean): Indexed[Doc, V] =
+      add[V, Indexed[Doc, V]](Field.indexed(name, FieldGetter.func(get), stored))
 
-    def index[V: RW](get: Doc => V)(implicit name: Name): Indexed[Doc, V] = index(name.value, get)
+    def index[V: RW](get: Doc => V)(implicit name: Name): Indexed[Doc, V] = index[V](get, stored = true)
+    def index[V: RW](get: Doc => V, stored: Boolean)(implicit name: Name): Indexed[Doc, V] = index(name.value, get)
 
     def indexComposite(fields: List[Field[Doc, _]],
                        include: List[Field[Doc, _]] = Nil)

@@ -16,7 +16,8 @@ import lightdb.spatial.{Geo, Point}
 sealed class Field[Doc <: Document[Doc], V](val name: String,
                                             val get: FieldGetter[Doc, V],
                                             val getRW: () => RW[V],
-                                            val indexed: Boolean = false) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
+                                            val indexed: Boolean,
+                                            val stored: Boolean) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
   implicit def rw: RW[V] = getRW()
 
   def isArr: Boolean = rw.definition match {
@@ -87,11 +88,11 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   def opt: Field[Doc, Option[V]] = new Field[Doc, Option[V]](name, FieldGetter {
     case (doc, _, state) => Option(get(doc, this, state))
-  }, () => implicitly[RW[Option[V]]], indexed)
+  }, () => implicitly[RW[Option[V]]], indexed, stored)
 
   def list: Field[Doc, List[V]] = new Field[Doc, List[V]](name, FieldGetter {
     case (doc, _, state) => List(get(doc, this, state))
-  }, () => implicitly[RW[List[V]]], indexed)
+  }, () => implicitly[RW[List[V]]], indexed, stored)
 
   override def distance(from: Point, radius: Distance): Filter[Doc] =
     Filter.Distance(name, from, radius)
@@ -105,23 +106,30 @@ object Field {
   def apply[Doc <: Document[Doc], V](name: String, get: FieldGetter[Doc, V])(implicit getRW: => RW[V]): Field[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
-    getRW = () => getRW
+    getRW = () => getRW,
+    indexed = false,
+    stored = false
   )
 
-  def indexed[Doc <: Document[Doc], V](name: String, get: FieldGetter[Doc, V])(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
+  def indexed[Doc <: Document[Doc], V](name: String,
+                                       get: FieldGetter[Doc, V],
+                                       stored: Boolean)(implicit getRW: => RW[V]): Indexed[Doc, V] = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW,
-    indexed = true
+    indexed = true,
+    stored = stored
   ) with Indexed[Doc, V] {
     override def toString: String = s"Indexed(name = ${this.name})"
   }
 
-  def tokenized[Doc <: Document[Doc]](name: String, get: FieldGetter[Doc, String]): Tokenized[Doc] = new Field[Doc, String](
+  def tokenized[Doc <: Document[Doc]](name: String,
+                                      get: FieldGetter[Doc, String]): Tokenized[Doc] = new Field[Doc, String](
     name = name,
     get = get,
     getRW = () => stringRW,
-    indexed = true
+    indexed = true,
+    stored = true
   ) with Tokenized[Doc] {
     override def toString: String = s"Tokenized(name = ${this.name})"
   }
@@ -130,7 +138,8 @@ object Field {
     name = name,
     get = get,
     getRW = () => getRW,
-    indexed = true
+    indexed = true,
+    stored = true
   ) with UniqueIndex[Doc, V] {
     override def toString: String = s"Unique(name = ${this.name})"
   }
@@ -180,7 +189,7 @@ object Field {
                                          get: FieldGetter[Doc, List[FacetValue]],
                                          val hierarchical: Boolean,
                                          val multiValued: Boolean,
-                                         val requireDimCount: Boolean) extends Field[Doc, List[FacetValue]](name, get, getRW = () => implicitly[RW[List[FacetValue]]], indexed = true) with Indexed[Doc, List[FacetValue]] {
+                                         val requireDimCount: Boolean) extends Field[Doc, List[FacetValue]](name, get, getRW = () => implicitly[RW[List[FacetValue]]], indexed = true, stored = true) with Indexed[Doc, List[FacetValue]] {
     def drillDown(path: String*): DrillDownFacetFilter[Doc] = DrillDownFacetFilter(name, path.toList)
   }
 }

@@ -90,7 +90,10 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   private def createLuceneFields(field: Field[Doc, _], doc: Doc, state: IndexingState): List[LuceneField] = {
-    def fs: LuceneField.Store = if (store.storeMode.isAll || field.indexed) LuceneField.Store.YES else LuceneField.Store.NO
+    def fs: LuceneField.Store = if (store.storeMode.isAll || (field.stored && field.indexed)) LuceneField.Store.YES else LuceneField.Store.NO
+    if (fs == LuceneField.Store.NO) {
+      scribe.info(s"*** ${store.name}.${field.name}")
+    }
     val json = field.getJson(doc, state)
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
