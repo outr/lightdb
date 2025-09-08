@@ -13,7 +13,6 @@ object FieldGetter {
     case (doc, _, _) => f(doc)
   }
 
-  def apply[Doc <: Document[Doc], V](f: (Doc, Field[Doc, V], IndexingState) => V): FieldGetter[Doc, V] = new FieldGetter[Doc, V] {
-    override def apply(doc: Doc, field: Field[Doc, V], state: IndexingState): V = f(doc, field, state)
-  }
+  def apply[Doc <: Document[Doc], V](f: (Doc, Field[Doc, V], IndexingState) => V): FieldGetter[Doc, V] =
+    (doc: Doc, field: Field[Doc, V], state: IndexingState) => f(doc, field, state)
 }

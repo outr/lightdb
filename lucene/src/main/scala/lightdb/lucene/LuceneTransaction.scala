@@ -124,7 +124,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
               }
               case DefType.Enum(_, _) => add(new StringField(field.name, json.asString, fs))
               case DefType.Opt(d) => addJson(json, d)
-              case DefType.Json | DefType.Obj(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+              case DefType.Json | DefType.Obj(_, _) | DefType.Poly(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
               case _ if json == Null => // Ignore null values
               case DefType.Arr(d) =>
                 val v = json.asVector
