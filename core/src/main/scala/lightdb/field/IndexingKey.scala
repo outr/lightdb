@@ -1,3 +1,7 @@
 package lightdb.field
 
-trait IndexingKey[T]
+final class IndexingKey[T]
+
+object IndexingKey {
+  def apply[T]: IndexingKey[T] = new IndexingKey[T]
+}

@@ -96,6 +96,10 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
     def index[V: RW](get: Doc => V)(implicit name: Name): Indexed[Doc, V] = index[V](get, stored = true)
     def index[V: RW](get: Doc => V, stored: Boolean)(implicit name: Name): Indexed[Doc, V] = index(name.value, get)
 
+    def index[V: RW](get: FieldGetter[Doc, V])(implicit name: Name): Indexed[Doc, V] = index[V](get, stored = true)
+    def index[V: RW](get: FieldGetter[Doc, V], stored: Boolean)(implicit name: Name): Indexed[Doc, V] =
+      add[V, Indexed[Doc, V]](Field.indexed(name.value, get, stored))
+
     def indexComposite(fields: List[Field[Doc, _]],
                        include: List[Field[Doc, _]] = Nil)
                       (implicit name: Name): CompositeIndex[Doc] = synchronized {
