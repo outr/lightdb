@@ -708,7 +708,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val gpa: I[Option[Double]] = field.index(_.gpa)
     val allNames: I[List[String]] = field.index(p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized((doc: Person) => s"${doc.name} ${doc.age}")
-    val doc: I[Person] = field.index(identity)
+    val doc: I[Person] = field.index(p => p)
     val ageDouble: I[Double] = field.index(_.age.toDouble)
   }
 

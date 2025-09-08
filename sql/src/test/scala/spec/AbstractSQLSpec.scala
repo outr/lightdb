@@ -166,7 +166,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     val friends: I[List[Id[Person]]] = field.index(_.friends)
     val allNames: I[List[String]] = field.index(p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized((doc: Person) => s"${doc.name} ${doc.age}")
-    val doc: I[Person] = field.index(identity)
+    val doc: I[Person] = field.index(p => p)
     val ageDouble: I[Double] = field.index(_.age.toDouble)
 
     val ageAndGender: CompositeIndex[Person] = field.indexComposite(fields = List(age, gender))
