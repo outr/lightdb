@@ -1,6 +1,6 @@
 // Scala versions
 val scala213 = "2.13.16"
-val scala3 = "3.7.2"
+val scala3 = "3.7.3"
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
