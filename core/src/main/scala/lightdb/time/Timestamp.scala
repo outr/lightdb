@@ -33,6 +33,11 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
 }
 
 object Timestamp {
+  /**
+   * Convenience method to get the current year.
+   */
+  def CurrentYear: Int = Timestamp().year
+
   implicit val rw: RW[Timestamp] = RW.from(
     r = _.value.json,
     w = {
