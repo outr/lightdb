@@ -2,7 +2,8 @@ package lightdb.cache
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
-import lightdb.{Query, SearchResults, Timestamp}
+import lightdb.time.Timestamp
+import lightdb.{Query, SearchResults}
 import rapid.{Fiber, Task}
 
 import java.util.concurrent.ConcurrentHashMap

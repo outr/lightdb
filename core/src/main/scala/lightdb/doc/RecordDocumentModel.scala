@@ -1,6 +1,6 @@
 package lightdb.doc
 
-import lightdb.Timestamp
+import lightdb.time.Timestamp
 
 trait RecordDocumentModel[Doc <: RecordDocument[Doc]] extends DocumentModel[Doc] {
   val created: I[Timestamp] = field.index("created", (doc: Doc) => doc.created)

@@ -1,6 +1,6 @@
 package lightdb.doc
 
-import lightdb.Timestamp
+import lightdb.time.Timestamp
 
 trait RecordDocument[Doc <: RecordDocument[Doc]] extends Document[Doc] {
   def created: Timestamp

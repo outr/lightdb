@@ -8,7 +8,8 @@ import lightdb.filter._
 import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager, Store}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{LightDB, Sort, StoredValue, Timestamp}
+import lightdb.{LightDB, Sort, StoredValue}
+import lightdb.time.Timestamp
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import perfolation.double2Implicits

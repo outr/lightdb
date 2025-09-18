@@ -1,8 +1,10 @@
-package lightdb
+package lightdb.time
 
+import fabric.{NumInt, Str}
 import fabric.define.DefType
 import fabric.rw._
 import perfolation.long2Implicits
+import lightdb._
 
 import java.util.Calendar
 import scala.concurrent.duration.FiniteDuration
@@ -33,7 +35,11 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
 object Timestamp {
   implicit val rw: RW[Timestamp] = RW.from(
     r = _.value.json,
-    w = j => Timestamp(j.asLong),
+    w = {
+      case NumInt(l, _) => Timestamp(l)
+      case Str(s, _) => TimestampParser(s).getOrElse(throw new RuntimeException(s"Unable to parse Timestamp from: [$s]"))
+      case j => throw new RuntimeException(s"Unsupported JSON for Timestamp: $j")
+    },
     d = DefType.Int
   )
   implicit val numeric: Numeric[Timestamp] = Numeric[Long].map(Timestamp.apply)(_.value)

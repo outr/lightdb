@@ -8,7 +8,8 @@ import lightdb.sql.SQLStoreTransaction
 import lightdb.sql.query.SQLQuery
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{CompositeIndex, LightDB, StoredValue, Timestamp}
+import lightdb.{CompositeIndex, LightDB, StoredValue}
+import lightdb.time.Timestamp
 import lightdb.filter._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
