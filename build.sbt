@@ -74,7 +74,7 @@ val collectionCompatVersion: String = "2.13.0"
 
 val reactifyVersion: String = "4.1.5"
 
-val rapidVersion: String = "1.1.0"
+val rapidVersion: String = "2.0.0"
 
 val spatial4JVersion: String = "0.8"
 
