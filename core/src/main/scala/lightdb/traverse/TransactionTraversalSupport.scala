@@ -5,7 +5,7 @@ import lightdb.graph.EdgeDocument
 import lightdb.id.Id
 import lightdb.transaction.PrefixScanningTransaction
 import lightdb.{traverse => GraphTraversal}
-import rapid.{Pull, Stream, Task}
+import rapid.{Pull, Step, Stream, Task}
 
 /**
  * Extension methods for transactions to support traversal functionality
@@ -92,50 +92,48 @@ trait TransactionTraversalSupport[Doc <: Document[Doc], Model <: DocumentModel[D
       val seen = mutable.Set[List[Id[From]]]()
       queue.enqueue((from, Nil))
 
-      val pull: Pull[TraversalPath[E, From, From]] = new Pull[TraversalPath[E, From, From]] {
-        private var buffer: List[TraversalPath[E, From, From]] = Nil
+      var buffer: List[TraversalPath[E, From, From]] = Nil
 
-        override def pull(): Option[TraversalPath[E, From, From]] = {
-          if (buffer.nonEmpty) {
-            val next = buffer.head
-            buffer = buffer.tail
-            Some(next)
-          } else {
-            var collected = List.empty[TraversalPath[E, From, From]]
+      val pullTask: Task[Step[TraversalPath[E, From, From]]] = Task {
+        if (buffer.nonEmpty) {
+          val next = buffer.head
+          buffer = buffer.tail
+          Step.Emit(next)
+        } else {
+          var collected = List.empty[TraversalPath[E, From, From]]
 
-            while (queue.nonEmpty && collected.size < bufferSize) {
-              val (currentId, path) = queue.dequeue()
+          while (queue.nonEmpty && collected.size < bufferSize) {
+            val (currentId, path) = queue.dequeue()
 
-              if (path.length < maxDepth) {
-                val edges: List[E] = edgesForFunc(currentId).toList.sync()
-                val filteredEdges = edges.filter(edgeFilter)
-                val nextSteps = filteredEdges.filterNot(e => path.exists(_._to == e._to))
-                val newPaths = nextSteps.map(e => (e._to, path :+ e))
-                val (completed, pending) = newPaths.partition(_._1 == to)
+            if (path.length < maxDepth) {
+              val edges: List[E] = edgesForFunc(currentId).toList.sync()
+              val filteredEdges = edges.filter(edgeFilter)
+              val nextSteps = filteredEdges.filterNot(e => path.exists(_._to == e._to))
+              val newPaths = nextSteps.map(e => (e._to, path :+ e))
+              val (completed, pending) = newPaths.partition(_._1 == to)
 
-                pending.foreach {
-                  case (id, newPath) =>
-                    val signature = from +: newPath.map(_._to)
-                    if (!seen.contains(signature)) {
-                      seen += signature
-                      queue.enqueue((id, newPath))
-                    }
-                }
-
-                collected ++= completed.map(p => TraversalPath(p._2))
+              pending.foreach {
+                case (id, newPath) =>
+                  val signature = from +: newPath.map(_._to)
+                  if (!seen.contains(signature)) {
+                    seen += signature
+                    queue.enqueue((id, newPath))
+                  }
               }
-            }
 
-            if (collected.nonEmpty) {
-              buffer = collected.tail
-              Some(collected.head)
-            } else {
-              None
+              collected ++= completed.map(p => TraversalPath(p._2))
             }
+          }
+
+          if (collected.nonEmpty) {
+            buffer = collected.tail
+            Step.Emit(collected.head)
+          } else {
+            Step.Stop
           }
         }
       }
-
+      val pull = Pull(pullTask)
       Stream(Task.pure(pull))
     }
 

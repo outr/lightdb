@@ -18,6 +18,13 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
   def second: Int = value.t.secondOfMinute
   def millisecond: Int = value.t.milliOfSecond
 
+  def daysBetween(that: Timestamp): Int = {
+    val millisPerDay = 86_400_000L
+    val start = math.min(value, that.value)
+    val end = math.max(value, that.value)
+    math.floorDiv(end - start, millisPerDay).toInt
+  }
+
   def toMidnight: Timestamp = Timestamp.of(
     year = year,
     month = month,
@@ -29,7 +36,7 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
     value + timeout.toMillis < now
   }
 
-  override def toString: String = s"${value.t.D} ${value.t.T}"
+  override def toString: String = s"${value.t.m}/${value.t.d}/${value.t.year} ${value.t.T}"
 }
 
 object Timestamp {
