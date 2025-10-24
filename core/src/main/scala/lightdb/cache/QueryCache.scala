@@ -53,13 +53,14 @@ trait QueryCache {
     query.search
   } else {
     map.computeIfAbsent(key -> query, _ => {
-      val fiber = query.search.flatMap { results =>
+      val task = query.search.flatMap { results =>
         results.streamWithScore.toList.map { list =>
           results.copy(streamWithScore = rapid.Stream.emits(list))
         }
-      }.start()
-      new Cached(fiber)
-    }).incrementUsage().fiber
+      }.singleton
+      task.start()
+      new Cached(task)
+    }).incrementUsage().task
   }
 
   /**
@@ -72,7 +73,7 @@ trait QueryCache {
   def modify(key: Key, v: V): Task[Unit] = Task {
     val docId = id(v)
     map.entrySet().asScala.filter(_.getKey._1 == key).foreach { entry =>
-      val fiber = entry.getValue.fiber.flatMap { results =>
+      val task = entry.getValue.task.flatMap { results =>
         results.streamWithScore.toList.map { list =>
           if (list.exists { case (value, _) => id(value) == docId }) {
             val updatedList = list.map { case (value, score) =>
@@ -83,8 +84,9 @@ trait QueryCache {
             results
           }
         }
-      }.start()
-      entry.setValue(new Cached(fiber))
+      }.singleton
+      task.start()
+      entry.setValue(new Cached(task))
     }
   }
 
@@ -132,7 +134,7 @@ trait QueryCache {
     }
   }
 
-  private class Cached(val fiber: Fiber[SearchResults[Doc, Model, V]]) {
+  private class Cached(val task: Task[SearchResults[Doc, Model, V]]) {
     @volatile private var _lastAccess = Timestamp()
     @volatile private var _referenceCount = 0
 

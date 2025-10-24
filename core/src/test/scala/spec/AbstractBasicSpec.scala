@@ -653,7 +653,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           tx.count.map { count =>
             counter.addAndGet(count)
           }
-        }.startAndForget()
+        }.start()
       }
       Task.condition(Task(counter.get() == 19 * 10 && db.people.transaction.active == 0), timeout = 1.minute).succeed
     }
