@@ -18,6 +18,9 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
   def second: Int = value.t.secondOfMinute
   def millisecond: Int = value.t.milliOfSecond
 
+  def +(millis: Long): Timestamp = Timestamp(value + millis)
+  def -(millis: Long): Timestamp = Timestamp(value - millis)
+  
   def daysBetween(that: Timestamp): Int = {
     val millisPerDay = 86_400_000L
     val start = math.min(value, that.value)
@@ -44,6 +47,12 @@ object Timestamp {
    * Convenience method to get the current year.
    */
   def CurrentYear: Int = Timestamp().year
+  
+  def seconds(v: Int): Long = v * 1000L
+  def minutes(v: Int): Long = seconds(v * 60)
+  def hours(v: Int): Long = minutes(v * 60)
+  def days(v: Int): Long = hours(v * 24)
+  def weeks(v: Int): Long = days(v * 7)
 
   implicit val rw: RW[Timestamp] = RW.from(
     r = _.value.json,
