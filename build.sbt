@@ -1,6 +1,8 @@
 // Scala versions
-val scala213 = "2.13.17"
+val scala213 = "2.13.18"
+
 val scala3 = "3.7.4"
+
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
 
@@ -15,7 +17,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.11.3"
+ThisBuild / version := "4.11.4-SNAPSHOT"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -88,21 +90,21 @@ val mapdbVersion: String = "3.1.0"
 
 val lmdbVersion: String = "0.9.1"
 
-val jedisVersion: String = "7.0.0"
+val jedisVersion: String = "7.1.0"
 
 val fabricVersion: String = "1.18.4"
 
 val scribeVersion: String = "3.17.0"
 
-val luceneVersion: String = "10.3.1"
+val luceneVersion: String = "10.3.2"
 
 val hikariCPVersion: String = "7.0.2"
 
 val commonsDBCP2Version: String = "2.13.0"
 
-val sqliteVersion: String = "3.51.0.0"
+val sqliteVersion: String = "3.51.1.0"
 
-val duckdbVersion: String = "1.4.1.0"
+val duckdbVersion: String = "1.4.2.0"
 
 val h2Version: String = "2.4.240"
 
