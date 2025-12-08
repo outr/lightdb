@@ -53,6 +53,8 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     ps.close()
   }
 
+  def markDirty(): Unit = dirty = true
+
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
       if (psInsert == null) {
         val connection = connectionManager.getConnection(this)
