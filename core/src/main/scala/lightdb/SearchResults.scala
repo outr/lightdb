@@ -13,11 +13,24 @@ case class SearchResults[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](m
                                                                                streamWithScore: rapid.Stream[(V, Double)],
                                                                                facetResults: Map[FacetField[Doc], FacetResult],
                                                                                transaction: Transaction[Doc, Model]) {
+  private var cachedListWithScore: Option[List[(V, Double)]] = None
+
+  private def materialized: Task[List[(V, Double)]] = synchronized {
+    cachedListWithScore match {
+      case Some(value) => Task.pure(value)
+      case None =>
+        streamWithScore.toList.map { list =>
+          cachedListWithScore = Some(list)
+          list
+        }
+    }
+  }
+
   def stream: rapid.Stream[V] = streamWithScore.map(_._1)
 
-  lazy val listWithScore: Task[List[(V, Double)]] = streamWithScore.toList
-  lazy val list: Task[List[V]] = listWithScore.map(_.map(_._1))
-  lazy val scores: Task[List[Double]] = listWithScore.map(_.map(_._2))
+  lazy val listWithScore: Task[List[(V, Double)]] = materialized
+  lazy val list: Task[List[V]] = materialized.map(_.map(_._1))
+  lazy val scores: Task[List[Double]] = materialized.map(_.map(_._2))
 
   /**
    * Represents the total minus the current offset.

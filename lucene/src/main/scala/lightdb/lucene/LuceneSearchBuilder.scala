@@ -17,6 +17,7 @@ import org.apache.lucene.document._
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
+import org.apache.lucene.search.grouping.{FirstPassGroupingCollector, SearchGroup, TermGroupSelector, TopGroups, TopGroupsCollector}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermInSetQuery, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.util.BytesRef
 import org.apache.lucene.util.automaton.RegExp
@@ -96,6 +97,23 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
     }
     val total: Int = actualCount.getOrElse(topFieldDocs.totalHits.value.toInt)
     val storedFields: StoredFields = indexSearcher.storedFields()
+    val iterator: Iterator[(V, Double)] = materializeScoreDocs(query, scoreDocs, storedFields)
+    val task: Task[Iterator[(V, Double)]] = Task(iterator)
+    val stream = rapid.Stream.fromIterator[(V, Double)](task)
+    SearchResults(
+      model = model,
+      offset = query.offset,
+      limit = query.limit,
+      total = Some(total),
+      streamWithScore = stream,
+      facetResults = facetResults,
+      transaction = tx
+    )
+  }
+
+  private def materializeScoreDocs[V](query: Query[Doc, Model, V],
+                                      scoreDocs: List[ScoreDoc],
+                                      storedFields: StoredFields): Iterator[(V, Double)] = {
     val idsAndScores = scoreDocs.map(doc => Id[Doc](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
     def jsonField[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): Json = {
       val values = storedFields.document(scoreDoc.doc).getValues(field.name)
@@ -139,7 +157,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         (scoreDoc, json, score)
       }
     }
-    def iterator: Iterator[(V, Double)] = query.conversion match {
+    query.conversion match {
       case Conversion.Value(field) => scoreDocs.iterator.map { scoreDoc =>
         value(scoreDoc, field) -> scoreDoc.score.toDouble
       }
@@ -162,17 +180,92 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           DistanceAndDoc(doc, distance) -> score
       }
     }
-    val task: Task[Iterator[(V, Double)]] = Task(iterator)
-    val stream = rapid.Stream.fromIterator[(V, Double)](task)
-    SearchResults(
-      model = model,
-      offset = query.offset,
-      limit = query.limit,
-      total = Some(total),
-      streamWithScore = stream,
-      facetResults = facetResults,
-      transaction = tx
-    )
+  }
+
+  def grouped[G, V](query: Query[Doc, Model, V],
+                    groupField: Field[Doc, G],
+                    docsPerGroup: Int,
+                    groupOffset: Int,
+                    groupLimit: Int,
+                    groupSortList: List[Sort],
+                    withinGroupSortList: List[Sort],
+                    includeScores: Boolean,
+                    includeTotalGroupCount: Boolean): Task[LuceneGroupedSearchResults[Doc, Model, G, V]] = Task {
+    if (groupLimit <= 0) throw new RuntimeException(s"Group limit must be positive but was $groupLimit")
+    if (docsPerGroup <= 0) throw new RuntimeException(s"Docs per group must be positive but was $docsPerGroup")
+
+    val indexSearcher = tx.state.indexSearcher
+    val luceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
+    val groupSort = sort(groupSortList)
+    val withinGroupSort = sort(if (withinGroupSortList.nonEmpty) withinGroupSortList else groupSortList)
+    val topNGroups = groupOffset + groupLimit
+    val groupFieldName = s"${groupField.name}Sort"
+    val groupSelector = new TermGroupSelector(groupFieldName)
+
+    val firstPass = new FirstPassGroupingCollector[BytesRef](groupSelector, groupSort, topNGroups)
+    indexSearcher.search(luceneQuery, firstPass)
+    val rawTopGroups: List[SearchGroup[BytesRef]] = Option(firstPass.getTopGroups(groupOffset))
+      .map(_.asScala.toList)
+      .getOrElse(Nil)
+
+    if (rawTopGroups.isEmpty) {
+      LuceneGroupedSearchResults(
+        model = model,
+        offset = groupOffset,
+        limit = Some(groupLimit),
+        totalGroups = if (includeTotalGroupCount) Some(0) else None,
+        groups = Nil,
+        transaction = tx
+      )
+    } else {
+      val secondPass = new TopGroupsCollector[BytesRef](
+        groupSelector,
+        rawTopGroups.asJava,
+        groupSort,
+        withinGroupSort,
+        docsPerGroup,
+        includeScores
+      )
+      indexSearcher.search(luceneQuery, secondPass)
+      val topGroupsResult: Option[TopGroups[BytesRef]] = Option(secondPass.getTopGroups(groupOffset))
+      val storedFields: StoredFields = indexSearcher.storedFields()
+      val groupedResults = topGroupsResult
+        .map(_.groups.toList)
+        .getOrElse(Nil)
+        .map { gd =>
+          val docs = materializeScoreDocs(query, gd.scoreDocs.toList, storedFields).toList
+          LuceneGroupedResult(
+            group = decodeGroupValue(gd.groupValue, groupField),
+            results = docs
+          )
+        }
+      val totalGroups = if (includeTotalGroupCount) {
+        topGroupsResult.flatMap(tg => Option(tg.totalGroupCount).filter(_ >= 0).map(_.intValue()))
+          .orElse(Some(rawTopGroups.size))
+      } else {
+        None
+      }
+      LuceneGroupedSearchResults(
+        model = model,
+        offset = groupOffset,
+        limit = Some(groupLimit),
+        totalGroups = totalGroups,
+        groups = groupedResults,
+        transaction = tx
+      )
+    }
+  }
+
+  private def decodeGroupValue[G](groupValue: BytesRef, field: Field[Doc, G]): G = {
+    if (groupValue == null) {
+      field.rw.definition match {
+        case DefType.Opt(_) => None.asInstanceOf[G]
+        case _ => throw new RuntimeException(s"Missing group value for grouping field '${field.name}'")
+      }
+    } else {
+      val asString = groupValue.utf8ToString
+      Field.string2Json(field.name, asString, field.rw.definition).as[G](field.rw)
+    }
   }
 
   private def sort(sort: List[Sort]): LuceneSort = {
