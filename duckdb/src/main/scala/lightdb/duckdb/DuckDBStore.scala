@@ -20,6 +20,14 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = DuckDBTransaction[Doc, Model]
 
+  override protected def createUpsertSQL(): String = {
+    val cols = fields.map(_.name)
+    val values = cols.map(_ => "?")
+    val assignments = fields.filterNot(_ == model._id).map(f => s"${f.name}=excluded.${f.name}")
+    val update = if (assignments.nonEmpty) assignments.mkString(", ") else s"${model._id.name}=${model._id.name}"
+    s"INSERT INTO $fqn(${cols.mkString(", ")}) VALUES(${values.mkString(", ")}) ON CONFLICT(${model._id.name}) DO UPDATE SET $update"
+  }
+
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[DuckDBTransaction[Doc, Model]] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
     DuckDBTransaction(this, state, parent)

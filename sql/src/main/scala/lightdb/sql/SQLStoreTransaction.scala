@@ -100,10 +100,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
-      if (state.batchUpsert.get() >= Store.MaxInsertBatch) {
-        ps.executeBatch()
-        state.batchUpsert.set(0)
-      }
+      // Flush immediately to ensure compatibility with single-connection, auto-commit drivers
+      ps.executeBatch()
+      state.batchUpsert.set(0)
+      state.markDirty()
     }
     doc
   }
@@ -155,6 +155,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       state.withPreparedStatement(sql.query) { ps =>
         try {
           sql.populate(ps, this)
+          state.markDirty()
           ps.executeUpdate()
         } finally {
           state.returnPreparedStatement(sql.query, ps)

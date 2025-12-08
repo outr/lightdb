@@ -2,7 +2,7 @@ package spec
 import lightdb.duckdb.DuckDBStore
 import lightdb.store.CollectionManager
 
-//@EmbeddedTest
+@EmbeddedTest
 class DuckDBSpec extends AbstractBasicSpec {
   override def storeManager: CollectionManager = DuckDBStore
 }

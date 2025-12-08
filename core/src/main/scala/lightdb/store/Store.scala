@@ -17,6 +17,7 @@ import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.Semaphore
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
@@ -115,7 +116,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       })
       s.active.incrementAndGet()
       s.lastUsed.set(System.currentTimeMillis())
-      f(s.tx).guarantee(Task {
+      s.withLock(f(s.tx)).guarantee(Task {
         s.active.decrementAndGet()
         s.lastUsed.set(System.currentTimeMillis())
       })
@@ -147,8 +148,12 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     private case class Shared(name: String, tx: TX, timeout: FiniteDuration) {
       val active = new AtomicInteger(0)
       val lastUsed = new AtomicLong(0L)
+      private val lock = new Semaphore(1)
 
       private val timeoutMillis = timeout.toMillis
+
+      def withLock[A](task: Task[A]): Task[A] =
+        Task(lock.acquire()).flatMap(_ => task.guarantee(Task(lock.release())))
 
       private def recurse(): Task[Unit] = Task.defer {
         val nextPossibleTimeout: Long = if (active.get() > 0) {
