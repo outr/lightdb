@@ -88,6 +88,12 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
    */
   def optimize(): Task[Unit] = Task.unit
 
+  /**
+   * Whether the store can natively handle ExistsChild without generic resolution.
+   * Defaults to false; backends can override to provide optimized handling.
+   */
+  def supportsNativeExistsChild: Boolean = false
+
   object transaction {
     private val set = ConcurrentHashMap.newKeySet[TX]
     private val sharedMap = new ConcurrentHashMap[String, Shared]()

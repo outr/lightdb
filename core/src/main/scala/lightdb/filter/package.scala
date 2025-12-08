@@ -42,8 +42,9 @@ package object filter {
    */
   def existsChild[
     Parent <: Document[Parent],
-    Child <: Document[Child]
-  ](relation: ParentChildRelation[Parent, Child])
-   (childFilter: DocumentModel[Child] => Filter[Child]): Filter[Parent] =
+    Child <: Document[Child],
+    ChildModel <: DocumentModel[Child]
+  ](relation: ParentChildRelation[Parent, Child, ChildModel])
+   (childFilter: ChildModel => Filter[Child]): Filter[Parent] =
     Filter.ExistsChild(relation, childFilter)
 }

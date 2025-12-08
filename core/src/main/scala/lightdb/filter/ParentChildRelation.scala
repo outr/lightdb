@@ -1,6 +1,7 @@
 package lightdb.filter
 
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.store.Collection
 
@@ -12,9 +13,10 @@ import lightdb.store.Collection
  */
 final case class ParentChildRelation[
   Parent <: Document[Parent],
-  Child <: Document[Child]
+  Child <: Document[Child],
+  ChildModel <: DocumentModel[Child]
 ](
-  childStore: Collection[Child, _ <: DocumentModel[Child]],
-  parentId: Child => Id[Parent]
+  childStore: Collection[Child, ChildModel],
+  parentField: ChildModel => Field[Child, Id[Parent]]
 )
 
