@@ -18,7 +18,7 @@ import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.search.grouping.{FirstPassGroupingCollector, SearchGroup, TermGroupSelector, TopGroups, TopGroupsCollector}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermInSetQuery, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MatchNoDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermInSetQuery, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.util.BytesRef
 import org.apache.lucene.util.automaton.RegExp
 import rapid.Task
@@ -317,6 +317,9 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
           b.add(exactQuery(f.field(model), f.getJson(model)), BooleanClause.Occur.MUST_NOT)
           b.build()
+        case _: Filter.MatchNone[Doc] => new MatchNoDocsQuery
+        case _: Filter.ExistsChild[Doc, _] =>
+          throw new RuntimeException("ExistsChild filter must be planned before execution")
         case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression), RegExp.ALL, 10_000_000)
         case f: Filter.In[Doc, _] =>
           val values = f.getJson(model)

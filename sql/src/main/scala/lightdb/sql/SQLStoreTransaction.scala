@@ -585,6 +585,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   private def filter2Part(f: Filter[Doc]): SQLPart = {
     val fields = f.fields(store.model)
     f match {
+      case _: Filter.MatchNone[Doc] => SQLPart.Fragment("1=0")
+      case _: Filter.ExistsChild[Doc, _] =>
+        throw new UnsupportedOperationException("ExistsChild filter must be planned before execution")
       case f: Filter.DrillDownFacetFilter[Doc] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
       // Tokenized fields: equality is interpreted as matching all whitespace-separated tokens (AND semantics)
       case f: Filter.Equals[Doc, _] if f.value != null && f.value != None && f.field(store.model).isTokenized =>

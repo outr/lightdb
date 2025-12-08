@@ -4,6 +4,8 @@ import fabric.{Json, Str}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.spatial.{Geo, Point}
+import lightdb.id.Id
+import rapid.Task
 
 sealed trait Filter[Doc <: Document[Doc]] {
   def fieldNames: List[String]
@@ -106,5 +108,44 @@ object Filter {
      * excluded from the result set.
      */
     lazy val onlyThisLevel: DrillDownFacetFilter[Doc] = copy(showOnlyThisLevel = true)
+  }
+
+  /**
+   * Parent-side filter that matches when at least one child satisfies the provided child filter.
+   */
+  case class ExistsChild[
+    Parent <: Document[Parent],
+    Child <: Document[Child]
+  ](
+    relation: ParentChildRelation[Parent, Child],
+    childFilter: DocumentModel[Child] => Filter[Child]
+  ) extends Filter[Parent] {
+    // Resolved into a parent id filter during planning; no direct parent fields referenced here.
+    override val fieldNames: List[String] = Nil
+
+    def resolve(parentModel: DocumentModel[Parent]): Task[Filter[Parent]] = {
+      val parentIdField = parentModel._id.name
+      relation.childStore.transaction { childTx =>
+        val cf = childFilter(childTx.store.model)
+        childTx.query
+          .filter(_ => cf)
+          .toList
+          .map(_.map(relation.parentId).toSet)
+          .map { parentIds =>
+            if (parentIds.isEmpty) {
+              Filter.MatchNone[Parent]()
+            } else {
+              Filter.In[Parent, Id[Parent]](parentIdField, parentIds.toSeq)
+            }
+          }
+      }
+    }
+  }
+
+  /**
+   * A filter that intentionally matches no documents.
+   */
+  case class MatchNone[Doc <: Document[Doc]]() extends Filter[Doc] {
+    override val fieldNames: List[String] = Nil
   }
 }

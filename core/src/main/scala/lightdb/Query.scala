@@ -33,6 +33,33 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
 
   private type Q = Query[Doc, Model, V]
 
+  private def validateFilters(q: Query[Doc, Model, V]): Task[Unit] = Task {
+    val storeMode = q.collection.storeMode
+    if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
+      val notIndexed = q.filter.toList.flatMap(_.fields(q.model)).filter(!_.indexed)
+      if (storeMode.isIndexes) {
+        if (notIndexed.nonEmpty) {
+          throw NonIndexedFieldException(q, notIndexed)
+        }
+      } else {
+        if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
+          scribe.warn(s"Inefficient query filtering on non-indexed field(s): ${notIndexed.map(_.name).mkString(", ")}")
+        }
+      }
+    }
+  }
+
+  private def prepared: Task[Q] = for {
+    resolved <- FilterPlanner.resolve(filter, model)
+    optimizedFilter = if (optimize) {
+      resolved.map(QueryOptimizer.optimize)
+    } else {
+      resolved
+    }
+    q = copy(filter = optimizedFilter)
+    _ <- validateFilters(q)
+  } yield q
+
   def scored: Q = copy(scoreDocs = true)
 
   def minDocScore(min: Double): Q = copy(
@@ -128,36 +155,19 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
     ))
 
   def search: Task[SearchResults[Doc, Model, V]] = {
-    val storeMode = collection.storeMode
-    if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
-      val notIndexed = filter.toList.flatMap(_.fields(model)).filter(!_.indexed)
-      if (storeMode.isIndexes) {
-        if (notIndexed.nonEmpty) {
-          throw NonIndexedFieldException(query, notIndexed)
-        }
-      } else {
-        if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
-          scribe.warn(s"Inefficient query filtering on non-indexed field(s): ${notIndexed.map(_.name).mkString(", ")}")
-        }
-      }
-    }
-    val q = if (optimize) {
-      copy(filter = filter.map(QueryOptimizer.optimize))
-    } else {
-      this
-    }
-    transaction.doSearch(q)
+    prepared.flatMap(transaction.doSearch(_))
   }
 
   /**
    * Uses the query to find and delete all the documents that match the criteria in this collection.
    */
-  def delete: Task[Int] = transaction.doDelete(this)
+  def delete: Task[Int] = prepared.flatMap(transaction.doDelete(_))
 
   /**
    * Updates all the records that match the criteria in this collection with the fields and values.
    */
-  def update(f: => Model => List[FieldAndValue[Doc, _]]): Task[Int] = transaction.doUpdate(query, f(model))
+  def update(f: => Model => List[FieldAndValue[Doc, _]]): Task[Int] =
+    prepared.flatMap(q => transaction.doUpdate(q, f(model)))
 
   def streamPage: rapid.Stream[V] = rapid.Stream.force(search.map(_.stream))
 

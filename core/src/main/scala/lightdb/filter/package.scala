@@ -1,6 +1,6 @@
 package lightdb
 
-import lightdb.doc.Document
+import lightdb.doc.{Document, DocumentModel}
 
 import scala.language.implicitConversions
 
@@ -36,4 +36,14 @@ package object filter {
       case _ => Filter.Multi(minShould = 1).conditional(filter, Condition.Should).conditional(that, Condition.Should)
     }
   }
+
+  /**
+   * Builds a parent-side filter that matches when a related child satisfies the provided child filter.
+   */
+  def existsChild[
+    Parent <: Document[Parent],
+    Child <: Document[Child]
+  ](relation: ParentChildRelation[Parent, Child])
+   (childFilter: DocumentModel[Child] => Filter[Child]): Filter[Parent] =
+    Filter.ExistsChild(relation, childFilter)
 }
