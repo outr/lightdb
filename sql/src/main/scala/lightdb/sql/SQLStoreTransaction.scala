@@ -582,34 +582,36 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     (1 to count).toList.map(index => meta.getColumnName(index))
   }
 
-  private def filter2Part(f: Filter[Doc]): SQLPart = {
-    val fields = f.fields(store.model)
+  private def filter2Part(f: Filter[Doc]): SQLPart = filter2PartOn(f, store)
+
+  private def filter2PartOn[C <: Document[C]](f: Filter[C], targetStore: SQLStore[C, _ <: DocumentModel[C]]): SQLPart = {
+    val fields = f.fields(targetStore.model)
     f match {
-      case _: Filter.MatchNone[Doc] => SQLPart.Fragment("1=0")
-      case _: Filter.ExistsChild[Doc, _] =>
-        throw new UnsupportedOperationException("ExistsChild filter must be planned before execution")
-      case f: Filter.DrillDownFacetFilter[Doc] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
+      case _: Filter.MatchNone[C] => SQLPart.Fragment("1=0")
+      case _: Filter.ExistsChild[_, _, _] =>
+        throw new UnsupportedOperationException("ExistsChild should have been resolved before SQL translation")
+      case f: Filter.DrillDownFacetFilter[C] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
       // Tokenized fields: equality is interpreted as matching all whitespace-separated tokens (AND semantics)
-      case f: Filter.Equals[Doc, _] if f.value != null && f.value != None && f.field(store.model).isTokenized =>
-        f.getJson(store.model) match {
+      case f: Filter.Equals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
+        f.getJson(targetStore.model) match {
           case Str(s, _) =>
             val tokens = s.split("\\s+").toList.filter(_.nonEmpty)
             val parts = tokens.map(t => likePart(f.fieldName, s"%$t%"))
             if (parts.isEmpty) SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
           case _ => throw new UnsupportedOperationException(s"Unsupported tokenized equality value for ${f.fieldName}")
         }
-      case f: Filter.Equals[Doc, _] if f.field(store.model).isArr =>
-        val values = f.getJson(store.model).asVector
+      case f: Filter.Equals[C, _] if f.field(targetStore.model).isArr =>
+        val values = f.getJson(targetStore.model).asVector
         val parts = values.toList.map { json =>
           val jsonString = JsonFormatter.Compact(json)
           likePart(f.fieldName, s"%$jsonString%")
         }
         SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
-      case f: Filter.Equals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
-      case f: Filter.Equals[Doc, _] => SQLPart(s"${f.fieldName} = ?", f.field(store.model).rw.read(f.value))
+      case f: Filter.Equals[C, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
+      case f: Filter.Equals[C, _] => SQLPart(s"${f.fieldName} = ?", f.field(targetStore.model).rw.read(f.value))
       // Tokenized fields: not equals is interpreted as NOT(all tokens present)
-      case f: Filter.NotEquals[Doc, _] if f.value != null && f.value != None && f.field(store.model).isTokenized =>
-        f.getJson(store.model) match {
+      case f: Filter.NotEquals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
+        f.getJson(targetStore.model) match {
           case Str(s, _) =>
             val tokens = s.split("\\s+").toList.filter(_.nonEmpty)
             val inner = if (tokens.isEmpty) SQLPart.Fragment("1=1") else {
@@ -619,25 +621,25 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
             SQLQuery(List(SQLPart.Fragment("NOT("), inner, SQLPart.Fragment(")")))
           case _ => throw new UnsupportedOperationException(s"Unsupported tokenized inequality value for ${f.fieldName}")
         }
-      case f: Filter.NotEquals[Doc, _] if f.field(store.model).isArr =>
-        val values = f.getJson(store.model).asVector
+      case f: Filter.NotEquals[C, _] if f.field(targetStore.model).isArr =>
+        val values = f.getJson(targetStore.model).asVector
         val parts = values.toList.map { json =>
           val jsonString = JsonFormatter.Compact(json)
           notLikePart(f.fieldName, s"%$jsonString%")
         }
         SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
-      case f: Filter.NotEquals[Doc, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
-      case f: Filter.NotEquals[Doc, _] => SQLPart(s"${f.fieldName} != ?", f.field(store.model).rw.read(f.value))
-      case f: Filter.Regex[Doc, _] => regexpPart(f.fieldName, f.expression)
+      case f: Filter.NotEquals[C, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
+      case f: Filter.NotEquals[C, _] => SQLPart(s"${f.fieldName} != ?", f.field(targetStore.model).rw.read(f.value))
+      case f: Filter.Regex[C, _] => regexpPart(f.fieldName, f.expression)
       // TODO: Support fieldName = ANY (?::text[])
-      case f: Filter.In[Doc, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => f.field(store.model).rw.read(v)): _*)
-      case f: Filter.RangeLong[Doc] => (f.from, f.to) match {
+      case f: Filter.In[C, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => f.field(targetStore.model).rw.read(v)): _*)
+      case f: Filter.RangeLong[C] => (f.from, f.to) match {
         case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", from.json, to.json)
         case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", to.json)
         case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", from.json)
         case _ => throw new UnsupportedOperationException(s"Invalid: $f")
       }
-      case f: Filter.RangeDouble[Doc] => (f.from, f.to) match {
+      case f: Filter.RangeDouble[C] => (f.from, f.to) match {
         case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", from.json, to.json)
         case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", to.json)
         case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", from.json)
@@ -650,22 +652,27 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case Filter.Contains(fieldName, query) => likePart(fieldName, s"%$query%")
       case Filter.Exact(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%\"$query\"%")
       case Filter.Exact(fieldName, query) => likePart(fieldName, s"$query")
-      case f: Filter.Distance[Doc] => distanceFilter(f)
-      case f: Filter.Multi[Doc] =>
+      case f: Filter.Distance[C] =>
+        if (targetStore eq store) {
+          distanceFilter(f.asInstanceOf[Filter.Distance[Doc]])
+        } else {
+          throw new UnsupportedOperationException("Distance filtering not supported on related child store")
+        }
+      case f: Filter.Multi[C] =>
         val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
         if (f.minShould != 1 && shoulds.nonEmpty) {
           throw new UnsupportedOperationException("Should filtering only works in SQL for exactly one condition")
         }
-        val shouldParts = shoulds.map(fc => filter2Part(fc.filter)) match {
+        val shouldParts = shoulds.map(fc => filter2PartOn(fc.filter, targetStore)) match {
           case Nil => Nil
           case list => List(SQLQuery(SQLPart.Fragment("(") :: list.intersperse(SQLPart.Fragment(" OR ")) ::: List(SQLPart.Fragment(")"))))
         }
         val parts: List[SQLPart] = others.flatMap { fc =>
           if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
           fc.condition match {
-            case Condition.Must => List(filter2Part(fc.filter))
+            case Condition.Must => List(filter2PartOn(fc.filter, targetStore))
             case Condition.MustNot =>
-              val p = filter2Part(fc.filter)
+              val p = filter2PartOn(fc.filter, targetStore)
               // Create a proper SQLQuery for NOT conditions to avoid flattening issues
               List(SQLQuery(List(SQLPart.Fragment("NOT("), p, SQLPart.Fragment(")"))))
             case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")

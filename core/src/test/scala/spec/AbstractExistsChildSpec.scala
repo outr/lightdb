@@ -1,7 +1,7 @@
 package spec
 
 import fabric.rw._
-import lightdb.doc.{DocumentModel, JsonConversion, RecordDocument, RecordDocumentModel}
+import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.filter._
 import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager}
@@ -15,34 +15,30 @@ import rapid.{AsyncTaskSpec, Task}
 import java.nio.file.Path
 
 abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
-  private val parentWithBoth = Parent(name = "Alpha", category = "Well")
-  private val parentMailOnly = Parent(name = "Bravo", category = "Well")
-  private val parentLegalOnly = Parent(name = "Charlie", category = "Lease")
-  private val parentIrrelevant = Parent(name = "Delta", category = "Well")
+  private val alpha = Parent(name = "Alpha", category = "Well")
+  private val bravo = Parent(name = "Bravo", category = "Well")
+  private val charlie = Parent(name = "Charlie", category = "Lease")
+  private val delta = Parent(name = "Delta", category = "Well")
 
   private val children = List(
-    Child(parentId = parentWithBoth._id, kind = "MailingAddress", state = Some("WY")),
-    Child(parentId = parentWithBoth._id, kind = "LegalDescription", range = Some("68W")),
-    Child(parentId = parentMailOnly._id, kind = "MailingAddress", state = Some("WY")),
-    Child(parentId = parentLegalOnly._id, kind = "LegalDescription", range = Some("68W")),
-    Child(parentId = parentIrrelevant._id, kind = "MailingAddress", state = Some("UT"))
+    Child(parentId = alpha._id, kind = "MailingAddress", state = Some("WY")),
+    Child(parentId = alpha._id, kind = "LegalDescription", range = Some("68W")),
+    Child(parentId = bravo._id, kind = "MailingAddress", state = Some("WY")),
+    Child(parentId = charlie._id, kind = "LegalDescription", range = Some("68W")),
+    Child(parentId = delta._id, kind = "MailingAddress", state = Some("UT"))
   )
 
   protected lazy val specName: String = getClass.getSimpleName
 
   protected val db: DB = new DB
 
-  private val relation = ParentChildRelation[Parent, Child](db.children, _.parentId)
+  private val relation = ParentChildRelation[Parent, Child, Child.type](db.children, _.parentId)
 
-  private def mailingInWy(model: DocumentModel[Child]): Filter[Child] = {
-    val m = model.asInstanceOf[Child.type]
-    (m.kind === "MailingAddress") && (m.state === Some("WY"))
-  }
+  private def mailingInWy(model: Child.type): Filter[Child] =
+    (model.kind === "MailingAddress") && (model.state === Some("WY"))
 
-  private def legalRange(model: DocumentModel[Child]): Filter[Child] = {
-    val m = model.asInstanceOf[Child.type]
-    (m.kind === "LegalDescription") && (m.range === Some("68W"))
-  }
+  private def legalRange(model: Child.type): Filter[Child] =
+    (model.kind === "LegalDescription") && (model.range === Some("68W"))
 
   specName should {
     "initialize the database" in {
@@ -50,7 +46,7 @@ abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec 
     }
     "insert parents and children" in {
       for {
-        _ <- db.parents.transaction(_.insert(List(parentWithBoth, parentMailOnly, parentLegalOnly, parentIrrelevant)))
+        _ <- db.parents.transaction(_.insert(List(alpha, bravo, charlie, delta)))
         _ <- db.children.transaction(_.insert(children))
       } yield succeed
     }
@@ -60,7 +56,7 @@ abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec 
           .filter(_ => existsChild(relation)(mailingInWy))
           .id
           .toList
-          .map(_.toSet should be(Set(parentWithBoth._id, parentMailOnly._id)))
+          .map(_.toSet should be(Set(alpha._id, bravo._id)))
       }
     }
     "match parents when different children satisfy different conditions" in {
@@ -69,7 +65,7 @@ abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec 
           .filter(_ => existsChild(relation)(mailingInWy) && existsChild(relation)(legalRange))
           .id
           .toList
-          .map(_ should be(List(parentWithBoth._id)))
+          .map(_ should be(List(alpha._id)))
       }
     }
     "not match parents missing one of the required child conditions" in {
@@ -78,7 +74,7 @@ abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec 
           .filter(_ => existsChild(relation)(mailingInWy) && existsChild(relation)(legalRange))
           .sort(Sort.ByField(Parent.name))
           .toList
-          .map(_.map(_._id).toSet should be(Set(parentWithBoth._id)))
+          .map(_.map(_._id).toSet should be(Set(alpha._id)))
       }
     }
     "combine parent and child filters" in {
@@ -88,13 +84,13 @@ abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec 
           .filter(_ => existsChild(relation)(mailingInWy) && existsChild(relation)(legalRange))
           .id
           .toList
-          .map(_ should be(List(parentWithBoth._id)))
+          .map(_ should be(List(alpha._id)))
       }
     }
     "match none when no children satisfy the condition" in {
       db.parents.transaction { tx =>
         tx.query
-          .filter(_ => existsChild(relation)(_ => Child.kind === "NonExistentKind"))
+          .filter(_ => existsChild(relation)((_: Child.type) => Child.kind === "NonExistentKind"))
           .toList
           .map(_ shouldBe empty)
       }

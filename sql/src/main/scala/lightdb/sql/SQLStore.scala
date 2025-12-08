@@ -20,6 +20,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX <: SQLStoreTransaction[Doc, Model]
 
+  override def supportsNativeExistsChild: Boolean = false
+
   def supportsSchemas: Boolean = false
 
   lazy val fqn: String = if (supportsSchemas) {

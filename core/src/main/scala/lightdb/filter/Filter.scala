@@ -115,10 +115,11 @@ object Filter {
    */
   case class ExistsChild[
     Parent <: Document[Parent],
-    Child <: Document[Child]
+    Child <: Document[Child],
+    ChildModel <: DocumentModel[Child]
   ](
-    relation: ParentChildRelation[Parent, Child],
-    childFilter: DocumentModel[Child] => Filter[Child]
+    relation: ParentChildRelation[Parent, Child, ChildModel],
+    childFilter: ChildModel => Filter[Child]
   ) extends Filter[Parent] {
     // Resolved into a parent id filter during planning; no direct parent fields referenced here.
     override val fieldNames: List[String] = Nil
@@ -126,17 +127,17 @@ object Filter {
     def resolve(parentModel: DocumentModel[Parent]): Task[Filter[Parent]] = {
       val parentIdField = parentModel._id.name
       relation.childStore.transaction { childTx =>
-        val cf = childFilter(childTx.store.model)
+        val model: ChildModel = childTx.store.model
+        val cf = childFilter(model)
+        val parentField = relation.parentField(model)
         childTx.query
           .filter(_ => cf)
+          .value(_ => parentField)
           .toList
-          .map(_.map(relation.parentId).toSet)
-          .map { parentIds =>
-            if (parentIds.isEmpty) {
-              Filter.MatchNone[Parent]()
-            } else {
-              Filter.In[Parent, Id[Parent]](parentIdField, parentIds.toSeq)
-            }
+          .map(_.toSet)
+          .map {
+            case parentIds if parentIds.isEmpty => Filter.MatchNone[Parent]()
+            case parentIds => Filter.In[Parent, Id[Parent]](parentIdField, parentIds.toSeq)
           }
       }
     }

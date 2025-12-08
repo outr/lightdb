@@ -50,7 +50,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   }
 
   private def prepared: Task[Q] = for {
-    resolved <- FilterPlanner.resolve(filter, model)
+    resolved <- FilterPlanner.resolve(filter, model, resolveExistsChild = !collection.supportsNativeExistsChild)
     optimizedFilter = if (optimize) {
       resolved.map(QueryOptimizer.optimize)
     } else {
