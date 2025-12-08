@@ -15,7 +15,7 @@ import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, Mu
 import lightdb.store.Conversion
 import lightdb.transaction.{CollectionTransaction, Transaction}
 import lightdb.util.Aggregator
-import lightdb.{Query, SearchResults}
+import lightdb.{Query, SearchResults, Sort}
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
@@ -57,6 +57,30 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected def _rollback: Task[Unit] = state.rollback
 
   override protected def _close: Task[Unit] = state.close
+
+  def groupBy[G, V](query: Query[Doc, Model, V],
+                    groupField: Field[Doc, G],
+                    docsPerGroup: Int = query.pageSize.getOrElse(1),
+                    groupOffset: Int = query.offset,
+                    groupLimit: Option[Int] = query.limit,
+                    groupSort: List[Sort] = query.sort,
+                    withinGroupSort: List[Sort] = Nil,
+                    includeScores: Boolean = query.scoreDocs,
+                    includeTotalGroupCount: Boolean = true): Task[LuceneGroupedSearchResults[Doc, Model, G, V]] = {
+    val limit = groupLimit.getOrElse(100_000_000)
+    val withinSort = if (withinGroupSort.nonEmpty) withinGroupSort else groupSort
+    searchBuilder.grouped(
+      query = query,
+      groupField = groupField,
+      docsPerGroup = docsPerGroup,
+      groupOffset = groupOffset,
+      groupLimit = limit,
+      groupSortList = groupSort,
+      withinGroupSortList = withinSort,
+      includeScores = includeScores,
+      includeTotalGroupCount = includeTotalGroupCount
+    )
+  }
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = searchBuilder(query)
 
@@ -146,10 +170,12 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
         field.getJson(doc, state) match {
           case Str(s, _) =>
             val bytes = new BytesRef(s)
-            val sorted = new SortedDocValuesField(fieldSortName, bytes)
-            add(sorted)
-          case NumInt(l, _) => add(new NumericDocValuesField(fieldSortName, l))
-          case NumDec(d, _) => add(new DoubleDocValuesField(fieldSortName, d.toDouble))
+            add(new SortedDocValuesField(fieldSortName, bytes))
+          case NumInt(l, _) =>
+            add(new NumericDocValuesField(fieldSortName, l))
+          case NumDec(d, _) =>
+            val value = d.toDouble
+            add(new DoubleDocValuesField(fieldSortName, value))
           case j if field.isSpatial && j != Null =>
             val list = j match {
               case Arr(values, _) => values.toList.map(_.as[Geo])
