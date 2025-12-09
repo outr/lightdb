@@ -11,7 +11,6 @@ import rapid.{Task, Unique}
 import java.nio.file.Path
 import java.sql.Connection
 
-// TODO: Look into http://www.h2gis.org/docs/1.5.0/quickstart/ for spatial support
 class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                  path: Option[Path],
                                                                  model: Model,
@@ -27,6 +26,19 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   }
 
   override protected def upsertPrefix: String = "MERGE"
+
+  override protected def initTransaction(tx: TX): Task[Unit] = super.initTransaction(tx).flatMap { _ =>
+    Task {
+      val c = tx.state.connectionManager.getConnection(tx.state)
+      val s = c.createStatement()
+      try {
+        s.execute("""CREATE ALIAS IF NOT EXISTS GEO_DISTANCE_JSON FOR "lightdb.h2.H2SpatialFunctions.distanceJson"""")
+        s.execute("""CREATE ALIAS IF NOT EXISTS GEO_DISTANCE_MIN FOR "lightdb.h2.H2SpatialFunctions.distanceMin"""")
+      } finally {
+        s.close()
+      }
+    }
+  }
 
   override protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = 'PUBLIC';")
