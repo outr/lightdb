@@ -2,9 +2,10 @@ package lightdb.mapdb
 
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
+import lightdb.store.{Store, StoreMode}
 import lightdb.transaction.Transaction
-import org.mapdb.{DB, DBMaker, HTreeMap, Serializer}
+import org.mapdb.{DB, DBMaker, BTreeMap, Serializer}
 import rapid.Task
 
 import java.nio.file.{Files, Path}
@@ -14,7 +15,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
                                                                     model: Model,
                                                                     val storeMode: StoreMode[Doc, Model],
                                                                     lightDB: LightDB,
-                                                                    storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
+                                                                    storeManager: PrefixScanningStoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX = MapDBTransaction[Doc, Model]
 
   private lazy val db: DB = {
@@ -24,9 +25,11 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
     }.getOrElse(DBMaker.memoryDirectDB())
     maker.make()
   }
-  private[mapdb] lazy val map: HTreeMap[String, String] = db.hashMap("map", Serializer.STRING, Serializer.STRING).createOrOpen()
+  private[mapdb] lazy val map: BTreeMap[String, String] = db
+    .treeMap("map", Serializer.STRING, Serializer.STRING)
+    .createOrOpen()
 
-  override protected def initialize(): Task[Unit] = super.initialize().next(Task(map.verify()))
+  override protected def initialize(): Task[Unit] = super.initialize()
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
     MapDBTransaction(this, parent)
@@ -38,7 +41,7 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
   })
 }
 
-object MapDBStore extends StoreManager {
+object MapDBStore extends PrefixScanningStoreManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = MapDBStore[Doc, Model]
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

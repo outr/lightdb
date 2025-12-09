@@ -4,18 +4,23 @@ import fabric.Json
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
-import lightdb.transaction.Transaction
+import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import rapid.Task
 
 import scala.jdk.CollectionConverters._
 
 case class MapDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: MapDBStore[Doc, Model],
-                                                                               parent: Option[Transaction[Doc, Model]]) extends Transaction[Doc, Model] {
+                                                                               parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] {
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     store.map.values()
       .iterator()
       .asScala
       .map(toJson)
+  })
+
+  override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
+    val to = prefix + Character.MAX_VALUE
+    store.map.subMap(prefix, true, to, true).values().iterator().asScala.map(toJson)
   })
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
