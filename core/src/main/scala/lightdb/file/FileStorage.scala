@@ -122,12 +122,8 @@ class FileStorage[S <: PrefixScanningStore[KeyValue, KeyValue.type]](val store: 
 object FileStorage {
   def apply[DB <: LightDB { type SM <: PrefixScanningStoreManager }](db: DB,
                                                                      storeName: String = "_files"): FileStorage[PrefixScanningStore[KeyValue, KeyValue.type]] = {
-    val existing = db.stores.collectFirst {
-      case s: PrefixScanningStore[KeyValue, KeyValue.type] if s.name == storeName => s
-    }
-    val store: PrefixScanningStore[KeyValue, KeyValue.type] = existing.getOrElse {
+    val store: PrefixScanningStore[KeyValue, KeyValue.type] =
       db.storeCustom[KeyValue, KeyValue.type, db.SM](KeyValue, db.storeManager, Some(storeName))
-    }
     new FileStorage(store)
   }
 }
