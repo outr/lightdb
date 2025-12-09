@@ -529,6 +529,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     case f: Float => num(f.toDouble)
     case d: Double => num(d)
     case bd: BigDecimal => num(bd)
+    case b: Byte => num(b)
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
@@ -542,6 +543,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     case d: java.lang.Double => d.doubleValue()
     case bi: java.math.BigInteger => BigDecimal(bi)
     case bd: java.math.BigDecimal => BigDecimal(bd)
+    case b: java.lang.Byte => b.byteValue()
     case _ => throw new RuntimeException(s"Unsupported object: $obj (${obj.getClass.getName})")
   }
 
