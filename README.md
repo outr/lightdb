@@ -32,12 +32,12 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.11.3"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0-SNAPSHOT"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.11.3"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.12.0-SNAPSHOT"
 ```
 
 ## Videos
@@ -69,7 +69,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.11.3"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0-SNAPSHOT"
 ```
 
 ---
@@ -161,7 +161,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE")
+//   _id = StringId("zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK")
 // )
 db.people.transaction { implicit txn =>
   txn.insert(adam)
@@ -172,7 +172,7 @@ db.people.transaction { implicit txn =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE")
+//   _id = StringId("zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK")
 // )
 ```
 
@@ -186,7 +186,7 @@ db.people.transaction { txn =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)))
 ```
 
 ---
@@ -208,6 +208,9 @@ db.people.transaction { txn =>
 5. **Backups and Restores:**
    Backup and restore databases seamlessly.
 
+6. **Prefix-Scanned File Storage (chunked blobs):**
+   Store file metadata under `file:<id>` and data chunks under `data::<id>::<chunk>`. Requires a prefix-capable store: RocksDB, LMDB, or MapDB (B-Tree).
+
 ---
 
 ## Advanced Queries
@@ -223,7 +226,7 @@ db.people.transaction { txn =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 231},repl.MdocSession$MdocApp$Person$@4e75673c))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 294},repl.MdocSession$MdocApp$Person$@184126b2))
 ```
 
 ### Grouping
@@ -234,7 +237,7 @@ db.people.transaction { txn =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)))))
 ```
 
 ---
@@ -248,17 +251,301 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
-// res5: Int = 12
+// res5: Int = 15
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res6: Int = 12
+// res6: Int = 15
 ```
 
 ---
+
+## File Storage (prefix, chunked)
+
+Prefix-capable stores only: RocksDB, LMDB, MapDB (B-Tree). Metadata lives at `file:<id>`, chunks at `data::<id>::<chunk>`, enabling ordered streaming by chunk index.
+
+```scala
+import lightdb.file.FileStorage
+import lightdb.rocksdb.RocksDBStore    // or LMDBStore / MapDBStore
+import lightdb.KeyValue
+import rapid.Stream
+import java.nio.file.Path
+
+object fileDb extends LightDB {
+  override type SM = RocksDBStore.type
+  override val storeManager: RocksDBStore.type = RocksDBStore
+  override val directory = Some(Path.of("db/files"))
+  override def upgrades = Nil
+}
+
+fileDb.init.sync()
+
+// Use a dedicated KeyValue store for files (prefix-capable manager required)
+val fs = FileStorage(fileDb, "_files")
+
+// Write (chunk size = 4 bytes)
+val meta = fs.put("hello.txt", Stream.emits(Seq("Hello RocksDB!".getBytes("UTF-8"))), chunkSize = 4).sync()
+
+// Read back
+val bytes = fs.readAll(meta.fileId).sync().flatten
+println(new String(bytes, "UTF-8")) // Hello RocksDB!
+
+// List and delete
+fs.list.sync().map(_.fileName)
+fs.delete(meta.fileId).sync()
+```
+
+---
+
+## Full-Text Search (Lucene)
+
+```scala
+import lightdb._
+import lightdb.lucene.LuceneStore
+import lightdb.doc._
+import lightdb.id.Id
+import fabric.rw._
+import java.nio.file.Path
+
+case class Note(text: String, _id: Id[Note] = Id()) extends Document[Note]
+object Note extends DocumentModel[Note] with JsonConversion[Note] {
+  implicit val rw: RW[Note] = RW.gen
+  val text = field.tokenized("text", _.text)
+}
+
+object luceneDb extends LightDB {
+  type SM = LuceneStore.type
+  val storeManager = LuceneStore
+  val directory = Some(Path.of("db/lucene"))
+  val notes = store(Note)
+  def upgrades = Nil
+}
+
+luceneDb.init.sync()
+luceneDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
+// res8: Note = Note(
+//   text = "the quick brown fox",
+//   _id = StringId("jG4vbbyuCaioTXX3GpJV8pxfkcVMbxez")
+// )
+val hits = luceneDb.notes.transaction { txn =>
+  txn.query.search.flatMap(_.list)
+}.sync()
+// hits: List[Note] = List(
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("KFZdfuQF6mqDk4l1xVggnZduOBEqCkdD")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("mioULpUq2rDeJOGqdeGxckoN8HpWL1rY")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("jG4vbbyuCaioTXX3GpJV8pxfkcVMbxez")
+//   )
+// )
+```
+
+## Spatial Queries
+
+```scala
+import lightdb._
+import lightdb.doc._
+import lightdb.id.Id
+import lightdb.spatial.Point
+import lightdb.distance._
+import lightdb.sql.SQLiteStore
+import fabric.rw._
+import java.nio.file.Path
+
+case class Place(name: String, loc: Point, _id: Id[Place] = Id()) extends Document[Place]
+object Place extends DocumentModel[Place] with JsonConversion[Place] {
+  implicit val rw: RW[Place] = RW.gen
+  val name = field("name", _.name)
+  val loc  = field.index("loc", _.loc) // index for spatial queries
+}
+
+object spatialDb extends LightDB {
+  type SM = SQLiteStore.type
+  val storeManager = SQLiteStore
+  val directory = Some(Path.of("db/spatial"))
+  val places = store(Place)
+  def upgrades = Nil
+}
+
+spatialDb.init.sync()
+spatialDb.places.transaction(_.insert(Place("NYC", Point(40.7142, -74.0119)))).sync()
+// res10: Place = Place(
+//   name = "NYC",
+//   loc = Point(latitude = 40.7142, longitude = -74.0119),
+//   _id = StringId("vPweysyUCPYjwqC4ubdkaaqCHaYJFwl1")
+// )
+// Distance filters are supported on spatial-capable backends; example filter:
+val nycFilter = Place.loc.distance(Point(40.7, -74.0), 5_000.meters)
+// nycFilter: Filter[Place] = Distance(
+//   fieldName = "loc",
+//   from = Point(latitude = 40.7, longitude = -74.0),
+//   radius = Distance(5000.0)
+// )
+```
+
+## Graph Traversal (Edges)
+
+```scala
+import lightdb._
+import lightdb.doc._
+import lightdb.graph.{EdgeDocument, EdgeModel}
+import lightdb.id.Id
+import fabric.rw._
+import java.nio.file.Path
+
+case class GPerson(name: String, _id: Id[GPerson] = Id()) extends Document[GPerson]
+object GPerson extends DocumentModel[GPerson] with JsonConversion[GPerson] {
+  implicit val rw: RW[GPerson] = RW.gen
+  val name = field("name", _.name)
+}
+
+case class Follows(_from: Id[GPerson], _to: Id[GPerson]) extends EdgeDocument[Follows, GPerson, GPerson] {
+  override val _id: EdgeId[Follows, GPerson, GPerson] = EdgeId(_from, _to)
+}
+object Follows extends EdgeModel[Follows, GPerson, GPerson] with JsonConversion[Follows] {
+  implicit val rw: RW[Follows] = RW.gen
+}
+
+object graphDb extends LightDB {
+  type SM = lightdb.store.hashmap.HashMapStore.type
+  val storeManager = lightdb.store.hashmap.HashMapStore
+  val directory = None
+  val people = store(GPerson)
+  val follows = store(Follows)
+  def upgrades = Nil
+}
+
+graphDb.init.sync()
+```
+
+## Split Collection (storage + search)
+
+```scala
+import lightdb._
+import lightdb.doc._
+import lightdb.store.split.SplitStoreManager
+import lightdb.rocksdb.RocksDBStore
+import lightdb.lucene.LuceneStore
+import fabric.rw._
+import java.nio.file.Path
+
+case class Article(title: String, body: String, _id: Id[Article] = Id()) extends Document[Article]
+object Article extends DocumentModel[Article] with JsonConversion[Article] {
+  implicit val rw: RW[Article] = RW.gen
+  val title = field.index("title", _.title)
+  val body  = field.tokenized("body", _.body)
+}
+
+object splitDb extends LightDB {
+  type SM = SplitStoreManager[lightdb.rocksdb.RocksDBStore.type, lightdb.lucene.LuceneStore.type]
+  val storeManager = SplitStoreManager(RocksDBStore, LuceneStore)
+  val directory = Some(Path.of("db/split"))
+  val articles = store(Article)
+  def upgrades = Nil
+}
+```
+
+## Sharded / MultiStore
+
+```scala
+import lightdb._
+import lightdb.doc._
+import lightdb.store.hashmap.HashMapStore
+import fabric.rw._
+
+case class TenantDoc(value: String, _id: Id[TenantDoc] = Id()) extends Document[TenantDoc]
+object TenantDoc extends DocumentModel[TenantDoc] with JsonConversion[TenantDoc] {
+  implicit val rw: RW[TenantDoc] = RW.gen
+  val value = field("value", _.value)
+}
+
+object shardDb extends LightDB {
+  type SM = HashMapStore.type
+  val storeManager = HashMapStore
+  val directory = None
+  def upgrades = Nil
+  val shards = multiStore[String, TenantDoc, TenantDoc.type](TenantDoc, key => s"tenant_$key")
+}
+
+val tenantA = shardDb.shards("tenantA")
+// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@159cebb8
+tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
+// res12: TenantDoc = TenantDoc(
+//   value = "hello",
+//   _id = StringId("WHldMxQ6dxcjgHfafu92XV4qGuGpWks8")
+// )
+```
+
+## Stored Values (config flags)
+
+```scala
+import lightdb._
+import fabric.rw._
+
+object cfgDb extends LightDB {
+  type SM = lightdb.store.hashmap.HashMapStore.type
+  val storeManager = lightdb.store.hashmap.HashMapStore
+  val directory = None
+  def upgrades = Nil
+}
+
+cfgDb.init.sync()
+val featureFlag = cfgDb.stored[Boolean]("featureX", default = false)
+// featureFlag: StoredValue[Boolean] = StoredValue(
+//   key = "featureX",
+//   store = lightdb.store.hashmap.HashMapStore@42502db4,
+//   default = repl.MdocSession$MdocApp$$Lambda/0x0000000053769240@4d171618,
+//   persistence = Stored
+// )
+featureFlag.set(true).sync()
+// res14: Boolean = true
+```
+
+## SQL Stores (DuckDB / SQLite)
+
+```scala
+import lightdb._
+import lightdb.doc._
+import lightdb.id.Id
+import lightdb.sql.SQLiteStore
+import fabric.rw._
+import java.nio.file.Path
+
+case class Row(value: String, _id: Id[Row] = Id()) extends Document[Row]
+object Row extends DocumentModel[Row] with JsonConversion[Row] {
+  implicit val rw: RW[Row] = RW.gen
+  val value = field("value", _.value)
+}
+
+object sqlDb extends LightDB {
+  type SM = SQLiteStore.type
+  val storeManager = SQLiteStore
+  val directory = Some(Path.of("db/sqlite-example"))
+  val rows = store(Row)
+  def upgrades = Nil
+}
+
+sqlDb.init.sync()
+sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
+// res16: Row = Row(
+//   value = "hi sql",
+//   _id = StringId("RuOBLLb87vBewnsUDQ1nqE6Cq2sXzULT")
+// )
+```
+
+## Reindex / Optimize / Upgrades
+
+- `store.reIndex()` and `store.optimize()` give backends a chance to rebuild or compact data.
+- Database upgrades: implement `upgrades: List[DatabaseUpgrade]` and add migration steps; LightDB runs them on init.
 
 ## Clean Up
 
