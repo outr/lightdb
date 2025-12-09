@@ -7,7 +7,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.store.{BufferedWritingTransaction, WriteOp}
-import lightdb.transaction.Transaction
+import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.lmdbjava.Txn
 import rapid._
 
@@ -16,7 +16,9 @@ import java.nio.charset.StandardCharsets
 
 case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LMDBStore[Doc, Model],
                                                                               instance: LMDBInstance,
-                                                                              parent: Option[Transaction[Doc, Model]]) extends BufferedWritingTransaction[Doc, Model] {
+                                                                              parent: Option[Transaction[Doc, Model]])
+  extends BufferedWritingTransaction[Doc, Model]
+    with PrefixScanningTransaction[Doc, Model] {
   private var _readTxn: Txn[ByteBuffer] = instance.newRead()
 
   def readTxn: Txn[ByteBuffer] = _readTxn
@@ -52,6 +54,9 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
 
   override def jsonStream: rapid.Stream[Json] =
     rapid.Stream.fromIterator(Task(new LMDBValueIterator(store.instance.dbi, readTxn))).map(b2j)
+
+  override def jsonPrefixStream(prefix: String): rapid.Stream[Json] =
+    rapid.Stream.fromIterator(Task(new LMDBValueIterator(store.instance.dbi, readTxn, Some(prefix)))).map(b2j)
 
   override protected def _truncate: Task[Int] = count.flatTap { _ =>
     store.instance.withWrite { txn =>

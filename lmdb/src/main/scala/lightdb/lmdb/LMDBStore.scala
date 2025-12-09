@@ -2,7 +2,8 @@ package lightdb.lmdb
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreMode}
+import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.transaction.Transaction
 import org.lmdbjava._
 import rapid._
@@ -16,7 +17,7 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    private[lmdb] val instance: LMDBInstance,
                                                                    val storeMode: StoreMode[Doc, Model],
                                                                    db: LightDB,
-                                                                   storeManager: StoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) {
+                                                                   storeManager: PrefixScanningStoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX = LMDBTransaction[Doc, Model]
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
@@ -28,7 +29,7 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   }
 }
 
-object LMDBStore extends StoreManager {
+object LMDBStore extends PrefixScanningStoreManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = LMDBStore[Doc, Model]
 
   /**
