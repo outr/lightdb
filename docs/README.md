@@ -4,19 +4,19 @@
 Computationally focused database using pluggable stores
 
 ## Provided Stores
-| Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Notes                                 |
-|------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|---------------------------------------|
-| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅       | ✅          | ✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | Fast, simple write-optimized store    |
-| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | Ultra low-latency, off-heap storage   |
-| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅       | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | Read-optimized, mature B+Tree engine  |
-| [MapDB](https://mapdb.org)                                            | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | Easy Java-native persistence           |
-| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | High-performance LSM tree             |
-| [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | Popular in-memory data structure store|
-| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | Best-in-class full-text search engine |
-| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | Lightweight embedded SQL              |
-| [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | Java-native SQL engine                |
-| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | Columnar, ideal for analytics         |
-| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | Full-featured RDBMS                   |
+| Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Prefix Scan | Notes                                 |
+|------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|-------------|---------------------------------------|
+| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅       | ✅          | ✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | ❌          | Fast, simple write-optimized store    |
+| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | ❌          | Ultra low-latency, off-heap storage   |
+| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅       | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | ✅          | Read-optimized, mature B+Tree engine  |
+| [MapDB (B-Tree)](https://mapdb.org)                                   | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | ✅          | Uses BTreeMap for ordered/prefix scans|
+| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅          | High-performance LSM tree             |
+| [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌          | Popular in-memory data structure store|
+| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌          | Best-in-class full-text search engine |
+| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | ❌          | Lightweight embedded SQL              |
+| [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | ❌          | Java-native SQL engine                |
+| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | ❌          | Columnar, ideal for analytics         |
+| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | ❌          | Full-featured RDBMS                   |
 
 ### Legend
 - ✅: Supported / Good
@@ -191,6 +191,9 @@ db.people.transaction { txn =>
 5. **Backups and Restores:**
    Backup and restore databases seamlessly.
 
+6. **Prefix-Scanned File Storage (chunked blobs):**
+   Store file metadata under `file:<id>` and data chunks under `data::<id>::<chunk>`. Requires a prefix-capable store: RocksDB, LMDB, or MapDB (B-Tree).
+
 ---
 
 ## Advanced Queries
@@ -238,6 +241,246 @@ DatabaseRestore.archive(db, new File("backup.zip")).sync()
 ```
 
 ---
+
+## File Storage (prefix, chunked)
+
+Prefix-capable stores only: RocksDB, LMDB, MapDB (B-Tree). Metadata lives at `file:<id>`, chunks at `data::<id>::<chunk>`, enabling ordered streaming by chunk index.
+
+```scala
+import lightdb.file.FileStorage
+import lightdb.rocksdb.RocksDBStore    // or LMDBStore / MapDBStore
+import lightdb.KeyValue
+import rapid.Stream
+import java.nio.file.Path
+
+object fileDb extends LightDB {
+  override type SM = RocksDBStore.type
+  override val storeManager: RocksDBStore.type = RocksDBStore
+  override val directory = Some(Path.of("db/files"))
+  override def upgrades = Nil
+}
+
+fileDb.init.sync()
+
+// Use a dedicated KeyValue store for files (prefix-capable manager required)
+val fs = FileStorage(fileDb, "_files")
+
+// Write (chunk size = 4 bytes)
+val meta = fs.put("hello.txt", Stream.emits(Seq("Hello RocksDB!".getBytes("UTF-8"))), chunkSize = 4).sync()
+
+// Read back
+val bytes = fs.readAll(meta.fileId).sync().flatten
+println(new String(bytes, "UTF-8")) // Hello RocksDB!
+
+// List and delete
+fs.list.sync().map(_.fileName)
+fs.delete(meta.fileId).sync()
+```
+
+---
+
+## Full-Text Search (Lucene)
+
+```scala mdoc
+import lightdb._
+import lightdb.lucene.LuceneStore
+import lightdb.doc._
+import lightdb.id.Id
+import fabric.rw._
+import java.nio.file.Path
+
+case class Note(text: String, _id: Id[Note] = Id()) extends Document[Note]
+object Note extends DocumentModel[Note] with JsonConversion[Note] {
+  implicit val rw: RW[Note] = RW.gen
+  val text = field.tokenized("text", _.text)
+}
+
+object luceneDb extends LightDB {
+  type SM = LuceneStore.type
+  val storeManager = LuceneStore
+  val directory = Some(Path.of("db/lucene"))
+  val notes = store(Note)
+  def upgrades = Nil
+}
+
+luceneDb.init.sync()
+luceneDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
+val hits = luceneDb.notes.transaction { txn =>
+  txn.query.search.flatMap(_.list)
+}.sync()
+```
+
+## Spatial Queries
+
+```scala mdoc
+import lightdb._
+import lightdb.doc._
+import lightdb.id.Id
+import lightdb.spatial.Point
+import lightdb.distance._
+import lightdb.sql.SQLiteStore
+import fabric.rw._
+import java.nio.file.Path
+
+case class Place(name: String, loc: Point, _id: Id[Place] = Id()) extends Document[Place]
+object Place extends DocumentModel[Place] with JsonConversion[Place] {
+  implicit val rw: RW[Place] = RW.gen
+  val name = field("name", _.name)
+  val loc  = field.index("loc", _.loc) // index for spatial queries
+}
+
+object spatialDb extends LightDB {
+  type SM = SQLiteStore.type
+  val storeManager = SQLiteStore
+  val directory = Some(Path.of("db/spatial"))
+  val places = store(Place)
+  def upgrades = Nil
+}
+
+spatialDb.init.sync()
+spatialDb.places.transaction(_.insert(Place("NYC", Point(40.7142, -74.0119)))).sync()
+// Distance filters are supported on spatial-capable backends; example filter:
+val nycFilter = Place.loc.distance(Point(40.7, -74.0), 5_000.meters)
+```
+
+## Graph Traversal (Edges)
+
+```scala mdoc
+import lightdb._
+import lightdb.doc._
+import lightdb.graph.{EdgeDocument, EdgeModel}
+import lightdb.id.Id
+import fabric.rw._
+import java.nio.file.Path
+
+case class GPerson(name: String, _id: Id[GPerson] = Id()) extends Document[GPerson]
+object GPerson extends DocumentModel[GPerson] with JsonConversion[GPerson] {
+  implicit val rw: RW[GPerson] = RW.gen
+  val name = field("name", _.name)
+}
+
+case class Follows(_from: Id[GPerson], _to: Id[GPerson]) extends EdgeDocument[Follows, GPerson, GPerson] {
+  override val _id: EdgeId[Follows, GPerson, GPerson] = EdgeId(_from, _to)
+}
+object Follows extends EdgeModel[Follows, GPerson, GPerson] with JsonConversion[Follows] {
+  implicit val rw: RW[Follows] = RW.gen
+}
+
+object graphDb extends LightDB {
+  type SM = lightdb.store.hashmap.HashMapStore.type
+  val storeManager = lightdb.store.hashmap.HashMapStore
+  val directory = None
+  val people = store(GPerson)
+  val follows = store(Follows)
+  def upgrades = Nil
+}
+
+graphDb.init.sync()
+```
+
+## Split Collection (storage + search)
+
+```scala mdoc
+import lightdb._
+import lightdb.doc._
+import lightdb.store.split.SplitStoreManager
+import lightdb.rocksdb.RocksDBStore
+import lightdb.lucene.LuceneStore
+import fabric.rw._
+import java.nio.file.Path
+
+case class Article(title: String, body: String, _id: Id[Article] = Id()) extends Document[Article]
+object Article extends DocumentModel[Article] with JsonConversion[Article] {
+  implicit val rw: RW[Article] = RW.gen
+  val title = field.index("title", _.title)
+  val body  = field.tokenized("body", _.body)
+}
+
+object splitDb extends LightDB {
+  type SM = SplitStoreManager[lightdb.rocksdb.RocksDBStore.type, lightdb.lucene.LuceneStore.type]
+  val storeManager = SplitStoreManager(RocksDBStore, LuceneStore)
+  val directory = Some(Path.of("db/split"))
+  val articles = store(Article)
+  def upgrades = Nil
+}
+```
+
+## Sharded / MultiStore
+
+```scala mdoc
+import lightdb._
+import lightdb.doc._
+import lightdb.store.hashmap.HashMapStore
+import fabric.rw._
+
+case class TenantDoc(value: String, _id: Id[TenantDoc] = Id()) extends Document[TenantDoc]
+object TenantDoc extends DocumentModel[TenantDoc] with JsonConversion[TenantDoc] {
+  implicit val rw: RW[TenantDoc] = RW.gen
+  val value = field("value", _.value)
+}
+
+object shardDb extends LightDB {
+  type SM = HashMapStore.type
+  val storeManager = HashMapStore
+  val directory = None
+  def upgrades = Nil
+  val shards = multiStore[String, TenantDoc, TenantDoc.type](TenantDoc, key => s"tenant_$key")
+}
+
+val tenantA = shardDb.shards("tenantA")
+tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
+```
+
+## Stored Values (config flags)
+
+```scala mdoc
+import lightdb._
+import fabric.rw._
+
+object cfgDb extends LightDB {
+  type SM = lightdb.store.hashmap.HashMapStore.type
+  val storeManager = lightdb.store.hashmap.HashMapStore
+  val directory = None
+  def upgrades = Nil
+}
+
+cfgDb.init.sync()
+val featureFlag = cfgDb.stored[Boolean]("featureX", default = false)
+featureFlag.set(true).sync()
+```
+
+## SQL Stores (DuckDB / SQLite)
+
+```scala mdoc
+import lightdb._
+import lightdb.doc._
+import lightdb.id.Id
+import lightdb.sql.SQLiteStore
+import fabric.rw._
+import java.nio.file.Path
+
+case class Row(value: String, _id: Id[Row] = Id()) extends Document[Row]
+object Row extends DocumentModel[Row] with JsonConversion[Row] {
+  implicit val rw: RW[Row] = RW.gen
+  val value = field("value", _.value)
+}
+
+object sqlDb extends LightDB {
+  type SM = SQLiteStore.type
+  val storeManager = SQLiteStore
+  val directory = Some(Path.of("db/sqlite-example"))
+  val rows = store(Row)
+  def upgrades = Nil
+}
+
+sqlDb.init.sync()
+sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
+```
+
+## Reindex / Optimize / Upgrades
+
+- `store.reIndex()` and `store.optimize()` give backends a chance to rebuild or compact data.
+- Database upgrades: implement `upgrades: List[DatabaseUpgrade]` and add migration steps; LightDB runs them on init.
 
 ## Clean Up
 
