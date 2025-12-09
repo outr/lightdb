@@ -14,6 +14,8 @@ import lightdb.transaction.Transaction
 case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: H2Store[Doc, Model],
                                                                             state: SQLState[Doc, Model],
                                                                             parent: Option[Transaction[Doc, Model]]) extends SQLStoreTransaction[Doc, Model] {
+  override protected def concatPrefix: String = "STRING_AGG"
+
   override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = List(
     SQLPart(s"GEO_DISTANCE_JSON(${d.field.name}, ?) AS ${d.field.name}Distance", d.from.json),
     SQLPart(s"GEO_DISTANCE_MIN(${d.field.name}, ?) AS ${d.field.name}DistanceMin", d.from.json)
