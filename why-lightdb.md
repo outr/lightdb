@@ -68,6 +68,12 @@ This gives you the best of both worlds: a clean, consistent interface for everyd
 
 ---
 
+### 3b. Prefix-Optimized File Storage
+
+LightDB can model file metadata and chunked payloads directly on key-value stores using prefix scanning (e.g., `file:` for metadata, `data::` for chunks). RocksDB already supports this efficiently; other prefix-capable stores can plug in with the same APIs as they add support.
+
+---
+
 ### 4. SplitCollection: Combine Stores for Performance and Flexibility
 
 LightDB allows you to combine two different storage engines into a single logical collection using a `SplitCollection`. This lets you optimize for **both performance and functionality** by assigning different roles to different backends.
