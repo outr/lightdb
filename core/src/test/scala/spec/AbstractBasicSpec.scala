@@ -16,7 +16,8 @@ import perfolation.double2Implicits
 import rapid.{AsyncTaskSpec, Task}
 
 import java.io.File
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
+import java.util.Comparator
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
 
@@ -66,6 +67,11 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     features += key.asInstanceOf[DBFeatureKey[Any]] -> value
 
   protected lazy val specName: String = getClass.getSimpleName
+
+  // Ensure a clean slate before the first DB is created, but allow persistence
+  // checks later in the spec (after dispose/new DB) to keep on-disk data.
+  private lazy val dbPath: Path = Path.of(s"db/$specName")
+  deleteDirectoryIfExists(dbPath)
 
   protected var db: DB = new DB
 
@@ -400,7 +406,6 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           }
       }
     }
-    // TODO: Fix support in SQL
     "query all names that start with t" in {
       db.people.transaction { transaction =>
         transaction.query.filter(_.allNames.startsWith("t")).toList.map { people =>
@@ -769,5 +774,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     override def alwaysRun: Boolean = false
 
     override def upgrade(ldb: LightDB): Task[Unit] = db.startTime.set(System.currentTimeMillis()).unit
+  }
+
+  private def deleteDirectoryIfExists(path: Path): Unit = {
+    if (Files.exists(path)) {
+      Files.walk(path)
+        .sorted(Comparator.reverseOrder())
+        .forEach(Files.delete(_))
+    }
   }
 }

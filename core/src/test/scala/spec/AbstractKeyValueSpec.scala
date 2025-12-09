@@ -10,7 +10,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
+import java.util.Comparator
 
 abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   val CreateRecords = 100_000
@@ -57,6 +58,11 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
 
   protected lazy val specName: String = getClass.getSimpleName
   
+  // Clear any leftover on-disk data before the first DB instance is created,
+  // but leave subsequent instances intact so persistence checks remain valid.
+  private lazy val dbPath: Path = Path.of(s"db/$specName")
+  deleteDirectoryIfExists(dbPath)
+
   protected var db: DB = new DB
 
   specName should {
@@ -202,5 +208,13 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
 
     val userId: I[Id[User]] = field.index("userId", _.userId)
     val value: F[String] = field("value", _.value)
+  }
+
+  private def deleteDirectoryIfExists(path: Path): Unit = {
+    if (Files.exists(path)) {
+      Files.walk(path)
+        .sorted(Comparator.reverseOrder())
+        .forEach(Files.delete(_))
+    }
   }
 }
