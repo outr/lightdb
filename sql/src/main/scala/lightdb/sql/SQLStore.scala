@@ -7,6 +7,7 @@ import lightdb.field.Field
 import lightdb.field.Field._
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store._
+import lightdb.store.prefix.PrefixScanningStore
 import rapid.Task
 
 import java.nio.file.Path
@@ -17,7 +18,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            path: Option[Path],
                                                                            model: Model,
                                                                            lightDB: LightDB,
-                                                                           storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
+                                                                           storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX <: SQLStoreTransaction[Doc, Model]
 
   override def supportsNativeExistsChild: Boolean = false
