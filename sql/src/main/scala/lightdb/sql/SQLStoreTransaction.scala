@@ -16,7 +16,7 @@ import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, Material
 import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.query.{SQLPart, SQLQuery}
 import lightdb.store.{Conversion, Store}
-import lightdb.transaction.CollectionTransaction
+import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction}
 import lightdb.util.ActionIterator
 import lightdb.{Query, SearchResults, Sort, SortDirection}
 import rapid.Task
@@ -24,7 +24,7 @@ import rapid.Task
 import java.sql.{PreparedStatement, ResultSet, SQLException, Types}
 import scala.util.Try
 
-trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] {
+trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] {
   override def store: SQLStore[Doc, Model]
 
   def state: SQLState[Doc, Model]
@@ -36,6 +36,16 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val s = connection.createStatement()
     state.register(s)
     val rs = s.executeQuery(s"SELECT * FROM ${store.fqn}")
+    state.register(rs)
+    rs2Iterator(rs, Conversion.Json(store.fields))
+  })
+
+  override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
+    val connection = state.connectionManager.getConnection(state)
+    val ps = connection.prepareStatement(s"SELECT * FROM ${store.fqn} WHERE ${store.model._id.name} LIKE ? ORDER BY ${store.model._id.name}")
+    state.register(ps)
+    ps.setString(1, s"$prefix%")
+    val rs = ps.executeQuery()
     state.register(rs)
     rs2Iterator(rs, Conversion.Json(store.fields))
   })
