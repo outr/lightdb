@@ -47,10 +47,27 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     }
   }
 
-  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = if (caching) {
-    cache.get(sql).add(ps)
-  } else {
-    ps.close()
+  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = {
+    if (ps == null) return
+    if (caching) {
+      cache.computeIfAbsent(sql, _ => new ConcurrentLinkedQueue[PreparedStatement]).add(ps)
+    } else {
+      Try(ps.close())
+    }
+  }
+
+  /**
+   * Closes open result sets and non-prepared statements for this state.
+   * Needed for drivers like DuckDB that disallow executing new statements
+   * while a previous result set is still open. Prepared statements are
+   * left alone to avoid breaking statement pooling/reuse.
+   */
+  def closePendingResults(): Unit = synchronized {
+    resultSets.foreach(rs => Try(rs.close()))
+    resultSets = Nil
+    val (prepared, regular) = statements.partition(_.isInstanceOf[java.sql.PreparedStatement])
+    regular.foreach(s => Try(s.close()))
+    statements = prepared
   }
 
   def markDirty(): Unit = dirty = true
@@ -74,7 +91,11 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def register(s: Statement): Unit = synchronized {
-    statements = (s :: statements).distinct
+    // Only track non-prepared statements; prepared statements may be pooled.
+    s match {
+      case _: PreparedStatement => ()
+      case _ => statements = (s :: statements).distinct
+    }
   }
 
   def register(rs: ResultSet): Unit = synchronized {

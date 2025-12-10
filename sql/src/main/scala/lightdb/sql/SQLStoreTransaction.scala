@@ -151,6 +151,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   def resultsFor(sql: SQLQuery): SQLResults = {
     if (SQLStoreTransaction.LogQueries) scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
     try {
+      state.closePendingResults()
       state.withPreparedStatement(sql.query) { ps =>
         sql.populate(ps, this)
         SQLResults(ps.executeQuery(), sql.query, ps)
@@ -162,6 +163,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   def executeUpdate(sql: SQLQuery): Int = {
     try {
+      state.closePendingResults()
       state.withPreparedStatement(sql.query) { ps =>
         try {
           sql.populate(ps, this)
@@ -177,6 +179,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   }
 
   def queryTotal(sql: SQLQuery): Int = {
+    state.closePendingResults()
     val results = resultsFor(sql)
     val rs = results.rs
     try {
@@ -249,13 +252,17 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
                          limit: Option[Int],
                          conversion: Conversion[Doc, V],
                          totalQuery: Option[SQLQuery] = None): Task[SearchResults[Doc, Model, V]] = Task {
+    // For drivers like DuckDB, ensure no pending results before new statements.
+    state.closePendingResults()
+    // Compute total first to avoid interfering with the main result set.
+    val total = totalQuery.map { tq =>
+      queryTotal(tq)
+    }
+    // Clear again before opening the main cursor.
+    state.closePendingResults()
     val results = resultsFor(sql)
-
     val rs = results.rs
     state.register(rs)
-    val total = totalQuery.map { sql =>
-      queryTotal(sql)
-    }
     val stream = rapid.Stream.fromIterator[(V, Double)](Task {
       val iterator = rs2Iterator(rs, conversion)
       val ps = rs.getStatement.asInstanceOf[PreparedStatement]
@@ -434,6 +441,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   }
 
   override def truncate: Task[Int] = Task {
+    state.closePendingResults()
     val connection = state.connectionManager.getConnection(state)
     val ps = connection.prepareStatement(s"DELETE FROM ${store.fqn}")
     try {
