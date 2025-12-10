@@ -4,19 +4,19 @@
 Computationally focused database using pluggable stores
 
 ## Provided Stores
-| Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Notes                                 |
-|------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|---------------------------------------|
-| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅       | ✅          | ✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | Fast, simple write-optimized store    |
-| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | Ultra low-latency, off-heap storage   |
-| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅       | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | Read-optimized, mature B+Tree engine  |
-| [MapDB](https://mapdb.org)                                            | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | Easy Java-native persistence           |
-| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | High-performance LSM tree             |
-| [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | Popular in-memory data structure store|
-| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | Best-in-class full-text search engine |
-| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | Lightweight embedded SQL              |
-| [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | Java-native SQL engine                |
-| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | Columnar, ideal for analytics         |
-| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | Full-featured RDBMS                   |
+| Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Prefix Scan | Notes                                 |
+|------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|-----------|---------------------------------------|
+| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅       | ✅          | ✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | ❌        | Fast, simple write-optimized store    |
+| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | ❌        | Ultra low-latency, off-heap storage   |
+| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅       | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | ✅        | Read-optimized, mature B+Tree engine  |
+| [MapDB (B-Tree)](https://mapdb.org)                                   | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | ✅        | Uses BTreeMap for ordered/prefix scans|
+| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅        | High-performance LSM tree             |
+| [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌        | Popular in-memory data structure store|
+| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine |
+| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | 🟡        | Lightweight embedded SQL              |
+| [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
+| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | 🟡        | Columnar, ideal for analytics         |
+| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | 🟡         | Full-featured RDBMS                   |
 
 ### Legend
 - ✅: Supported / Good
@@ -32,12 +32,12 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0-SNAPSHOT"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.12.0-SNAPSHOT"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.12.0"
 ```
 
 ## Videos
@@ -69,7 +69,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0-SNAPSHOT"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0"
 ```
 
 ---
@@ -161,7 +161,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK")
+//   _id = StringId("rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L")
 // )
 db.people.transaction { implicit txn =>
   txn.insert(adam)
@@ -172,7 +172,7 @@ db.people.transaction { implicit txn =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK")
+//   _id = StringId("rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L")
 // )
 ```
 
@@ -186,7 +186,7 @@ db.people.transaction { txn =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)))
 ```
 
 ---
@@ -226,7 +226,7 @@ db.people.transaction { txn =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 294},repl.MdocSession$MdocApp$Person$@184126b2))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 315},repl.MdocSession$MdocApp$Person$@788212e3))
 ```
 
 ### Grouping
@@ -237,7 +237,7 @@ db.people.transaction { txn =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)))))
 ```
 
 ---
@@ -251,14 +251,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
-// res5: Int = 15
+// res5: Int = 16
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res6: Int = 15
+// res6: Int = 16
 ```
 
 ---
@@ -328,7 +328,7 @@ luceneDb.init.sync()
 luceneDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
 // res8: Note = Note(
 //   text = "the quick brown fox",
-//   _id = StringId("jG4vbbyuCaioTXX3GpJV8pxfkcVMbxez")
+//   _id = StringId("cGw4Y83JUCTcaJHV7GWboFJ5CPGD9rpO")
 // )
 val hits = luceneDb.notes.transaction { txn =>
   txn.query.search.flatMap(_.list)
@@ -345,6 +345,10 @@ val hits = luceneDb.notes.transaction { txn =>
 //   Note(
 //     text = "the quick brown fox",
 //     _id = StringId("jG4vbbyuCaioTXX3GpJV8pxfkcVMbxez")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("cGw4Y83JUCTcaJHV7GWboFJ5CPGD9rpO")
 //   )
 // )
 ```
@@ -381,7 +385,7 @@ spatialDb.places.transaction(_.insert(Place("NYC", Point(40.7142, -74.0119)))).s
 // res10: Place = Place(
 //   name = "NYC",
 //   loc = Point(latitude = 40.7142, longitude = -74.0119),
-//   _id = StringId("vPweysyUCPYjwqC4ubdkaaqCHaYJFwl1")
+//   _id = StringId("D3aaqfudDRAsx19qhl3AvNYCm89MSaHY")
 // )
 // Distance filters are supported on spatial-capable backends; example filter:
 val nycFilter = Place.loc.distance(Point(40.7, -74.0), 5_000.meters)
@@ -477,11 +481,11 @@ object shardDb extends LightDB {
 }
 
 val tenantA = shardDb.shards("tenantA")
-// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@159cebb8
+// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@41c671b5
 tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
 // res12: TenantDoc = TenantDoc(
 //   value = "hello",
-//   _id = StringId("WHldMxQ6dxcjgHfafu92XV4qGuGpWks8")
+//   _id = StringId("gdepDOioIra2Y4EvCfsmhcRbOn5z8kzq")
 // )
 ```
 
@@ -502,8 +506,8 @@ cfgDb.init.sync()
 val featureFlag = cfgDb.stored[Boolean]("featureX", default = false)
 // featureFlag: StoredValue[Boolean] = StoredValue(
 //   key = "featureX",
-//   store = lightdb.store.hashmap.HashMapStore@42502db4,
-//   default = repl.MdocSession$MdocApp$$Lambda/0x0000000053769240@4d171618,
+//   store = lightdb.store.hashmap.HashMapStore@3798aff8,
+//   default = repl.MdocSession$MdocApp$$Lambda/0x00000000277a0c48@4c6134c1,
 //   persistence = Stored
 // )
 featureFlag.set(true).sync()
@@ -538,7 +542,7 @@ sqlDb.init.sync()
 sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
 // res16: Row = Row(
 //   value = "hi sql",
-//   _id = StringId("RuOBLLb87vBewnsUDQ1nqE6Cq2sXzULT")
+//   _id = StringId("02dClngmqh8sn71tyKLSUD3U6udsfMtn")
 // )
 ```
 
