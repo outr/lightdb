@@ -68,7 +68,7 @@ object LMDBStore extends PrefixScanningStoreManager {
       .setMaxDbs(MaxDbs)
       .setMapSize(MapSize)
       .setMaxReaders(MaxReaders)
-      .open(path.toFile, EnvFlags.MDB_WRITEMAP)
+      .open(path.toFile) // default flags for safety (no WRITEMAP)
     LMDBInstance(env, env.openDbi(name, DbiFlags.MDB_CREATE))
   }
 

@@ -2,7 +2,7 @@ package lightdb.duckdb
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
+import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig}
 import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
 import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
@@ -64,7 +64,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 object DuckDBStore extends CollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = DuckDBStore[Doc, Model]
 
-  def singleConnectionManager(file: Option[Path]): ConnectionManager = {
+  private def pooledConnectionManager(file: Option[Path]): ConnectionManager = {
     val path = file match {
       case Some(f) =>
         val file = f.toFile
@@ -72,8 +72,12 @@ object DuckDBStore extends CollectionManager {
         file.getCanonicalPath
       case None => ""
     }
-    SingleConnectionManager(SQLConfig(
-      jdbcUrl = s"jdbc:duckdb:$path"
+    // DuckDB JDBC cannot have multiple concurrent operations on the same connection;
+    // use a small pool so each transaction gets its own connection.
+    DBCPConnectionManager(SQLConfig(
+      jdbcUrl = s"jdbc:duckdb:$path",
+      maximumPoolSize = Some(8),
+      autoCommit = false
     ))
   }
 
@@ -86,7 +90,7 @@ object DuckDBStore extends CollectionManager {
       name = name,
       path = path,
       model = model,
-      connectionManager = singleConnectionManager(path),
+      connectionManager = pooledConnectionManager(path),
       storeMode = storeMode,
       lightDB = db,
       storeManager = this
