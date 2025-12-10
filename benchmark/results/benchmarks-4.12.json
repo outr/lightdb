@@ -1,0 +1,2060 @@
+[
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvGetBenchmark.get",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "rocksdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 473700.3885957231,
+            "scoreError" : 257474.88678928046,
+            "scoreConfidence" : [
+                216225.50180644263,
+                731175.2753850035
+            ],
+            "scorePercentiles" : {
+                "0.0" : 457407.5665207148,
+                "50.0" : 481552.4668433244,
+                "90.0" : 482141.1324231301,
+                "95.0" : 482141.1324231301,
+                "99.0" : 482141.1324231301,
+                "99.9" : 482141.1324231301,
+                "99.99" : 482141.1324231301,
+                "99.999" : 482141.1324231301,
+                "99.9999" : 482141.1324231301,
+                "100.0" : 482141.1324231301
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    482141.1324231301,
+                    481552.4668433244,
+                    457407.5665207148
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvGetBenchmark.get",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "lmdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 141625.20063743007,
+            "scoreError" : 152442.53061470643,
+            "scoreConfidence" : [
+                -10817.329977276357,
+                294067.7312521365
+            ],
+            "scorePercentiles" : {
+                "0.0" : 132318.25275683962,
+                "50.0" : 144074.9436160141,
+                "90.0" : 148482.4055394365,
+                "95.0" : 148482.4055394365,
+                "99.0" : 148482.4055394365,
+                "99.9" : 148482.4055394365,
+                "99.99" : 148482.4055394365,
+                "99.999" : 148482.4055394365,
+                "99.9999" : 148482.4055394365,
+                "100.0" : 148482.4055394365
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    132318.25275683962,
+                    144074.9436160141,
+                    148482.4055394365
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvGetBenchmark.get",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "mapdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 65487.72164837385,
+            "scoreError" : 3943.5949521427806,
+            "scoreConfidence" : [
+                61544.12669623107,
+                69431.31660051663
+            ],
+            "scorePercentiles" : {
+                "0.0" : 65252.574639329796,
+                "50.0" : 65532.80161037996,
+                "90.0" : 65677.7886954118,
+                "95.0" : 65677.7886954118,
+                "99.0" : 65677.7886954118,
+                "99.9" : 65677.7886954118,
+                "99.99" : 65677.7886954118,
+                "99.999" : 65677.7886954118,
+                "99.9999" : 65677.7886954118,
+                "100.0" : 65677.7886954118
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    65677.7886954118,
+                    65252.574639329796,
+                    65532.80161037996
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvGetBenchmark.get",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "sqlite",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 135809.69656115712,
+            "scoreError" : 10576.650262756786,
+            "scoreConfidence" : [
+                125233.04629840034,
+                146386.34682391392
+            ],
+            "scorePercentiles" : {
+                "0.0" : 135300.5118573385,
+                "50.0" : 135687.92623915794,
+                "90.0" : 136440.65158697494,
+                "95.0" : 136440.65158697494,
+                "99.0" : 136440.65158697494,
+                "99.9" : 136440.65158697494,
+                "99.99" : 136440.65158697494,
+                "99.999" : 136440.65158697494,
+                "99.9999" : 136440.65158697494,
+                "100.0" : 136440.65158697494
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    135687.92623915794,
+                    136440.65158697494,
+                    135300.5118573385
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvGetBenchmark.get",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "duckdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 4948.6299359300165,
+            "scoreError" : 809.7547875375004,
+            "scoreConfidence" : [
+                4138.875148392516,
+                5758.384723467517
+            ],
+            "scorePercentiles" : {
+                "0.0" : 4915.584659738427,
+                "50.0" : 4931.225146467889,
+                "90.0" : 4999.080001583734,
+                "95.0" : 4999.080001583734,
+                "99.0" : 4999.080001583734,
+                "99.9" : 4999.080001583734,
+                "99.99" : 4999.080001583734,
+                "99.999" : 4999.080001583734,
+                "99.9999" : 4999.080001583734,
+                "100.0" : 4999.080001583734
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    4915.584659738427,
+                    4931.225146467889,
+                    4999.080001583734
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvGetBenchmark.get",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "h2",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 278844.8752952419,
+            "scoreError" : 30029.698914477205,
+            "scoreConfidence" : [
+                248815.1763807647,
+                308874.5742097191
+            ],
+            "scorePercentiles" : {
+                "0.0" : 277103.21494793706,
+                "50.0" : 279056.6331535933,
+                "90.0" : 280374.7777841953,
+                "95.0" : 280374.7777841953,
+                "99.0" : 280374.7777841953,
+                "99.9" : 280374.7777841953,
+                "99.99" : 280374.7777841953,
+                "99.999" : 280374.7777841953,
+                "99.9999" : 280374.7777841953,
+                "100.0" : 280374.7777841953
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    280374.7777841953,
+                    279056.6331535933,
+                    277103.21494793706
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvGetBenchmark.get",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "hashmap",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 1086854.6089617654,
+            "scoreError" : 232554.82862894173,
+            "scoreConfidence" : [
+                854299.7803328237,
+                1319409.437590707
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1073045.1622762694,
+                "50.0" : 1089347.6065197142,
+                "90.0" : 1098171.0580893122,
+                "95.0" : 1098171.0580893122,
+                "99.0" : 1098171.0580893122,
+                "99.9" : 1098171.0580893122,
+                "99.99" : 1098171.0580893122,
+                "99.999" : 1098171.0580893122,
+                "99.9999" : 1098171.0580893122,
+                "100.0" : 1098171.0580893122
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1073045.1622762694,
+                    1098171.0580893122,
+                    1089347.6065197142
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvUpsertBenchmark.upsert",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "rocksdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 185141.34099454907,
+            "scoreError" : 173997.42140243624,
+            "scoreConfidence" : [
+                11143.919592112827,
+                359138.7623969853
+            ],
+            "scorePercentiles" : {
+                "0.0" : 174160.44258459136,
+                "50.0" : 189906.0971606846,
+                "90.0" : 191357.48323837118,
+                "95.0" : 191357.48323837118,
+                "99.0" : 191357.48323837118,
+                "99.9" : 191357.48323837118,
+                "99.99" : 191357.48323837118,
+                "99.999" : 191357.48323837118,
+                "99.9999" : 191357.48323837118,
+                "100.0" : 191357.48323837118
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    191357.48323837118,
+                    189906.0971606846,
+                    174160.44258459136
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvUpsertBenchmark.upsert",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "lmdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 90567.49854897452,
+            "scoreError" : 24815.57605353421,
+            "scoreConfidence" : [
+                65751.9224954403,
+                115383.07460250873
+            ],
+            "scorePercentiles" : {
+                "0.0" : 89276.49173668367,
+                "50.0" : 90438.28306433567,
+                "90.0" : 91987.72084590423,
+                "95.0" : 91987.72084590423,
+                "99.0" : 91987.72084590423,
+                "99.9" : 91987.72084590423,
+                "99.99" : 91987.72084590423,
+                "99.999" : 91987.72084590423,
+                "99.9999" : 91987.72084590423,
+                "100.0" : 91987.72084590423
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    90438.28306433567,
+                    89276.49173668367,
+                    91987.72084590423
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvUpsertBenchmark.upsert",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "mapdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 20323.391226274503,
+            "scoreError" : 703.9808994578788,
+            "scoreConfidence" : [
+                19619.410326816625,
+                21027.37212573238
+            ],
+            "scorePercentiles" : {
+                "0.0" : 20280.566609211404,
+                "50.0" : 20334.148039571643,
+                "90.0" : 20355.459030040456,
+                "95.0" : 20355.459030040456,
+                "99.0" : 20355.459030040456,
+                "99.9" : 20355.459030040456,
+                "99.99" : 20355.459030040456,
+                "99.999" : 20355.459030040456,
+                "99.9999" : 20355.459030040456,
+                "100.0" : 20355.459030040456
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    20334.148039571643,
+                    20355.459030040456,
+                    20280.566609211404
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvUpsertBenchmark.upsert",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "sqlite",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 21302.205716511566,
+            "scoreError" : 1453.0928928310811,
+            "scoreConfidence" : [
+                19849.112823680483,
+                22755.298609342648
+            ],
+            "scorePercentiles" : {
+                "0.0" : 21237.534159166164,
+                "50.0" : 21277.90984803794,
+                "90.0" : 21391.17314233059,
+                "95.0" : 21391.17314233059,
+                "99.0" : 21391.17314233059,
+                "99.9" : 21391.17314233059,
+                "99.99" : 21391.17314233059,
+                "99.999" : 21391.17314233059,
+                "99.9999" : 21391.17314233059,
+                "100.0" : 21391.17314233059
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    21237.534159166164,
+                    21391.17314233059,
+                    21277.90984803794
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvUpsertBenchmark.upsert",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "duckdb",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 887.1627506904773,
+            "scoreError" : 88.13240121928716,
+            "scoreConfidence" : [
+                799.0303494711901,
+                975.2951519097645
+            ],
+            "scorePercentiles" : {
+                "0.0" : 881.5908476764557,
+                "50.0" : 889.719829659421,
+                "90.0" : 890.177574735555,
+                "95.0" : 890.177574735555,
+                "99.0" : 890.177574735555,
+                "99.9" : 890.177574735555,
+                "99.99" : 890.177574735555,
+                "99.999" : 890.177574735555,
+                "99.9999" : 890.177574735555,
+                "100.0" : 890.177574735555
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    890.177574735555,
+                    889.719829659421,
+                    881.5908476764557
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvUpsertBenchmark.upsert",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "h2",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 152590.80132401877,
+            "scoreError" : 66078.2165805178,
+            "scoreConfidence" : [
+                86512.58474350098,
+                218669.01790453657
+            ],
+            "scorePercentiles" : {
+                "0.0" : 148944.454984274,
+                "50.0" : 152640.05634011206,
+                "90.0" : 156187.89264767032,
+                "95.0" : 156187.89264767032,
+                "99.0" : 156187.89264767032,
+                "99.9" : 156187.89264767032,
+                "99.99" : 156187.89264767032,
+                "99.999" : 156187.89264767032,
+                "99.9999" : 156187.89264767032,
+                "100.0" : 156187.89264767032
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    152640.05634011206,
+                    156187.89264767032,
+                    148944.454984274
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.KvUpsertBenchmark.upsert",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "hashmap",
+            "preLoad" : "10000",
+            "valueSize" : "64"
+        },
+        "primaryMetric" : {
+            "score" : 355811.12183161126,
+            "scoreError" : 447382.62723311636,
+            "scoreConfidence" : [
+                -91571.5054015051,
+                803193.7490647277
+            ],
+            "scorePercentiles" : {
+                "0.0" : 332565.00714991,
+                "50.0" : 353431.7100158354,
+                "90.0" : 381436.6483290886,
+                "95.0" : 381436.6483290886,
+                "99.0" : 381436.6483290886,
+                "99.9" : 381436.6483290886,
+                "99.99" : 381436.6483290886,
+                "99.999" : 381436.6483290886,
+                "99.9999" : 381436.6483290886,
+                "100.0" : 381436.6483290886
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    381436.6483290886,
+                    353431.7100158354,
+                    332565.00714991
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "rocksdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.6265831532450991,
+            "scoreError" : 0.18975972428972068,
+            "scoreConfidence" : [
+                0.4368234289553784,
+                0.8163428775348197
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.6174485569576962,
+                "50.0" : 0.6243970909217152,
+                "90.0" : 0.6379038118558857,
+                "95.0" : 0.6379038118558857,
+                "99.0" : 0.6379038118558857,
+                "99.9" : 0.6379038118558857,
+                "99.99" : 0.6379038118558857,
+                "99.999" : 0.6379038118558857,
+                "99.9999" : 0.6379038118558857,
+                "100.0" : 0.6379038118558857
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.6379038118558857,
+                    0.6174485569576962,
+                    0.6243970909217152
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "lmdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.6320157653760642,
+            "scoreError" : 0.041393827471897585,
+            "scoreConfidence" : [
+                0.5906219379041666,
+                0.6734095928479618
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.6294293498596226,
+                "50.0" : 0.632947159985823,
+                "90.0" : 0.6336707862827468,
+                "95.0" : 0.6336707862827468,
+                "99.0" : 0.6336707862827468,
+                "99.9" : 0.6336707862827468,
+                "99.99" : 0.6336707862827468,
+                "99.999" : 0.6336707862827468,
+                "99.9999" : 0.6336707862827468,
+                "100.0" : 0.6336707862827468
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.6294293498596226,
+                    0.632947159985823,
+                    0.6336707862827468
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "mapdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.6643888074620737,
+            "scoreError" : 0.14711640071101786,
+            "scoreConfidence" : [
+                0.5172724067510559,
+                0.8115052081730916
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.6564661649739977,
+                "50.0" : 0.6641132628054567,
+                "90.0" : 0.6725869946067667,
+                "95.0" : 0.6725869946067667,
+                "99.0" : 0.6725869946067667,
+                "99.9" : 0.6725869946067667,
+                "99.99" : 0.6725869946067667,
+                "99.999" : 0.6725869946067667,
+                "99.9999" : 0.6725869946067667,
+                "100.0" : 0.6725869946067667
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.6725869946067667,
+                    0.6564661649739977,
+                    0.6641132628054567
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "sqlite",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.5686949376672535,
+            "scoreError" : 0.3866450013589488,
+            "scoreConfidence" : [
+                0.18204993630830474,
+                0.9553399390262023
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.5448847419939956,
+                "50.0" : 0.5757048715205239,
+                "90.0" : 0.5854951994872414,
+                "95.0" : 0.5854951994872414,
+                "99.0" : 0.5854951994872414,
+                "99.9" : 0.5854951994872414,
+                "99.99" : 0.5854951994872414,
+                "99.999" : 0.5854951994872414,
+                "99.9999" : 0.5854951994872414,
+                "100.0" : 0.5854951994872414
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.5757048715205239,
+                    0.5854951994872414,
+                    0.5448847419939956
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "duckdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.6000066539036054,
+            "scoreError" : 0.03261182629394,
+            "scoreConfidence" : [
+                0.5673948276096654,
+                0.6326184801975454
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.5980122612526464,
+                "50.0" : 0.6005432154630652,
+                "90.0" : 0.6014644849951046,
+                "95.0" : 0.6014644849951046,
+                "99.0" : 0.6014644849951046,
+                "99.9" : 0.6014644849951046,
+                "99.99" : 0.6014644849951046,
+                "99.999" : 0.6014644849951046,
+                "99.9999" : 0.6014644849951046,
+                "100.0" : 0.6014644849951046
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.6005432154630652,
+                    0.5980122612526464,
+                    0.6014644849951046
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "h2",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.6559222309292593,
+            "scoreError" : 0.10050434691781339,
+            "scoreConfidence" : [
+                0.5554178840114459,
+                0.7564265778470727
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.650010829110769,
+                "50.0" : 0.6568431386320941,
+                "90.0" : 0.6609127250449147,
+                "95.0" : 0.6609127250449147,
+                "99.0" : 0.6609127250449147,
+                "99.9" : 0.6609127250449147,
+                "99.99" : 0.6609127250449147,
+                "99.999" : 0.6609127250449147,
+                "99.9999" : 0.6609127250449147,
+                "100.0" : 0.6609127250449147
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.6609127250449147,
+                    0.650010829110769,
+                    0.6568431386320941
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "hashmap",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.6074452758258757,
+            "scoreError" : 0.1356710941624325,
+            "scoreConfidence" : [
+                0.4717741816634432,
+                0.7431163699883082
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.5992060322933329,
+                "50.0" : 0.6094698970273662,
+                "90.0" : 0.6136598981569279,
+                "95.0" : 0.6136598981569279,
+                "99.0" : 0.6136598981569279,
+                "99.9" : 0.6136598981569279,
+                "99.99" : 0.6136598981569279,
+                "99.999" : 0.6136598981569279,
+                "99.9999" : 0.6136598981569279,
+                "100.0" : 0.6136598981569279
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.6094698970273662,
+                    0.6136598981569279,
+                    0.5992060322933329
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbFindByTitleIdBenchmark.findByTitleId",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "rocksdb-lucene",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 0.6241709639508569,
+            "scoreError" : 0.13271633177208592,
+            "scoreConfidence" : [
+                0.491454632178771,
+                0.7568872957229429
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.6177917046848106,
+                "50.0" : 0.622627832265709,
+                "90.0" : 0.6320933549020514,
+                "95.0" : 0.6320933549020514,
+                "99.0" : 0.6320933549020514,
+                "99.9" : 0.6320933549020514,
+                "99.99" : 0.6320933549020514,
+                "99.999" : 0.6320933549020514,
+                "99.9999" : 0.6320933549020514,
+                "100.0" : 0.6320933549020514
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    0.6177917046848106,
+                    0.622627832265709,
+                    0.6320933549020514
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "rocksdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 29085.04193453865,
+            "scoreError" : 239.16115344427433,
+            "scoreConfidence" : [
+                28845.880781094376,
+                29324.203087982925
+            ],
+            "scorePercentiles" : {
+                "0.0" : 29070.871105810227,
+                "50.0" : 29087.51837757639,
+                "90.0" : 29096.73632022935,
+                "95.0" : 29096.73632022935,
+                "99.0" : 29096.73632022935,
+                "99.9" : 29096.73632022935,
+                "99.99" : 29096.73632022935,
+                "99.999" : 29096.73632022935,
+                "99.9999" : 29096.73632022935,
+                "100.0" : 29096.73632022935
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    29087.51837757639,
+                    29096.73632022935,
+                    29070.871105810227
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "lmdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 25136.700139402285,
+            "scoreError" : 15348.360044396495,
+            "scoreConfidence" : [
+                9788.34009500579,
+                40485.06018379878
+            ],
+            "scorePercentiles" : {
+                "0.0" : 24172.354983142854,
+                "50.0" : 25517.350440368053,
+                "90.0" : 25720.394994695955,
+                "95.0" : 25720.394994695955,
+                "99.0" : 25720.394994695955,
+                "99.9" : 25720.394994695955,
+                "99.99" : 25720.394994695955,
+                "99.999" : 25720.394994695955,
+                "99.9999" : 25720.394994695955,
+                "100.0" : 25720.394994695955
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    25720.394994695955,
+                    25517.350440368053,
+                    24172.354983142854
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "mapdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 19255.930046914975,
+            "scoreError" : 6602.017919651131,
+            "scoreConfidence" : [
+                12653.912127263844,
+                25857.947966566106
+            ],
+            "scorePercentiles" : {
+                "0.0" : 19041.764196313074,
+                "50.0" : 19052.27825434385,
+                "90.0" : 19673.747690088,
+                "95.0" : 19673.747690088,
+                "99.0" : 19673.747690088,
+                "99.9" : 19673.747690088,
+                "99.99" : 19673.747690088,
+                "99.999" : 19673.747690088,
+                "99.9999" : 19673.747690088,
+                "100.0" : 19673.747690088
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    19052.27825434385,
+                    19041.764196313074,
+                    19673.747690088
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "sqlite",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 19133.347392376687,
+            "scoreError" : 30323.336646907166,
+            "scoreConfidence" : [
+                -11189.98925453048,
+                49456.68403928385
+            ],
+            "scorePercentiles" : {
+                "0.0" : 17250.313194567796,
+                "50.0" : 19753.4703580057,
+                "90.0" : 20396.258624556558,
+                "95.0" : 20396.258624556558,
+                "99.0" : 20396.258624556558,
+                "99.9" : 20396.258624556558,
+                "99.99" : 20396.258624556558,
+                "99.999" : 20396.258624556558,
+                "99.9999" : 20396.258624556558,
+                "100.0" : 20396.258624556558
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    17250.313194567796,
+                    19753.4703580057,
+                    20396.258624556558
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "duckdb",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 3151.8315100059203,
+            "scoreError" : 1010.1020020244279,
+            "scoreConfidence" : [
+                2141.7295079814926,
+                4161.9335120303485
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3088.2828975626053,
+                "50.0" : 3177.5480887146296,
+                "90.0" : 3189.6635437405266,
+                "95.0" : 3189.6635437405266,
+                "99.0" : 3189.6635437405266,
+                "99.9" : 3189.6635437405266,
+                "99.99" : 3189.6635437405266,
+                "99.999" : 3189.6635437405266,
+                "99.9999" : 3189.6635437405266,
+                "100.0" : 3189.6635437405266
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3088.2828975626053,
+                    3177.5480887146296,
+                    3189.6635437405266
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "h2",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 22225.67163348832,
+            "scoreError" : 2548.7893290863435,
+            "scoreConfidence" : [
+                19676.882304401977,
+                24774.460962574663
+            ],
+            "scorePercentiles" : {
+                "0.0" : 22092.080278995785,
+                "50.0" : 22214.152138933263,
+                "90.0" : 22370.782482535913,
+                "95.0" : 22370.782482535913,
+                "99.0" : 22370.782482535913,
+                "99.9" : 22370.782482535913,
+                "99.99" : 22370.782482535913,
+                "99.999" : 22370.782482535913,
+                "99.9999" : 22370.782482535913,
+                "100.0" : 22370.782482535913
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    22092.080278995785,
+                    22214.152138933263,
+                    22370.782482535913
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "hashmap",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 741189.1262335852,
+            "scoreError" : 471104.11439804675,
+            "scoreConfidence" : [
+                270085.01183553843,
+                1212293.240631632
+            ],
+            "scorePercentiles" : {
+                "0.0" : 713512.1426615826,
+                "50.0" : 745420.0296507311,
+                "90.0" : 764635.2063884418,
+                "95.0" : 764635.2063884418,
+                "99.0" : 764635.2063884418,
+                "99.9" : 764635.2063884418,
+                "99.99" : 764635.2063884418,
+                "99.999" : 764635.2063884418,
+                "99.9999" : 764635.2063884418,
+                "100.0" : 764635.2063884418
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    764635.2063884418,
+                    745420.0296507311,
+                    713512.1426615826
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "benchmark.jmh.imdb.ImdbGetByIdBenchmark.getById",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/home/mhicks/.sdkman/candidates/java/25.crac-zulu/bin/java",
+        "jvmArgs" : [
+            "--enable-native-access=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-modules=jdk.incubator.vector",
+            "--illegal-access=permit",
+            "--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
+            "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
+            "--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED",
+            "--add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED"
+        ],
+        "jdkVersion" : "25",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25+36-LTS",
+        "warmupIterations" : 3,
+        "warmupTime" : "10 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 3,
+        "measurementTime" : "10 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "backend" : "rocksdb-lucene",
+            "batchSize" : "1000",
+            "dataDir" : "data",
+            "recordLimit" : "50000"
+        },
+        "primaryMetric" : {
+            "score" : 16269.623399075264,
+            "scoreError" : 1460.2757819963153,
+            "scoreConfidence" : [
+                14809.347617078949,
+                17729.89918107158
+            ],
+            "scorePercentiles" : {
+                "0.0" : 16204.546967619555,
+                "50.0" : 16245.323086807053,
+                "90.0" : 16359.000142799183,
+                "95.0" : 16359.000142799183,
+                "99.0" : 16359.000142799183,
+                "99.9" : 16359.000142799183,
+                "99.99" : 16359.000142799183,
+                "99.999" : 16359.000142799183,
+                "99.9999" : 16359.000142799183,
+                "100.0" : 16359.000142799183
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    16359.000142799183,
+                    16204.546967619555,
+                    16245.323086807053
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    }
+]
+
+
