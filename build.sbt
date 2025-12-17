@@ -100,7 +100,7 @@ val luceneVersion: String = "10.3.2"
 
 val hikariCPVersion: String = "7.0.2"
 
-val commonsDBCP2Version: String = "2.13.0"
+val commonsDBCP2Version: String = "2.14.0"
 
 val sqliteVersion: String = "3.51.1.0"
 
