@@ -42,6 +42,35 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }*/
 
+  override protected def indexes(connection: Connection): Set[String] = {
+    val sql = if (supportsSchemas) {
+      s"SELECT LOWER(index_name) AS name FROM duckdb_indexes() WHERE LOWER(schema_name) = LOWER(?) AND LOWER(table_name) = LOWER(?)"
+    } else {
+      s"SELECT LOWER(index_name) AS name FROM duckdb_indexes() WHERE LOWER(table_name) = LOWER(?)"
+    }
+    val ps = connection.prepareStatement(sql)
+    try {
+      if (supportsSchemas) {
+        ps.setString(1, lightDB.name)
+        ps.setString(2, name)
+      } else {
+        ps.setString(1, name)
+      }
+      val rs = ps.executeQuery()
+      try {
+        var set = Set.empty[String]
+        while (rs.next()) {
+          set += rs.getString("name")
+        }
+        set
+      } finally {
+        rs.close()
+      }
+    } finally {
+      ps.close()
+    }
+  }
+
   override protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' AND table_type = 'BASE TABLE'")
     try {
