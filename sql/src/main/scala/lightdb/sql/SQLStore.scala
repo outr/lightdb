@@ -11,7 +11,7 @@ import lightdb.store.prefix.PrefixScanningStore
 import rapid.Task
 
 import java.nio.file.Path
-import java.sql.Connection
+import java.sql.{Connection, DatabaseMetaData}
 import scala.language.implicitConversions
 
 abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
@@ -83,9 +83,25 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       createTable(tx)
     }
 
+    val fieldNames = fields.map(_.name.toLowerCase).toSet
+
+    // Remove bad indexes
+    val CN = """.+_(.+)_idx""".r
+    val existingIndexes = indexes(connection)
+    existingIndexes.filterNot(_.contains("autoindex")).foreach { name =>
+      val columnName = name match {
+        case CN(n) => n
+      }
+      val exists = fieldNames.contains(columnName)
+      if (!exists) {
+        scribe.info(s"Removing unused index: $name")
+        executeUpdate(s"DROP INDEX IF EXISTS $name", tx)
+      }
+    }
+    connection.commit()
+
     // Add/Remove columns
     val existingColumns = columns(connection)
-    val fieldNames = fields.map(_.name.toLowerCase).toSet
     // Drop columns
     existingColumns.foreach { name =>
       if (!fieldNames.contains(name.toLowerCase)) {
@@ -141,6 +157,30 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       }.toSet
     } finally {
       ps.close()
+    }
+  }
+
+  protected def indexes(connection: Connection): Set[String] = {
+    val meta = connection.getMetaData
+    val schema = if (supportsSchemas) {
+      lightDB.name
+    } else {
+      null
+    }
+    val rs = meta.getIndexInfo(null, schema, name, false, false)
+    try {
+      var set = Set.empty[String]
+      while (rs.next()) {
+        val indexName = rs.getString("INDEX_NAME")
+        val indexType = rs.getShort("TYPE")
+        val isStatistic = indexType == DatabaseMetaData.tableIndexStatistic
+        if (indexName != null && !isStatistic) {
+          set += indexName.toLowerCase
+        }
+      }
+      set
+    } finally {
+      rs.close()
     }
   }
 
