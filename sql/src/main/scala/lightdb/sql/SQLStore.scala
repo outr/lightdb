@@ -86,11 +86,13 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     val fieldNames = fields.map(_.name.toLowerCase).toSet
 
     // Remove bad indexes
-    val CN = """.+_(.+)_idx""".r
+    val CN1 = """.+_(.+)_idx""".r
+    val CN2 = """(.+)_idx""".r
     val existingIndexes = indexes(connection)
     existingIndexes.filterNot(_.contains("autoindex")).foreach { name =>
       val columnName = name match {
-        case CN(n) => n
+        case CN1(n) => n
+        case CN2(n) => n
       }
       val exists = fieldNames.contains(columnName)
       if (!exists) {

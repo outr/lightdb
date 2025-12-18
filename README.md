@@ -32,12 +32,12 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.13.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.12.0"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.13.0"
 ```
 
 ## Videos
@@ -69,7 +69,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.12.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.13.0"
 ```
 
 ---
@@ -161,7 +161,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L")
+//   _id = StringId("W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa")
 // )
 db.people.transaction { implicit txn =>
   txn.insert(adam)
@@ -172,7 +172,7 @@ db.people.transaction { implicit txn =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L")
+//   _id = StringId("W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa")
 // )
 ```
 
@@ -186,7 +186,7 @@ db.people.transaction { txn =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)))
 ```
 
 ---
@@ -226,7 +226,7 @@ db.people.transaction { txn =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 315},repl.MdocSession$MdocApp$Person$@788212e3))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 336},repl.MdocSession$MdocApp$Person$@6ecf94a7))
 ```
 
 ### Grouping
@@ -237,7 +237,7 @@ db.people.transaction { txn =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)))))
 ```
 
 ---
@@ -251,14 +251,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
-// res5: Int = 16
+// res5: Int = 17
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res6: Int = 16
+// res6: Int = 17
 ```
 
 ---
@@ -328,7 +328,7 @@ luceneDb.init.sync()
 luceneDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
 // res8: Note = Note(
 //   text = "the quick brown fox",
-//   _id = StringId("cGw4Y83JUCTcaJHV7GWboFJ5CPGD9rpO")
+//   _id = StringId("2wCZpCOI4OfTMwqVAKFCijhGbv9MKnPM")
 // )
 val hits = luceneDb.notes.transaction { txn =>
   txn.query.search.flatMap(_.list)
@@ -349,6 +349,10 @@ val hits = luceneDb.notes.transaction { txn =>
 //   Note(
 //     text = "the quick brown fox",
 //     _id = StringId("cGw4Y83JUCTcaJHV7GWboFJ5CPGD9rpO")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("2wCZpCOI4OfTMwqVAKFCijhGbv9MKnPM")
 //   )
 // )
 ```
@@ -385,7 +389,7 @@ spatialDb.places.transaction(_.insert(Place("NYC", Point(40.7142, -74.0119)))).s
 // res10: Place = Place(
 //   name = "NYC",
 //   loc = Point(latitude = 40.7142, longitude = -74.0119),
-//   _id = StringId("D3aaqfudDRAsx19qhl3AvNYCm89MSaHY")
+//   _id = StringId("g0xpsXK3ez9sl6YihQZOp4KaxLcQDcAi")
 // )
 // Distance filters are supported on spatial-capable backends; example filter:
 val nycFilter = Place.loc.distance(Point(40.7, -74.0), 5_000.meters)
@@ -481,11 +485,11 @@ object shardDb extends LightDB {
 }
 
 val tenantA = shardDb.shards("tenantA")
-// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@41c671b5
+// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@65a27ad8
 tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
 // res12: TenantDoc = TenantDoc(
 //   value = "hello",
-//   _id = StringId("gdepDOioIra2Y4EvCfsmhcRbOn5z8kzq")
+//   _id = StringId("cWoMwnTFe1RCBpTlJqRR32ngOAKAfxJL")
 // )
 ```
 
@@ -506,8 +510,8 @@ cfgDb.init.sync()
 val featureFlag = cfgDb.stored[Boolean]("featureX", default = false)
 // featureFlag: StoredValue[Boolean] = StoredValue(
 //   key = "featureX",
-//   store = lightdb.store.hashmap.HashMapStore@3798aff8,
-//   default = repl.MdocSession$MdocApp$$Lambda/0x00000000277a0c48@4c6134c1,
+//   store = lightdb.store.hashmap.HashMapStore@56bef8a6,
+//   default = repl.MdocSession$MdocApp$$Lambda/0x000000003a7a4e70@484cf913,
 //   persistence = Stored
 // )
 featureFlag.set(true).sync()
@@ -542,7 +546,7 @@ sqlDb.init.sync()
 sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
 // res16: Row = Row(
 //   value = "hi sql",
-//   _id = StringId("02dClngmqh8sn71tyKLSUD3U6udsfMtn")
+//   _id = StringId("19niIooa5wl1N2paoiEhw6owtswFdPN4")
 // )
 ```
 
