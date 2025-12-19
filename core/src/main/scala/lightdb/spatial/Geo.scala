@@ -5,14 +5,20 @@ import fabric.io.JsonFormatter
 import fabric.rw._
 
 trait Geo {
-  import Geo._
-
   def center: Point
 
   def toJson: Json
 
   protected def coord(p: Point): Json =
     arr(num(p.longitude), num(p.latitude))
+
+  lazy val polygons: List[Polygon] = this match {
+    case p: Polygon => List(p)
+    case MultiPolygon(polygons) => polygons
+    case Line(points) if points.size >= 3 => List(Polygon(points ++ points.reverse.tail))
+    case Line(_) => Nil // Ignore lines that cannot form a valid polygon
+    case geo => throw new RuntimeException(s"Unsupported spatial: $geo")
+  }
 
   protected def ensureClosed(points: List[Point]): List[Point] =
     points match {
