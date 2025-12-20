@@ -12,7 +12,7 @@ trait Geo {
   protected def coord(p: Point): Json =
     arr(num(p.longitude), num(p.latitude))
 
-  lazy val polygons: List[Polygon] = this match {
+  def polygons: List[Polygon] = this match {
     case p: Polygon => List(p)
     case MultiPolygon(polygons) => polygons
     case Line(points) if points.size >= 3 => List(Polygon(points ++ points.reverse.tail))
