@@ -7,7 +7,9 @@ import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str, arr, bool, num, 
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.facet.{FacetQuery, FacetResult, FacetResultValue, FacetValue}
 import lightdb.field.Field.Tokenized
+import lightdb.field.Field.FacetField
 import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb._
@@ -22,6 +24,7 @@ import lightdb.{Query, SearchResults, Sort, SortDirection}
 import rapid.Task
 
 import java.sql.{PreparedStatement, ResultSet, SQLException, Types}
+import scala.collection.mutable
 import scala.util.Try
 
 trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] {
@@ -251,7 +254,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
                          offset: Int,
                          limit: Option[Int],
                          conversion: Conversion[Doc, V],
-                         totalQuery: Option[SQLQuery] = None): Task[SearchResults[Doc, Model, V]] = Task {
+                         totalQuery: Option[SQLQuery] = None,
+                         facetResults: Map[FacetField[Doc], FacetResult] = Map.empty): Task[SearchResults[Doc, Model, V]] = Task {
     // For drivers like DuckDB, ensure no pending results before new statements.
     state.closePendingResults()
     // Compute total first to avoid interfering with the main result set.
@@ -277,7 +281,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       limit = limit,
       total = total,
       streamWithScore = stream,
-      facetResults = Map.empty,
+      facetResults = facetResults,
       transaction = this
     )
   }
@@ -319,7 +323,119 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
     val b = toSQL[V](query)
-    execute[V](b.query, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
+    val facetResults = if (query.facets.nonEmpty) {
+      computeFacets(b, query.facets)
+    } else {
+      Task.pure(Map.empty[FacetField[Doc], FacetResult])
+    }
+    facetResults.flatMap { fr =>
+      execute[V](b.query, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None, fr)
+    }
+  }
+
+  /**
+   * Generic (portable) facet implementation for SQL stores.
+   *
+   * Notes:
+   * - This computes facets by scanning matching rows and parsing the stored facet JSON.
+   * - This matches Lucene semantics used by AbstractFacetSpec (including "$ROOT$" handling for hierarchical facets).
+   * - Performance is acceptable for test/small datasets; for large datasets we should add backend-specific GROUP BY / JSON explode.
+   */
+  private def computeFacets(base: SQLQueryBuilder[Doc, Model],
+                            facetQueries: List[FacetQuery[Doc]]): Task[Map[FacetField[Doc], FacetResult]] = Task {
+    val facetFields: List[FacetField[Doc]] = facetQueries.map(_.field).distinct
+    if (facetFields.isEmpty) {
+      Map.empty[FacetField[Doc], FacetResult]
+    } else {
+      // Build a "no paging" query that only selects the facet columns.
+      val facetSelect = base.copy(
+        fields = facetFields.map(ff => SQLPart.Fragment(ff.name)),
+        // IMPORTANT:
+        // Lucene tie-breaks facet values (when counts are equal) by taxonomy ord, which corresponds closely to
+        // "first seen while indexing". For SQL we approximate this by using the database's natural scan order.
+        //
+        // Do NOT force an ORDER BY here (like _id ASC) because ids aren't guaranteed to reflect insertion order
+        // (e.g. random UUIDs), and that breaks AbstractFacetSpec expectations.
+        sort = Nil,
+        limit = None,
+        offset = 0
+      )
+      val results = resultsFor(facetSelect.query)
+      val rs = results.rs
+      try {
+        // Per facet field, count child labels (including "$ROOT$").
+        val countsByField = mutable.HashMap.empty[FacetField[Doc], mutable.HashMap[String, Int]]
+        facetFields.foreach { ff =>
+          countsByField.put(ff, mutable.HashMap.empty[String, Int])
+        }
+
+        def bump(ff: FacetField[Doc], key: String): Unit = {
+          val map = countsByField(ff)
+          map.updateWith(key) {
+            case Some(v) => Some(v + 1)
+            case None => Some(1)
+          }
+        }
+
+        // Precompute path per field from facetQueries (last one wins, matching SearchResults map semantics).
+        val queryByField: Map[FacetField[Doc], FacetQuery[Doc]] =
+          facetQueries.foldLeft(Map.empty[FacetField[Doc], FacetQuery[Doc]]) {
+            case (m, fq) => m.updated(fq.field, fq)
+          }
+
+        while (rs.next()) {
+          facetFields.foreach { ff =>
+            val fq = queryByField(ff)
+            val jsonStr = rs.getString(ff.name)
+            val values: List[FacetValue] = Option(jsonStr) match {
+              case None => Nil
+              case Some(s) if s.isEmpty => Nil
+              case Some(s) =>
+                // stored as JSON (List[FacetValue])
+                JsonParser(s).as[List[FacetValue]]
+            }
+
+            // A missing facet list is treated as "$ROOT$" for hierarchical facets at the requested path.
+            if (values.isEmpty) {
+              if (ff.hierarchical && fq.path.isEmpty) bump(ff, "$ROOT$")
+            } else {
+              values.foreach { fv =>
+                val path = fv.path
+                if (ff.hierarchical) {
+                  if (path.startsWith(fq.path)) {
+                    val child = if (path.length == fq.path.length) "$ROOT$" else path(fq.path.length)
+                    bump(ff, child)
+                  }
+                } else {
+                  val child = path.headOption.getOrElse("$ROOT$")
+                  bump(ff, child)
+                }
+              }
+            }
+          }
+        }
+
+        // Materialize results
+        queryByField.map { case (ff, fq) =>
+          val counts = countsByField(ff).toMap
+          val childrenLimit = fq.childrenLimit.getOrElse(Int.MaxValue)
+          val sorted = counts.iterator
+            .filter(_._1 != "$ROOT$")
+            .toList
+            // Deterministic ordering across backends:
+            // - count desc
+            // - value asc
+            .sortBy { case (value, count) => (-count, value) }
+          val top = sorted.take(childrenLimit).map { case (value, count) => FacetResultValue(value, count) }
+          val totalCount = top.map(_.count).sum
+          val childCount = counts.keySet.size
+          ff -> FacetResult(top, childCount = childCount, totalCount = totalCount)
+        }
+      } finally {
+        Try(rs.close())
+        results.release(state)
+      }
+    }
   }
 
   override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] = Task {
@@ -611,7 +727,22 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case _: Filter.MatchNone[C] => SQLPart.Fragment("1=0")
       case _: Filter.ExistsChild[_, _, _] =>
         throw new UnsupportedOperationException("ExistsChild should have been resolved before SQL translation")
-      case f: Filter.DrillDownFacetFilter[C] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
+      case f: Filter.DrillDownFacetFilter[C] =>
+        // Facets are stored as JSON (List[FacetValue]) in a single column.
+        // We implement drill-down by matching the "path" JSON substring.
+        // - showOnlyThisLevel: require exact path array match (no deeper segments)
+        // - otherwise: prefix match
+        val pathJson = JsonFormatter.Compact(f.path.json)
+        if (f.showOnlyThisLevel) {
+          likePart(f.fieldName, s"%\"path\":$pathJson%")
+        } else if (f.path.isEmpty) {
+          // Drill down to "any value in this dimension" - best effort
+          likePart(f.fieldName, s"%\"path\":%")
+        } else {
+          // Prefix match: drop trailing ']' to avoid matching only exact
+          val prefix = pathJson.stripSuffix("]")
+          likePart(f.fieldName, s"%\"path\":$prefix%")
+        }
       // Tokenized fields: equality is interpreted as matching all whitespace-separated tokens (AND semantics)
       case f: Filter.Equals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
         f.getJson(targetStore.model) match {

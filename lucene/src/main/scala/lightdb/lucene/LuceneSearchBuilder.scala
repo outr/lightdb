@@ -67,7 +67,9 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
             } else {
               Nil
             }
-            val updatedValues = values.filterNot(_.value == "$ROOT$")
+            val updatedValues = values
+              .filterNot(_.value == "$ROOT$")
+              .sortBy(v => (-v.count, v.value))
             val totalCount = updatedValues.map(_.count).sum
             fq.field -> FacetResult(updatedValues, facetResult.childCount, totalCount)
           case None =>
