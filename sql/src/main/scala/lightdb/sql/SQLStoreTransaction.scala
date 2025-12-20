@@ -912,7 +912,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
           s"path_depth = $pathDepth"
         } else {
           // Get children of parent path: depth = parentPath.length, and full_path starts with parent
-          val parentFullPath = parentPath.mkString("/")
+          // Note: parentPath comes from application code (Query API), not user input, so SQL injection is not a concern
+          val parentFullPath = parentPath.map(_.replace("'", "''")).mkString("/")
           s"path_depth = $pathDepth AND full_path LIKE '$parentFullPath/%'"
         }
         
