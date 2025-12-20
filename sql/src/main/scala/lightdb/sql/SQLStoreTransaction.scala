@@ -16,6 +16,7 @@ import lightdb._
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}
+import lightdb.sql.dsl.TxnSqlDsl
 import lightdb.sql.query.{SQLPart, SQLQuery}
 import lightdb.store.{Conversion, Store}
 import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction}
@@ -33,6 +34,13 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   def state: SQLState[Doc, Model]
 
   def fqn: String = store.fqn
+
+  /**
+   * Transaction-aware, type-safe SQL DSL.
+   *
+   * This complements `sql[V](query: String)(builder: SQLQuery => SQLQuery)` for raw ad-hoc queries.
+   */
+  def sql: TxnSqlDsl.Builder[Doc, Model] = TxnSqlDsl(this)
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     val connection = state.connectionManager.getConnection(state)
@@ -200,6 +208,50 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val sql = SQLQuery.parse(query)
     val updated = builder(sql)
     search[V](updated)
+  }
+
+  /**
+   * Stream results for an arbitrary SQLQuery without forcing a Task-wrapped SearchResults.
+   *
+   * This is mainly used by the transaction-aware SQL DSL.
+   */
+  def sqlStream[V](sql: SQLQuery)(implicit rw: RW[V]): rapid.Stream[V] = {
+    rapid.Stream.fromIterator[V](Task {
+      val results = resultsFor(sql)
+      state.register(results.rs)
+      val iterator = new Iterator[V] {
+        private lazy val fieldNames: List[String] = {
+          val metaData = results.rs.getMetaData
+          val count = metaData.getColumnCount
+          (1 to count).toList.map { index =>
+            metaData.getColumnName(index)
+          }
+        }
+
+        override def hasNext: Boolean = results.rs.next()
+
+        override def next(): V = {
+          val fieldValues = fieldNames.map { name =>
+            val obj = results.rs.getObject(name)
+            obj2Value(obj) match {
+              case null => Null
+              case s: String => str(s)
+              case b: Boolean => bool(b)
+              case i: Int => num(i)
+              case l: Long => num(l)
+              case f: Float => num(f)
+              case d: Double => num(d)
+              case bd: BigDecimal => num(bd)
+              case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
+            }
+          }
+          val json = obj(fieldNames.zip(fieldValues): _*)
+          json.as[V]
+        }
+      }
+      val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
+      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.query, ps))
+    })
   }
 
   def search[V](sql: SQLQuery)(implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task {
@@ -719,6 +771,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     (1 to count).toList.map(index => meta.getColumnName(index))
   }
 
+  protected[sql] def filterToSQLPart(f: Filter[Doc]): SQLPart = filter2Part(f)
+
+  // Keep the original helper for existing SQL translation logic.
   private def filter2Part(f: Filter[Doc]): SQLPart = filter2PartOn(f, store)
 
   private def filter2PartOn[C <: Document[C]](f: Filter[C], targetStore: SQLStore[C, _ <: DocumentModel[C]]): SQLPart = {

@@ -11,6 +11,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{CompositeIndex, LightDB, StoredValue}
 import lightdb.time.Timestamp
 import lightdb.filter._
+import lightdb.sql.dsl.SQLDsl
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
@@ -62,17 +63,53 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "query with an arbitrary query" in {
       db.people.transaction { transaction =>
         val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
-        /*
-          // TODO: Support DSL for query building
-          txn.sql
-            .columns(p => p.name)
-            .where(p => p.name === "Adam")
-            .as[Name]
-            .stream
-         */
         txn.sql[Name](s"SELECT name FROM ${txn.fqn} WHERE name = :name") { q =>
           q.values("name" -> "Adam")
         }.flatMap(_.list).map { names =>
+          names should be(List(Name("Adam")))
+        }
+      }
+    }
+    "query with type-safe txn.sql DSL" in {
+      db.people.transaction { transaction =>
+        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        txn.sql
+          .columns(p => p.name)
+          .where(p => p.name === "Adam")
+          .as[Name]
+          .list
+          .map { names =>
+            names should be(List(Name("Adam")))
+          }
+      }
+    }
+    "query with an arbitrary query via SQLDsl" in {
+      db.people.transaction { transaction =>
+        import SQLDsl._
+        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        val q = SQLDsl
+          .select(col(Person.name))
+          .from(table(db.people))
+          .where(col(Person.name) === "Adam")
+          .toSQLQuery
+        txn.search[Name](q).flatMap(_.list).map { names =>
+          names should be(List(Name("Adam")))
+        }
+      }
+    }
+    "query with an arbitrary query via SQLDsl (self-join)" in {
+      db.people.transaction { transaction =>
+        import SQLDsl._
+        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        val p = table(db.people).as("p")
+        val p2 = table(db.people).as("p2")
+        val q = SQLDsl
+          .select(p.col(Person.name))
+          .from(p)
+          .join(p2, on = p.col(Person._id) === p2.col(Person._id))
+          .where(p.col(Person.name) === "Adam")
+          .toSQLQuery
+        txn.search[Name](q).flatMap(_.list).map { names =>
           names should be(List(Name("Adam")))
         }
       }
