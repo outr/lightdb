@@ -99,11 +99,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         state.batchInsert.set(0)
       }
     }
+    // Update facet tables
+    updateFacetTables(doc, indexingState)
     doc
   }
 
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val indexingState = new IndexingState
+    // First delete existing facet entries for this document
+    deleteFacetEntries(doc._id)
     state.withUpsertPreparedStatement { ps =>
       store.fields.zipWithIndex.foreach {
         case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
@@ -115,6 +119,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       state.batchUpsert.set(0)
       state.markDirty()
     }
+    // Update facet tables
+    updateFacetTables(doc, indexingState)
     doc
   }
 
@@ -136,7 +142,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val ps = connection.prepareStatement(sql.query)
     try {
       sql.fillPlaceholder(index.rw.read(value)).populate(ps, this)
-      ps.executeUpdate() > 0
+      val deleted = ps.executeUpdate() > 0
+      // Delete facet entries if document was deleted
+      if (deleted && index.name == "_id") {
+        deleteFacetEntries(value.asInstanceOf[Id[Doc]])
+      }
+      deleted
     } finally {
       ps.close()
     }
@@ -251,7 +262,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
                          offset: Int,
                          limit: Option[Int],
                          conversion: Conversion[Doc, V],
-                         totalQuery: Option[SQLQuery] = None): Task[SearchResults[Doc, Model, V]] = Task {
+                         totalQuery: Option[SQLQuery] = None,
+                         query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task {
     // For drivers like DuckDB, ensure no pending results before new statements.
     state.closePendingResults()
     // Compute total first to avoid interfering with the main result set.
@@ -271,13 +283,17 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         state.returnPreparedStatement(sql.query, ps)
       })
     })
+    
+    // Compute facet results
+    val facetResults = computeFacetResults(query)
+    
     SearchResults(
       model = store.model,
       offset = offset,
       limit = limit,
       total = total,
       streamWithScore = stream,
-      facetResults = Map.empty,
+      facetResults = facetResults,
       transaction = this
     )
   }
@@ -319,7 +335,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
     val b = toSQL[V](query)
-    execute[V](b.query, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None)
+    execute[V](b.query, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None, query)
   }
 
   override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] = Task {
@@ -611,7 +627,39 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case _: Filter.MatchNone[C] => SQLPart.Fragment("1=0")
       case _: Filter.ExistsChild[_, _, _] =>
         throw new UnsupportedOperationException("ExistsChild should have been resolved before SQL translation")
-      case f: Filter.DrillDownFacetFilter[C] => throw new UnsupportedOperationException(s"SQLStore does not support Facets: $f")
+      case f: Filter.DrillDownFacetFilter[C] => 
+        // Get the facet field from the model
+        val modelField = targetStore.model.fieldByName(f.fieldName)
+        val facetField = modelField match {
+          case ff: Field.FacetField[C @unchecked] => ff
+          case _ => throw new RuntimeException(s"Field ${f.fieldName} is not a FacetField")
+        }
+        val tableName = targetStore.facetTableName(facetField)
+        
+        if (f.showOnlyThisLevel) {
+          // Only match documents where the facet path ends exactly at this level (has $ROOT$ marker)
+          val fullPath = if (f.path.isEmpty) "$ROOT$" else f.path.mkString("/") + "/$ROOT$"
+          SQLPart(
+            s"${targetStore.model._id.name} IN (SELECT doc_id FROM $tableName WHERE full_path = ?)",
+            str(fullPath)
+          )
+        } else {
+          // Match documents that have this prefix in their facet path
+          val pathFilter = if (f.path.isEmpty) {
+            // No path means match all documents with this facet
+            s"${targetStore.model._id.name} IN (SELECT DISTINCT doc_id FROM $tableName)"
+          } else {
+            val fullPath = f.path.mkString("/")
+            s"${targetStore.model._id.name} IN (SELECT DISTINCT doc_id FROM $tableName WHERE full_path = ? OR full_path LIKE ?)"
+          }
+          
+          if (f.path.isEmpty) {
+            SQLPart.Fragment(pathFilter)
+          } else {
+            val fullPath = f.path.mkString("/")
+            SQLPart(pathFilter, str(fullPath), str(s"$fullPath/%"))
+          }
+        }
       // Tokenized fields: equality is interpreted as matching all whitespace-separated tokens (AND semantics)
       case f: Filter.Equals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
         f.getJson(targetStore.model) match {
@@ -733,6 +781,201 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   protected def extraFieldsForDistance(conversion: Conversion.Distance[Doc, _]): List[SQLPart] =
     throw new UnsupportedOperationException("Distance conversions not supported")
+
+  /**
+   * Update facet tables for a document.
+   */
+  private def updateFacetTables(doc: Doc, indexingState: IndexingState): Unit = {
+    import lightdb.field.Field.FacetField
+    import lightdb.facet.FacetValue
+    
+    val docId = doc._id.toString
+    
+    store.facetFields.foreach { facetField =>
+      val tableName = store.facetTableName(facetField)
+      val facetValues = facetField.get(doc, facetField, indexingState)
+      
+      facetValues.foreach { facetValue =>
+        insertFacetEntries(tableName, docId, facetValue, facetField.hierarchical)
+      }
+    }
+  }
+
+  /**
+   * Insert facet entries for a facet value.
+   */
+  private def insertFacetEntries(tableName: String, docId: String, facetValue: FacetValue, hierarchical: Boolean): Unit = {
+    val connection = state.connectionManager.getConnection(state)
+    val path = facetValue.path
+    
+    if (hierarchical) {
+      // For hierarchical facets, insert entries for each level of the hierarchy
+      // e.g., for path ["2010", "10", "15"], insert:
+      //   - depth=0, component="2010", full_path="2010"
+      //   - depth=1, component="10", full_path="2010/10"
+      //   - depth=2, component="15", full_path="2010/10/15"
+      //   - depth=3, component="$ROOT$", full_path="2010/10/15/$ROOT$" (marks end)
+      val fullPath = path.mkString("/")
+      var currentPath = ""
+      
+      path.zipWithIndex.foreach { case (component, depth) =>
+        currentPath = if (currentPath.isEmpty) component else s"$currentPath/$component"
+        val insertSQL = s"INSERT INTO $tableName (doc_id, path_depth, path_component, full_path) VALUES (?, ?, ?, ?)"
+        val ps = connection.prepareStatement(insertSQL)
+        try {
+          ps.setString(1, docId)
+          ps.setInt(2, depth)
+          ps.setString(3, component)
+          ps.setString(4, currentPath)
+          ps.executeUpdate()
+          state.markDirty()
+        } finally {
+          ps.close()
+        }
+      }
+      
+      // Add the $ROOT$ marker for hierarchical facets
+      val rootInsertSQL = s"INSERT INTO $tableName (doc_id, path_depth, path_component, full_path) VALUES (?, ?, ?, ?)"
+      val rootPs = connection.prepareStatement(rootInsertSQL)
+      try {
+        rootPs.setString(1, docId)
+        rootPs.setInt(2, path.length)
+        rootPs.setString(3, "$ROOT$")
+        rootPs.setString(4, if (fullPath.isEmpty) "$ROOT$" else s"$fullPath/$$ROOT$$")
+        rootPs.executeUpdate()
+        state.markDirty()
+      } finally {
+        rootPs.close()
+      }
+    } else {
+      // For non-hierarchical facets, insert a single entry
+      val component = if (path.isEmpty) "" else path.mkString("/")
+      val insertSQL = s"INSERT INTO $tableName (doc_id, path_depth, path_component, full_path) VALUES (?, ?, ?, ?)"
+      val ps = connection.prepareStatement(insertSQL)
+      try {
+        ps.setString(1, docId)
+        ps.setInt(2, 0)
+        ps.setString(3, component)
+        ps.setString(4, component)
+        ps.executeUpdate()
+        state.markDirty()
+      } finally {
+        ps.close()
+      }
+    }
+  }
+
+  /**
+   * Delete all facet entries for a document.
+   */
+  private def deleteFacetEntries(docId: Id[Doc]): Unit = {
+    val connection = state.connectionManager.getConnection(state)
+    store.facetFields.foreach { facetField =>
+      val tableName = store.facetTableName(facetField)
+      val deleteSQL = s"DELETE FROM $tableName WHERE doc_id = ?"
+      val ps = connection.prepareStatement(deleteSQL)
+      try {
+        ps.setString(1, docId.toString)
+        ps.executeUpdate()
+        state.markDirty()
+      } finally {
+        ps.close()
+      }
+    }
+  }
+
+  /**
+   * Compute facet results for a query.
+   */
+  private def computeFacetResults[V](query: Query[Doc, Model, V]): Map[Field.FacetField[Doc], lightdb.facet.FacetResult] = {
+    import lightdb.facet.{FacetResult, FacetResultValue}
+    
+    if (query.facets.isEmpty) {
+      Map.empty
+    } else {
+      query.facets.map { fq =>
+        val facetField = fq.field
+        val tableName = store.facetTableName(facetField)
+        val parentPath = fq.path
+        val childrenLimit = fq.childrenLimit
+        
+        // Build the query to get facet counts
+        // We need to:
+        // 1. Filter by the parent path (if any)
+        // 2. Count documents by the next level component
+        // 3. Apply the main query filter to only count matching documents
+        
+        val pathDepth = parentPath.length
+        val pathFilter = if (parentPath.isEmpty) {
+          // Root level: get all depth=0 components
+          s"path_depth = $pathDepth"
+        } else {
+          // Get children of parent path: depth = parentPath.length, and full_path starts with parent
+          val parentFullPath = parentPath.mkString("/")
+          s"path_depth = $pathDepth AND full_path LIKE '$parentFullPath/%'"
+        }
+        
+        // Build a filter to only include documents that match the main query
+        val docIdFilter = query.filter match {
+          case Some(filter) =>
+            // Build the main query SQL to get matching doc IDs
+            val b = toSQL[Doc](query.copy(
+              facets = Nil,
+              conversion = Conversion.Doc(),
+              limit = None,
+              offset = 0
+            ))
+            // Get just the filter parts
+            val filterParts = b.filters
+            if (filterParts.nonEmpty) {
+              val conditions = filterParts.map(_.query).mkString(" AND ")
+              s"doc_id IN (SELECT ${store.model._id.name} FROM ${store.fqn} WHERE $conditions)"
+            } else {
+              "1=1"
+            }
+          case None =>
+            "1=1" // No filter, include all
+        }
+        
+        // Query to get facet counts
+        val facetQuery = s"""
+          SELECT 
+            path_component,
+            COUNT(DISTINCT doc_id) as count
+          FROM $tableName
+          WHERE $pathFilter
+            AND path_component != '$$ROOT$$'
+            AND $docIdFilter
+          GROUP BY path_component
+          ORDER BY count DESC, path_component ASC
+          ${childrenLimit.map(l => s"LIMIT $l").getOrElse("")}
+        """.trim
+        
+        val results = try {
+          val rs = executeQuery(facetQuery)
+          try {
+            var values = List.empty[FacetResultValue]
+            var totalCount = 0
+            while (rs.next()) {
+              val value = rs.getString("path_component")
+              val count = rs.getInt("count")
+              values = FacetResultValue(value, count) :: values
+              totalCount += count
+            }
+            FacetResult(values.reverse, values.length, totalCount)
+          } finally {
+            rs.close()
+          }
+        } catch {
+          case t: Throwable =>
+            scribe.warn(s"Failed to compute facet for ${facetField.name}: ${t.getMessage}", t)
+            FacetResult(Nil, 0, 0)
+        }
+        
+        facetField -> results
+      }.toMap
+    }
+  }
 }
 
 object SQLStoreTransaction {

@@ -131,6 +131,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     model.compositeIndexes.foreach { compositeIndex =>
       executeUpdate(createCompositeIndexSQL(compositeIndex), tx)
     }
+
+    // Initialize facet tables for facet fields
+    initFacetTables(tx, connection, existingTables)
   }
 
   protected def createUniqueIndexSQL(index: UniqueIndex[Doc, _]): String =
@@ -145,6 +148,59 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       case list => s" INCLUDE(${list.map(_.name).mkString(", ")})"
     }
     s"CREATE INDEX IF NOT EXISTS ${name}_${compositeIndex.name}_idx ON $fqn(${compositeIndex.fields.map(_.name).mkString(", ")})$include"
+  }
+
+  /**
+   * Get all facet fields in this store.
+   */
+  lazy val facetFields: List[FacetField[Doc]] = fields.collect {
+    case ff: FacetField[Doc] => ff
+  }
+
+  /**
+   * Get the facet table name for a given facet field.
+   */
+  def facetTableName(facetField: FacetField[Doc]): String = s"${name}_facet_${facetField.name}"
+
+  /**
+   * Initialize facet tables during store initialization.
+   */
+  protected def initFacetTables(tx: TX, connection: Connection, existingTables: Set[String]): Unit = {
+    facetFields.foreach { facetField =>
+      val tableName = facetTableName(facetField)
+      if (!existingTables.contains(tableName.toLowerCase)) {
+        createFacetTable(facetField, tx)
+      }
+    }
+  }
+
+  /**
+   * Create a facet table for a given facet field.
+   */
+  protected def createFacetTable(facetField: FacetField[Doc], tx: TX): Unit = {
+    val tableName = facetTableName(facetField)
+    scribe.info(s"Creating facet table $tableName for field ${facetField.name}")
+    
+    // Create table with columns: doc_id, path_depth, path_component, full_path
+    val createTableSQL = s"""
+      CREATE TABLE IF NOT EXISTS $tableName (
+        doc_id VARCHAR NOT NULL,
+        path_depth INT NOT NULL,
+        path_component VARCHAR NOT NULL,
+        full_path VARCHAR NOT NULL
+      )
+    """.trim
+    
+    executeUpdate(createTableSQL, tx)
+    
+    // Create index on doc_id for efficient deletion
+    executeUpdate(s"CREATE INDEX IF NOT EXISTS ${tableName}_doc_id_idx ON $tableName(doc_id)", tx)
+    
+    // Create index on path_depth and path_component for efficient facet counting
+    executeUpdate(s"CREATE INDEX IF NOT EXISTS ${tableName}_path_idx ON $tableName(path_depth, path_component)", tx)
+    
+    // Create index on full_path for drill-down filtering
+    executeUpdate(s"CREATE INDEX IF NOT EXISTS ${tableName}_full_path_idx ON $tableName(full_path)", tx)
   }
 
   protected def tables(connection: Connection): Set[String]
