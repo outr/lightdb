@@ -14,7 +14,11 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               having: List[SQLPart] = Nil,
                                                                               sort: List[SQLPart] = Nil,
                                                                               limit: Option[Int] = None,
-                                                                              offset: Int) {
+                                                                              offset: Int,
+                                                                              fromOverride: Option[List[SQLPart]] = None,
+                                                                              fromSuffix: List[SQLPart] = Nil) {
+  private lazy val fromParts: List[SQLPart] = fromOverride.getOrElse(List(SQLPart.Fragment(store.fqn))) ::: fromSuffix
+
   lazy val whereClause: List[SQLPart] = if (filters.nonEmpty) {
     SQLPart.Fragment("WHERE\n") :: filters.intersperse(SQLPart.Fragment("\nAND\n"))
   } else {
@@ -24,7 +28,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
   lazy val parts: List[SQLPart] = List(
     List(SQLPart.Fragment("SELECT\n\t")),
     if (fields.nonEmpty) fields.intersperse(SQLPart.Fragment(", ")) else List(SQLPart.Fragment("*")),
-    List(SQLPart.Fragment(s"\nFROM\n\t${store.fqn}\n")),
+    List(SQLPart.Fragment("\nFROM\n\t")) ::: fromParts ::: List(SQLPart.Fragment("\n")),
     whereClause,
     if (group.nonEmpty) {
       SQLPart.Fragment("\nGROUP BY\n") :: group.intersperse(SQLPart.Fragment(", "))

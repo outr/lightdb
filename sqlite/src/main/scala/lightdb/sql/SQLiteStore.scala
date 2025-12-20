@@ -45,6 +45,13 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
     val s = connection.createStatement()
     try {
+      // Apply tuning pragmas first.
+      SQLiteStore.Pragmas.foreach {
+        case (k, v) =>
+          try s.execute(s"PRAGMA $k=$v;")
+          catch { case _: Throwable => () }
+      }
+
       s.execute("PRAGMA journal_mode=WAL;")
     } catch {
       case t: Throwable =>
@@ -57,12 +64,86 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }
 
+  private def createFTS(tx: TX): Unit = {
+    val tokenized = fields.collect { case t: lightdb.field.Field.Tokenized[Doc] => t }
+    if (tokenized.isEmpty) return
+
+    val ftsTable = s"${this.name}__fts"
+    val cols = tokenized.map(_.name)
+    // contentless fts: we manage inserts via triggers
+    val colSql = (List("_id UNINDEXED") ::: cols).mkString(", ")
+    executeUpdate(s"CREATE VIRTUAL TABLE IF NOT EXISTS $ftsTable USING fts5($colSql)", tx)
+
+    // Keep FTS table in sync with base table.
+    val insertCols = ("_id" :: cols).mkString(", ")
+    val newCols = ("new._id" :: cols.map(c => s"new.$c")).mkString(", ")
+
+    executeUpdate(
+      s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ai AFTER INSERT ON ${this.name} BEGIN
+         |  INSERT INTO $ftsTable($insertCols) VALUES($newCols);
+         |END;""".stripMargin, tx
+    )
+    executeUpdate(
+      s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ad AFTER DELETE ON ${this.name} BEGIN
+         |  DELETE FROM $ftsTable WHERE _id = old._id;
+         |END;""".stripMargin, tx
+    )
+    executeUpdate(
+      s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_au AFTER UPDATE ON ${this.name} BEGIN
+         |  DELETE FROM $ftsTable WHERE _id = old._id;
+         |  INSERT INTO $ftsTable($insertCols) VALUES($newCols);
+         |END;""".stripMargin, tx
+    )
+  }
+
+  private def createMultiValueIndexes(tx: TX): Unit = {
+    // Only for array-like indexed fields (List/Set/etc.) where the stored representation is JSON array.
+    val arrayIndexed = fields.collect {
+      case f if f.indexed && f.isArr => f
+    }
+    arrayIndexed.foreach { f =>
+      val mvTable = s"${this.name}__mv__${f.name}"
+      executeUpdate(s"CREATE TABLE IF NOT EXISTS $mvTable(owner_id TEXT NOT NULL, value TEXT NOT NULL)", tx)
+      executeUpdate(s"CREATE INDEX IF NOT EXISTS ${mvTable}__value_idx ON $mvTable(value)", tx)
+      executeUpdate(s"CREATE INDEX IF NOT EXISTS ${mvTable}__owner_value_idx ON $mvTable(owner_id, value)", tx)
+
+      // Sync table via triggers using json_each(new.<field>).
+      executeUpdate(
+        s"""CREATE TRIGGER IF NOT EXISTS ${mvTable}__ai AFTER INSERT ON ${this.name} BEGIN
+           |  DELETE FROM $mvTable WHERE owner_id = new._id;
+           |  INSERT INTO $mvTable(owner_id, value)
+           |    SELECT new._id, CAST(value AS TEXT) FROM json_each(new.${f.name});
+           |END;""".stripMargin, tx
+      )
+      executeUpdate(
+        s"""CREATE TRIGGER IF NOT EXISTS ${mvTable}__au AFTER UPDATE ON ${this.name} BEGIN
+           |  DELETE FROM $mvTable WHERE owner_id = new._id;
+           |  INSERT INTO $mvTable(owner_id, value)
+           |    SELECT new._id, CAST(value AS TEXT) FROM json_each(new.${f.name});
+           |END;""".stripMargin, tx
+      )
+      executeUpdate(
+        s"""CREATE TRIGGER IF NOT EXISTS ${mvTable}__ad AFTER DELETE ON ${this.name} BEGIN
+           |  DELETE FROM $mvTable WHERE owner_id = old._id;
+           |END;""".stripMargin, tx
+      )
+    }
+  }
+
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
     SQLiteTransaction(this, state, parent)
   }
 
   override protected def initTransaction(tx: TX): Task[Unit] = super.initTransaction(tx).map { _ =>
+    // Schema is now ensured; build optional auxiliary structures.
+    if (SQLiteStore.EnableFTS) {
+      createFTS(tx)
+    }
+    if (SQLiteStore.EnableMultiValueIndexes) {
+      createMultiValueIndexes(tx)
+    }
+
     val c = tx.state.connectionManager.getConnection(tx.state)
     if (hasSpatial.sync()) {
       scribe.info(s"$name has spatial features. Enabling...")
@@ -126,18 +207,46 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 object SQLiteStore extends SQLCollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SQLiteStore[Doc, Model]
 
+  /**
+   * SQLite tuning knobs (applied via PRAGMA on connection init).
+   * These default to conservative, concurrency-friendly values for WAL.
+   */
+  var Pragmas: Map[String, String] = Map(
+    "busy_timeout" -> "5000",
+    // WAL is generally best with NORMAL synchronous for throughput; change to FULL if you need max durability.
+    "synchronous" -> "NORMAL",
+    // Larger cache helps read-heavy workloads. Negative means KiB.
+    "cache_size" -> "-200000",
+    // Try to checkpoint periodically to keep WAL from growing unbounded.
+    "wal_autocheckpoint" -> "2000",
+    "temp_store" -> "MEMORY"
+  )
+
+  /**
+   * Enables FTS5 tables for tokenized fields. Requires SQLite compiled with FTS5 (common in modern builds).
+   */
+  var EnableFTS: Boolean = true
+
+  /**
+   * Enables auxiliary index tables for array-like fields (List/Set) to make membership filters index-backed.
+   * Requires SQLite JSON1 (`json_each`) to be available.
+   */
+  var EnableMultiValueIndexes: Boolean = true
+
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {
-    val path = file match {
+    file match {
       case Some(f) =>
         Files.createDirectories(f)
-        val file = f.toFile
-        file.getCanonicalPath
-      case None => ":memory:"
+        val file = f.toFile.getCanonicalPath
+        SingleConnectionManager(SQLConfig(
+          jdbcUrl = s"jdbc:sqlite:$file/db.sqlite"
+        ))
+      case None =>
+        // In-memory SQLite must not append a file path suffix.
+        SingleConnectionManager(SQLConfig(
+          jdbcUrl = "jdbc:sqlite::memory:"
+        ))
     }
-
-    SingleConnectionManager(SQLConfig(
-      jdbcUrl = s"jdbc:sqlite:$path/db.sqlite"
-    ))
   }
 
   def apply[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
