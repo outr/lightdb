@@ -28,6 +28,21 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   override protected def initConnection(connection: Connection): Unit = {
     super.initConnection(connection)
+    // SQLite requires switching journal_mode outside of an active transaction.
+    // Our default SQLConfig uses autoCommit=false, which can cause SQLite JDBC to
+    // treat us as "in transaction" already. Temporarily enable auto-commit to
+    // ensure journal_mode can be set deterministically.
+    val previousAutoCommit = try connection.getAutoCommit catch {
+      case _: Throwable => true
+    }
+    if (!previousAutoCommit) {
+      try {
+        // End any implicit transaction context before setting journal_mode.
+        connection.setAutoCommit(true)
+      } catch {
+        case _: Throwable => // best-effort
+      }
+    }
     val s = connection.createStatement()
     try {
       s.execute("PRAGMA journal_mode=WAL;")
@@ -35,7 +50,10 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       case t: Throwable =>
         scribe.warn(s"Unable to enable SQLite WAL (journal_mode=WAL) for store '$name'. Continuing without WAL.", t)
     } finally {
-      s.close()
+      try s.close() catch { case _: Throwable => () }
+      if (!previousAutoCommit) {
+        try connection.setAutoCommit(false) catch { case _: Throwable => () }
+      }
     }
   }
 
@@ -105,7 +123,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
 }
 
-object SQLiteStore extends CollectionManager {
+object SQLiteStore extends SQLCollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SQLiteStore[Doc, Model]
 
   def singleConnectionManager(file: Option[Path]): ConnectionManager = {

@@ -1,9 +1,9 @@
 package spec
 
 import lightdb.h2.H2Store
-import lightdb.store.CollectionManager
+import lightdb.sql.SQLCollectionManager
 
 @EmbeddedTest
 class H2SQLSpec extends AbstractSQLSpec {
-  override def storeManager: CollectionManager = H2Store
+  override def storeManager: SQLCollectionManager = H2Store
 }

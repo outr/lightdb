@@ -4,7 +4,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig}
 import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
-import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid.Task
 
@@ -90,7 +90,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   }
 }
 
-object DuckDBStore extends CollectionManager {
+object DuckDBStore extends lightdb.sql.SQLCollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = DuckDBStore[Doc, Model]
 
   private def pooledConnectionManager(file: Option[Path]): ConnectionManager = {
