@@ -35,6 +35,22 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   def fqn: String = store.fqn
 
+  protected case class BestMatchPlan(scoreColumn: String,
+                                     scoreField: SQLPart,
+                                     joinFromSuffix: List[SQLPart],
+                                     matchFilter: SQLPart,
+                                     sortPart: SQLPart)
+
+  /**
+   * Backends may provide a best-match (relevance) plan when Sort.BestMatch is requested.
+   *
+   * If defined, the plan may:
+   * - join extra FROM sources (e.g., FTS tables)
+   * - add a filter that constrains the match set
+   * - add a computed score column and an ORDER BY clause
+   */
+  protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: SortDirection): Option[BestMatchPlan] = None
+
   /**
    * Hook for backends to provide an optimized tokenized (full-text-like) equality predicate.
    * Default behavior falls back to token-by-token LIKE matching.
@@ -337,6 +353,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
                          offset: Int,
                          limit: Option[Int],
                          conversion: Conversion[Doc, V],
+                         scoreColumn: Option[String] = None,
                          totalQuery: Option[SQLQuery] = None,
                          facetResults: Map[FacetField[Doc], FacetResult] = Map.empty): Task[SearchResults[Doc, Model, V]] = Task {
     // For drivers like DuckDB, ensure no pending results before new statements.
@@ -351,9 +368,25 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val rs = results.rs
     state.register(rs)
     val stream = rapid.Stream.fromIterator[(V, Double)](Task {
-      val iterator = rs2Iterator(rs, conversion)
+      val iterator = scoreColumn match {
+        case Some(col) =>
+          new Iterator[(V, Double)] {
+            override def hasNext: Boolean = rs.next()
+            override def next(): (V, Double) = {
+              val v = row2Value(rs, conversion)
+              val score = try {
+                rs.getDouble(col)
+              } catch {
+                case _: Throwable => 0.0
+              }
+              (v, score)
+            }
+          }
+        case None =>
+          rs2Iterator(rs, conversion).map(v => v -> 0.0)
+      }
       val ps = rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator.map(v => v -> 0.0), onClose = () => {
+      ActionIterator(iterator, onClose = () => {
         Try(rs.close())
         state.returnPreparedStatement(sql.query, ps)
       })
@@ -371,6 +404,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   def toSQL[V](query: Query[Doc, Model, V]): SQLQueryBuilder[Doc, Model] = {
     var extraFields = List.empty[SQLPart]
+    var bestMatch: Option[BestMatchPlan] = None
     val fields = query.conversion match {
       case Conversion.Value(field) => List(field)
       case Conversion.Doc() => store.fields
@@ -386,21 +420,37 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         extraFields = extraFields ::: extraFieldsForDistance(d)
         store.fields
     }
+
+    val bestMatchDirectionOpt: Option[SortDirection] = query.sort.collectFirst {
+      case Sort.BestMatch(direction) => direction
+    }
+    bestMatch = bestMatchDirectionOpt.flatMap(dir => bestMatchPlan(query.filter, dir))
+
+    val baseFieldParts: List[SQLPart] = if (bestMatch.nonEmpty) {
+      // When joining auxiliary tables (e.g., FTS), disambiguate base-table columns and keep stable column labels.
+      fields.map(f => SQLPart.Fragment(s"${store.fqn}.${f.name} AS ${f.name}"))
+    } else {
+      fields.map(f => fieldPart(f))
+    }
+
     SQLQueryBuilder(
       store = store,
       state = state,
-      fields = fields.map(f => fieldPart(f)) ::: extraFields,
-      filters = query.filter.map(filter2Part).toList,
+      fields = baseFieldParts ::: extraFields ::: bestMatch.toList.map(_.scoreField),
+      filters = query.filter.map(filter2Part).toList ::: bestMatch.toList.map(_.matchFilter),
       group = Nil,
       having = Nil,
-      sort = query.sort.collect {
+      sort = query.sort.flatMap {
+        case Sort.BestMatch(_) => bestMatch.toList.map(_.sortPart)
         case Sort.ByField(index, direction) =>
           val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
-          SQLPart.Fragment(s"${index.name} $dir")
-        case Sort.ByDistance(field, _, direction) => sortByDistance(field, direction)
+          List(SQLPart.Fragment(s"${index.name} $dir"))
+        case Sort.ByDistance(field, _, direction) => List(sortByDistance(field, direction))
+        case _ => Nil
       },
       limit = query.limit.orElse(query.pageSize),
-      offset = query.offset
+      offset = query.offset,
+      fromSuffix = bestMatch.toList.flatMap(_.joinFromSuffix)
     )
   }
 
@@ -412,7 +462,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       Task.pure(Map.empty[FacetField[Doc], FacetResult])
     }
     facetResults.flatMap { fr =>
-      execute[V](b.query, b.offset, b.limit, query.conversion, if (query.countTotal) Some(b.totalQuery) else None, fr)
+      val scoreCol = if (query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch])) {
+        Some("__score")
+      } else {
+        None
+      }
+      execute[V](b.query, b.offset, b.limit, query.conversion, scoreCol, if (query.countTotal) Some(b.totalQuery) else None, fr)
     }
   }
 
@@ -699,30 +754,31 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   private def rs2Iterator[V](rs: ResultSet, conversion: Conversion[Doc, V]): Iterator[V] = new Iterator[V] {
     override def hasNext: Boolean = rs.next()
+    override def next(): V = row2Value(rs, conversion)
+  }
 
-    override def next(): V = {
-      def jsonFromFields(fields: List[Field[Doc, _]]): Json =
-        obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
+  private def row2Value[V](rs: ResultSet, conversion: Conversion[Doc, V]): V = {
+    def jsonFromFields(fields: List[Field[Doc, _]]): Json =
+      obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
 
-      conversion match {
-        case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
-        case Conversion.Doc() => getDoc(rs).asInstanceOf[V]
-        case Conversion.Converted(c) => c(getDoc(rs))
-        case Conversion.Materialized(fields) =>
-          val json = jsonFromFields(fields)
-          MaterializedIndex[Doc, Model](json, store.model).asInstanceOf[V]
-        case Conversion.DocAndIndexes() =>
-          val json = jsonFromFields(store.fields.filter(_.indexed))
-          val doc = getDoc(rs)
-          MaterializedAndDoc[Doc, Model](json, store.model, doc).asInstanceOf[V]
-        case Conversion.Json(fields) =>
-          jsonFromFields(fields).asInstanceOf[V]
-        case Conversion.Distance(field, _, _, _) =>
-          val fieldName = s"${field.name}Distance"
-          val distances = JsonParser(rs.getString(fieldName)).as[List[Double]].map(d => Distance(d))
-          val doc = getDoc(rs)
-          DistanceAndDoc(doc, distances).asInstanceOf[V]
-      }
+    conversion match {
+      case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
+      case Conversion.Doc() => getDoc(rs).asInstanceOf[V]
+      case Conversion.Converted(c) => c(getDoc(rs))
+      case Conversion.Materialized(fields) =>
+        val json = jsonFromFields(fields)
+        MaterializedIndex[Doc, Model](json, store.model).asInstanceOf[V]
+      case Conversion.DocAndIndexes() =>
+        val json = jsonFromFields(store.fields.filter(_.indexed))
+        val doc = getDoc(rs)
+        MaterializedAndDoc[Doc, Model](json, store.model, doc).asInstanceOf[V]
+      case Conversion.Json(fields) =>
+        jsonFromFields(fields).asInstanceOf[V]
+      case Conversion.Distance(field, _, _, _) =>
+        val fieldName = s"${field.name}Distance"
+        val distances = JsonParser(rs.getString(fieldName)).as[List[Double]].map(d => Distance(d))
+        val doc = getDoc(rs)
+        DistanceAndDoc(doc, distances).asInstanceOf[V]
     }
   }
 

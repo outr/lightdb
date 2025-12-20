@@ -7,31 +7,67 @@ import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.Geo
 import lightdb.sql.query.SQLPart
+import lightdb.sql.query.SQLQuery
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.ListExtras
 import fabric.io.JsonFormatter
 import fabric.{Bool, Json, NumDec, NumInt, Str}
-import lightdb.sql.query.SQLQuery
 
 case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SQLStore[Doc, Model],
                                                                                 state: SQLState[Doc, Model],
                                                                                 parent: Option[Transaction[Doc, Model]]) extends SQLStoreTransaction[Doc, Model] {
   private def ftsTableName: String = s"${store.name}__fts"
+  private def scoreColumn: String = "__score"
+
+  private def tokenizeQuery(value: String): String = {
+    val tokens = value.split("\\s+").toList.map(_.trim).filter(_.nonEmpty)
+    tokens.map(t => s""""$t"""").mkString(" ")
+  }
+
+  private def findFirstTokenizedEquals(filter: Option[Filter[Doc]]): Option[String] = {
+    def loop(f: Filter[Doc]): Option[String] = f match {
+      case e: Filter.Equals[Doc, _] if e.value != null && e.value != None && e.field(store.model).isTokenized =>
+        e.getJson(store.model) match {
+          case Str(s, _) => Some(s)
+          case _ => None
+        }
+      case m: Filter.Multi[Doc] =>
+        m.filters.iterator.map(fc => loop(fc.filter)).collectFirst {
+          case Some(s) => s
+        }
+      case _ => None
+    }
+    filter.flatMap(loop)
+  }
+
+  override protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: lightdb.SortDirection): Option[BestMatchPlan] = {
+    if (!SQLiteStore.EnableFTS) return None
+    val raw = findFirstTokenizedEquals(filter).getOrElse(return None)
+    val q = tokenizeQuery(raw)
+    // Use USING(_id) to avoid ambiguous column name errors when selecting "_id" from the base table + fts table.
+    val join = List(SQLPart.Fragment(s" JOIN $ftsTableName USING(_id)"))
+    val matchFilter = SQLPart(s"$ftsTableName MATCH ?", q.json)
+    val scoreField = SQLPart.Fragment(s"(-bm25($ftsTableName)) AS $scoreColumn")
+    val dir = direction match {
+      case SortDirection.Descending => "DESC"
+      case SortDirection.Ascending => "ASC"
+    }
+    val sortPart = SQLPart.Fragment(s"$scoreColumn $dir")
+    Some(BestMatchPlan(scoreColumn, scoreField, join, matchFilter, sortPart))
+  }
 
   override protected def tokenizedEqualsPart(fieldName: String, value: String): SQLPart = {
     // Prefer FTS5 if enabled; fall back to LIKE if FTS isn't available.
     if (!SQLiteStore.EnableFTS) return super.tokenizedEqualsPart(fieldName, value)
-    val tokens = value.split("\\s+").toList.map(_.trim).filter(_.nonEmpty)
-    val query = tokens.map(t => s""""$t"""").mkString(" ")
+    val query = tokenizeQuery(value)
     // contentless fts table stores _id and tokenized columns
     SQLPart(s"_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?)", query.json)
   }
 
   override protected def tokenizedNotEqualsPart(fieldName: String, value: String): SQLPart = {
     if (!SQLiteStore.EnableFTS) return super.tokenizedNotEqualsPart(fieldName, value)
-    val tokens = value.split("\\s+").toList.map(_.trim).filter(_.nonEmpty)
-    val query = tokens.map(t => s""""$t"""").mkString(" ")
+    val query = tokenizeQuery(value)
     SQLPart(s"NOT(_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?))", query.json)
   }
 
