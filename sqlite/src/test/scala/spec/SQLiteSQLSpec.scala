@@ -1,9 +1,9 @@
 package spec
 
 import lightdb.sql.SQLiteStore
-import lightdb.store.CollectionManager
+import lightdb.sql.SQLCollectionManager
 
 @EmbeddedTest
 class SQLiteSQLSpec extends AbstractSQLSpec {
-  override def storeManager: CollectionManager = SQLiteStore
+  override def storeManager: SQLCollectionManager = SQLiteStore
 }

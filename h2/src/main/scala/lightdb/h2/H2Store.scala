@@ -4,7 +4,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
-import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid.{Task, Unique}
 
@@ -59,7 +59,7 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
   }
 }
 
-object H2Store extends CollectionManager {
+object H2Store extends lightdb.sql.SQLCollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = H2Store[Doc, Model]
 
   def config(file: Option[Path]): SQLConfig = SQLConfig(

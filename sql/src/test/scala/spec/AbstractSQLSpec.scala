@@ -4,9 +4,9 @@ import fabric.rw._
 import fabric.str
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.id.Id
-import lightdb.sql.SQLStoreTransaction
+import lightdb.sql.SQLCollectionManager
 import lightdb.sql.query.SQLQuery
-import lightdb.store.{Collection, CollectionManager}
+import lightdb.store.CollectionManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{CompositeIndex, LightDB, StoredValue}
 import lightdb.time.Timestamp
@@ -62,7 +62,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
     "query with an arbitrary query" in {
       db.people.transaction { transaction =>
-        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        val txn = transaction
         txn.sql[Name](s"SELECT name FROM ${txn.fqn} WHERE name = :name") { q =>
           q.values("name" -> "Adam")
         }.flatMap(_.list).map { names =>
@@ -72,7 +72,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
     "query with type-safe txn.sql DSL" in {
       db.people.transaction { transaction =>
-        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        val txn = transaction
         txn.sql
           .columns(p => p.name)
           .where(p => p.name === "Adam")
@@ -86,7 +86,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "query with an arbitrary query via SQLDsl" in {
       db.people.transaction { transaction =>
         import SQLDsl._
-        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        val txn = transaction
         val q = SQLDsl
           .select(col(Person.name))
           .from(table(db.people))
@@ -100,7 +100,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "query with an arbitrary query via SQLDsl (self-join)" in {
       db.people.transaction { transaction =>
         import SQLDsl._
-        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        val txn = transaction
         val p = table(db.people).as("p")
         val p2 = table(db.people).as("p2")
         val q = SQLDsl
@@ -117,7 +117,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "verify generated SQL query contains no limit" in {
       db.people.transaction { transaction =>
         Task {
-          val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+          val txn = transaction
           val sql = txn
             .toSQL(txn.query.clearPageSize).query.query
             .replaceAll("\\s+", " ")
@@ -130,7 +130,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "verify queryFull populates arguments" in {
       db.people.transaction { transaction =>
         Task {
-          val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+          val txn = transaction
           val sql = txn
             .toSQL(txn.query.clearPageSize.filter(p => p.name === "Adam" && p.age === 21 && p.city === Some(City("Somewhere")))).query.queryLiteral
             .replaceAll("\\s+", " ")
@@ -150,7 +150,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
     "query with multiple args" in {
       db.people.transaction { transaction =>
-        val txn = transaction.asInstanceOf[SQLStoreTransaction[Person, Person.type]]
+        val txn = transaction
         txn.sql[Name](s"SELECT name FROM ${txn.fqn} WHERE name IN (:names)") { query =>
           query.fillPlaceholder("names", "Adam".json, "Charlie".json)
         }.flatMap(_.list).map { people =>
@@ -166,17 +166,17 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
   }
 
-  def storeManager: CollectionManager
+  def storeManager: SQLCollectionManager
 
   class DB extends LightDB {
-    override type SM = CollectionManager
-    override val storeManager: CollectionManager = spec.storeManager
+    override type SM = SQLCollectionManager
+    override val storeManager: SQLCollectionManager = spec.storeManager
 
     override def name: String = specName
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people: Collection[Person, Person.type] = store(Person)
+    val people = store(Person)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

@@ -7,7 +7,7 @@ import lightdb.store.{CollectionManager, StoreMode}
 
 import java.nio.file.Path
 
-case class SQLiteSharedStore(connectionManager: ConnectionManager) extends CollectionManager {
+case class SQLiteSharedStore(connectionManager: ConnectionManager) extends SQLCollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SQLiteStore[Doc, Model]
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
