@@ -26,6 +26,19 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = SQLiteTransaction[Doc, Model]
 
+  override protected def initConnection(connection: Connection): Unit = {
+    super.initConnection(connection)
+    val s = connection.createStatement()
+    try {
+      s.execute("PRAGMA journal_mode=WAL;")
+    } catch {
+      case t: Throwable =>
+        scribe.warn(s"Unable to enable SQLite WAL (journal_mode=WAL) for store '$name'. Continuing without WAL.", t)
+    } finally {
+      s.close()
+    }
+  }
+
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
     SQLiteTransaction(this, state, parent)
