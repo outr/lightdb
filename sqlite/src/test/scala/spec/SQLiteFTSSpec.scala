@@ -7,6 +7,7 @@ import lightdb.sql.{SQLCollectionManager, SQLiteStore}
 import lightdb.time.Timestamp
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.LightDB
+import lightdb.Sort
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
@@ -18,7 +19,7 @@ import rapid.{AsyncTaskSpec, Task}
  */
 @EmbeddedTest
 class SQLiteFTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
-  object TestDB extends LightDB {
+  final class TestDB extends LightDB {
     override type SM = SQLCollectionManager
     override val storeManager: SQLCollectionManager = SQLiteStore
     override def directory = None
@@ -27,26 +28,59 @@ class SQLiteFTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val docs = store(Doc)
   }
 
+  private def withDB[A](f: TestDB => Task[A]): Task[A] = {
+    val db = new TestDB
+    db.init.next(f(db)).guarantee(db.dispose)
+  }
+
   "SQLite FTS" should {
     "support tokenized search via FTS (no throw)" in {
-      for {
-        _ <- TestDB.init
-        _ <- TestDB.docs.transaction { txn =>
+      withDB { TestDB =>
+        for {
+          _ <- TestDB.docs.transaction { txn =>
           txn.insert(List(
             Doc(name = "Adam", _id = Doc.id("adam")),
             Doc(name = "Brenda", _id = Doc.id("brenda"))
           )).unit
-        }
-        total <- TestDB.docs.transaction { txn =>
+          }
+          total <- TestDB.docs.transaction { txn =>
           txn.query
             .filter(_.search === "adam")
             .countTotal(true)
             .id
             .search
             .map(_.total.getOrElse(0))
+          }
+        } yield total should be >= 1
+      }
+    }
+
+    "support BestMatch ranking (bm25) and non-constant scores" in {
+      withDB { TestDB =>
+        for {
+          _ <- TestDB.docs.transaction { txn =>
+          txn.truncate.unit.next {
+            txn.insert(List(
+              Doc(name = "adam", _id = Doc.id("a1")),
+              Doc(name = "adam adam adam", _id = Doc.id("a3"))
+            )).unit
+          }
+          }
+          scored <- TestDB.docs.transaction { txn =>
+          txn.query
+            .filter(_.search === "adam")
+            .clearSort
+            .sort(Sort.BestMatch())
+            .scored
+            .clearPageSize
+            .streamScoredPage
+            .toList
+          }
+        } yield {
+          scored.map(_._1.name).toSet should be(Set("adam", "adam adam adam"))
+          scored.map(_._2).distinct.size should be >= 2
         }
-        _ <- TestDB.dispose
-      } yield total should be >= 1
+      }
     }
   }
 
