@@ -36,6 +36,37 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   def fqn: String = store.fqn
 
   /**
+   * Hook for backends to provide an optimized tokenized (full-text-like) equality predicate.
+   * Default behavior falls back to token-by-token LIKE matching.
+   */
+  protected def tokenizedEqualsPart(fieldName: String, value: String): SQLPart = {
+    val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
+    val parts = tokens.map(t => likePart(fieldName, s"%$t%"))
+    if (parts.isEmpty) SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
+  }
+
+  /**
+   * Hook for backends to provide an optimized tokenized inequality predicate.
+   * Default behavior is NOT(all tokens present).
+   */
+  protected def tokenizedNotEqualsPart(fieldName: String, value: String): SQLPart = {
+    val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
+    val inner = if (tokens.isEmpty) SQLPart.Fragment("1=1") else {
+      val parts = tokens.map(t => likePart(fieldName, s"%$t%"))
+      SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
+    }
+    SQLQuery(List(SQLPart.Fragment("NOT("), inner, SQLPart.Fragment(")")))
+  }
+
+  /**
+   * Hook for backends to provide an indexed membership predicate for array-like fields.
+   * If None, default behavior uses LIKE against the stored JSON representation.
+   */
+  protected def arrayContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = None
+
+  protected def arrayNotContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = None
+
+  /**
    * Transaction-aware, type-safe SQL DSL.
    *
    * This complements `sql[V](query: String)(builder: SQLQuery => SQLQuery)` for raw ad-hoc queries.
@@ -802,39 +833,36 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case f: Filter.Equals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
         f.getJson(targetStore.model) match {
           case Str(s, _) =>
-            val tokens = s.split("\\s+").toList.filter(_.nonEmpty)
-            val parts = tokens.map(t => likePart(f.fieldName, s"%$t%"))
-            if (parts.isEmpty) SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
+            tokenizedEqualsPart(f.fieldName, s)
           case _ => throw new UnsupportedOperationException(s"Unsupported tokenized equality value for ${f.fieldName}")
         }
       case f: Filter.Equals[C, _] if f.field(targetStore.model).isArr =>
         val values = f.getJson(targetStore.model).asVector
-        val parts = values.toList.map { json =>
-          val jsonString = JsonFormatter.Compact(json)
-          likePart(f.fieldName, s"%$jsonString%")
+        arrayContainsAllParts(f.fieldName, values.toList).getOrElse {
+          val parts = values.toList.map { json =>
+            val jsonString = JsonFormatter.Compact(json)
+            likePart(f.fieldName, s"%$jsonString%")
+          }
+          SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
         }
-        SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
       case f: Filter.Equals[C, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
       case f: Filter.Equals[C, _] => SQLPart(s"${f.fieldName} = ?", f.field(targetStore.model).rw.read(f.value))
       // Tokenized fields: not equals is interpreted as NOT(all tokens present)
       case f: Filter.NotEquals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
         f.getJson(targetStore.model) match {
           case Str(s, _) =>
-            val tokens = s.split("\\s+").toList.filter(_.nonEmpty)
-            val inner = if (tokens.isEmpty) SQLPart.Fragment("1=1") else {
-              val parts = tokens.map(t => likePart(f.fieldName, s"%$t%"))
-              SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
-            }
-            SQLQuery(List(SQLPart.Fragment("NOT("), inner, SQLPart.Fragment(")")))
+            tokenizedNotEqualsPart(f.fieldName, s)
           case _ => throw new UnsupportedOperationException(s"Unsupported tokenized inequality value for ${f.fieldName}")
         }
       case f: Filter.NotEquals[C, _] if f.field(targetStore.model).isArr =>
         val values = f.getJson(targetStore.model).asVector
-        val parts = values.toList.map { json =>
-          val jsonString = JsonFormatter.Compact(json)
-          notLikePart(f.fieldName, s"%$jsonString%")
+        arrayNotContainsAllParts(f.fieldName, values.toList).getOrElse {
+          val parts = values.toList.map { json =>
+            val jsonString = JsonFormatter.Compact(json)
+            notLikePart(f.fieldName, s"%$jsonString%")
+          }
+          SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
         }
-        SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
       case f: Filter.NotEquals[C, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
       case f: Filter.NotEquals[C, _] => SQLPart(s"${f.fieldName} != ?", f.field(targetStore.model).rw.read(f.value))
       case f: Filter.Regex[C, _] => regexpPart(f.fieldName, f.expression)
