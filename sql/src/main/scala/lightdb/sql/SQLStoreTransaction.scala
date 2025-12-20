@@ -849,7 +849,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       }
     } else {
       // For non-hierarchical facets, insert a single entry
-      val component = if (path.isEmpty) "" else path.mkString("/")
+      // The path elements are joined to form a single facet value
+      val component = path.mkString("/")
       val insertSQL = s"INSERT INTO $tableName (doc_id, path_depth, path_component, full_path) VALUES (?, ?, ?, ?)"
       val ps = connection.prepareStatement(insertSQL)
       try {
