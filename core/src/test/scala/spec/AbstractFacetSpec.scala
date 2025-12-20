@@ -52,7 +52,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
             val authorsResult = results.facet(_.authorsFacet)
             authorsResult.childCount should be(6)
             authorsResult.totalCount should be(8)
-            authorsResult.values.map(_.value) should be(List("Bob", "Lisa", "James", "Susan", "Frank", "George"))
+            authorsResult.values.map(_.value) should be(List("Bob", "Lisa", "Frank", "George", "James", "Susan"))
             authorsResult.values.map(_.count) should be(List(2, 2, 1, 1, 1, 1))
           }
       }
@@ -65,7 +65,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
           .search
           .map { results =>
             val publishDateResult = results.facet(_.publishDateFacet)
-            publishDateResult.values.map(_.value) should be(List("2010", "2012", "1999"))
+            publishDateResult.values.map(_.value) should be(List("1999", "2010", "2012"))
             publishDateResult.childCount should be(4)
             publishDateResult.values.map(_.count) should be(List(2, 2, 2))
             publishDateResult.totalCount should be(6)
@@ -125,12 +125,12 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
             val authorResult = results.facet(_.authorsFacet)
             authorResult.childCount should be(5)
             authorResult.totalCount should be(5)
-            authorResult.values.map(_.value) should be(List("Bob", "Lisa", "Susan", "Frank", "George"))
+            authorResult.values.map(_.value) should be(List("Bob", "Frank", "George", "Lisa", "Susan"))
             authorResult.values.map(_.count) should be(List(1, 1, 1, 1, 1))
             val publishResult = results.facet(_.publishDateFacet)
             publishResult.childCount should be(3)
             publishResult.totalCount should be(4)
-            publishResult.values.map(_.value) should be(List("2012", "1999"))
+            publishResult.values.map(_.value) should be(List("1999", "2012"))
             publishResult.values.map(_.count) should be(List(2, 2))
           }
       }
@@ -265,7 +265,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
         transaction.query.facet(_.authorsFacet).search.map { results =>
           results.getFacet(_.publishDateFacet) should be(None)
           val authorResult = results.facet(_.authorsFacet)
-          authorResult.values.map(_.value) should be(List("Bob", "Lisa", "James", "Frank", "George"))
+          authorResult.values.map(_.value) should be(List("Bob", "Lisa", "Frank", "George", "James"))
           authorResult.values.map(_.count) should be(List(2, 2, 1, 1, 1))
         }
       }
