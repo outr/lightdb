@@ -15,7 +15,6 @@ import rapid.AsyncTaskSpec
 import lightdb.filter.FilterExtras
 
 import java.nio.file.Path
-import scala.reflect.Selectable.reflectiveSelectable
 
 @EmbeddedTest
 class RocksDBTraversalTokenizedSpec
@@ -78,7 +77,7 @@ class RocksDBTraversalTokenizedSpec
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         eqNames <- DB.people.transaction { tx =>
           tx.query.filter(_.bio === "quick fox").toList.map(_.map(_.name).sorted)
@@ -105,7 +104,7 @@ class RocksDBTraversalTokenizedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         page1 <- DB.people.transaction { tx =>
           tx.query
@@ -146,7 +145,7 @@ class RocksDBTraversalTokenizedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         page1 <- DB.people.transaction { tx =>
           tx.query
@@ -188,7 +187,7 @@ class RocksDBTraversalTokenizedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         page <- DB.people.transaction { tx =>
           tx.query

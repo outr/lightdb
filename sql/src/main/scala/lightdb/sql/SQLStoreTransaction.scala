@@ -867,7 +867,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val fields = f.fields(targetStore.model)
     f match {
       case _: Filter.MatchNone[C] => SQLPart.Fragment("1=0")
-      case _: Filter.ExistsChild[_, _, _] =>
+      case _: Filter.ExistsChild[_] =>
         throw new UnsupportedOperationException("ExistsChild should have been resolved before SQL translation")
       case f: Filter.DrillDownFacetFilter[C] =>
         // Facets are stored as JSON (List[FacetValue]) in a single column.

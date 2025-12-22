@@ -20,7 +20,13 @@ trait TraversalRocksDBWrappedManager {
     ): S[Doc, Model] = {
       val backing = RocksDBStore.create(db, model, s"${name}__backing", path, storeMode)
       val indexPath = path.map(p => p.getParent.resolve(s"${name}__tindex"))
-      val indexBacking = RocksDBStore.create(db, lightdb.KeyValue, s"${name}__tindex", indexPath, lightdb.store.StoreMode.All())
+      val indexBacking = RocksDBStore.create[lightdb.KeyValue, lightdb.KeyValue.type](
+        db,
+        lightdb.KeyValue,
+        s"${name}__tindex",
+        indexPath,
+        lightdb.store.StoreMode.All[lightdb.KeyValue, lightdb.KeyValue.type]()
+      )
       new lightdb.traversal.store.TraversalStore[Doc, Model](
         name = name,
         path = path,

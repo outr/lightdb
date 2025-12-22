@@ -12,7 +12,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import profig.Profig
 import rapid.AsyncTaskSpec
-import scala.reflect.Selectable.reflectiveSelectable
 
 import java.nio.file.Path
 
@@ -70,7 +69,7 @@ class RocksDBTraversalFastTotalFromPersistedPostingsSpec
         _ <- DB.people.transaction(_.insert(docs))
         // Ensure persisted index is ready so query engine can use it.
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query

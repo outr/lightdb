@@ -15,7 +15,7 @@ object FilterPlanner {
   def resolve[Doc <: Document[Doc]](filter: Filter[Doc],
                                    model: DocumentModel[Doc],
                                    resolveExistsChild: Boolean): Task[Filter[Doc]] = filter match {
-    case f: Filter.ExistsChild[Doc @unchecked, _, _] if resolveExistsChild =>
+    case f: Filter.ExistsChild[Doc @unchecked] if resolveExistsChild =>
       f.resolve(model)
     case multi: Filter.Multi[Doc] =>
       multi.filters.map { clause =>

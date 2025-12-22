@@ -85,7 +85,7 @@ object TraversalQueryEngine {
   ): Task[SearchResults[Doc, Model, V]] = Task.defer {
     def containsExistsChild(filterOpt: Option[Filter[Doc]]): Boolean = {
       def loop(f: Filter[Doc]): Boolean = f match {
-        case _: Filter.ExistsChild[Doc @unchecked, _, _] => true
+        case _: Filter.ExistsChild[Doc @unchecked] => true
         case m: Filter.Multi[Doc] => m.filters.exists(fc => loop(fc.filter))
         case _ => false
       }
@@ -108,29 +108,28 @@ object TraversalQueryEngine {
 
       // Try the "single ExistsChild" early-terminating semi-join. Otherwise fallback to planner resolve.
       def stripExistsChild(f: Filter[Doc]): Option[Filter[Doc]] = f match {
-        case _: Filter.ExistsChild[Doc @unchecked, _, _] => None
+        case _: Filter.ExistsChild[Doc @unchecked] => None
         case m: Filter.Multi[Doc] =>
-          val clauses = m.filters.filterNot(_.filter.isInstanceOf[Filter.ExistsChild[Doc @unchecked, _, _]])
+          val clauses = m.filters.filterNot(_.filter.isInstanceOf[Filter.ExistsChild[Doc @unchecked]])
           if (clauses.isEmpty) None else Some(m.copy(filters = clauses))
         case other =>
           // Unknown composition; keep as-is (but this means evalFilter would throw). We'll rely on planner fallback.
           Some(other)
       }
 
-      def extractExistsChildren(f: Filter[Doc]): List[Filter.ExistsChild[Doc @unchecked, _, _]] = f match {
-        case ec: Filter.ExistsChild[Doc @unchecked, _, _] => List(ec)
+      def extractExistsChildren(f: Filter[Doc]): List[Filter.ExistsChild[Doc @unchecked]] = f match {
+        case ec: Filter.ExistsChild[Doc @unchecked] => List(ec)
         case m: Filter.Multi[Doc] =>
           m.filters.collect {
-            case fc
-                if (fc.condition == Condition.Must || fc.condition == Condition.Filter) &&
-                  fc.filter.isInstanceOf[Filter.ExistsChild[Doc @unchecked, _, _]] =>
-              fc.filter.asInstanceOf[Filter.ExistsChild[Doc @unchecked, _, _]]
+            case FilterClause(ec: Filter.ExistsChild[Doc @unchecked], condition, _)
+                if (condition == Condition.Must || condition == Condition.Filter) =>
+              ec
           }
         case _ => Nil
       }
 
       def earlyTerminateSemiJoinMulti(
-        existsChildren: List[Filter.ExistsChild[Doc @unchecked, _, _]],
+        existsChildren: List[Filter.ExistsChild[Doc @unchecked]],
         originalFilter: Filter[Doc]
       ): Task[SearchResults[Doc, Model, V]] = {
         // verify filter excludes ExistsChild because evalFilter doesn't support it.
@@ -226,14 +225,14 @@ object TraversalQueryEngine {
                   ttx.store.effectiveIndexBacking match {
                     case None =>
                       // fallback to scan path
-                      childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+                      childTx.query.filter(_ => driverFilter).value(_ => parentField).stream
                     case Some(idx) =>
                       rapid.Stream.force {
                         idx.transaction { kv0 =>
                           val kv = kv0.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]]
                           TraversalPersistedIndex.isReady(ttx.store.name, kv).map { ready =>
                             if (!ready) {
-                              childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+                              childTx.query.filter(_ => driverFilter).value(_ => parentField).stream
                             } else {
                               seedChildIdsFromPersisted(kv, ttx.store.name) match {
                                 case Some(childIds) =>
@@ -241,7 +240,7 @@ object TraversalQueryEngine {
                                     .evalMap(cid => TraversalPersistedIndex.refGet(ttx.store.name, parentField.name, cid, kv))
                                     .collect { case Some(pid) => Id[Doc](pid) }
                                 case None =>
-                                  childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+                                  childTx.query.filter(_ => driverFilter).value(_ => parentField).stream
                               }
                             }
                           }
@@ -249,7 +248,7 @@ object TraversalQueryEngine {
                       }
                   }
                 case _ =>
-                  childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+                  childTx.query.filter(_ => driverFilter).value(_ => parentField).stream
               }
 
               val s =
@@ -331,7 +330,7 @@ object TraversalQueryEngine {
               case m: Filter.Multi[Doc] =>
                 val ecs = extractExistsChildren(m)
                 if (ecs.isEmpty) None else Some(earlyTerminateSemiJoinMulti(ecs, f0.asInstanceOf[Filter[Doc]]))
-              case ec: Filter.ExistsChild[Doc @unchecked, _, _] =>
+              case ec: Filter.ExistsChild[Doc @unchecked] =>
                 Some(earlyTerminateSemiJoinMulti(List(ec), f0.asInstanceOf[Filter[Doc]]))
               case _ => None
             }
@@ -373,7 +372,7 @@ object TraversalQueryEngine {
                           val need = offset + pageSize
                           val state = new IndexingState
 
-                          def childHasMatch(ec: Filter.ExistsChild[Doc @unchecked, _, _], pid: Id[Doc]): Task[Boolean] =
+                          def childHasMatch(ec: Filter.ExistsChild[Doc @unchecked], pid: Id[Doc]): Task[Boolean] =
                             ec.relation.childStore.transaction { childTx =>
                               val childModel = childTx.store.model
                               val cf = ec.childFilter(childModel)
@@ -459,16 +458,16 @@ object TraversalQueryEngine {
         else {
           query.filter.flatMap { f0 =>
             val original = f0.asInstanceOf[Filter[Doc]]
-            val existsChildren: List[Filter.ExistsChild[Doc @unchecked, _, _]] = original match {
+            val existsChildren: List[Filter.ExistsChild[Doc @unchecked]] = original match {
               case m: Filter.Multi[Doc] => extractExistsChildren(m)
-              case ec: Filter.ExistsChild[Doc @unchecked, _, _] => List(ec)
+              case ec: Filter.ExistsChild[Doc @unchecked] => List(ec)
               case _ => Nil
             }
             if (existsChildren.isEmpty || nativeFullMaxParents <= 0) None
             else {
               val verifyFilter: Option[Filter[Doc]] = stripExistsChild(original)
 
-              def parentIdsFor(ec: Filter.ExistsChild[Doc @unchecked, _, _]): Task[Option[Set[String]]] =
+              def parentIdsFor(ec: Filter.ExistsChild[Doc @unchecked]): Task[Option[Set[String]]] =
                 ec.relation.childStore.transaction { childTx =>
                   val childModel = childTx.store.model
                   val cf = ec.childFilter(childModel)
@@ -481,7 +480,7 @@ object TraversalQueryEngine {
                       .filter(_ => cf)
                       .value(_ => parentField)
                       .stream
-                      .evalMap { pid =>
+                      .evalMap { (pid: Id[Doc]) =>
                         Task {
                           if (pid != null) {
                             seen.add(pid.value)
@@ -671,7 +670,9 @@ object TraversalQueryEngine {
     }
 
     def distanceMin(doc: Doc, field: Field[Doc, List[Geo]], from: Point): Double = {
-      val list = field.get(doc, field, state) match {
+      // Some backends historically returned unexpected collection shapes; widen to Any so Scala 2 doesn't reject patterns.
+      val raw: Any = field.get(doc, field, state)
+      val list = raw match {
         case null => Nil
         case l: List[_] => l.collect { case g: Geo => g }
         case s: Set[_] => s.toList.collect { case g: Geo => g }
@@ -3131,14 +3132,14 @@ object TraversalQueryEngine {
       field.get(doc, field, state).asInstanceOf[V]
     case Conversion.Doc() => doc.asInstanceOf[V]
     case Conversion.Converted(c) => c(doc)
-    case Conversion.Materialized(fields) =>
-      val json = obj(fields.map(f => f.name -> f.getJson(doc, state)): _*)
+    case m: Conversion.Materialized[Doc @unchecked, Model @unchecked] =>
+      val json = obj(m.fields.map(f => f.name -> f.getJson(doc, state)): _*)
       MaterializedIndex[Doc, Model](json, model).asInstanceOf[V]
     case Conversion.DocAndIndexes() =>
       val json = obj(model.indexedFields.map(f => f.name -> f.getJson(doc, state)): _*)
       MaterializedAndDoc[Doc, Model](json, model, doc).asInstanceOf[V]
-    case Conversion.Json(fields) =>
-      obj(fields.map(f => f.name -> f.getJson(doc, state)): _*).asInstanceOf[V]
+    case j: Conversion.Json[Doc @unchecked] =>
+      obj(j.fields.map(f => f.name -> f.getJson(doc, state)): _*).asInstanceOf[V]
     case d: Conversion.Distance[Doc, _] =>
       val distances = distanceCacheById.getOrElse(doc._id.value, {
         val list = d.field.get(doc, d.field, state) match {
@@ -3415,7 +3416,7 @@ object TraversalQueryEngine {
           }
       }
       geos.exists(g => Spatial.distance(g, f.from).valueInMeters <= f.radius.valueInMeters)
-    case f: Filter.ExistsChild[Doc @unchecked, _, _] =>
+    case f: Filter.ExistsChild[Doc @unchecked] =>
       // In a normal LightDB execution path, FilterPlanner.resolve will have already resolved ExistsChild.
       // If it reaches here, treat it as unsupported to avoid silent wrong answers.
       throw new UnsupportedOperationException("ExistsChild must be resolved before traversal execution")

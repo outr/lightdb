@@ -14,7 +14,6 @@ import profig.Profig
 import rapid.AsyncTaskSpec
 
 import java.nio.file.Path
-import scala.reflect.Selectable.reflectiveSelectable
 
 @EmbeddedTest
 class RocksDBTraversalStreamingSortByFieldSpec
@@ -78,7 +77,7 @@ class RocksDBTraversalStreamingSortByFieldSpec
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         names <- DB.people.transaction { tx =>
           tx.query.sort(Sort.ByField(Person.age).desc).limit(3).toList.map(_.map(_.name))

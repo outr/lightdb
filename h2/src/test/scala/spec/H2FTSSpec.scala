@@ -21,7 +21,7 @@ class H2FTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs = store(Doc)
+    val docs: S[Doc, Doc.type] = store(Doc)
   }
 
   private def withDB[A](f: TestDB => Task[A]): Task[A] = {
@@ -84,5 +84,3 @@ class H2FTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     val search = field.tokenized("search", _.searchText)
   }
 }
-
-
