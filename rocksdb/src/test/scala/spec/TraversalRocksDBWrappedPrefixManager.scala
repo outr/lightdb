@@ -1,8 +1,8 @@
 package spec
 
 import lightdb.rocksdb.RocksDBStore
-import lightdb.store.prefix.PrefixScanningStoreManager
 import lightdb.store.StoreMode
+import lightdb.traversal.store.TraversalManager
 
 /**
  * Test helper: a PrefixScanningStoreManager that creates TraversalStore instances wrapping a RocksDBStore backing.
@@ -10,9 +10,7 @@ import lightdb.store.StoreMode
  * This is used by specs that require PrefixScanningStoreManager (e.g. AbstractTraversalSpec).
  */
 trait TraversalRocksDBWrappedPrefixManager {
-  def traversalPrefixStoreManager: PrefixScanningStoreManager = new PrefixScanningStoreManager {
-    override type S[Doc <: lightdb.doc.Document[Doc], Model <: lightdb.doc.DocumentModel[Doc]] =
-      lightdb.traversal.store.TraversalStore[Doc, Model]
+  def traversalPrefixStoreManager: TraversalManager = new TraversalManager {
 
     override def create[Doc <: lightdb.doc.Document[Doc], Model <: lightdb.doc.DocumentModel[Doc]](
       db: lightdb.LightDB,

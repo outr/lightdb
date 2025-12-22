@@ -2,14 +2,13 @@ package spec
 
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.CollectionManager
+import lightdb.traversal.store.TraversalManager
 
 /**
  * Test helper: a CollectionManager that creates TraversalStore instances wrapping a RocksDBStore backing.
  */
 trait TraversalRocksDBWrappedManager {
-  def traversalStoreManager: CollectionManager = new CollectionManager {
-    override type S[Doc <: lightdb.doc.Document[Doc], Model <: lightdb.doc.DocumentModel[Doc]] =
-      lightdb.traversal.store.TraversalStore[Doc, Model]
+  def traversalStoreManager: TraversalManager = new TraversalManager {
 
     override def create[Doc <: lightdb.doc.Document[Doc], Model <: lightdb.doc.DocumentModel[Doc]](
       db: lightdb.LightDB,

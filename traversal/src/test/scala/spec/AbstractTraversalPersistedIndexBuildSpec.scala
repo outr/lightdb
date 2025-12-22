@@ -5,6 +5,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager}
+import lightdb.traversal.store.{TraversalManager, TraversalTransaction}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -22,27 +23,25 @@ abstract class AbstractTraversalPersistedIndexBuildSpec
     with AsyncTaskSpec
     with Matchers
 {
-  def traversalStoreManager: CollectionManager
+  def traversalStoreManager: TraversalManager
 
   private lazy val specName: String = getClass.getSimpleName
 
   object DB extends LightDB {
-    override type SM = CollectionManager
-    override val storeManager: CollectionManager = traversalStoreManager
+    override type SM = TraversalManager
+    override val storeManager: TraversalManager = traversalStoreManager
     override lazy val directory: Option[Path] = Some(Files.createTempDirectory("lightdb-traversal-persisted-index-build-"))
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val entries: Collection[Entry, Entry.type] = store(Entry, name = Some("entries"))
+    val entries: S[Entry, Entry.type] = store(Entry, name = Some("entries"))
   }
 
   specName should {
     "initialize" in DB.init.succeed
 
     "build persisted index and expose ready + postings (eq + ngram)" in {
-      DB.entries.transaction { tx0 =>
-        val tx = tx0.asInstanceOf[lightdb.traversal.store.TraversalTransaction[Entry, Entry.type]]
+      DB.entries.transaction { tx =>
         val store = tx.store
-
         for {
           _ <- tx.insert(List(
             Entry(name = "Alice", age = 10, _id = Id("a")),

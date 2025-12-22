@@ -8,6 +8,7 @@ import lightdb.store.{Collection, CollectionManager}
 import lightdb.time.Timestamp
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.LightDB
+import lightdb.traversal.store.TraversalManager
 import lightdb.transaction.PrefixScanningTransaction
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
@@ -40,16 +41,16 @@ class RocksDBTraversalOrderedPostingsIntersectionSpec
   }
 
   private lazy val specName: String = getClass.getSimpleName
-  override def traversalStoreManager: CollectionManager = super.traversalStoreManager
+  override def traversalStoreManager: TraversalManager = super.traversalStoreManager
 
   object DB extends LightDB {
-    override type SM = CollectionManager
-    override val storeManager: CollectionManager = traversalStoreManager
+    override type SM = TraversalManager
+    override val storeManager: TraversalManager = traversalStoreManager
 
     override def name: String = specName
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people: Collection[Person, Person.type] = store(Person)
+    val people: S[Person, Person.type] = store(Person)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
@@ -82,8 +83,7 @@ class RocksDBTraversalOrderedPostingsIntersectionSpec
         _ <- DB.people
           .asInstanceOf[TraversalStore[_, _]]
           .buildPersistedIndex()
-        ids <- DB.people.transaction { tx =>
-          val ttx = tx.asInstanceOf[TraversalTransaction[Person, Person.type]]
+        ids <- DB.people.transaction { ttx =>
           val storeName = ttx.store.name
 
           ttx.store.effectiveIndexBacking match {
@@ -104,5 +104,6 @@ class RocksDBTraversalOrderedPostingsIntersectionSpec
     }
   }
 }
+
 
 
