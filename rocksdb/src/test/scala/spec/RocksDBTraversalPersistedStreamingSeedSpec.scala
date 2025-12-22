@@ -14,7 +14,6 @@ import profig.Profig
 import rapid.AsyncTaskSpec
 import lightdb.filter.FilterExtras
 import scala.language.implicitConversions
-import scala.reflect.Selectable.reflectiveSelectable
 
 import java.nio.file.Path
 
@@ -86,7 +85,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -110,7 +109,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -138,7 +137,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -165,7 +164,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -196,7 +195,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           import lightdb.filter.{Condition, Filter, FilterClause}
@@ -237,7 +236,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -266,7 +265,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           import lightdb.filter.{Condition, Filter, FilterClause}
@@ -303,7 +302,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -332,7 +331,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -355,7 +354,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -387,7 +386,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query

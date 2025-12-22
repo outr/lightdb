@@ -320,7 +320,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.add(exactQuery(f.field(model), f.getJson(model)), BooleanClause.Occur.MUST_NOT)
           b.build()
         case _: Filter.MatchNone[Doc] => new MatchNoDocsQuery
-        case _: Filter.ExistsChild[Doc, _, _] =>
+        case _: Filter.ExistsChild[Doc] =>
           throw new RuntimeException("ExistsChild filter must be planned before execution")
         case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression), RegExp.ALL, 10_000_000)
         case f: Filter.In[Doc, _] =>

@@ -14,7 +14,6 @@ import profig.Profig
 import rapid.AsyncTaskSpec
 
 import java.nio.file.Path
-import scala.reflect.Selectable.reflectiveSelectable
 
 @EmbeddedTest
 class RocksDBTraversalFastTotalFromPrefixPostingsSpec
@@ -74,7 +73,7 @@ class RocksDBTraversalFastTotalFromPrefixPostingsSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query
@@ -97,7 +96,7 @@ class RocksDBTraversalFastTotalFromPrefixPostingsSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): rapid.Task[Unit] }]
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
           .buildPersistedIndex()
         results <- DB.people.transaction { tx =>
           tx.query

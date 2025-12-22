@@ -118,18 +118,17 @@ object Filter {
   /**
    * Parent-side filter that matches when at least one child satisfies the provided child filter.
    */
-  case class ExistsChild[
-    Parent <: Document[Parent],
-    Child <: Document[Child],
-    ChildModel <: DocumentModel[Child]
-  ](
-    relation: ParentChildRelation[Parent, Child, ChildModel],
-    childFilter: ChildModel => Filter[Child]
-  ) extends Filter[Parent] {
+  trait ExistsChild[Parent <: Document[Parent]] extends Filter[Parent] {
+    type Child <: Document[Child]
+    type ChildModel <: DocumentModel[Child]
+
+    val relation: ParentChildRelation.Aux[Parent, Child, ChildModel]
+    val childFilter: ChildModel => Filter[Child]
+
     // Resolved into a parent id filter during planning; no direct parent fields referenced here.
     override val fieldNames: List[String] = Nil
 
-    def resolve(parentModel: DocumentModel[Parent]): Task[Filter[Parent]] = {
+    final def resolve(parentModel: DocumentModel[Parent]): Task[Filter[Parent]] = {
       val parentIdField = parentModel._id.name
       relation.childStore.transaction { childTx =>
         val model: ChildModel = childTx.store.model
@@ -177,6 +176,22 @@ object Filter {
               throw t
           }
       }
+    }
+  }
+
+  object ExistsChild {
+    def apply[
+      Parent <: Document[Parent],
+      Child0 <: Document[Child0],
+      ChildModel0 <: DocumentModel[Child0]
+    ](
+      relation0: ParentChildRelation.Aux[Parent, Child0, ChildModel0],
+      childFilter0: ChildModel0 => Filter[Child0]
+    ): ExistsChild[Parent] = new ExistsChild[Parent] {
+      override type Child = Child0
+      override type ChildModel = ChildModel0
+      override val relation: ParentChildRelation.Aux[Parent, Child0, ChildModel0] = relation0
+      override val childFilter: ChildModel0 => Filter[Child0] = childFilter0
     }
   }
 

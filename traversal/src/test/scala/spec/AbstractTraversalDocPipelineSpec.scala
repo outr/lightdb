@@ -64,60 +64,64 @@ abstract class AbstractTraversalDocPipelineSpec
     }
 
     "lookupOpt (join by id) using Pipeline stages" in {
-      DB.transactions(DB.people, DB.pets) { (peopleTx0, petsTx0) =>
-        val peopleTx = peopleTx0.asInstanceOf[lightdb.traversal.store.TraversalTransaction[P, P.type]]
-        val petsTx = petsTx0.asInstanceOf[lightdb.traversal.store.TraversalTransaction[Pet, Pet.type]]
+      DB.people.transaction { people =>
+        DB.pets.transaction { pets =>
+          val peopleTx = people.asInstanceOf[lightdb.traversal.store.TraversalTransaction[P, P.type]]
+          val petsTx = pets.asInstanceOf[lightdb.traversal.store.TraversalTransaction[Pet, Pet.type]]
 
-        for {
-          _ <- petsTx.insert(List(
-            Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
-            Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
-          ))
-          _ <- peopleTx.insert(List(
-            P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
-            P("Bob", 20, bestPetId = None, _id = Id("b"))
-          ))
+          for {
+            _ <- petsTx.insert(List(
+              Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
+              Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
+            ))
+            _ <- peopleTx.insert(List(
+              P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
+              P("Bob", 20, bestPetId = None, _id = Id("b"))
+            ))
 
-          pipeline = DocPipeline.fromTransaction(peopleTx.store.name, peopleTx.store.model, peopleTx)
-          joined <- pipeline
-            .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
-            .project(p => p)
-            .pipe(LookupStages.lookupOpt(petsTx, (p: P) => p.bestPetId))
-            .stream
-            .toList
-        } yield {
-          val map = joined.map { case (p, pet) => p._id.value -> pet.map(_._id.value) }.toMap
-          map shouldBe Map("a" -> Some("p1"), "b" -> None)
+            pipeline = DocPipeline.fromTransaction(peopleTx.store.name, peopleTx.store.model, peopleTx)
+            joined <- pipeline
+              .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
+              .project(p => p)
+              .pipe(LookupStages.lookupOpt(petsTx, (p: P) => p.bestPetId))
+              .stream
+              .toList
+          } yield {
+            val map = joined.map { case (p, pet) => p._id.value -> pet.map(_._id.value) }.toMap
+            map shouldBe Map("a" -> Some("p1"), "b" -> None)
+          }
         }
       }
     }
 
     "lookupMany (join by foreign key) using Pipeline stages" in {
-      DB.transactions(DB.people, DB.pets) { (peopleTx0, petsTx0) =>
-        val peopleTx = peopleTx0.asInstanceOf[lightdb.traversal.store.TraversalTransaction[P, P.type]]
-        val petsTx = petsTx0.asInstanceOf[lightdb.traversal.store.TraversalTransaction[Pet, Pet.type]]
+      DB.people.transaction { people =>
+        DB.pets.transaction { pets =>
+          val peopleTx = people.asInstanceOf[lightdb.traversal.store.TraversalTransaction[P, P.type]]
+          val petsTx = pets.asInstanceOf[lightdb.traversal.store.TraversalTransaction[Pet, Pet.type]]
 
-        for {
-          _ <- petsTx.insert(List(
-            Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
-            Pet(ownerId = Id[P]("a"), name = "Mittens", _id = Id[Pet]("p3")),
-            Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
-          ))
-          _ <- peopleTx.insert(List(
-            P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
-            P("Bob", 20, bestPetId = None, _id = Id("b"))
-          ))
+          for {
+            _ <- petsTx.insert(List(
+              Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
+              Pet(ownerId = Id[P]("a"), name = "Mittens", _id = Id[Pet]("p3")),
+              Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
+            ))
+            _ <- peopleTx.insert(List(
+              P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
+              P("Bob", 20, bestPetId = None, _id = Id("b"))
+            ))
 
-          pipeline = DocPipeline.fromTransaction(peopleTx.store.name, peopleTx.store.model, peopleTx)
-          joined <- pipeline
-            .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
-            .project(p => p)
-            .pipe(LookupStages.lookupManyField(petsTx, Pet.ownerId, (p: P) => p._id))
-            .stream
-            .toList
-        } yield {
-          val map = joined.map { case (p, pets) => p._id.value -> pets.map(_._id.value).toSet }.toMap
-          map shouldBe Map("a" -> Set("p1", "p3"), "b" -> Set("p2"))
+            pipeline = DocPipeline.fromTransaction(peopleTx.store.name, peopleTx.store.model, peopleTx)
+            joined <- pipeline
+              .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
+              .project(p => p)
+              .pipe(LookupStages.lookupManyField(petsTx, Pet.ownerId, (p: P) => p._id))
+              .stream
+              .toList
+          } yield {
+            val map = joined.map { case (p, pets) => p._id.value -> pets.map(_._id.value).toSet }.toMap
+            map shouldBe Map("a" -> Set("p1", "p3"), "b" -> Set("p2"))
+          }
         }
       }
     }

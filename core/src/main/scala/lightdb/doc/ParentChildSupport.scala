@@ -18,7 +18,7 @@ trait ParentChildSupport[Doc <: Document[Doc], Child <: Document[Child], ChildMo
 
   def parentField(childModel: ChildModel): Field[Child, Id[Doc]]
 
-  lazy val relation: ParentChildRelation[Doc, Child, ChildModel] = ParentChildRelation(childStore, parentField)
+  lazy val relation: ParentChildRelation.Aux[Doc, Child, ChildModel] = ParentChildRelation(childStore, parentField)
 
   /**
    * Builds a parent-side filter that matches when a related child satisfies the provided child filter.

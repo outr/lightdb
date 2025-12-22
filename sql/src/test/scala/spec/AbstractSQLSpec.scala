@@ -176,7 +176,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people = store(Person)
+    val people: S[Person, Person.type] = store(Person)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

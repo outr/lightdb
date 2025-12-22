@@ -16,8 +16,6 @@ import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
 import spec.{EmbeddedTest, TraversalRocksDBWrappedManager}
 
-import scala.reflect.Selectable.reflectiveSelectable
-
 import java.nio.file.Path
 
 @EmbeddedTest
@@ -82,7 +80,7 @@ class RocksDBTraversalOrderedPostingsIntersectionSpec
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
-          .asInstanceOf[{ def buildPersistedIndex(): Task[Unit] }]
+          .asInstanceOf[TraversalStore[_, _]]
           .buildPersistedIndex()
         ids <- DB.people.transaction { tx =>
           val ttx = tx.asInstanceOf[TraversalTransaction[Person, Person.type]]
