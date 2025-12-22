@@ -117,12 +117,541 @@ object TraversalQueryEngine {
           Some(other)
       }
 
+      def extractExistsChildren(f: Filter[Doc]): List[Filter.ExistsChild[Doc @unchecked, _, _]] = f match {
+        case ec: Filter.ExistsChild[Doc @unchecked, _, _] => List(ec)
+        case m: Filter.Multi[Doc] =>
+          m.filters.collect {
+            case fc
+                if (fc.condition == Condition.Must || fc.condition == Condition.Filter) &&
+                  fc.filter.isInstanceOf[Filter.ExistsChild[Doc @unchecked, _, _]] =>
+              fc.filter.asInstanceOf[Filter.ExistsChild[Doc @unchecked, _, _]]
+          }
+        case _ => Nil
+      }
+
+      def earlyTerminateSemiJoinMulti(
+        existsChildren: List[Filter.ExistsChild[Doc @unchecked, _, _]],
+        originalFilter: Filter[Doc]
+      ): Task[SearchResults[Doc, Model, V]] = {
+        // verify filter excludes ExistsChild because evalFilter doesn't support it.
+        val verifyFilter: Option[Filter[Doc]] = stripExistsChild(originalFilter)
+        val offset = query.offset
+        val pageSize = limitOpt.get
+        val state = new IndexingState
+        val needScore: Boolean =
+          query.scoreDocs || query.minDocScore.nonEmpty || query.sort.exists(_.isInstanceOf[Sort.BestMatch])
+
+        val driver = existsChildren.head
+        val others = existsChildren.tail
+        val probeChunkSize: Int = Profig("lightdb.traversal.existsChild.probeChunkSize").opt[Int].getOrElse(128) max 1
+
+        val parentStream: rapid.Stream[(Doc, Double)] =
+          rapid.Stream.force {
+            driver.relation.childStore.transaction { childTx =>
+              val childModel = childTx.store.model
+              val driverFilter = driver.childFilter(childModel)
+              val parentField = driver.relation.parentField(childModel)
+
+              val seen = mutable.HashSet.empty[String]
+              // Fast-path: if the child store is traversal-backed and has a ready persisted index, and the child filter is seedable,
+              // stream matching child ids from postings and map childId -> parentId via persisted ref mapping (no child doc loads).
+              def seedChildIdsFromPersisted(
+                kv: lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type],
+                storeName: String
+              ): Option[rapid.Stream[String]] = {
+                val prefixMaxLen = Profig("lightdb.traversal.persistedIndex.prefixMaxLen").opt[Int].getOrElse(8) max 1
+                val maxInTerms = Profig("lightdb.traversal.persistedIndex.streamingSeed.maxInTerms").opt[Int].getOrElse(32) max 1
+
+                def encodedSingleValue(value: Any): Option[String] =
+                  TraversalIndex.valuesForIndexValue(value) match {
+                    case List(null) => Some("null")
+                    case List(s: String) => Some(s.toLowerCase)
+                    case List(other) => Some(other.toString)
+                    case _ => None
+                  }
+
+                driverFilter match {
+                  case e: lightdb.filter.Filter.Equals[?, ?] =>
+                    val f = childModel.fieldByName[Any](e.fieldName)
+                    if (!f.indexed) None
+                    else if (f.isTokenized) {
+                      val rawStrOpt: Option[String] = e.value match {
+                        case s: String => Some(s)
+                        case _ => None
+                      }
+                      val toks =
+                        rawStrOpt.toList
+                          .flatMap(_.toLowerCase.split("\\s+").toList.map(_.trim).filter(_.nonEmpty))
+                          .distinct
+                      toks.headOption.map(tok => TraversalPersistedIndex.postingsStream(TraversalKeys.tokPrefix(storeName, e.fieldName, tok), kv))
+                    } else {
+                      encodedSingleValue(e.value).map(enc => TraversalPersistedIndex.postingsStream(TraversalKeys.eqPrefix(storeName, e.fieldName, enc), kv))
+                    }
+                  case s: lightdb.filter.Filter.StartsWith[?, ?] =>
+                    val f = childModel.fieldByName[Any](s.fieldName)
+                    if (!f.indexed) None
+                    else Option(s.query).map(_.toLowerCase.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
+                      TraversalPersistedIndex.postingsStream(TraversalKeys.swPrefix(storeName, s.fieldName, q), kv)
+                    }
+                  case e: lightdb.filter.Filter.EndsWith[?, ?] =>
+                    val f = childModel.fieldByName[Any](e.fieldName)
+                    if (!f.indexed) None
+                    else Option(e.query).map(_.toLowerCase.reverse.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
+                      TraversalPersistedIndex.postingsStream(TraversalKeys.ewPrefix(storeName, e.fieldName, q), kv)
+                    }
+                  case i: lightdb.filter.Filter.In[?, ?] =>
+                    val f = childModel.fieldByName[Any](i.fieldName)
+                    val values0 = i.values.asInstanceOf[Seq[Any]].take(maxInTerms).toList
+                    val encOpt = values0.map(encodedSingleValue)
+                    if (!f.indexed || values0.isEmpty || encOpt.exists(_.isEmpty)) None
+                    else {
+                      val prefixes = encOpt.flatten.distinct.map(enc => TraversalKeys.eqPrefix(storeName, i.fieldName, enc))
+                      val seenIds = mutable.HashSet.empty[String]
+                      Some(
+                        rapid.Stream.merge {
+                          Task.pure {
+                            val it = prefixes.iterator.map(pfx => TraversalPersistedIndex.postingsStream(pfx, kv))
+                            Pull.fromIterator(it)
+                          }
+                        }.collect { case id if seenIds.add(id) => id }
+                      )
+                    }
+                  case _ =>
+                    None
+                }
+              }
+
+              val parentIds: rapid.Stream[Id[Doc]] = childTx match {
+                case ttx: TraversalTransaction[?, ?] if ttx.store.persistedIndexEnabled && ttx.store.name != "_backingStore" =>
+                  ttx.store.effectiveIndexBacking match {
+                    case None =>
+                      // fallback to scan path
+                      childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+                    case Some(idx) =>
+                      rapid.Stream.force {
+                        idx.transaction { kv0 =>
+                          val kv = kv0.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]]
+                          TraversalPersistedIndex.isReady(ttx.store.name, kv).map { ready =>
+                            if (!ready) {
+                              childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+                            } else {
+                              seedChildIdsFromPersisted(kv, ttx.store.name) match {
+                                case Some(childIds) =>
+                                  childIds
+                                    .evalMap(cid => TraversalPersistedIndex.refGet(ttx.store.name, parentField.name, cid, kv))
+                                    .collect { case Some(pid) => Id[Doc](pid) }
+                                case None =>
+                                  childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+                              }
+                            }
+                          }
+                        }
+                      }
+                  }
+                case _ =>
+                  childTx.query.filter(_ => driverFilter).value(_ => parentField).stream.map(_.asInstanceOf[Id[Doc]])
+              }
+
+              val s =
+                parentIds
+                  .collect { case pid if pid != null && seen.add(pid.value) => pid }
+                  .chunk(probeChunkSize)
+                  .evalMap { idsChunk =>
+                    val base: Set[Id[Doc]] = idsChunk.toList.toSet
+                    if (others.isEmpty) Task.pure(base.toList)
+                    else {
+                      // Intersect each clause's parent-id hits against the current candidate chunk.
+                      others.foldLeft(Task.pure(base)) { (accT, ec) =>
+                        accT.flatMap { acc =>
+                          if (acc.isEmpty) Task.pure(Set.empty)
+                          else {
+                            ec.relation.childStore.transaction { tx2 =>
+                              val m2 = tx2.store.model
+                              val cf2 = ec.childFilter(m2)
+                              val pf2 = ec.relation.parentField(m2)
+                              tx2.query
+                                .filter(_ => cf2)
+                                .filter(_ => Filter.In(pf2.name, acc.toSeq))
+                                .value(_ => pf2)
+                                .toList
+                                .map(_.toSet)
+                            }.map(hits => acc intersect hits)
+                          }
+                        }
+                      }.map(_.toList)
+                    }
+                  }
+                  .flatMap(list => rapid.Stream.emits(list))
+                  .evalMap(pid => backing.get(pid))
+                  .collect { case Some(doc) => doc }
+                  .evalMap { doc =>
+                    Task {
+                      val passesOther = verifyFilter.forall(f => evalFilter(f, model, doc, state))
+                      if (!passesOther) None
+                      else {
+                        val score = if (needScore) bestMatchScore(verifyFilter, model, doc, state) else 0.0
+                        val passesScore = query.minDocScore.forall(min => score >= min)
+                        if (passesScore) Some(doc -> score) else None
+                      }
+                    }
+                  }
+                  .collect { case Some(v) => v }
+              Task.pure(s)
+            }
+          }
+
+        val paged = parentStream.drop(offset).take(pageSize)
+        val streamWithScore = paged.map { case (doc, score) =>
+          convert(doc, query.conversion, model, state, Map.empty) -> score
+        }
+
+        Task.pure(
+          SearchResults(
+            model = model,
+            offset = offset,
+            limit = limitOpt,
+            total = None,
+            streamWithScore = streamWithScore,
+            facetResults = Map.empty,
+            transaction = query.transaction
+          )
+        )
+      }
+
       val plannerFallback: Task[SearchResults[Doc, Model, V]] =
         FilterPlanner
           .resolve(query.filter.map(_.asInstanceOf[Filter[Doc]]), model, resolveExistsChild = true)
           .flatMap(resolved => search(storeName, model, backing, indexCache, persistedIndex, query.copy(filter = resolved)))
 
-      plannerFallback
+      val earlyTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
+        if (!canEarlyTerminate) None
+        else {
+          query.filter.flatMap { f0 =>
+            f0.asInstanceOf[Filter[Doc]] match {
+              case m: Filter.Multi[Doc] =>
+                val ecs = extractExistsChildren(m)
+                if (ecs.isEmpty) None else Some(earlyTerminateSemiJoinMulti(ecs, f0.asInstanceOf[Filter[Doc]]))
+              case ec: Filter.ExistsChild[Doc @unchecked, _, _] =>
+                Some(earlyTerminateSemiJoinMulti(List(ec), f0.asInstanceOf[Filter[Doc]]))
+              case _ => None
+            }
+          }
+        }
+
+      // Parent-driven page-only semi-join (opt-in): when parent-side has a small seed, probe children by parent id
+      // instead of scanning broad child filters to discover parent ids.
+      def boolPropOrProfig(key: String, default: Boolean): Boolean =
+        sys.props.get(key).flatMap(_.toBooleanOption).getOrElse(Profig(key).opt[Boolean].getOrElse(default))
+      def intPropOrProfig(key: String, default: Int): Int =
+        sys.props.get(key).flatMap(_.toIntOption).getOrElse(Profig(key).opt[Int].getOrElse(default))
+
+      val parentDrivenEnabled: Boolean =
+        boolPropOrProfig("lightdb.traversal.existsChild.parentDriven", default = false)
+      val parentDrivenMaxParents: Int =
+        intPropOrProfig("lightdb.traversal.existsChild.parentDriven.maxParents", default = 1024) max 1
+
+      val parentDrivenTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
+        if (!canEarlyTerminate || !parentDrivenEnabled) None
+        else {
+          (persistedIndex, query.filter) match {
+            case (Some(parentKv), Some(f0)) =>
+              val original = f0.asInstanceOf[Filter[Doc]]
+              val existsChildren = extractExistsChildren(original)
+              if (existsChildren.isEmpty) None
+              else {
+                val verifyFilter = stripExistsChild(original)
+
+                Some(
+                  TraversalPersistedIndex.isReady(storeName, parentKv).flatMap { ready =>
+                    if (!ready) plannerFallback
+                    else {
+                      seedCandidatesPersisted(storeName, model, verifyFilter, parentKv).flatMap {
+                        case Some(ids) if ids.nonEmpty && ids.size <= parentDrivenMaxParents =>
+                          val orderedParentIds = ids.toList.sorted
+                          val offset = query.offset
+                          val pageSize = limitOpt.get
+                          val need = offset + pageSize
+                          val state = new IndexingState
+
+                          def childHasMatch(ec: Filter.ExistsChild[Doc @unchecked, _, _], pid: Id[Doc]): Task[Boolean] =
+                            ec.relation.childStore.transaction { childTx =>
+                              val childModel = childTx.store.model
+                              val cf = ec.childFilter(childModel)
+                              val parentField = ec.relation.parentField(childModel)
+
+                              // Probe children for this parent; execution will seed by parentId equality postings when available.
+                              childTx.query
+                                .clearPageSize
+                                .limit(1)
+                                .filter(_ => cf)
+                                .filter(_ => Filter.Equals(parentField.name, pid))
+                                .id
+                                .stream
+                                .take(1)
+                                .toList
+                                .map(_.nonEmpty)
+                            }
+
+                          val parentStream: rapid.Stream[(Doc, Double)] =
+                            rapid.Stream
+                              .emits(orderedParentIds)
+                              .map(id => Id[Doc](id))
+                              .evalMap(id => backing.get(id))
+                              .collect { case Some(doc) => doc }
+                              .evalMap { doc =>
+                                val pid = doc._id
+                                val parentOk = verifyFilter.forall(vf => evalFilter(vf, model, doc, state))
+                                if (!parentOk) Task.pure(None)
+                                else {
+                                  existsChildren
+                                    .foldLeft(Task.pure(true)) { (accT, ec) =>
+                                      accT.flatMap {
+                                        case false => Task.pure(false)
+                                        case true => childHasMatch(ec, pid)
+                                      }
+                                    }
+                                    .map {
+                                      case true => Some(doc -> 0.0)
+                                      case false => None
+                                    }
+                                }
+                              }
+                              .collect { case Some(v) => v }
+
+                          val paged = parentStream.take(need).drop(offset).take(pageSize)
+                          Task.pure(
+                            SearchResults(
+                              model = model,
+                              offset = offset,
+                              limit = limitOpt,
+                              total = None,
+                              streamWithScore = paged.map { case (doc, score) =>
+                                convert(doc, query.conversion, model, state, Map.empty) -> score
+                              },
+                              facetResults = Map.empty,
+                              transaction = query.transaction
+                            )
+                          )
+                        case _ =>
+                          plannerFallback
+                      }
+                    }
+                  }
+                )
+              }
+            case _ =>
+              None
+          }
+        }
+
+      // Optional "native full" ExistsChild resolution (not page-only): resolve to a bounded parent-id IN filter
+      // without going through FilterPlanner/ExistsChild.resolve (which may materialize huge sets or be capped too low).
+      //
+      // This stays disabled by default; enable with:
+      // -Dlightdb.traversal.existsChild.nativeFull=true
+      val nativeFullEnabled: Boolean =
+        boolPropOrProfig("lightdb.traversal.existsChild.nativeFull", default = false)
+      val nativeFullMaxParents: Int =
+        intPropOrProfig("lightdb.traversal.existsChild.nativeFull.maxParentIds", default = 100_000) max 0
+
+      val nativeFullTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
+        if (!nativeFullEnabled) None
+        else {
+          query.filter.flatMap { f0 =>
+            val original = f0.asInstanceOf[Filter[Doc]]
+            val existsChildren: List[Filter.ExistsChild[Doc @unchecked, _, _]] = original match {
+              case m: Filter.Multi[Doc] => extractExistsChildren(m)
+              case ec: Filter.ExistsChild[Doc @unchecked, _, _] => List(ec)
+              case _ => Nil
+            }
+            if (existsChildren.isEmpty || nativeFullMaxParents <= 0) None
+            else {
+              val verifyFilter: Option[Filter[Doc]] = stripExistsChild(original)
+
+              def parentIdsFor(ec: Filter.ExistsChild[Doc @unchecked, _, _]): Task[Option[Set[String]]] =
+                ec.relation.childStore.transaction { childTx =>
+                  val childModel = childTx.store.model
+                  val cf = ec.childFilter(childModel)
+                  val parentField = ec.relation.parentField(childModel)
+
+                  final class TooManyParents extends RuntimeException("too many parents")
+                  def fallbackScan(): Task[Option[Set[String]]] = {
+                    val seen = mutable.HashSet.empty[String]
+                    childTx.query
+                      .filter(_ => cf)
+                      .value(_ => parentField)
+                      .stream
+                      .evalMap { pid =>
+                        Task {
+                          if (pid != null) {
+                            seen.add(pid.value)
+                            if (seen.size > nativeFullMaxParents) throw new TooManyParents
+                          }
+                        }
+                      }
+                      .drain
+                      .attempt
+                      .map {
+                        case scala.util.Success(_) => Some(seen.toSet)
+                        case scala.util.Failure(_: TooManyParents) => None
+                        case scala.util.Failure(t) => throw t
+                      }
+                  }
+
+                  // Fast path: if the child store is traversal-backed and has a ready persisted index, map childId -> parentId
+                  // via the per-doc ref mapping (ti:<childStore>:ref:<parentField>:<childId> -> "<parentId>") without loading docs.
+                  childTx match {
+                    case ttx: TraversalTransaction[?, ?] if ttx.store.persistedIndexEnabled && ttx.store.name != "_backingStore" =>
+                      ttx.store.effectiveIndexBacking match {
+                        case None =>
+                          fallbackScan()
+                        case Some(idx) =>
+                          idx
+                            .transaction { kv0 =>
+                            val kv = kv0.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]]
+                            TraversalPersistedIndex.isReady(ttx.store.name, kv).flatMap { ready =>
+                              if (!ready) fallbackScan()
+                              else {
+                                val seen = mutable.HashSet.empty[String]
+                                // If the child filter is seedable from persisted postings, stream child ids from postings
+                                // (avoids scanning + doc loads). Otherwise fall back to child query scan.
+                                val prefixMaxLen = Profig("lightdb.traversal.persistedIndex.prefixMaxLen").opt[Int].getOrElse(8) max 1
+                                val maxInTerms = Profig("lightdb.traversal.persistedIndex.streamingSeed.maxInTerms").opt[Int].getOrElse(32) max 1
+
+                                def encodedSingleValue(value: Any): Option[String] =
+                                  TraversalIndex.valuesForIndexValue(value) match {
+                                    case List(null) => Some("null")
+                                    case List(s: String) => Some(s.toLowerCase)
+                                    case List(other) => Some(other.toString)
+                                    case _ => None
+                                  }
+
+                                def seedChildIdsFromPersisted: Option[rapid.Stream[String]] =
+                                  cf match {
+                                    case e: lightdb.filter.Filter.Equals[?, ?] =>
+                                      val f = childModel.fieldByName[Any](e.fieldName)
+                                      if (!f.indexed) None
+                                      else if (f.isTokenized) {
+                                        val rawStrOpt: Option[String] = e.value match {
+                                          case s: String => Some(s)
+                                          case _ => None
+                                        }
+                                        val toks =
+                                          rawStrOpt.toList
+                                            .flatMap(_.toLowerCase.split("\\s+").toList.map(_.trim).filter(_.nonEmpty))
+                                            .distinct
+                                        toks.headOption.map { tok =>
+                                          TraversalPersistedIndex.postingsStream(TraversalKeys.tokPrefix(ttx.store.name, e.fieldName, tok), kv)
+                                        }
+                                      } else {
+                                        encodedSingleValue(e.value).map { enc =>
+                                          TraversalPersistedIndex.postingsStream(TraversalKeys.eqPrefix(ttx.store.name, e.fieldName, enc), kv)
+                                        }
+                                      }
+                                    case s: lightdb.filter.Filter.StartsWith[?, ?] =>
+                                      val f = childModel.fieldByName[Any](s.fieldName)
+                                      if (!f.indexed) None
+                                      else {
+                                        Option(s.query).map(_.toLowerCase.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
+                                          TraversalPersistedIndex.postingsStream(TraversalKeys.swPrefix(ttx.store.name, s.fieldName, q), kv)
+                                        }
+                                      }
+                                    case e: lightdb.filter.Filter.EndsWith[?, ?] =>
+                                      val f = childModel.fieldByName[Any](e.fieldName)
+                                      if (!f.indexed) None
+                                      else {
+                                        Option(e.query).map(_.toLowerCase.reverse.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
+                                          TraversalPersistedIndex.postingsStream(TraversalKeys.ewPrefix(ttx.store.name, e.fieldName, q), kv)
+                                        }
+                                      }
+                                    case i: lightdb.filter.Filter.In[?, ?] =>
+                                      val f = childModel.fieldByName[Any](i.fieldName)
+                                      val values0 = i.values.asInstanceOf[Seq[Any]].take(maxInTerms).toList
+                                      val encOpt = values0.map(encodedSingleValue)
+                                      if (!f.indexed || values0.isEmpty || encOpt.exists(_.isEmpty)) None
+                                      else {
+                                        val prefixes = encOpt.flatten.distinct.map(enc => TraversalKeys.eqPrefix(ttx.store.name, i.fieldName, enc))
+                                        val seenIds = mutable.HashSet.empty[String]
+                                        Some(
+                                          rapid.Stream.merge {
+                                            Task.pure {
+                                              val it = prefixes.iterator.map(pfx => TraversalPersistedIndex.postingsStream(pfx, kv))
+                                              Pull.fromIterator(it)
+                                            }
+                                          }.collect { case id if seenIds.add(id) => id }
+                                        )
+                                      }
+                                    case _ =>
+                                      None
+                                  }
+
+                                val childIds: rapid.Stream[String] =
+                                  seedChildIdsFromPersisted.getOrElse {
+                                    // fallback: scan via child query (may still seed internally, but will load docs)
+                                    childTx.query.filter(_ => cf).id.stream.map(_.value)
+                                  }
+
+                                childIds
+                                  .evalMap { cidStr =>
+                                    TraversalPersistedIndex.refGet(ttx.store.name, parentField.name, cidStr, kv).map {
+                                      case Some(pid) =>
+                                        seen.add(pid)
+                                        if (seen.size > nativeFullMaxParents) throw new TooManyParents
+                                        true
+                                      case None =>
+                                        throw new RuntimeException("missing child->parent ref mapping")
+                                    }
+                                  }
+                                  .drain
+                                  .attempt
+                                  .map {
+                                    case scala.util.Success(_) => Some(seen.toSet)
+                                    case scala.util.Failure(_: TooManyParents) => None
+                                    case scala.util.Failure(t) => throw t
+                                  }
+                              }
+                            }
+                          }
+                            .attempt
+                            .flatMap {
+                              case scala.util.Success(opt) => Task.pure(opt)
+                              case scala.util.Failure(_) => fallbackScan()
+                            }
+                      }
+                    case _ =>
+                      fallbackScan()
+                  }
+                }
+
+              Some(
+                existsChildren.map(parentIdsFor).tasks.flatMap { setsOpt =>
+                  if (setsOpt.exists(_.isEmpty)) plannerFallback
+                  else {
+                    val sets = setsOpt.flatten
+                    if (sets.isEmpty) plannerFallback
+                    else {
+                      val base = sets.reduceLeft(_ intersect _)
+                      val inFilter =
+                        if (base.isEmpty) Filter.MatchNone[Doc]()
+                        else Filter.In[Doc, Id[Doc]](model._id.name, base.toSeq.map(id => Id[Doc](id)))
+                      val rewritten: Option[Filter[Doc]] = verifyFilter match {
+                        case None => Some(inFilter)
+                        case Some(vf) =>
+                          Some(Filter.Multi[Doc](0, List(
+                            FilterClause(inFilter, Condition.Must, None),
+                            FilterClause(vf, Condition.Must, None)
+                          )))
+                      }
+                      search(storeName, model, backing, indexCache, persistedIndex, query.copy(filter = rewritten))
+                    }
+                  }
+                }
+              )
+            }
+          }
+        }
+
+      parentDrivenTaskOpt.orElse(earlyTaskOpt).orElse(nativeFullTaskOpt).getOrElse(plannerFallback)
     } else {
 
     val state = new IndexingState
@@ -141,9 +670,8 @@ object TraversalQueryEngine {
       case Sort.ByDistance(_, _, direction) => direction
     }
 
-    def distanceMin(doc: Doc, field: Field[Doc, Any], from: Point): Double = {
-      val raw: Any = field.get(doc, field.asInstanceOf[Field[Doc, Any]], state)
-      val list = raw match {
+    def distanceMin(doc: Doc, field: Field[Doc, List[Geo]], from: Point): Double = {
+      val list = field.get(doc, field, state) match {
         case null => Nil
         case l: List[_] => l.collect { case g: Geo => g }
         case s: Set[_] => s.toList.collect { case g: Geo => g }
@@ -161,7 +689,7 @@ object TraversalQueryEngine {
           val f = field.asInstanceOf[Field[Doc, Any]]
           f.get(doc, f, state)
         case Sort.ByDistance(field, from, _) =>
-          distanceMin(doc, field.asInstanceOf[Field[Doc, Any]], from)
+          distanceMin(doc, field.asInstanceOf[Field[Doc, List[Geo]]], from)
       }
 
     def compareHits(a: Hit, b: Hit): Int = {
@@ -2604,19 +3132,16 @@ object TraversalQueryEngine {
     case Conversion.Doc() => doc.asInstanceOf[V]
     case Conversion.Converted(c) => c(doc)
     case Conversion.Materialized(fields) =>
-      val fs = fields.asInstanceOf[List[Field[Doc, Any]]]
-      val json = obj(fs.map(f => f.name -> f.getJson(doc, state)): _*)
+      val json = obj(fields.map(f => f.name -> f.getJson(doc, state)): _*)
       MaterializedIndex[Doc, Model](json, model).asInstanceOf[V]
     case Conversion.DocAndIndexes() =>
       val json = obj(model.indexedFields.map(f => f.name -> f.getJson(doc, state)): _*)
       MaterializedAndDoc[Doc, Model](json, model, doc).asInstanceOf[V]
     case Conversion.Json(fields) =>
-      val fs = fields.asInstanceOf[List[Field[Doc, Any]]]
-      obj(fs.map(f => f.name -> f.getJson(doc, state)): _*).asInstanceOf[V]
+      obj(fields.map(f => f.name -> f.getJson(doc, state)): _*).asInstanceOf[V]
     case d: Conversion.Distance[Doc, _] =>
       val distances = distanceCacheById.getOrElse(doc._id.value, {
-        val raw: Any = d.field.get(doc, d.field, state).asInstanceOf[Any]
-        val list = raw match {
+        val list = d.field.get(doc, d.field, state) match {
           case null => Nil
           case l: List[_] => l.collect { case g: Geo => g }
           case s: Set[_] => s.toList.collect { case g: Geo => g }

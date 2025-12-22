@@ -1,11 +1,16 @@
 package lightdb.filter
 
-import fabric.{Json, Str}
+import fabric._
+import fabric.rw._
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.spatial.{Geo, Point}
 import lightdb.id.Id
+import profig.Profig
 import rapid.Task
+
+import scala.collection.mutable
+import scala.util.{Failure, Success}
 
 sealed trait Filter[Doc <: Document[Doc]] {
   def fieldNames: List[String]
@@ -130,14 +135,46 @@ object Filter {
         val model: ChildModel = childTx.store.model
         val cf = childFilter(model)
         val parentField = relation.parentField(model)
+        // Bound parent-id materialization to avoid blowing memory on very large datasets.
+        //
+        // Default is unbounded to preserve historical behavior. Opt-in with:
+        // -Dlightdb.existsChild.maxParentIds=<N>
+        // (cap is on DISTINCT parent ids, not raw child rows).
+        val maxDistinct: Int = {
+          Profig("lightdb.existsChild.maxParentIds")
+            .get()
+            .getOrElse(Null)
+            .as[Option[Int]]
+            .filter(_ >= 0)
+            .getOrElse(Int.MaxValue)
+        }
+
+        final class TooManyParents extends RuntimeException("Too many distinct parent ids")
+        val seen = mutable.HashSet.empty[Id[Parent]]
+
         childTx.query
           .filter(_ => cf)
           .value(_ => parentField)
-          .toList
-          .map(_.toSet)
+          .stream
+          .evalMap { pid =>
+            Task {
+              if (pid != null && seen.add(pid) && seen.size > maxDistinct) throw new TooManyParents
+            }
+          }
+          .drain
+          .attempt
           .map {
-            case parentIds if parentIds.isEmpty => Filter.MatchNone[Parent]()
-            case parentIds => Filter.In[Parent, Id[Parent]](parentIdField, parentIds.toSeq)
+            case Success(_) =>
+              if (seen.isEmpty) Filter.MatchNone[Parent]()
+              else Filter.In[Parent, Id[Parent]](parentIdField, seen.toSeq)
+            case Failure(_: TooManyParents) =>
+              throw new IllegalArgumentException(
+                s"ExistsChild resolution exceeded maxParentIds=$maxDistinct distinct parent ids. " +
+                  s"Add more selective child filters, redesign to avoid broad ExistsChild, or raise " +
+                  s"'lightdb.existsChild.maxParentIds'."
+              )
+            case Failure(t) =>
+              throw t
           }
       }
     }

@@ -12,4 +12,3 @@ trait Stage[-A, +B] {
 }
 
 
-

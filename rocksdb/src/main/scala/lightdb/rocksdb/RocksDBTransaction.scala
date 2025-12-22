@@ -43,12 +43,15 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override def getAll(ids: Seq[Id[Doc]]): rapid.Stream[Doc] = rapid.Stream.force(Task {
     val keyBytes = ids.map(_.bytes).asJava
-    val handle = store.handle.orNull
-
-    val handleList = java.util.Collections.nCopies(ids.size, handle)
 
     rapid.Stream.fromIterator(Task {
-      val rawResults = store.rocksDB.multiGetAsList(handleList, keyBytes)
+      val rawResults = store.handle match {
+        case Some(h) =>
+          val handleList = java.util.Collections.nCopies(ids.size, h)
+          store.rocksDB.multiGetAsList(handleList, keyBytes)
+        case None =>
+          store.rocksDB.multiGetAsList(keyBytes)
+      }
       rawResults
         .asScala
         .iterator
