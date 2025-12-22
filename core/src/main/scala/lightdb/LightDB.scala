@@ -10,6 +10,7 @@ import lightdb.transaction.{Transaction, TransactionManager}
 import lightdb.trigger.StoreTrigger
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
+import profig.Profig
 import rapid._
 
 import java.nio.file.Path
@@ -95,6 +96,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   lazy val transactions: TransactionManager = new TransactionManager
 
   override protected def initialize(): Task[Unit] = for {
+    _ <- Task(Profig.initConfiguration())
     _ <- logger.info(s"$name database initializing...")
     _ = backingStore
     _ <- logger.info(s"Initializing stores: ${stores.map(_.name).mkString(", ")}...")

@@ -292,7 +292,7 @@ object SQLDsl {
       val orderPart: List[SQLPart] =
         if (orderBy.isEmpty) Nil
         else {
-          val parts = orderBy.map { ob =>
+          val parts: List[SQLPart] = orderBy.map { ob =>
             SQLQuery(List(
               SQLPart.Fragment(ob.col.value),
               SQLPart.Fragment(" "),

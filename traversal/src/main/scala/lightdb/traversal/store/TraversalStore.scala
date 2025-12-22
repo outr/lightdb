@@ -62,9 +62,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
           case psm: PrefixScanningStoreManager =>
             val idxName = s"${name}__tindex"
             val idxPath = path.map(p => p.getParent.resolve(idxName))
-            Some(
-              psm.create[KeyValue, KeyValue.type](lightDB, KeyValue, idxName, idxPath, StoreMode.All[KeyValue, KeyValue.type]())
-            )
+            Some(psm.create(lightDB, KeyValue, idxName, idxPath, StoreMode.All()).asInstanceOf[PrefixScanningStore[KeyValue, KeyValue.type]])
           case _ =>
             None
         }

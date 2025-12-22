@@ -713,21 +713,21 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
       val computers: List[AggComputer] = query.functions.map { f0 =>
         val f = f0.asInstanceOf[lightdb.aggregate.AggregateFunction[Any, Any, Doc]]
         val field = f.field.asInstanceOf[Field[Doc, Any]]
-        val tRW = f0.asInstanceOf[lightdb.aggregate.AggregateFunction[Any, Any, Doc]].tRW.asInstanceOf[RW[Any]]
+        val rw = f0.asInstanceOf[lightdb.aggregate.AggregateFunction[Any, Any, Doc]].tRW.asInstanceOf[RW[Any]]
         f.`type` match {
-          case lightdb.aggregate.AggregateType.Min => MinAgg(f.name, tRW, field)
-          case lightdb.aggregate.AggregateType.Max => MaxAgg(f.name, tRW, field)
-          case lightdb.aggregate.AggregateType.Avg => AvgAgg(f.name, tRW, field)
-          case lightdb.aggregate.AggregateType.Sum => SumAgg(f.name, tRW, field)
-          case lightdb.aggregate.AggregateType.Count => CountAgg(f.name, tRW, field)
-          case lightdb.aggregate.AggregateType.CountDistinct => CountDistinctAgg(f.name, tRW, field)
-          case lightdb.aggregate.AggregateType.Concat => ConcatAgg(f.name, tRW, field, distinct = false)
-          case lightdb.aggregate.AggregateType.ConcatDistinct => ConcatAgg(f.name, tRW, field, distinct = true)
+          case lightdb.aggregate.AggregateType.Min => MinAgg(f.name, rw, field)
+          case lightdb.aggregate.AggregateType.Max => MaxAgg(f.name, rw, field)
+          case lightdb.aggregate.AggregateType.Avg => AvgAgg(f.name, rw, field)
+          case lightdb.aggregate.AggregateType.Sum => SumAgg(f.name, rw, field)
+          case lightdb.aggregate.AggregateType.Count => CountAgg(f.name, rw, field)
+          case lightdb.aggregate.AggregateType.CountDistinct => CountDistinctAgg(f.name, rw, field)
+          case lightdb.aggregate.AggregateType.Concat => ConcatAgg(f.name, rw, field, distinct = false)
+          case lightdb.aggregate.AggregateType.ConcatDistinct => ConcatAgg(f.name, rw, field, distinct = true)
           case lightdb.aggregate.AggregateType.Group =>
             // Not supported yet (would require emitting multiple rows); keep deterministic placeholder.
             new AggComputer {
               override val name: String = f.name
-              override val rw: RW[Any] = tRW
+              override val rw: RW[Any] = rw
               override def update(docId: String, doc: Doc): Unit = ()
               override def value(): Any = null
             }
