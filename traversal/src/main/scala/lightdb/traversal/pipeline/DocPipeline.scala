@@ -86,29 +86,25 @@ final case class DocPipeline[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
 object DocPipeline {
   def fromTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
-    storeName: String,
-    model: Model,
     tx: PrefixScanningTransaction[Doc, Model]
   ): DocPipeline[Doc, Model] =
     DocPipeline(
-      storeName,
-      model,
+      tx.store.name,
+      tx.store.model,
       tx,
       new TraversalIndexCache[Doc, Model](
-        storeName = storeName,
-        model = model,
+        storeName = tx.store.name,
+        model = tx.store.model,
         enabled = Profig("lightdb.traversal.indexCache").opt[Boolean].getOrElse(false)
       ),
       tx.stream
     )
 
   def fromTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
-    storeName: String,
-    model: Model,
     tx: PrefixScanningTransaction[Doc, Model],
     indexCache: TraversalIndexCache[Doc, Model]
   ): DocPipeline[Doc, Model] =
-    DocPipeline(storeName, model, tx, indexCache, tx.stream)
+    DocPipeline(tx.store.name, tx.store.model, tx, indexCache, tx.stream)
 }
 
 
