@@ -2,6 +2,7 @@ package spec
 
 import lightdb.store.CollectionManager
 import lightdb.store.prefix.PrefixScanningStoreManager
+import lightdb.traversal.store.TraversalManager
 
 @EmbeddedTest
 class RocksDBTraversalStoreBasicSpec extends AbstractBasicSpec with TraversalRocksDBWrappedManager {
@@ -35,12 +36,12 @@ class RocksDBTraversalStoreTraversalSpec extends AbstractTraversalSpec with Trav
 
 @EmbeddedTest
 class RocksDBTraversalStoreDocPipelineSpec extends AbstractTraversalDocPipelineSpec with TraversalRocksDBWrappedManager {
-  override def traversalStoreManager: CollectionManager = super.traversalStoreManager
+  override def traversalStoreManager: TraversalManager = super.traversalStoreManager
 }
 
 @EmbeddedTest
 class RocksDBTraversalStorePersistedIndexBuildSpec extends AbstractTraversalPersistedIndexBuildSpec with TraversalRocksDBWrappedManager {
-  override def traversalStoreManager: CollectionManager = super.traversalStoreManager
+  override def traversalStoreManager: TraversalManager = super.traversalStoreManager
 }
 
 

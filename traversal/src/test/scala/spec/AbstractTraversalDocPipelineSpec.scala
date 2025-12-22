@@ -5,9 +5,9 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.id.Id
-import lightdb.store.{Collection, CollectionManager}
 import lightdb.traversal.pipeline.DocPipeline
-import lightdb.traversal.pipeline.{LookupStages, Pipeline}
+import lightdb.traversal.pipeline.LookupStages
+import lightdb.traversal.store.{TraversalManager, TraversalTransaction}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -25,38 +25,38 @@ abstract class AbstractTraversalDocPipelineSpec
     with AsyncTaskSpec
     with Matchers
 {
-  def traversalStoreManager: CollectionManager
+  def traversalStoreManager: TraversalManager
 
   private lazy val specName: String = getClass.getSimpleName
 
   object DB extends LightDB {
-    override type SM = CollectionManager
-    override val storeManager: CollectionManager = traversalStoreManager
+    override type SM = TraversalManager
+    override val storeManager: TraversalManager = traversalStoreManager
     override lazy val directory: Option[Path] = Some(Files.createTempDirectory("lightdb-traversal-doc-pipeline-"))
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val people: Collection[P, P.type] = store(P, name = Some("people"))
-    val pets: Collection[Pet, Pet.type] = store(Pet, name = Some("pets"))
+    val people: S[P, P.type] = store(P, name = Some("people"))
+    val pets: S[Pet, Pet.type] = store(Pet, name = Some("pets"))
   }
 
   specName should {
-    "initialize" in DB.init.succeed
-
+    "initialize" in {
+      DB.init.succeed
+    }
     "match using DocPipeline (Filter.Equals) with candidate seeding" in {
       DB.people.transaction { tx =>
-        val t = tx.asInstanceOf[lightdb.traversal.store.TraversalTransaction[P, P.type]]
         for {
-          _ <- t.insert(List(
+          _ <- tx.insert(List(
             P("Alice", 10, _id = Id("a")),
             P("Bob", 20, _id = Id("b")),
             P("Alice", 30, _id = Id("c"))
           ))
           pipeline = DocPipeline.fromTransaction(
-            storeName = t.store.name,
-            model = t.store.model,
-            tx = t
+            storeName = tx.store.name,
+            model = tx.store.model,
+            tx = tx
           )
-          list <- pipeline.`match`(Filter.Equals[P, String]("name", "Alice")).toList
+          list <- pipeline.`match`(P.name === "Alice").toList
         } yield {
           list.map(_._id.value).toSet shouldBe Set("a", "c")
         }
@@ -66,24 +66,21 @@ abstract class AbstractTraversalDocPipelineSpec
     "lookupOpt (join by id) using Pipeline stages" in {
       DB.people.transaction { people =>
         DB.pets.transaction { pets =>
-          val peopleTx = people.asInstanceOf[lightdb.traversal.store.TraversalTransaction[P, P.type]]
-          val petsTx = pets.asInstanceOf[lightdb.traversal.store.TraversalTransaction[Pet, Pet.type]]
-
           for {
-            _ <- petsTx.insert(List(
+            _ <- pets.insert(List(
               Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
               Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
             ))
-            _ <- peopleTx.insert(List(
+            _ <- people.insert(List(
               P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
               P("Bob", 20, bestPetId = None, _id = Id("b"))
             ))
 
-            pipeline = DocPipeline.fromTransaction(peopleTx.store.name, peopleTx.store.model, peopleTx)
+            pipeline = DocPipeline.fromTransaction(people.store.name, people.store.model, people)
             joined <- pipeline
               .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
               .project(p => p)
-              .pipe(LookupStages.lookupOpt(petsTx, (p: P) => p.bestPetId))
+              .pipe(LookupStages.lookupOpt(pets, (p: P) => p.bestPetId))
               .stream
               .toList
           } yield {
@@ -97,25 +94,22 @@ abstract class AbstractTraversalDocPipelineSpec
     "lookupMany (join by foreign key) using Pipeline stages" in {
       DB.people.transaction { people =>
         DB.pets.transaction { pets =>
-          val peopleTx = people.asInstanceOf[lightdb.traversal.store.TraversalTransaction[P, P.type]]
-          val petsTx = pets.asInstanceOf[lightdb.traversal.store.TraversalTransaction[Pet, Pet.type]]
-
           for {
-            _ <- petsTx.insert(List(
+            _ <- pets.insert(List(
               Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
               Pet(ownerId = Id[P]("a"), name = "Mittens", _id = Id[Pet]("p3")),
               Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
             ))
-            _ <- peopleTx.insert(List(
+            _ <- people.insert(List(
               P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
               P("Bob", 20, bestPetId = None, _id = Id("b"))
             ))
 
-            pipeline = DocPipeline.fromTransaction(peopleTx.store.name, peopleTx.store.model, peopleTx)
+            pipeline = DocPipeline.fromTransaction(people.store.name, people.store.model, people)
             joined <- pipeline
               .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
               .project(p => p)
-              .pipe(LookupStages.lookupManyField(petsTx, Pet.ownerId, (p: P) => p._id))
+              .pipe(LookupStages.lookupManyField(pets, Pet.ownerId, (p: P) => p._id))
               .stream
               .toList
           } yield {
