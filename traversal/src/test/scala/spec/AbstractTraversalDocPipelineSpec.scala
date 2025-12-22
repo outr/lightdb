@@ -51,11 +51,7 @@ abstract class AbstractTraversalDocPipelineSpec
             P("Bob", 20, _id = Id("b")),
             P("Alice", 30, _id = Id("c"))
           ))
-          pipeline = DocPipeline.fromTransaction(
-            storeName = tx.store.name,
-            model = tx.store.model,
-            tx = tx
-          )
+          pipeline = DocPipeline.fromTransaction(tx)
           list <- pipeline.`match`(P.name === "Alice").toList
         } yield {
           list.map(_._id.value).toSet shouldBe Set("a", "c")
@@ -75,10 +71,9 @@ abstract class AbstractTraversalDocPipelineSpec
               P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
               P("Bob", 20, bestPetId = None, _id = Id("b"))
             ))
-
-            pipeline = DocPipeline.fromTransaction(people.store.name, people.store.model, people)
+            pipeline = DocPipeline.fromTransaction(people)
             joined <- pipeline
-              .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
+              .`match`(P._id.in(Seq(Id[P]("a"), Id[P]("b"))))
               .project(p => p)
               .pipe(LookupStages.lookupOpt(pets, (p: P) => p.bestPetId))
               .stream
@@ -105,9 +100,9 @@ abstract class AbstractTraversalDocPipelineSpec
               P("Bob", 20, bestPetId = None, _id = Id("b"))
             ))
 
-            pipeline = DocPipeline.fromTransaction(people.store.name, people.store.model, people)
+            pipeline = DocPipeline.fromTransaction(people)
             joined <- pipeline
-              .`match`(Filter.In[P, Id[P]]("_id", Seq(Id[P]("a"), Id[P]("b"))))
+              .`match`(P._id.in(Seq(Id[P]("a"), Id[P]("b"))))
               .project(p => p)
               .pipe(LookupStages.lookupManyField(pets, Pet.ownerId, (p: P) => p._id))
               .stream
