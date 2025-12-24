@@ -32,10 +32,13 @@ object TraversalPersistedIndex {
   private val NumericOrderedPrefixLen: Int =
     (Profig("lightdb.traversal.persistedIndex.numericOrderedPrefixLen").opt[Int].getOrElse(4) max 1) min NumericPrefixMaxLen
   private val OneSidedRangeSeeding: Boolean = Profig("lightdb.traversal.persistedIndex.rangeOneSided").opt[Boolean].getOrElse(false)
+
   private def maxSeedSize: Int = Profig("lightdb.traversal.persistedIndex.maxSeedSize").opt[Int].getOrElse(100_000)
+
   private val OrderByFieldPostingsEnabled: Boolean =
     Profig("lightdb.traversal.orderByFieldPostings.enabled").opt[Boolean].getOrElse(false)
   private val MaxKeyBytes: Int = 128
+
   private def safeId(key: String): Option[Id[KeyValue]] = {
     val bytes = Option(key).getOrElse("").getBytes(java.nio.charset.StandardCharsets.UTF_8)
     if (bytes.length <= MaxKeyBytes) Some(Id[KeyValue](key)) else None
@@ -117,9 +120,9 @@ object TraversalPersistedIndex {
    * This is for page-only `Sort.IndexOrder` execution where we only need the first `takeN` docIds per prefix.
    * Each prefix is scanned in key order, which yields docIds in IndexOrder (lexicographic) order.
    */
-  private[traversal] def intersectOrderedPostingsTake(prefixes: List[String],
-                                                      kv: PrefixScanningTransaction[KeyValue, KeyValue.type],
-                                                      takeN: Int): Task[List[String]] = {
+  def intersectOrderedPostingsTake(prefixes: List[String],
+                                   kv: PrefixScanningTransaction[KeyValue, KeyValue.type],
+                                   takeN: Int): Task[List[String]] = {
     val n = math.max(0, takeN)
     val ps = prefixes.distinct
     if (n == 0 || ps.isEmpty) Task.pure(Nil)
@@ -181,20 +184,20 @@ object TraversalPersistedIndex {
     kv.get(Id[KeyValue](TraversalKeys.metaReadyKey(storeName))).map(_.nonEmpty)
 
   def indexDoc[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
-    storeName: String,
-    model: Model,
-    doc: Doc,
-    kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
-  ): Task[Unit] = Task.defer {
+                                                                   storeName: String,
+                                                                   model: Model,
+                                                                   doc: Doc,
+                                                                   kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
+                                                                 ): Task[Unit] = Task.defer {
     val postings = postingsForDoc(storeName, model, doc)
     if (postings.isEmpty) Task.unit else kv.upsert(postings).unit
   }
 
   private[traversal] def postingsForDoc[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
-    storeName: String,
-    model: Model,
-    doc: Doc
-  ): List[KeyValue] = {
+                                                                                            storeName: String,
+                                                                                            model: Model,
+                                                                                            doc: Doc
+                                                                                          ): List[KeyValue] = {
     val state = new IndexingState
     val docId = doc._id.value
 
@@ -323,20 +326,20 @@ object TraversalPersistedIndex {
   }
 
   def deindexDoc[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
-    storeName: String,
-    model: Model,
-    doc: Doc,
-    kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
-  ): Task[Unit] = Task.defer {
+                                                                     storeName: String,
+                                                                     model: Model,
+                                                                     doc: Doc,
+                                                                     kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
+                                                                   ): Task[Unit] = Task.defer {
     val ids = idsForDoc(storeName, model, doc)
     if (ids.isEmpty) Task.unit else ids.map(kv.delete).tasks.unit
   }
 
   private[traversal] def idsForDoc[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
-    storeName: String,
-    model: Model,
-    doc: Doc
-  ): List[Id[KeyValue]] = {
+                                                                                       storeName: String,
+                                                                                       model: Model,
+                                                                                       doc: Doc
+                                                                                     ): List[Id[KeyValue]] = {
     val state = new IndexingState
     val docId = doc._id.value
 
@@ -777,9 +780,9 @@ object TraversalPersistedIndex {
    * Seed-friendly postings helpers (bounded by maxSeedSize).
    */
   def eqPostingsCountIfSingleValue(storeName: String,
-                                  fieldName: String,
-                                  value: Any,
-                                  kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Int]] = {
+                                   fieldName: String,
+                                   value: Any,
+                                   kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Int]] = {
     // Only safe/meaningful for single scalar values; multi-valued equality requires intersection across values.
     // Additionally: string values are normalized to lowercase for indexing, but Equals semantics are case-sensitive,
     // so a postings-count would be an overcount when case differs. Restrict to non-string values.
@@ -788,10 +791,10 @@ object TraversalPersistedIndex {
     else {
       val encoded = normalizeValue(value)
       if (encoded.size != 1) Task.pure(None)
-    else {
-      val prefix = TraversalKeys.eqPrefix(storeName, fieldName, encoded.head)
-      postingsCount(prefix, kv).map(Some(_))
-    }
+      else {
+        val prefix = TraversalKeys.eqPrefix(storeName, fieldName, encoded.head)
+        postingsCount(prefix, kv).map(Some(_))
+      }
     }
   }
 
@@ -803,9 +806,9 @@ object TraversalPersistedIndex {
    * tokenized evalFilter semantics.
    */
   def tokPostingsCountIfSingleToken(storeName: String,
-                                   fieldName: String,
-                                   query: String,
-                                   kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Int]] = {
+                                    fieldName: String,
+                                    query: String,
+                                    kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Int]] = {
     val tokens =
       Option(query)
         .getOrElse("")
@@ -832,9 +835,9 @@ object TraversalPersistedIndex {
    * token postings are still small. It is bounded and will return None if any token postings are too large.
    */
   def tokPostingsCountIfSmallTokens(storeName: String,
-                                   fieldName: String,
-                                   query: String,
-                                   kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Int]] = {
+                                    fieldName: String,
+                                    query: String,
+                                    kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Int]] = {
     val maxTokenPostings: Int =
       Profig("lightdb.traversal.persistedIndex.fastTotal.tokenized.maxTokenPostings").opt[Int].getOrElse(100_000) max 1
     val maxTokens: Int =
@@ -1010,11 +1013,11 @@ object TraversalPersistedIndex {
    * NOTE: This can be expensive on large datasets; intended for an explicit maintenance step.
    */
   def buildFromStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
-    storeName: String,
-    model: Model,
-    backing: PrefixScanningTransaction[Doc, Model],
-    kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
-  ): Task[Unit] =
+                                                                         storeName: String,
+                                                                         model: Model,
+                                                                         backing: PrefixScanningTransaction[Doc, Model],
+                                                                         kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
+                                                                       ): Task[Unit] =
     clearStore(storeName, kv).next {
       backing
         .stream

@@ -13,7 +13,7 @@ trait Accumulator[-A, S, +Out] {
   def result(state: S): Out
 }
 
-object Accumulators {
+object Accumulator {
   def count[A]: Accumulator[A, Long, Long] = new Accumulator[A, Long, Long] {
     override def zero: Long = 0L
     override def add(state: Long, value: A): Long = state + 1L

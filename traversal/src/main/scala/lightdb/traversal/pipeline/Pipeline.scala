@@ -10,8 +10,8 @@ import rapid.Stream
  */
 final case class Pipeline[+A](stream: Stream[A]) {
   def pipe[B](stage: Stage[A, B]): Pipeline[B] = Pipeline(stage.run(stream))
-  def map[B](f: A => B): Pipeline[B] = pipe(Stages.map(f))
-  def filter(p: A => Boolean): Pipeline[A] = pipe(Stages.filter(p))
+  def map[B](f: A => B): Pipeline[B] = pipe(Stage.map(f))
+  def filter(p: A => Boolean): Pipeline[A] = pipe(Stage.filter(p))
 }
 
 object Pipeline {

@@ -406,10 +406,10 @@
   - [x] Integrate `Match` with `lightdb.filter.Filter` + model fields (Doc-specific via `DocPipeline`)
   - [x] Add `unwind`, `sort`, `limit/skip` stages *(correctness-first materialization in Phase A)*
   - [x] Add `groupBy2` (multiple accumulators) + `facet2` (two sub-pipelines)
-  - [x] Add correctness-first `$lookup`-style stages (`LookupStages.lookupOpt/lookupOne`)
+  - [x] Add correctness-first `$lookup`-style stages (`LookupStage.lookupOpt/lookupOne`)
   - [x] Specs: `TraversalDocPipelineSpec` covers lookup; `TraversalAggregationPipelineSpec` covers groupBy2/facet2
   - [x] Add `groupBy3` (three accumulators)
-  - [x] Add correctness-first one-to-many lookup (`LookupStages.lookupMany/lookupManyField`)
+  - [x] Add correctness-first one-to-many lookup (`LookupStage.lookupMany/lookupManyField`)
   - [x] Specs: `TraversalAggregationPipelineSpec` covers groupBy3; `TraversalDocPipelineSpec` covers lookupMany
 
 ### Scaling note: avoid in-memory as default
@@ -424,21 +424,21 @@
     - page-window results, or a bounded top-K heap when sorting with limit/offset
   - `DocPipeline.match` no longer forces `tx.stream.toVector` unless `indexCache` is enabled.
   - Pipeline stages now include **streaming implementations** for:
-    - `Stages.unwind`
-    - `Stages.skip`
-    - `Stages.limit`
+    - `Stage.unwind`
+    - `Stage.skip`
+    - `Stage.limit`
   - Pipeline stages now include **bounded (pagination-first) sorting**:
-    - `Stages.sortByPage(key, offset, limit, descending)` keeps only `offset + limit` rows in memory and emits the page.
+    - `Stage.sortByPage(key, offset, limit, descending)` keeps only `offset + limit` rows in memory and emits the page.
   - Pipeline stages now include **streaming groupBy** (bounded by number of groups):
-    - `Stages.groupBy`
-    - `Stages.groupBy2`
-    - `Stages.groupBy3`
+    - `Stage.groupBy`
+    - `Stage.groupBy2`
+    - `Stage.groupBy3`
   - Pipeline stages now include a **streaming facet-like reducer**:
-    - `Stages.facetTop(key, limit)` computes top-N counts in one pass (bounded by number of distinct keys)
+    - `Stage.facetTop(key, limit)` computes top-N counts in one pass (bounded by number of distinct keys)
     - Use this for facet-style outputs without replaying upstream; use `facet2` when you truly need to run multiple sub-pipelines over the same upstream.
   - Pipeline stages now include **streaming reducers** (single pass):
-    - `Stages.reduce(acc)` reduces to one output
-    - `Stages.reduce2(acc1, acc2)` reduces to two outputs in one pass (useful as a scalable alternative to `facet2` when both branches are reducers)
+    - `Stage.reduce(acc)` reduces to one output
+    - `Stage.reduce2(acc1, acc2)` reduces to two outputs in one pass (useful as a scalable alternative to `facet2` when both branches are reducers)
     - `Accumulators.facetTop` provides a reusable facet-style accumulator to pair with `reduce2`
   - Lookup stages are now **batched/streaming-friendly**:
     - `LookupStages.lookupOpt` and `LookupStages.lookupMany` buffer only `LookupStages.DefaultLookupChunkSize` upstream rows at a time.
@@ -466,8 +466,8 @@
       - Persisted seed scans are bounded by `-Dlightdb.traversal.persistedIndex.maxSeedSize` (default 100000)
       - If a seed would exceed the limit, traversal falls back to scan+verify (correctness preserved; memory protected)
   - Remaining known **pipeline materializers** (acceptable for small data / tests, but avoid by default at large scale):
-    - `Stages.sortBy`: materializes full input; prefer `Stages.sortByPage` for pagination flows
-    - `Stages.facet2`: materializes upstream to replay into both branches; prefer `Stages.reduce2` when both branches are reducers
+    - `Stage.sortBy`: materializes full input; prefer `Stage.sortByPage` for pagination flows
+    - `Stage.facet2`: materializes upstream to replay into both branches; prefer `Stage.reduce2` when both branches are reducers
 
 - **Persisted candidate seeding for pipelines**:
   - When `-Dlightdb.traversal.persistedIndex=true` is enabled and postings are ready, `DocPipeline.match` can seed from persisted postings instead of scanning.

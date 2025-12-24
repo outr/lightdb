@@ -1,21 +1,17 @@
-package lightdb.traversal.store
+package spec
 
 import fabric.rw._
-import lightdb.KeyValue
+import lightdb.{KeyValue, LightDB}
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.id.Id
-import lightdb.store.{Collection, CollectionManager}
 import lightdb.time.Timestamp
-import lightdb.upgrade.DatabaseUpgrade
-import lightdb.LightDB
-import lightdb.traversal.store.TraversalManager
 import lightdb.transaction.PrefixScanningTransaction
+import lightdb.traversal.store.{TraversalKeys, TraversalManager, TraversalPersistedIndex, TraversalStore}
+import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
-import spec.{EmbeddedTest, TraversalRocksDBWrappedManager}
 
 import java.nio.file.Path
 
