@@ -52,7 +52,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
   private val persistedIndexAutoBuild: Boolean =
     Profig("lightdb.traversal.persistedIndex.autobuild").opt[Boolean].getOrElse(false)
 
-  private[traversal] lazy val effectiveIndexBacking: Option[PrefixScanningStore[KeyValue, KeyValue.type]] = {
+  lazy val effectiveIndexBacking: Option[PrefixScanningStore[KeyValue, KeyValue.type]] = {
     indexBacking.orElse {
       // Auto-create a dedicated on-disk index store when persisted indexing is enabled and the backing store
       // uses a PrefixScanningStoreManager (e.g. RocksDBStore).

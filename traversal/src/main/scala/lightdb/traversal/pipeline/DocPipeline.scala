@@ -23,6 +23,8 @@ final case class DocPipeline[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   indexCache: TraversalIndexCache[Doc, Model],
   stream: Stream[Doc]
 ) {
+  def filter(f: Model => Filter[Doc]): DocPipeline[Doc, Model] = `match`(f)
+  def `match`(f: Model => Filter[Doc]): DocPipeline[Doc, Model] = `match`(f(model))
   def `match`(filter: Filter[Doc]): DocPipeline[Doc, Model] = {
     val seeded: Stream[Doc] = Stream.force {
       // Avoid any materialization unless explicitly requested:
@@ -75,8 +77,6 @@ final case class DocPipeline[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
     copy(stream = seeded)
   }
-
-  def `match`(f: Model => Filter[Doc]): DocPipeline[Doc, Model] = `match`(f(model))
 
   def project[A](f: Doc => A): Pipeline[A] = Pipeline(stream.map(f))
 

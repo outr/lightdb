@@ -1365,7 +1365,7 @@ object TraversalQueryEngine {
             // Special-case: for page-only queries sorted by a numeric field, stream docs in field order using persisted
             // order-by postings and early-terminate once we have offset+limit matches.
             val byFieldSortOpt: Option[Sort.ByField[Doc, _]] =
-              if (query.sort.size == 1 && query.sort.head.isInstanceOf[Sort.ByField[Doc, _]])
+              if (query.sort.size == 1 && query.sort.head.isInstanceOf[Sort.ByField[_, _]])
                 Some(query.sort.head.asInstanceOf[Sort.ByField[Doc, _]])
               else None
 
