@@ -73,7 +73,18 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   private lazy val dbPath: Path = Path.of(s"db/$specName")
   deleteDirectoryIfExists(dbPath)
 
-  protected var db: DB = new DB
+  protected var _db: DB = _
+
+  /**
+   * Lazily create the DB instance so store-specific test helpers (e.g. config via sys.props) can run during subclass
+   * initialization before the first DB is constructed.
+   */
+  protected def db: DB = {
+    if (_db == null) {
+      _db = new DB
+    }
+    _db
+  }
 
   specName should {
     "initialize the database" in {
@@ -261,7 +272,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         Task.unit.succeed
       } else {
         db.dispose.next {
-          db = new DB
+          _db = new DB
           db.init
         }.succeed
       }

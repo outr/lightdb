@@ -78,7 +78,8 @@ object Aggregator {
             }
             case AggregateType.Group => value
             case AggregateType.Concat => current match {
-              case Some(c) => (value :: c.as[List[Json]]).json
+              // Preserve encounter order (stream order)
+              case Some(c) => (c.as[List[Json]] :+ value).json
               case None => List(value).json
             }
           }
