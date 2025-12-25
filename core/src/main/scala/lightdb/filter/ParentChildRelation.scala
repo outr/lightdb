@@ -30,10 +30,10 @@ object ParentChildRelation {
   }
 
   def apply[
-    Parent <: Document[Parent],
+  Parent <: Document[Parent],
     Child0 <: Document[Child0],
     ChildModel0 <: DocumentModel[Child0]
-  ](
+](
     childStore0: Collection[Child0, ChildModel0],
     parentField0: ChildModel0 => Field[Child0, Id[Parent]]
   ): Aux[Parent, Child0, ChildModel0] = new ParentChildRelation[Parent] {

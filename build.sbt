@@ -114,10 +114,14 @@ val postgresqlVersion: String = "42.7.8"
 
 val chronicleMapVersion: String = "3.27ea2"
 
+val spiceVersion: String = "0.10.18-SNAPSHOT"
+
 val scalaTestVersion: String = "3.2.19"
 
+val testcontainersVersion: String = "2.0.3"
+
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -252,6 +256,19 @@ lazy val lucene = project.in(file("lucene"))
 		)
 	)
 
+lazy val opensearch = project.in(file("opensearch"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-opensearch",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"com.outr" %% "spice-client-netty" % spiceVersion,
+			"org.testcontainers" % "testcontainers" % testcontainersVersion % Test,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val halodb = project.in(file("halodb"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
@@ -328,7 +345,7 @@ lazy val redis = project.in(file("redis"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
