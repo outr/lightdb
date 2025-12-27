@@ -24,4 +24,23 @@ trait ParentChildSupport[Doc <: Document[Doc], Child <: Document[Child], ChildMo
    * Builds a parent-side filter that matches when a related child satisfies the provided child filter.
    */
   def childFilter(build: ChildModel => Filter[Child]): Filter[Doc] = Filter.ExistsChild(relation, build)
+
+  /**
+   * Same-child semantics: all provided child filters must be satisfied by a single child document.
+   *
+   * This compiles natively to a single `has_child` with a `bool.must` (OpenSearch), or resolves as one ExistsChild
+   * when backends do not support native joins.
+   */
+  def childFilterSameAll(builds: (ChildModel => Filter[Child])*): Filter[Doc] = {
+    Filter.ChildConstraints(relation, Filter.ChildSemantics.SameChildAll, builds.toList)
+  }
+
+  /**
+   * Collective semantics: each provided child filter must be satisfied by at least one child, but not necessarily the same child.
+   *
+   * This compiles natively to a parent `bool.must` of multiple `has_child` queries (OpenSearch).
+   */
+  def childFilterCollectiveAll(builds: (ChildModel => Filter[Child])*): Filter[Doc] = {
+    Filter.ChildConstraints(relation, Filter.ChildSemantics.CollectiveAll, builds.toList)
+  }
 }

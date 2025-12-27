@@ -3,6 +3,7 @@ package lightdb.opensearch.client
 import fabric.Null
 import fabric.rw._
 import lightdb.LightDB
+import lightdb.opensearch.OpenSearchJoinDomainRegistry
 import profig.Profig
 
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
@@ -37,8 +38,62 @@ case class OpenSearchConfig(baseUrl: String,
                             retryInitialDelay: FiniteDuration = 200.millis,
                             retryMaxDelay: FiniteDuration = 5.seconds,
                             retryStatusCodes: Set[Int] = Set(429, 502, 503, 504),
+                            /**
+                             * Global ingest concurrency limiter (shared across stores using the same baseUrl).
+                             * When set, OpenSearch commit writes will acquire a permit before sending requests.
+                             * Defaults to unlimited.
+                             */
+                            ingestMaxConcurrentRequests: Int = Int.MaxValue,
+                            /**
+                             * When enabled, OpenSearch requests will emit in-process metrics (counters + timing).
+                             * This is intentionally lightweight and dependency-free; wire to an external sink as needed.
+                             */
+                            metricsEnabled: Boolean = false,
+                            /**
+                             * If set (and metricsEnabled=true), periodically logs a snapshot of metrics for this baseUrl.
+                             */
+                            metricsLogEvery: Option[FiniteDuration] = None,
+                            /**
+                             * If set, this value will be sent as OpenSearch `filter_path` on search requests to reduce response payload size.
+                             *
+                             * Example: `hits.hits._id,hits.hits._source,hits.hits._score,hits.hits.sort,hits.total.value,aggregations`
+                             */
+                            searchFilterPath: Option[String] = None,
                             bulkMaxDocs: Int = 5_000,
                             bulkMaxBytes: Int = 5 * 1024 * 1024,
+                            /**
+                             * Maximum number of concurrent bulk requests issued during a commit when the buffered
+                             * operations are chunked. Defaults to 1 (sequential).
+                             */
+                            bulkConcurrency: Int = 1,
+                            /**
+                             * When true, facet aggregations will include a synthetic bucket for documents that have
+                             * no values for a facet field. This is implemented by indexing a special token in the
+                             * `<field>__facet` field when the facet value list is empty.
+                             */
+                            facetIncludeMissing: Boolean = false,
+                            /**
+                             * When true, skip mapping-hash verification during store initialization.
+                             * This is primarily an escape hatch for existing indices created before mapping hashes existed.
+                             */
+                            ignoreMappingHash: Boolean = false,
+                            /**
+                             * When enabled, bulk indexing failures will be captured into a dedicated dead-letter index
+                             * (best-effort) before the transaction fails.
+                             */
+                            deadLetterEnabled: Boolean = false,
+                            /**
+                             * Suffix appended to the derived dead-letter index name.
+                             */
+                            deadLetterIndexSuffix: String = "_deadletter",
+                            /**
+                             * Optional keyword-field normalization. When enabled, LightDB will:
+                             * - create keyword subfields with a normalizer (trim + lowercase)
+                             * - normalize query literals for keyword-field operations (term/terms/prefix on `.keyword`)
+                             *
+                             * Default is false to preserve Lucene's case-sensitive exact matching semantics for non-tokenized fields.
+                             */
+                            keywordNormalize: Boolean = false,
                             joinDomain: Option[String] = None,
                             joinRole: Option[String] = None,
                             joinChildren: List[String] = Nil,
@@ -58,145 +113,252 @@ object OpenSearchConfig {
    * - lightdb.opensearch.refreshPolicy
    */
   def from(db: LightDB, collectionName: String): OpenSearchConfig = {
-    val baseUrl = sys.props
-      .get("lightdb.opensearch.baseUrl")
-      .orElse(Profig("lightdb.opensearch.baseUrl").opt[String])
+    def optString(key: String): Option[String] =
+      Profig(key).opt[String].map(_.trim).filter(_.nonEmpty)
+
+    def optBoolean(key: String): Option[Boolean] =
+      Profig(key).opt[Boolean]
+
+    def optInt(key: String): Option[Int] =
+      Profig(key).opt[Int]
+
+    def optLong(key: String): Option[Long] =
+      Profig(key).opt[Long]
+
+    val baseUrl = optString("lightdb.opensearch.baseUrl")
       .getOrElse(throw new RuntimeException("Missing config: lightdb.opensearch.baseUrl"))
-    val indexPrefix = sys.props
-      .get("lightdb.opensearch.indexPrefix")
-      .orElse(Profig("lightdb.opensearch.indexPrefix").opt[String])
-    val refreshPolicy = sys.props
-      .get("lightdb.opensearch.refreshPolicy")
-      .orElse(Profig("lightdb.opensearch.refreshPolicy").opt[String])
 
-    val opaqueId = sys.props
-      .get("lightdb.opensearch.opaqueId")
-      .orElse(Profig("lightdb.opensearch.opaqueId").opt[String])
-      .map(_.trim)
-      .filter(_.nonEmpty)
-    val logRequests = sys.props
-      .get("lightdb.opensearch.logRequests")
-      .orElse(Profig("lightdb.opensearch.logRequests").opt[String])
-      .exists(_.trim.equalsIgnoreCase("true"))
+    val requestTimeoutMillis = optLong(s"lightdb.opensearch.$collectionName.requestTimeoutMillis")
+      .orElse(optLong("lightdb.opensearch.requestTimeoutMillis"))
+      .filter(_ > 0L)
+      .getOrElse(10.seconds.toMillis)
+    val indexPrefix = optString("lightdb.opensearch.indexPrefix")
+    val refreshPolicy = optString(s"lightdb.opensearch.$collectionName.refreshPolicy")
+      .orElse(optString("lightdb.opensearch.refreshPolicy"))
 
-    val maxResultWindow = sys.props
-      .get("lightdb.opensearch.maxResultWindow")
-      .orElse(Profig("lightdb.opensearch.maxResultWindow").opt[String])
-      .flatMap(s => scala.util.Try(s.toInt).toOption)
+    val opaqueId = optString("lightdb.opensearch.opaqueId")
+    val logRequests = optBoolean("lightdb.opensearch.logRequests").getOrElse(false)
+
+    val maxResultWindow = optInt("lightdb.opensearch.maxResultWindow")
       .filter(_ >= 1)
       .getOrElse(250_000)
 
-    val trackTotalHitsUpTo = sys.props
-      .get("lightdb.opensearch.trackTotalHitsUpTo")
-      .orElse(Profig("lightdb.opensearch.trackTotalHitsUpTo").opt[String])
-      .flatMap(s => scala.util.Try(s.toInt).toOption)
+    val trackTotalHitsUpTo = optInt("lightdb.opensearch.trackTotalHitsUpTo")
       .filter(_ >= 1)
 
-    val useIndexAlias = sys.props
-      .get("lightdb.opensearch.useIndexAlias")
-      .orElse(Profig("lightdb.opensearch.useIndexAlias").opt[String])
-      .exists(s => s.equalsIgnoreCase("true"))
-    val indexAliasSuffix = sys.props
-      .get("lightdb.opensearch.indexAliasSuffix")
-      .orElse(Profig("lightdb.opensearch.indexAliasSuffix").opt[String])
+    val useIndexAlias = optBoolean("lightdb.opensearch.useIndexAlias").getOrElse(false)
+    val indexAliasSuffix = optString("lightdb.opensearch.indexAliasSuffix")
       .getOrElse("_000001")
-    val useWriteAlias = sys.props
-      .get("lightdb.opensearch.useWriteAlias")
-      .orElse(Profig("lightdb.opensearch.useWriteAlias").opt[String])
-      .exists(s => s.equalsIgnoreCase("true"))
-    val writeAliasSuffix = sys.props
-      .get("lightdb.opensearch.writeAliasSuffix")
-      .orElse(Profig("lightdb.opensearch.writeAliasSuffix").opt[String])
+    val useWriteAlias = optBoolean("lightdb.opensearch.useWriteAlias").getOrElse(false)
+    val writeAliasSuffix = optString("lightdb.opensearch.writeAliasSuffix")
       .getOrElse("_write")
 
     // Auth:
     // Prefer a prebuilt Authorization header if provided, otherwise construct from specific config keys.
-    val authHeader = sys.props
-      .get("lightdb.opensearch.authHeader")
-      .orElse(Profig("lightdb.opensearch.authHeader").opt[String])
+    val authHeader = optString("lightdb.opensearch.authHeader")
       .orElse {
-        val user = sys.props.get("lightdb.opensearch.username").orElse(Profig("lightdb.opensearch.username").opt[String])
-        val pass = sys.props.get("lightdb.opensearch.password").orElse(Profig("lightdb.opensearch.password").opt[String])
+        val user = optString("lightdb.opensearch.username")
+        val pass = optString("lightdb.opensearch.password")
         (user, pass) match {
           case (Some(u), Some(p)) =>
             val raw = s"$u:$p"
             val encoded = java.util.Base64.getEncoder.encodeToString(raw.getBytes("UTF-8"))
             Some(s"Basic $encoded")
           case _ =>
-            sys.props.get("lightdb.opensearch.bearerToken")
-              .orElse(Profig("lightdb.opensearch.bearerToken").opt[String])
+            optString("lightdb.opensearch.bearerToken")
               .map(t => s"Bearer $t")
               .orElse {
-                sys.props.get("lightdb.opensearch.apiKey")
-                  .orElse(Profig("lightdb.opensearch.apiKey").opt[String])
+                optString("lightdb.opensearch.apiKey")
                   .map(k => s"ApiKey $k")
               }
         }
       }
 
     // Retry/backoff controls
-    val retryMaxAttempts = sys.props
-      .get("lightdb.opensearch.retry.maxAttempts")
-      .orElse(Profig("lightdb.opensearch.retry.maxAttempts").opt[String])
-      .flatMap(s => scala.util.Try(s.toInt).toOption)
+    val retryMaxAttempts = optInt("lightdb.opensearch.retry.maxAttempts")
       .filter(_ >= 1)
       .getOrElse(3)
-    val retryInitialDelayMillis = sys.props
-      .get("lightdb.opensearch.retry.initialDelayMillis")
-      .orElse(Profig("lightdb.opensearch.retry.initialDelayMillis").opt[String])
-      .flatMap(s => scala.util.Try(s.toLong).toOption)
+    val retryInitialDelayMillis = optLong("lightdb.opensearch.retry.initialDelayMillis")
       .filter(_ >= 0L)
       .getOrElse(200L)
-    val retryMaxDelayMillis = sys.props
-      .get("lightdb.opensearch.retry.maxDelayMillis")
-      .orElse(Profig("lightdb.opensearch.retry.maxDelayMillis").opt[String])
-      .flatMap(s => scala.util.Try(s.toLong).toOption)
+    val retryMaxDelayMillis = optLong("lightdb.opensearch.retry.maxDelayMillis")
       .filter(_ >= 0L)
       .getOrElse(5000L)
 
+    val ingestMaxConcurrentRequests = optInt("lightdb.opensearch.ingest.maxConcurrentRequests")
+      .filter(_ >= 1)
+      .getOrElse(Int.MaxValue)
+
+    val metricsEnabled = optBoolean("lightdb.opensearch.metrics.enabled").getOrElse(false)
+
+    val metricsLogEvery = optLong("lightdb.opensearch.metrics.logEveryMillis")
+      .filter(_ > 0L)
+      .map(_.millis)
+
+    val searchFilterPath = optString(s"lightdb.opensearch.$collectionName.search.filterPath")
+      .orElse(optString("lightdb.opensearch.search.filterPath"))
+
     // Bulk sizing controls
-    val bulkMaxDocs = sys.props
-      .get("lightdb.opensearch.bulk.maxDocs")
-      .orElse(Profig("lightdb.opensearch.bulk.maxDocs").opt[String])
-      .flatMap(s => scala.util.Try(s.toInt).toOption)
+    val bulkMaxDocs = optInt("lightdb.opensearch.bulk.maxDocs")
       .filter(_ >= 1)
       .getOrElse(5000)
-    val bulkMaxBytes = sys.props
-      .get("lightdb.opensearch.bulk.maxBytes")
-      .orElse(Profig("lightdb.opensearch.bulk.maxBytes").opt[String])
-      .flatMap(s => scala.util.Try(s.toInt).toOption)
+    val bulkMaxBytes = optInt("lightdb.opensearch.bulk.maxBytes")
       .filter(_ >= 1)
       .getOrElse(5 * 1024 * 1024)
 
-    val joinDomain = sys.props
-      .get(s"lightdb.opensearch.$collectionName.joinDomain")
-      .orElse(Profig(s"lightdb.opensearch.$collectionName.joinDomain").opt[String])
-    val joinRole = sys.props
-      .get(s"lightdb.opensearch.$collectionName.joinRole")
-      .orElse(Profig(s"lightdb.opensearch.$collectionName.joinRole").opt[String])
-    val joinChildren = sys.props
-      .get(s"lightdb.opensearch.$collectionName.joinChildren")
-      .orElse(Profig(s"lightdb.opensearch.$collectionName.joinChildren").opt[String])
-      .map(_.split(",").toList.map(_.trim).filter(_.nonEmpty))
-      .getOrElse(Nil)
-    val joinParentField = sys.props
-      .get(s"lightdb.opensearch.$collectionName.joinParentField")
-      .orElse(Profig(s"lightdb.opensearch.$collectionName.joinParentField").opt[String])
-    val joinFieldName = sys.props
-      .get("lightdb.opensearch.joinFieldName")
-      .orElse(Profig("lightdb.opensearch.joinFieldName").opt[String])
+    val bulkConcurrency = optInt("lightdb.opensearch.bulk.concurrency")
+      .filter(_ >= 1)
+      .getOrElse(1)
+
+    val facetIncludeMissing = optBoolean(s"lightdb.opensearch.$collectionName.facets.includeMissing")
+      .orElse(optBoolean("lightdb.opensearch.facets.includeMissing"))
+      .getOrElse(false)
+
+    val ignoreMappingHash = optBoolean("lightdb.opensearch.ignoreMappingHash").getOrElse(false)
+
+    val deadLetterEnabled = optBoolean(s"lightdb.opensearch.$collectionName.deadLetter.enabled")
+      .orElse(optBoolean("lightdb.opensearch.deadLetter.enabled"))
+      .getOrElse(false)
+
+    val deadLetterIndexSuffix = optString("lightdb.opensearch.deadLetter.indexSuffix")
+      .getOrElse("_deadletter")
+
+    val keywordNormalize = optBoolean(s"lightdb.opensearch.$collectionName.keyword.normalize")
+      .orElse(optBoolean("lightdb.opensearch.keyword.normalize"))
+      .getOrElse(false)
+
+    def parseCsv(s: String): List[String] = s
+      .split(",")
+      .toList
+      .map(_.trim)
+      .filter(_.nonEmpty)
+
+    def parseChildParentFields(s: String): Map[String, String] = {
+      // Format: "ChildStoreA:parentIdField,ChildStoreB:parentIdField"
+      parseCsv(s).flatMap { pair =>
+        val i = pair.indexOf(':')
+        if (i <= 0 || i >= pair.length - 1) {
+          None
+        } else {
+          val child = pair.substring(0, i).trim
+          val field = pair.substring(i + 1).trim
+          if (child.isEmpty || field.isEmpty) None else Some(child -> field)
+        }
+      }.toMap
+    }
+
+    val joinDomainRaw = optString(s"lightdb.opensearch.$collectionName.joinDomain")
+    val joinRoleRaw = optString(s"lightdb.opensearch.$collectionName.joinRole")
+    val joinChildrenRaw = optString(s"lightdb.opensearch.$collectionName.joinChildren").map(parseCsv).getOrElse(Nil)
+    val joinChildParentFieldsRaw: Map[String, String] =
+      optString(s"lightdb.opensearch.$collectionName.joinChildParentFields").map(parseChildParentFields).getOrElse(Map.empty)
+    val joinParentFieldRaw = optString(s"lightdb.opensearch.$collectionName.joinParentField")
+
+    // Programmatic join-domain config (no JVM system properties): allow apps to register join config in code.
+    val registryEntry = OpenSearchJoinDomainRegistry.get(db.name, collectionName)
+    val joinDomainRaw2 = joinDomainRaw.orElse(registryEntry.map(_.joinDomain))
+    val joinRoleRaw2 = joinRoleRaw.orElse(registryEntry.map(_.joinRole))
+    val joinChildrenRaw2 = if (joinChildrenRaw.nonEmpty) joinChildrenRaw else registryEntry.map(_.joinChildren).getOrElse(Nil)
+    val joinParentFieldRaw2 = joinParentFieldRaw.orElse(registryEntry.flatMap(_.joinParentField))
+    // Join-domain inference:
+    //
+    // To reduce config duplication, child stores may infer join config from a parent store that declares:
+    // - lightdb.opensearch.<ParentStore>.joinDomain
+    // - lightdb.opensearch.<ParentStore>.joinChildren
+    // - lightdb.opensearch.<ParentStore>.joinChildParentFields (map: childStoreName -> parentId field name in child)
+    //
+    // This is system-properties-driven because Profig does not provide a safe way to enumerate all configured keys.
+    case class InferredChild(parentStoreName: String, joinDomain: String, joinParentField: String)
+
+    def extractStoreName(key: String, suffix: String): Option[String] = {
+      val prefix = "lightdb.opensearch."
+      if (key.startsWith(prefix) && key.endsWith(suffix)) {
+        Some(key.substring(prefix.length, key.length - suffix.length))
+      } else {
+        None
+      }
+    }
+
+    def allProfigKeys(json: fabric.Json, prefix: String = ""): List[String] = json match {
+      case o: fabric.Obj =>
+        o.value.toList.flatMap { case (k, v) =>
+          val full = if (prefix.isEmpty) k else s"$prefix.$k"
+          full :: allProfigKeys(v, full)
+        }
+      case _ =>
+        Nil
+    }
+
+    val candidateParentStores: Set[String] =
+      allProfigKeys(Profig.json).flatMap { k =>
+        extractStoreName(k, ".joinChildren").orElse(extractStoreName(k, ".joinChildParentFields"))
+      }.toSet
+
+    val inferredChild: Option[InferredChild] = if (joinDomainRaw2.nonEmpty || joinRoleRaw2.nonEmpty || joinParentFieldRaw2.nonEmpty) {
+      None
+    } else {
+      val candidates = candidateParentStores.toList.flatMap { parentStoreName =>
+        val parentJoinChildren = optString(s"lightdb.opensearch.$parentStoreName.joinChildren").map(parseCsv).getOrElse(Nil)
+        val parentChildParentFields =
+          optString(s"lightdb.opensearch.$parentStoreName.joinChildParentFields").map(parseChildParentFields).getOrElse(Map.empty)
+        val mentionedAsChild: Boolean =
+          parentJoinChildren.contains(collectionName) || parentChildParentFields.contains(collectionName)
+        if (!mentionedAsChild) {
+          Nil
+        } else {
+          val joinDomain = optString(s"lightdb.opensearch.$parentStoreName.joinDomain").getOrElse(parentStoreName)
+          parentChildParentFields.get(collectionName) match {
+            case Some(parentField) =>
+              List(InferredChild(parentStoreName = parentStoreName, joinDomain = joinDomain, joinParentField = parentField))
+            case None =>
+              throw new IllegalArgumentException(
+                s"OpenSearch join-domain inference for '$collectionName' found parent store '$parentStoreName', but no parent-field mapping was provided. " +
+                  s"Set 'lightdb.opensearch.$parentStoreName.joinChildParentFields' (e.g. '$collectionName:parentId') " +
+                  s"or explicitly configure 'lightdb.opensearch.$collectionName.joinParentField'."
+              )
+          }
+        }
+      }
+      candidates match {
+        case Nil => None
+        case one :: Nil => Some(one)
+        case many =>
+          throw new IllegalArgumentException(
+            s"OpenSearch join-domain inference for '$collectionName' is ambiguous. Multiple parent stores claim this child: " +
+              many.map(_.parentStoreName).distinct.sorted.mkString(", ")
+          )
+      }
+    }
+
+    val joinDomain = joinDomainRaw2.orElse(inferredChild.map(_.joinDomain))
+
+    // If this store declares join children or child-parent field mappings and a joinDomain, infer it is a join-parent.
+    val inferredJoinRoleParent: Option[String] =
+      if (joinRoleRaw2.isEmpty && joinDomain.nonEmpty && (joinChildrenRaw2.nonEmpty || joinChildParentFieldsRaw.nonEmpty)) Some("parent") else None
+
+    val joinRole = joinRoleRaw2
+      .orElse(inferredChild.map(_ => "child"))
+      .orElse(inferredJoinRoleParent)
+
+    val joinChildren: List[String] =
+      if (joinChildrenRaw2.nonEmpty) joinChildrenRaw2
+      else if (joinChildParentFieldsRaw.nonEmpty) joinChildParentFieldsRaw.keys.toList.sorted
+      else Nil
+
+    val joinParentField = joinParentFieldRaw2.orElse(inferredChild.map(_.joinParentField))
+
+    val joinFieldName = optString("lightdb.opensearch.joinFieldName")
+      .orElse(registryEntry.map(_.joinFieldName))
       .getOrElse("__lightdb_join")
-    val joinScoreMode = sys.props
-      .get(s"lightdb.opensearch.$collectionName.joinScoreMode")
-      .orElse(Profig(s"lightdb.opensearch.$collectionName.joinScoreMode").opt[String])
-      .orElse(sys.props.get("lightdb.opensearch.joinScoreMode"))
-      .orElse(Profig("lightdb.opensearch.joinScoreMode").opt[String])
+    val joinScoreMode = optString(s"lightdb.opensearch.$collectionName.joinScoreMode")
+      .orElse(optString("lightdb.opensearch.joinScoreMode"))
       .map(_.trim.toLowerCase)
       .filter(s => Set("none", "max", "sum", "avg", "min").contains(s))
       .getOrElse("none")
     val cfg = OpenSearchConfig(
       baseUrl = baseUrl,
       indexPrefix = indexPrefix,
+      requestTimeout = requestTimeoutMillis.millis,
       refreshPolicy = refreshPolicy,
       authHeader = authHeader,
       opaqueId = opaqueId,
@@ -212,6 +374,16 @@ object OpenSearchConfig {
       retryMaxDelay = retryMaxDelayMillis.millis,
       bulkMaxDocs = bulkMaxDocs,
       bulkMaxBytes = bulkMaxBytes,
+      ingestMaxConcurrentRequests = ingestMaxConcurrentRequests,
+      metricsEnabled = metricsEnabled,
+      metricsLogEvery = metricsLogEvery,
+      searchFilterPath = searchFilterPath,
+      bulkConcurrency = bulkConcurrency,
+      facetIncludeMissing = facetIncludeMissing,
+      ignoreMappingHash = ignoreMappingHash,
+      deadLetterEnabled = deadLetterEnabled,
+      deadLetterIndexSuffix = deadLetterIndexSuffix,
+      keywordNormalize = keywordNormalize,
       joinDomain = joinDomain,
       joinRole = joinRole,
       joinChildren = joinChildren,

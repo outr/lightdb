@@ -47,6 +47,47 @@ class OpenSearchAliasSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
 
       test
     }
+
+    "support creating a new physical index and repointing read/write aliases" in {
+      val config = OpenSearchConfig.from(new lightdb.LightDB {
+        override type SM = lightdb.store.CollectionManager
+        override val storeManager: lightdb.store.CollectionManager = lightdb.opensearch.OpenSearchStore
+        override def directory = None
+        override def upgrades = Nil
+        override def name: String = "OpenSearchAliasSpec2"
+      }, collectionName = "alias_test_2")
+      val client = OpenSearchClient(config)
+
+      val readAlias = "alias_spec2_read"
+      val writeAlias = Some("alias_spec2_write")
+
+      val indexBody = obj("mappings" -> obj("dynamic" -> bool(true)))
+
+      val test = for {
+        // Clean up any existing aliases/indices from prior runs
+        existing <- client.aliasTargets(readAlias)
+        _ <- existing.foldLeft(Task.unit)((acc, idx) => acc.next(client.deleteIndex(idx)))
+        existingW <- client.aliasTargets(writeAlias.get)
+        _ <- existingW.foldLeft(Task.unit)((acc, idx) => acc.next(client.deleteIndex(idx)))
+
+        created <- OpenSearchIndexMigration.createIndexAndRepointAliases(
+          client = client,
+          readAlias = readAlias,
+          writeAlias = writeAlias,
+          indexBody = indexBody,
+          defaultSuffix = "_000001"
+        )
+        // Write through write alias and read through read alias
+        _ <- client.indexDoc(writeAlias.get, "x1", obj("value" -> str("one")), refresh = Some("true"))
+        c <- client.count(readAlias, obj("query" -> obj("match_all" -> obj())))
+        // cleanup
+        _ <- client.deleteIndex(created)
+      } yield {
+        c should be(1)
+      }
+
+      test
+    }
   }
 }
 

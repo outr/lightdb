@@ -24,6 +24,15 @@ class SplitCollection[
   storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, db, storeManager) {
   override type TX = SplitCollectionTransaction[Doc, Model, Storage, Searching]
 
+  /**
+   * Delegate native join support to the searching collection.
+   *
+   * This is critical when using SplitCollection as "system of record + derived search index", e.g.
+   * RocksDB (storage) + OpenSearch (searching). Without this, ExistsChild will be forced through the planner
+   * fallback (materialize parent ids), even though the searching backend can execute joins natively.
+   */
+  override def supportsNativeExistsChild: Boolean = searching.supportsNativeExistsChild
+
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {

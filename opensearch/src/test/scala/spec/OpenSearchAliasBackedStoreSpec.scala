@@ -5,10 +5,13 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.opensearch.OpenSearchStore
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{LightDB}
+import lightdb.LightDB
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
+
+import java.nio.file.Path
 
 @EmbeddedTest
 class OpenSearchAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with OpenSearchTestSupport {
@@ -21,7 +24,7 @@ class OpenSearchAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
   class DB extends LightDB {
     override type SM = lightdb.store.CollectionManager
     override val storeManager: lightdb.store.CollectionManager = OpenSearchStore
-    override def directory = None
+    override def directory: Option[Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
     override def name: String = "OpenSearchAliasBackedStoreSpec"
 
@@ -30,8 +33,9 @@ class OpenSearchAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
   "OpenSearch alias-backed store" should {
     "initialize and read/write via alias" in {
-      val previous = sys.props.get("lightdb.opensearch.useIndexAlias")
-      sys.props.put("lightdb.opensearch.useIndexAlias", "true")
+      val key = "lightdb.opensearch.useIndexAlias"
+      val previous = Profig(key).opt[String]
+      Profig(key).store("true")
 
       val db = new DB
       val test = (for {
@@ -45,8 +49,8 @@ class OpenSearchAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
         v should be(Some("one"))
       }).guarantee(Task {
         previous match {
-          case Some(v) => sys.props.put("lightdb.opensearch.useIndexAlias", v)
-          case None => sys.props.remove("lightdb.opensearch.useIndexAlias")
+          case Some(v) => Profig(key).store(v)
+          case None => Profig(key).remove()
         }
       })
 
