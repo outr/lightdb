@@ -10,6 +10,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path
@@ -19,13 +20,13 @@ class OpenSearchNativeExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec w
   // Configure a join-domain shared index:
   // - Parent store is the join parent type and declares allowed children
   // - Child store is the join child type and declares which field contains parent id for routing/join
-  sys.props.put("lightdb.opensearch.Parent.joinDomain", "native_exists_child")
-  sys.props.put("lightdb.opensearch.Parent.joinRole", "parent")
-  sys.props.put("lightdb.opensearch.Parent.joinChildren", "Child")
+  Profig("lightdb.opensearch.Parent.joinDomain").store("native_exists_child")
+  Profig("lightdb.opensearch.Parent.joinRole").store("parent")
+  Profig("lightdb.opensearch.Parent.joinChildren").store("Child")
 
-  sys.props.put("lightdb.opensearch.Child.joinDomain", "native_exists_child")
-  sys.props.put("lightdb.opensearch.Child.joinRole", "child")
-  sys.props.put("lightdb.opensearch.Child.joinParentField", "parentId")
+  Profig("lightdb.opensearch.Child.joinDomain").store("native_exists_child")
+  Profig("lightdb.opensearch.Child.joinRole").store("child")
+  Profig("lightdb.opensearch.Child.joinParentField").store("parentId")
 
   private val alpha = Parent(name = "Alpha")
   private val bravo = Parent(name = "Bravo")
@@ -54,6 +55,36 @@ class OpenSearchNativeExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec w
         _ <- DB.dispose
       } yield {
         ids.toSet should be(Set(alpha._id, bravo._id))
+      }
+      test
+    }
+
+    "apply minDocScore predictably for filter-only has_child queries" in {
+      val test = for {
+        _ <- DB.init
+        _ <- DB.parents.transaction(_.truncate)
+        _ <- DB.children.transaction(_.truncate)
+        _ <- DB.parents.transaction(_.insert(List(alpha, bravo)))
+        _ <- DB.children.transaction(_.insert(children))
+        ok <- DB.parents.transaction { tx =>
+          tx.query
+            .filter(_.childFilter(_.state === Some("WY")))
+            .minDocScore(0.5)
+            .id
+            .toList
+        }
+        none <- DB.parents.transaction { tx =>
+          tx.query
+            .filter(_.childFilter(_.state === Some("WY")))
+            .minDocScore(1.1)
+            .id
+            .toList
+        }
+        _ <- DB.truncate()
+        _ <- DB.dispose
+      } yield {
+        ok.toSet should be(Set(alpha._id, bravo._id))
+        none shouldBe Nil
       }
       test
     }

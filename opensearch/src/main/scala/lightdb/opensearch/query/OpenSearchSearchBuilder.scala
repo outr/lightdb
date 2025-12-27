@@ -15,7 +15,12 @@ import lightdb.{Query, Sort}
  *
  * Initial version is intentionally minimal; it will be expanded to full `lightdb.Query` parity.
  */
-class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model, joinScoreMode: String = "none") {
+class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                                joinScoreMode: String = "none",
+                                                                                keywordNormalize: Boolean = false) {
+  private def normalizeKeyword(s: String): String =
+    if (keywordNormalize) s.trim.toLowerCase else s
+
   def filterToDsl(filter: Filter[Doc]): Json = filter2Dsl(filter)
 
   def sortsToDsl(sorts: List[Sort]): List[Json] = sorts2Dsl(sorts)
@@ -44,11 +49,28 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     filter match {
       case _: Filter.MatchNone[Doc] =>
         obj("match_none" -> obj())
+      case f: Filter.ChildConstraints[Doc @unchecked] =>
+        val relation = f.relation
+        val childModel: f.ChildModel = relation.childStore.model
+        val childBuilder = new OpenSearchSearchBuilder[f.Child, f.ChildModel](childModel, keywordNormalize = keywordNormalize)
+        f.semantics match {
+          case Filter.ChildSemantics.SameChildAll =>
+            val childMust = f.builds.map(b => childBuilder.filterToDsl(b(childModel)))
+            val childQuery = OpenSearchDsl.boolQuery(must = if (childMust.isEmpty) List(OpenSearchDsl.matchAll()) else childMust)
+            OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode)
+          case Filter.ChildSemantics.CollectiveAll =>
+            // AND of has_child clauses (each constraint can match a different child)
+            val must = f.builds.map { b =>
+              val cq = childBuilder.filterToDsl(b(childModel))
+              OpenSearchDsl.hasChild(relation.childStore.name, cq, scoreMode = joinScoreMode)
+            }
+            if (must.isEmpty) OpenSearchDsl.matchAll() else OpenSearchDsl.boolQuery(must = must)
+        }
       case f: Filter.ExistsChild[Doc] =>
         val relation = f.relation
         val childModel: f.ChildModel = relation.childStore.model
         val childFilter = f.childFilter(childModel)
-        val childBuilder = new OpenSearchSearchBuilder[f.Child, f.ChildModel](childModel)
+        val childBuilder = new OpenSearchSearchBuilder[f.Child, f.ChildModel](childModel, joinScoreMode = "none", keywordNormalize = keywordNormalize)
         val childQuery = childBuilder.filterToDsl(childFilter)
         OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode)
       case f: Filter.Equals[Doc, _] =>
@@ -83,7 +105,15 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           OpenSearchDsl.ids(f.getJson(model).map(jsonToIdString))
         } else {
           val fieldName = fieldNameForExact(field)
-          OpenSearchDsl.terms(fieldName, f.getJson(model))
+          val values = if (keywordNormalize && fieldName.endsWith(".keyword")) {
+            f.getJson(model).map {
+              case Str(s, _) => str(normalizeKeyword(s))
+              case other => other
+            }
+          } else {
+            f.getJson(model)
+          }
+          OpenSearchDsl.terms(fieldName, values)
         }
       case Filter.RangeLong(fieldName, from, to) =>
         OpenSearchDsl.range(fieldName, gte = from.map(num), lte = to.map(num))
@@ -95,14 +125,22 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           case Some(f) if f.isTokenized =>
             OpenSearchDsl.regexp(fieldNameForPattern(fieldName), s"${escapeRegexLiteral(q)}.*")
           case _ =>
-            OpenSearchDsl.prefix(fieldNameForPattern(fieldName), q)
+            val fn = fieldNameForPattern(fieldName)
+            val v = if (keywordNormalize && fn.endsWith(".keyword")) normalizeKeyword(q) else q
+            OpenSearchDsl.prefix(fn, v)
         }
       case Filter.EndsWith(fieldName, q) =>
-        OpenSearchDsl.regexp(fieldNameForPattern(fieldName), s".*${escapeRegexLiteral(q)}")
+        val fn = fieldNameForPattern(fieldName)
+        val v = if (keywordNormalize && fn.endsWith(".keyword")) normalizeKeyword(q) else q
+        OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}")
       case Filter.Contains(fieldName, q) =>
-        OpenSearchDsl.regexp(fieldNameForPattern(fieldName), s".*${escapeRegexLiteral(q)}.*")
+        val fn = fieldNameForPattern(fieldName)
+        val v = if (keywordNormalize && fn.endsWith(".keyword")) normalizeKeyword(q) else q
+        OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}.*")
       case Filter.Exact(fieldName, q) =>
-        OpenSearchDsl.term(fieldNameForPattern(fieldName), str(q))
+        val fn = fieldNameForPattern(fieldName)
+        val v = if (keywordNormalize && fn.endsWith(".keyword")) normalizeKeyword(q) else q
+        OpenSearchDsl.term(fn, str(v))
       case Filter.Distance(fieldName, from, radius) =>
         // OpenSearch expects a distance string like "10km"
         val centerField = s"$fieldName${lightdb.opensearch.OpenSearchTemplates.SpatialCenterSuffix}"
@@ -137,11 +175,14 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
         val mustList = must.result()
         val shouldList = should.result()
-        val hasShould = clauses.exists(c => c.condition == lightdb.filter.Condition.Should || c.condition == lightdb.filter.Condition.Filter)
-        val minimum = if (hasShould) Some(minShould).filter(_ > 0) else None
+        val minimum = if (shouldList.nonEmpty) Some(minShould).filter(_ > 0) else None
+        val filterList = filterB.result()
 
         // Lucene adds MatchAll MUST when there are only SHOULDs and minShould==0.
         val mustWithMatchAll = if (minimum.isEmpty && mustList.isEmpty && shouldList.nonEmpty) {
+          OpenSearchDsl.matchAll() :: mustList
+        } else if (mustList.isEmpty && shouldList.isEmpty && filterList.nonEmpty) {
+          // Lucene-style constant scoring: filters without any scoring clauses should still produce a constant score.
           OpenSearchDsl.matchAll() :: mustList
         } else {
           mustList
@@ -149,7 +190,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
         OpenSearchDsl.boolQuery(
           must = mustWithMatchAll,
-          filter = filterB.result(),
+          filter = filterList,
           should = shouldList,
           mustNot = mustNot.result(),
           minimumShouldMatch = minimum
@@ -234,7 +275,9 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       val must = if (tokens.nonEmpty) tokens.map(t => OpenSearchDsl.term(field.name, str(t))) else List(OpenSearchDsl.matchAll())
       addBoost(OpenSearchDsl.boolQuery(must = must), boost.getOrElse(1.0))
     case Str(s, _) =>
-      OpenSearchDsl.term(fieldNameForExact(field), str(s), boost)
+      val fieldName = fieldNameForExact(field)
+      val v = if (keywordNormalize && fieldName.endsWith(".keyword")) normalizeKeyword(s) else s
+      OpenSearchDsl.term(fieldName, str(v), boost)
     case Bool(b, _) =>
       OpenSearchDsl.term(field.name, bool(b), boost)
     case NumInt(l, _) =>
@@ -256,6 +299,14 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     // Prefer native boosting on bool queries (preserves internal scoring like Lucene),
     // otherwise fall back to function_score weight.
     query match {
+      case o: Obj if o.value.size == 1 && o.value.contains("has_child") =>
+        o.value("has_child") match {
+          case hc: Obj =>
+            // OpenSearch supports `boost` directly on has_child; avoid function_score for join performance.
+            obj("has_child" -> obj((hc.value.toSeq :+ ("boost" -> num(boost))): _*))
+          case _ =>
+            functionScore(query, boost)
+        }
       case o: Obj if o.value.size == 1 && o.value.contains("bool") =>
         o.value("bool") match {
           case b: Obj =>

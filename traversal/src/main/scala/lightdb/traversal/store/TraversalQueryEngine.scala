@@ -1,6 +1,6 @@
 package lightdb.traversal.store
 
-import fabric.{Obj, obj}
+import fabric.{Bool, Obj, obj}
 import fabric.Str
 import fabric.define.DefType
 import lightdb.doc.{Document, DocumentModel}
@@ -339,15 +339,27 @@ object TraversalQueryEngine {
 
       // Parent-driven page-only semi-join (opt-in): when parent-side has a small seed, probe children by parent id
       // instead of scanning broad child filters to discover parent ids.
-      def boolPropOrProfig(key: String, default: Boolean): Boolean =
-        sys.props.get(key).flatMap(_.toBooleanOption).getOrElse(Profig(key).opt[Boolean].getOrElse(default))
-      def intPropOrProfig(key: String, default: Int): Int =
-        sys.props.get(key).flatMap(_.toIntOption).getOrElse(Profig(key).opt[Int].getOrElse(default))
+      def boolProfig(key: String, default: Boolean): Boolean = {
+        Profig(key).get() match {
+          case Some(Bool(b, _)) => b
+          case Some(o: Obj) =>
+            o.get("enabled") match {
+              case Some(Bool(b, _)) => b
+              case Some(other) => other.asBoolean
+              case None => true
+            }
+          case _ =>
+            default
+        }
+      }
+
+      def intProfig(key: String, default: Int): Int =
+        Profig(key).opt[Int].getOrElse(default)
 
       val parentDrivenEnabled: Boolean =
-        boolPropOrProfig("lightdb.traversal.existsChild.parentDriven", default = false)
+        boolProfig("lightdb.traversal.existsChild.parentDriven", default = false)
       val parentDrivenMaxParents: Int =
-        intPropOrProfig("lightdb.traversal.existsChild.parentDriven.maxParents", default = 1024) max 1
+        intProfig("lightdb.traversal.existsChild.parentDriven.maxParents", default = 1024) max 1
 
       val parentDrivenTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
         if (!canEarlyTerminate || !parentDrivenEnabled) None
@@ -449,9 +461,9 @@ object TraversalQueryEngine {
       // This stays disabled by default; enable with:
       // -Dlightdb.traversal.existsChild.nativeFull=true
       val nativeFullEnabled: Boolean =
-        boolPropOrProfig("lightdb.traversal.existsChild.nativeFull", default = false)
+        boolProfig("lightdb.traversal.existsChild.nativeFull", default = false)
       val nativeFullMaxParents: Int =
-        intPropOrProfig("lightdb.traversal.existsChild.nativeFull.maxParentIds", default = 100_000) max 0
+        intProfig("lightdb.traversal.existsChild.nativeFull.maxParentIds", default = 100_000) max 0
 
       val nativeFullTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
         if (!nativeFullEnabled) None

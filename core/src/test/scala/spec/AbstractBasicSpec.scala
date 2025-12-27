@@ -76,7 +76,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   protected var _db: DB = _
 
   /**
-   * Lazily create the DB instance so store-specific test helpers (e.g. config via sys.props) can run during subclass
+   * Lazily create the DB instance so store-specific test helpers (e.g. config via Profig) can run during subclass
    * initialization before the first DB is constructed.
    */
   protected def db: DB = {

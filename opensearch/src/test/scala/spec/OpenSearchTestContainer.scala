@@ -5,6 +5,8 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.utility.DockerImageName
 
 import java.time.Duration
+import fabric.rw._
+import profig.Profig
 
 private[spec] object OpenSearchTestContainer {
   private val HttpPort = 9200
@@ -12,7 +14,8 @@ private[spec] object OpenSearchTestContainer {
   private class Container(image: DockerImageName) extends GenericContainer[Container](image)
 
   private lazy val container: Container = {
-    val image = sys.props.getOrElse("lightdb.opensearch.testcontainers.image", "opensearchproject/opensearch:2.13.0")
+    val image = Profig("lightdb.opensearch.testcontainers.image").opt[String]
+      .getOrElse("opensearchproject/opensearch:2.13.0")
     val c = new Container(DockerImageName.parse(image))
     c.withExposedPorts(HttpPort)
     c.withEnv("discovery.type", "single-node")
@@ -26,13 +29,13 @@ private[spec] object OpenSearchTestContainer {
 
   private lazy val started: Unit = {
     container.start()
-    sys.addShutdownHook {
+    Runtime.getRuntime.addShutdownHook(new Thread(() => {
       try {
         container.stop()
       } catch {
         case _: Throwable => // ignore
       }
-    }
+    }))
   }
 
   def baseUrl: String = {

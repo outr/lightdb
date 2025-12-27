@@ -7,7 +7,7 @@ import lightdb.traversal.store.TraversalManager
 /**
  * Test helper: a CollectionManager that creates TraversalStore instances wrapping a RocksDBStore backing.
  */
-trait TraversalRocksDBWrappedManager {
+trait TraversalRocksDBWrappedManager extends ProfigTestSupport { this: org.scalatest.Suite =>
   def traversalStoreManager: TraversalManager = new TraversalManager {
 
     override def create[Doc <: lightdb.doc.Document[Doc], Model <: lightdb.doc.DocumentModel[Doc]](

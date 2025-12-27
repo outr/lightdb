@@ -209,7 +209,7 @@
     - Optimization: traversal can map matching child `_id` -> parent id via persisted per-doc `ref` mapping in the child store index keyspace
       (avoids loading child docs just to read `parentField`).
   - Config note:
-    - Traversal uses **Profig** for these traversal-only flags, but keeps **`sys.props` override** behavior for compatibility with existing tests/scripts.
+    - Traversal uses **Profig** for these traversal-only flags.
 
 ### Phase 3 — “contains” (n-grams) + verification
 - [x] N-gram index builder *(persisted + in-memory cache optional; current gram size=3)*

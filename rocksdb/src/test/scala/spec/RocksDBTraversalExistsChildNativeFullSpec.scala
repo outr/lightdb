@@ -27,12 +27,13 @@ class RocksDBTraversalExistsChildNativeFullSpec
 
   override protected def beforeAll(): Unit = {
     // Force traversal-native ExistsChild handling + enable the "nativeFull" path.
-    System.setProperty("lightdb.traversal.existsChild.native", "true")
-    System.setProperty("lightdb.traversal.existsChild.nativeFull", "true")
-    System.setProperty("lightdb.traversal.existsChild.nativeFull.maxParentIds", "1000")
+    Profig.init()
+    Profig("lightdb.traversal.existsChild.native").store(true)
+    Profig("lightdb.traversal.existsChild.nativeFull").store(true)
+    Profig("lightdb.traversal.existsChild.nativeFull.maxParentIds").store(1000)
 
-    // Make the planner fallback path fail if it gets used (ExistsChild.resolve reads sys.props).
-    System.setProperty("lightdb.existsChild.maxParentIds", "1")
+    // Make the planner fallback path fail if it gets used.
+    Profig("lightdb.existsChild.maxParentIds").store(1)
 
     super.beforeAll()
   }
@@ -40,10 +41,10 @@ class RocksDBTraversalExistsChildNativeFullSpec
   override protected def afterAll(): Unit = {
     try super.afterAll()
     finally {
-      System.clearProperty("lightdb.traversal.existsChild.native")
-      System.clearProperty("lightdb.traversal.existsChild.nativeFull")
-      System.clearProperty("lightdb.traversal.existsChild.nativeFull.maxParentIds")
-      System.clearProperty("lightdb.existsChild.maxParentIds")
+      Profig("lightdb.traversal.existsChild.native").remove()
+      Profig("lightdb.traversal.existsChild.nativeFull").remove()
+      Profig("lightdb.traversal.existsChild.nativeFull.maxParentIds").remove()
+      Profig("lightdb.existsChild.maxParentIds").remove()
     }
   }
 

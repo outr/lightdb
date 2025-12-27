@@ -6,6 +6,7 @@ import lightdb.store.{StoreManager, StoreMode}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.Collection
 import profig.Profig
+import fabric._
 import fabric.rw._
 import rapid.Task
 
@@ -99,11 +100,24 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    */
   override def supportsNativeExistsChild: Boolean =
     {
-      def boolPropOrProfig(key: String, default: Boolean): Boolean =
-        sys.props.get(key).flatMap(_.toBooleanOption).getOrElse(Profig(key).opt[Boolean].getOrElse(default))
+      def boolProfig(key: String, default: Boolean): Boolean = {
+        Profig(key).get() match {
+          case Some(Bool(b, _)) => b
+          case Some(o: Obj) =>
+            // Allow object-style flags, e.g. `lightdb.traversal.existsChild.nativeFull.maxParentIds=1000`
+            // In that case `nativeFull` becomes an object; treat it as enabled unless explicitly disabled.
+            o.get("enabled") match {
+              case Some(Bool(b, _)) => b
+              case Some(other) => other.asBoolean
+              case None => true
+            }
+          case _ =>
+            default
+        }
+      }
 
-      boolPropOrProfig("lightdb.traversal.existsChild.native", default = false) ||
-        boolPropOrProfig("lightdb.traversal.existsChild.nativeFull", default = false)
+      boolProfig("lightdb.traversal.existsChild.native", default = false) ||
+        boolProfig("lightdb.traversal.existsChild.nativeFull", default = false)
     }
 
   override def storeMode: StoreMode[Doc, Model] = backing.storeMode

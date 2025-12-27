@@ -8,6 +8,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
 
 @EmbeddedTest
@@ -31,10 +32,12 @@ class OpenSearchWriteAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSp
 
   "OpenSearch write-alias backed store" should {
     "write via <alias>_write and read via <alias>" in {
-      val prevUseIndexAlias = sys.props.get("lightdb.opensearch.useIndexAlias")
-      val prevUseWriteAlias = sys.props.get("lightdb.opensearch.useWriteAlias")
-      sys.props.put("lightdb.opensearch.useIndexAlias", "true")
-      sys.props.put("lightdb.opensearch.useWriteAlias", "true")
+      val k1 = "lightdb.opensearch.useIndexAlias"
+      val k2 = "lightdb.opensearch.useWriteAlias"
+      val prevUseIndexAlias = Profig(k1).opt[String]
+      val prevUseWriteAlias = Profig(k2).opt[String]
+      Profig(k1).store("true")
+      Profig(k2).store("true")
 
       val db = new DB
       val test = (for {
@@ -48,12 +51,12 @@ class OpenSearchWriteAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSp
         v should be(Some("one"))
       }).guarantee(Task {
         prevUseIndexAlias match {
-          case Some(v) => sys.props.put("lightdb.opensearch.useIndexAlias", v)
-          case None => sys.props.remove("lightdb.opensearch.useIndexAlias")
+          case Some(v) => Profig(k1).store(v)
+          case None => Profig(k1).remove()
         }
         prevUseWriteAlias match {
-          case Some(v) => sys.props.put("lightdb.opensearch.useWriteAlias", v)
-          case None => sys.props.remove("lightdb.opensearch.useWriteAlias")
+          case Some(v) => Profig(k2).store(v)
+          case None => Profig(k2).remove()
         }
       })
 

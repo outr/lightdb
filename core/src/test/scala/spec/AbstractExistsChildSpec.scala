@@ -62,10 +62,27 @@ abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec 
           .map(_ should be(List(alpha._id)))
       }
     }
+    "match parents when different children satisfy different conditions (collective helper)" in {
+      DB.parents.transaction { tx =>
+        tx.query
+          .filter(_.childFilterCollectiveAll(_.state === Some("WY"), _.range === Some("68W")))
+          .id
+          .toList
+          .map(_ should be(List(alpha._id)))
+      }
+    }
     "match parents when both conditions are met on a single child" in {
       DB.parents.transaction { tx =>
         tx.query
           .filter(p => p.childFilter(c => c.state === Some("UT") && c.range === Some("70W")))
+          .toList
+          .map(_.map(_._id).toSet should be(Set(echo._id)))
+      }
+    }
+    "match parents when both conditions are met on a single child (same-child helper)" in {
+      DB.parents.transaction { tx =>
+        tx.query
+          .filter(_.childFilterSameAll(_.state === Some("UT"), _.range === Some("70W")))
           .toList
           .map(_.map(_._id).toSet should be(Set(echo._id)))
       }

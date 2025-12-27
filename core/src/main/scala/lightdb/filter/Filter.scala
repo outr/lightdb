@@ -6,11 +6,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.spatial.{Geo, Point}
 import lightdb.id.Id
-import profig.Profig
 import rapid.Task
-
-import scala.collection.mutable
-import scala.util.{Failure, Success}
 
 sealed trait Filter[Doc <: Document[Doc]] {
   def fieldNames: List[String]
@@ -128,54 +124,14 @@ object Filter {
     // Resolved into a parent id filter during planning; no direct parent fields referenced here.
     override val fieldNames: List[String] = Nil
 
+    /**
+     * Backwards-compatible helper for callers that previously invoked resolution here.
+     *
+     * ExistsChild is now treated as a pure logical operator; resolution/materialization is owned by FilterPlanner
+     * (via ExistsChildResolver).
+     */
     final def resolve(parentModel: DocumentModel[Parent]): Task[Filter[Parent]] = {
-      val parentIdField = parentModel._id.name
-      relation.childStore.transaction { childTx =>
-        val model: ChildModel = childTx.store.model
-        val cf = childFilter(model)
-        val parentField = relation.parentField(model)
-        // Bound parent-id materialization to avoid blowing memory on very large datasets.
-        //
-        // Default is unbounded to preserve historical behavior. Opt-in with:
-        // -Dlightdb.existsChild.maxParentIds=<N>
-        // (cap is on DISTINCT parent ids, not raw child rows).
-        val maxDistinct: Int = {
-          Profig("lightdb.existsChild.maxParentIds")
-            .get()
-            .getOrElse(Null)
-            .as[Option[Int]]
-            .filter(_ >= 0)
-            .getOrElse(Int.MaxValue)
-        }
-
-        final class TooManyParents extends RuntimeException("Too many distinct parent ids")
-        val seen = mutable.HashSet.empty[Id[Parent]]
-
-        childTx.query
-          .filter(_ => cf)
-          .value(_ => parentField)
-          .stream
-          .evalMap { pid =>
-            Task {
-              if (pid != null && seen.add(pid) && seen.size > maxDistinct) throw new TooManyParents
-            }
-          }
-          .drain
-          .attempt
-          .map {
-            case Success(_) =>
-              if (seen.isEmpty) Filter.MatchNone[Parent]()
-              else Filter.In[Parent, Id[Parent]](parentIdField, seen.toSeq)
-            case Failure(_: TooManyParents) =>
-              throw new IllegalArgumentException(
-                s"ExistsChild resolution exceeded maxParentIds=$maxDistinct distinct parent ids. " +
-                  s"Add more selective child filters, redesign to avoid broad ExistsChild, or raise " +
-                  s"'lightdb.existsChild.maxParentIds'."
-              )
-            case Failure(t) =>
-              throw t
-          }
-      }
+      FilterPlanner.DefaultExistsChildResolver.resolve(this, parentModel, joinMetadataProvider = None)
     }
   }
 
@@ -192,6 +148,75 @@ object Filter {
       override type ChildModel = ChildModel0
       override val relation: ParentChildRelation.Aux[Parent, Child0, ChildModel0] = relation0
       override val childFilter: ChildModel0 => Filter[Child0] = childFilter0
+    }
+  }
+
+  sealed trait ChildSemantics
+  object ChildSemantics {
+    /**
+     * Same-child semantics: all child constraints must be satisfied by a single child document.
+     */
+    case object SameChildAll extends ChildSemantics
+
+    /**
+     * Collective semantics: each constraint must be satisfied by at least one child (not necessarily the same child).
+     */
+    case object CollectiveAll extends ChildSemantics
+  }
+
+  /**
+   * An explicit, introspectable parent/child filter shape describing "same-child" vs "collective" semantics.
+   *
+   * - For non-native backends, planners can expand this into `ExistsChild` filters and resolve normally.
+   * - For native backends, compilers can pattern match on `semantics` directly.
+   */
+  trait ChildConstraints[Parent <: Document[Parent]] extends Filter[Parent] {
+    type Child <: Document[Child]
+    type ChildModel <: DocumentModel[Child]
+
+    val relation: ParentChildRelation.Aux[Parent, Child, ChildModel]
+    val semantics: ChildSemantics
+    val builds: List[ChildModel => Filter[Child]]
+
+    override val fieldNames: List[String] = Nil
+
+    final def expandToExistsChildFilters: Filter[Parent] = {
+      semantics match {
+        case ChildSemantics.SameChildAll =>
+          val childFilter: ChildModel => Filter[Child] = { cm =>
+            if (builds.isEmpty) {
+              // "exists any child"
+              Filter.Multi[Child](minShould = 0)
+            } else {
+              Filter.and(builds.map(_(cm)): _*)
+            }
+          }
+          Filter.ExistsChild(relation, childFilter)
+        case ChildSemantics.CollectiveAll =>
+          if (builds.isEmpty) {
+            Filter.Multi[Parent](minShould = 0)
+          } else {
+            Filter.and(builds.map(b => Filter.ExistsChild(relation, b)): _*)
+          }
+      }
+    }
+  }
+
+  object ChildConstraints {
+    def apply[
+      Parent <: Document[Parent],
+      Child0 <: Document[Child0],
+      ChildModel0 <: DocumentModel[Child0]
+    ](
+      relation0: ParentChildRelation.Aux[Parent, Child0, ChildModel0],
+      semantics0: ChildSemantics,
+      builds0: List[ChildModel0 => Filter[Child0]]
+    ): ChildConstraints[Parent] = new ChildConstraints[Parent] {
+      override type Child = Child0
+      override type ChildModel = ChildModel0
+      override val relation: ParentChildRelation.Aux[Parent, Child0, ChildModel0] = relation0
+      override val semantics: ChildSemantics = semantics0
+      override val builds: List[ChildModel0 => Filter[Child0]] = builds0
     }
   }
 
