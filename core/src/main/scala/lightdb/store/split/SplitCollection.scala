@@ -47,7 +47,7 @@ class SplitCollection[
     for {
       storageCount <- transaction.storage.count
       searchCount <- transaction.searching.count
-      shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1
+      shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1 && SplitCollection.ReIndexWhenOutOfSync
       _ <- logger.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
         .next(reIndexInternal(transaction))
         .next(logger.info(s"$name re-indexed successfully!"))
@@ -65,19 +65,24 @@ class SplitCollection[
 
   override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
 
-  private def reIndexInternal(transaction: TX): Task[Unit] = transaction
-    .searching
-    .truncate
-    .flatMap { _ =>
-      transaction
-        .storage
-        .stream
-        .chunk(SplitCollection.ReIndexChunkSize)
-        .par(SplitCollection.ReIndexMaxThreads) { docs =>
-          transaction.searching.insert(docs)
+  private def reIndexInternal(transaction: TX): Task[Unit] = transaction.searching.truncate.flatMap { _ =>
+    // IMPORTANT:
+    // Some searching backends (notably OpenSearch) buffer writes and only flush on `commit`.
+    // Doing `transaction.searching.insert(docs)` inside a parallel stream shares ONE searching transaction across
+    // threads and across the entire reindex. That can lead to:
+    // - thread-safety issues (lost buffered ops)
+    // - unbounded memory growth (buffering millions of ops before the outer transaction commits)
+    //
+    // To keep this safe and bounded, each chunk uses its own searching transaction and commits it immediately.
+    transaction.storage.stream
+      .chunk(SplitCollection.ReIndexChunkSize)
+      .par(SplitCollection.ReIndexMaxThreads) { docs =>
+        searching.transaction { stx =>
+          stx.insert(docs).next(stx.commit).unit
         }
-        .drain
-    }
+      }
+      .drain
+  }
 
   override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).next(super.doDispose())
 }
@@ -85,4 +90,5 @@ class SplitCollection[
 object SplitCollection {
   var ReIndexMaxThreads: Int = 32
   var ReIndexChunkSize: Int = 128
+  var ReIndexWhenOutOfSync: Boolean = true
 }

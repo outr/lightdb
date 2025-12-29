@@ -57,6 +57,17 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
 
   private var _stores = List.empty[Store[_, _ <: DocumentModel[_]]]
   private val _disposed = new AtomicBoolean(false)
+  @volatile private var initStarted = false
+
+  /**
+   * True if this database's initialization has started (db.init has been invoked), even if it hasn't completed yet.
+   *
+   * This is useful for enforcing invariants like "no transactions before init", while still allowing LightDB's own
+   * initialization process to transact as needed.
+   */
+  def isInitStarted: Boolean = initStarted
+
+  override protected def beforeInitialize(): Unit = initStarted = true
 
   /**
    * All stores registered with this database
@@ -146,6 +157,27 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   }
 
   /**
+   * Create a new store with an explicit StoreMode (advanced).
+   *
+   * This is useful for "search index + storage store" compositions where the searching store should be
+   * `StoreMode.Indexes(storage)` so that doc materialization happens from storage.
+   */
+  def storeWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                       storeMode: StoreMode[Doc, Model],
+                                                                       name: Option[String] = None): storeManager.S[Doc, Model] = {
+    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val path = directory.map(_.resolve(n))
+    val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
+    synchronized {
+      _stores = _stores ::: List(store)
+    }
+    if (isInitialized) { // Already initialized database, init store immediately
+      store.init.sync()
+    }
+    store
+  }
+
+  /**
    * Create a new store and associate it with this database. It is preferable that all stores be created
    * before the database is initialized, but stores that are added after init will automatically be initialized
    * during this method call.
@@ -160,6 +192,25 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val path = directory.map(_.resolve(n))
     val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
+    synchronized {
+      _stores = _stores ::: List(store)
+    }
+    if (isInitialized) { // Already initialized database, init store immediately
+      store.init.sync()
+    }
+    store
+  }
+
+  /**
+   * Create a new store with a specific StoreManager and explicit StoreMode (advanced).
+   */
+  def storeCustomWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
+                                                                                                 storeManager: SM,
+                                                                                                 storeMode: StoreMode[Doc, Model],
+                                                                                                 name: Option[String] = None): storeManager.S[Doc, Model] = {
+    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val path = directory.map(_.resolve(n))
+    val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
     synchronized {
       _stores = _stores ::: List(store)
     }

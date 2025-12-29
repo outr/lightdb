@@ -3,6 +3,7 @@ package lightdb.opensearch
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import fabric._
+import lightdb.doc.ParentChildSupport
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.{Collection, CollectionManager, StoreManager, StoreMode}
@@ -17,12 +18,98 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                                          model: Model,
                                                                          val storeMode: StoreMode[Doc, Model],
                                                                          lightDB: LightDB,
-                                                                         storeManager: StoreManager,
-                                                                         config: OpenSearchConfig,
-                                                                         client: OpenSearchClient)
+                                                                         storeManager: StoreManager)
   extends Collection[Doc, Model](name, path, model, lightDB, storeManager)
     with PrefixScanningStore[Doc, Model] {
   override type TX = OpenSearchTransaction[Doc, Model]
+
+  private def ensureAutoJoinDomainRegistry(): Unit = {
+    // Respect explicit configuration and programmatic registry entries.
+    if (OpenSearchJoinDomainRegistry.get(lightDB.name, name).nonEmpty) return
+
+    def hasExplicitJoinKeys(storeName: String): Boolean = {
+      val prefix = s"lightdb.opensearch.$storeName."
+      val keys = List(
+        s"${prefix}joinDomain",
+        s"${prefix}joinRole",
+        s"${prefix}joinChildren",
+        s"${prefix}joinChildParentFields",
+        s"${prefix}joinParentField"
+      )
+      keys.exists(k => profig.Profig(k).exists())
+    }
+
+    if (hasExplicitJoinKeys(name)) return
+
+    // Build relationship candidates from all stores in this DB by inspecting ParentChildSupport models.
+    // This is safe under the "no transactions before init" invariant and the fact that all stores are constructed
+    // before LightDB initialization begins.
+    case class Candidate(parentStoreName: String, joinDomain: String, joinFieldName: String, childStoreName: String, childParentFieldName: String)
+
+    def profigString(key: String): Option[String] =
+      profig.Profig(key).get().map(_.asString).map(_.trim).filter(_.nonEmpty)
+
+    def candidates: List[Candidate] =
+      lightDB.stores.flatMap { s =>
+        s.model match {
+          case pcs: ParentChildSupport[?, ?, ?] @unchecked =>
+            val parentStoreName = s.name
+            try {
+              val childStoreName = pcs.childStoreName
+              val childParentFieldName = pcs.childJoinParentFieldName
+              // If the parent store is explicitly configured, prefer that joinDomain/joinFieldName so children match.
+              val joinDomain =
+                profigString(s"lightdb.opensearch.$parentStoreName.joinDomain")
+                  .getOrElse(pcs.joinDomainName(parentStoreName))
+              val joinFieldName =
+                profigString("lightdb.opensearch.joinFieldName")
+                  .getOrElse(pcs.joinFieldName)
+              List(Candidate(parentStoreName, joinDomain, joinFieldName, childStoreName, childParentFieldName))
+            } catch {
+              case _: Throwable =>
+                // If a ParentChildSupport model cannot be inspected safely here, skip it (it will fall back to explicit config).
+                Nil
+            }
+          case _ =>
+            Nil
+        }
+      }
+
+    val directParent = candidates.find(_.parentStoreName == name)
+    val asChild = candidates.filter(_.childStoreName == name)
+
+    (directParent, asChild) match {
+      case (Some(c), _) =>
+        OpenSearchJoinDomainRegistry.register(
+          dbName = lightDB.name,
+          joinDomain = c.joinDomain,
+          parentStoreName = c.parentStoreName,
+          childJoinParentFields = Map(c.childStoreName -> c.childParentFieldName),
+          joinFieldName = c.joinFieldName
+        )
+      case (None, one :: Nil) =>
+        OpenSearchJoinDomainRegistry.register(
+          dbName = lightDB.name,
+          joinDomain = one.joinDomain,
+          parentStoreName = one.parentStoreName,
+          childJoinParentFields = Map(one.childStoreName -> one.childParentFieldName),
+          joinFieldName = one.joinFieldName
+        )
+      case (None, Nil) =>
+        () // no relationship, nothing to do
+      case (None, many) =>
+        throw new IllegalArgumentException(
+          s"OpenSearch auto join-domain configuration for '$name' is ambiguous. Multiple ParentChildSupport parents claim this child: " +
+            many.map(_.parentStoreName).distinct.sorted.mkString(", ")
+        )
+    }
+  }
+
+  private lazy val config = {
+    ensureAutoJoinDomainRegistry()
+    OpenSearchConfig.from(lightDB, name)
+  }
+  private lazy val client = OpenSearchClient(config)
 
   /**
    * OpenSearch can execute parent/child natively, but only if this collection is configured as part of a join-domain.
@@ -199,11 +286,6 @@ object OpenSearchStore extends CollectionManager with PrefixScanningStoreManager
                                                                          name: String,
                                                                          path: Option[Path],
                                                                          storeMode: StoreMode[Doc, Model]): S[Doc, Model] = {
-    scribe.info(s"OpenSearchStore.create($name): begin")
-    val config = OpenSearchConfig.from(db, name)
-    scribe.info(s"OpenSearchStore.create($name): config loaded")
-    val client = OpenSearchClient(config)
-    scribe.info(s"OpenSearchStore.create($name): client created")
     new OpenSearchStore[Doc, Model](
       name = name,
       // OpenSearch is an external service; there is no local on-disk store directory for this collection.
@@ -212,9 +294,7 @@ object OpenSearchStore extends CollectionManager with PrefixScanningStoreManager
       model = model,
       storeMode = storeMode,
       lightDB = db,
-      storeManager = this,
-      config = config,
-      client = client
+      storeManager = this
     )
   }
 }

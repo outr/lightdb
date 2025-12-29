@@ -13,6 +13,7 @@ import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Spatial}
 import lightdb.store.{Conversion, StoreMode}
 import lightdb.{Query, SearchResults, Sort, SortDirection}
+import lightdb.lucene.blockjoin.{LuceneBlockJoinFields, LuceneBlockJoinStore}
 import org.apache.lucene.document._
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
@@ -28,6 +29,23 @@ import scala.jdk.CollectionConverters._
 class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
                                                                              model: Model,
                                                                              tx: LuceneTransaction[Doc, Model]) {
+  private lazy val isBlockJoin: Boolean = store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]]
+
+  private def parentFieldName(name: String): String =
+    if (isBlockJoin) LuceneBlockJoinFields.mapParentFieldName(name) else name
+
+  private def childFieldName(name: String): String =
+    if (isBlockJoin) LuceneBlockJoinFields.mapChildFieldName(name) else name
+
+  private lazy val parentTypeQuery: LuceneQuery =
+    new TermQuery(new Term(LuceneBlockJoinFields.TypeField, LuceneBlockJoinFields.ParentTypeValue))
+
+  private lazy val childTypeQuery: LuceneQuery =
+    new TermQuery(new Term(LuceneBlockJoinFields.TypeField, LuceneBlockJoinFields.ChildTypeValue))
+
+  private lazy val parentBitSetProducer: AnyRef =
+    LuceneJoinCompat.queryBitSetProducer(parentTypeQuery)
+
   def apply[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task {
     val indexSearcher = tx.state.indexSearcher
     val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
@@ -116,9 +134,11 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
   private def materializeScoreDocs[V](query: Query[Doc, Model, V],
                                       scoreDocs: List[ScoreDoc],
                                       storedFields: StoredFields): Iterator[(V, Double)] = {
-    val idsAndScores = scoreDocs.map(doc => Id[Doc](storedFields.document(doc.doc).get("_id")) -> doc.score.toDouble)
+    val storedIdFieldName = parentFieldName("_id")
+    val idsAndScores = scoreDocs.map(doc => Id[Doc](storedFields.document(doc.doc).get(storedIdFieldName)) -> doc.score.toDouble)
     def jsonField[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): Json = {
-      val values = storedFields.document(scoreDoc.doc).getValues(field.name)
+      val storedName = parentFieldName(field.name)
+      val values = storedFields.document(scoreDoc.doc).getValues(storedName)
         .toVector
         .map(s => Field.string2Json(field.name, s, field.rw.definition))
       if (values.nonEmpty && values.head.isArr) {
@@ -145,7 +165,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         }
       case StoreMode.Indexes(_) =>
         val docId = scoreDoc.doc
-        val id = Id[Doc](storedFields.document(docId).get("_id"))
+        val id = Id[Doc](storedFields.document(docId).get(storedIdFieldName))
         val score = scoreDoc.score.toDouble
         tx.parent.get(id).sync() -> score
     }
@@ -286,7 +306,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       }
       case Sort.IndexOrder => SortField.FIELD_DOC
       case Sort.ByField(field, dir) =>
-        val fieldSortName = s"${field.name}Sort"
+        val fieldSortName = s"${parentFieldName(field.name)}Sort"
         def st(d: DefType): SortField.Type = d match {
           case DefType.Str => SortField.Type.STRING
           case DefType.Dec => SortField.Type.DOUBLE
@@ -305,27 +325,93 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         }
         sf(field.rw.definition)
       case Sort.ByDistance(field, from, _) =>
-        val fieldSortName = s"${field.name}Sort"
+        val fieldSortName = s"${parentFieldName(field.name)}Sort"
         LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
     }
   }
 
-  def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = filter match {
+  def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = {
+    val compiled = compileFilter(filter, model, parentFieldName, allowDrillDownFacets = true)
+    if (isBlockJoin) {
+      val b = new BooleanQuery.Builder
+      b.add(compiled, BooleanClause.Occur.MUST)
+      b.add(parentTypeQuery, BooleanClause.Occur.FILTER)
+      b.build()
+    } else {
+      compiled
+    }
+  }
+
+  private def compileFilter[D <: Document[D], M <: DocumentModel[D]](filterOpt: Option[Filter[D]],
+                                                                    m: M,
+                                                                    mapName: String => String,
+                                                                    allowDrillDownFacets: Boolean): LuceneQuery = filterOpt match {
     case Some(f) =>
       f match {
-        case f: Filter.Equals[Doc, _] => exactQuery(f.field(model), f.getJson(model))
-        case f: Filter.NotEquals[Doc, _] =>
+        case f: Filter.Equals[D @unchecked, _] =>
+          exactQuery(f.field(m), f.getJson(m), mapName)
+        case f: Filter.NotEquals[D @unchecked, _] =>
           val b = new BooleanQuery.Builder
           b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
-          b.add(exactQuery(f.field(model), f.getJson(model)), BooleanClause.Occur.MUST_NOT)
+          b.add(exactQuery(f.field(m), f.getJson(m), mapName), BooleanClause.Occur.MUST_NOT)
           b.build()
-        case _: Filter.MatchNone[Doc] => new MatchNoDocsQuery
-        case _: Filter.ExistsChild[Doc] =>
-          throw new RuntimeException("ExistsChild filter must be planned before execution")
-        case f: Filter.Regex[Doc, _] => new RegexpQuery(new Term(f.fieldName, f.expression), RegExp.ALL, 10_000_000)
-        case f: Filter.In[Doc, _] =>
-          val values = f.getJson(model)
-          val fieldName = f.field(model).name
+        case _: Filter.MatchNone[D @unchecked] =>
+          new MatchNoDocsQuery
+        case ec: Filter.ExistsChild[D @unchecked] =>
+          if (!isBlockJoin) throw new RuntimeException("ExistsChild filter must be planned before execution")
+          val childModel = ec.relation.childStore.model.asInstanceOf[DocumentModel[ec.Child]]
+          val cf = ec.childFilter(childModel.asInstanceOf[ec.ChildModel])
+          val childQuery0 = compileFilter(Some(cf.asInstanceOf[Filter[ec.Child]]), childModel, childFieldName, allowDrillDownFacets = false)
+          val childQuery = {
+            val b = new BooleanQuery.Builder
+            b.add(childQuery0, BooleanClause.Occur.MUST)
+            b.add(childTypeQuery, BooleanClause.Occur.FILTER)
+            b.build()
+          }
+          LuceneJoinCompat.toParentBlockJoinQuery(childQuery, parentBitSetProducer)
+        case cc: Filter.ChildConstraints[D @unchecked] =>
+          if (!isBlockJoin) throw new RuntimeException("ChildConstraints filter must be planned before execution")
+          val childModel = cc.relation.childStore.model.asInstanceOf[DocumentModel[cc.Child]]
+          cc.semantics match {
+            case Filter.ChildSemantics.SameChildAll =>
+              val childMust = cc.builds.map(b => b(childModel.asInstanceOf[cc.ChildModel]))
+              val combined = if (childMust.isEmpty) new MatchAllDocsQuery else {
+                val bq = new BooleanQuery.Builder
+                childMust.foreach { f =>
+                  bq.add(compileFilter(Some(f.asInstanceOf[Filter[cc.Child]]), childModel, childFieldName, allowDrillDownFacets = false), BooleanClause.Occur.MUST)
+                }
+                bq.build()
+              }
+              val childQuery = {
+                val b = new BooleanQuery.Builder
+                b.add(combined, BooleanClause.Occur.MUST)
+                b.add(childTypeQuery, BooleanClause.Occur.FILTER)
+                b.build()
+              }
+              LuceneJoinCompat.toParentBlockJoinQuery(childQuery, parentBitSetProducer)
+            case Filter.ChildSemantics.CollectiveAll =>
+              val must = cc.builds.map { build =>
+                val f = build(childModel.asInstanceOf[cc.ChildModel])
+                val cq0 = compileFilter(Some(f.asInstanceOf[Filter[cc.Child]]), childModel, childFieldName, allowDrillDownFacets = false)
+                val cq = {
+                  val bb = new BooleanQuery.Builder
+                  bb.add(cq0, BooleanClause.Occur.MUST)
+                  bb.add(childTypeQuery, BooleanClause.Occur.FILTER)
+                  bb.build()
+                }
+                LuceneJoinCompat.toParentBlockJoinQuery(cq, parentBitSetProducer)
+              }
+              if (must.isEmpty) new MatchAllDocsQuery else {
+                val bq = new BooleanQuery.Builder
+                must.foreach(q => bq.add(q, BooleanClause.Occur.MUST))
+                bq.build()
+              }
+          }
+        case f: Filter.Regex[D @unchecked, _] =>
+          new RegexpQuery(new Term(mapName(f.fieldName), f.expression), RegExp.ALL, 10_000_000)
+        case f: Filter.In[D @unchecked, _] =>
+          val values = f.getJson(m)
+          val fieldName = mapName(f.field(m).name)
           val bytesRefs = values.collect {
             case Str(s, _) => new BytesRef(s)
             case NumInt(i, _) => new BytesRef(i.toString)
@@ -333,25 +419,30 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
             case Bool(b, _) => new BytesRef(if (b) "1" else "0")
           }
           if (bytesRefs.size == values.size) {
-            // All simple string IDs → use TermInSetQuery to avoid overflow
             new TermInSetQuery(fieldName, bytesRefs.asJava)
           } else {
-            // fallback to BooleanQuery for mixed types
-            val queries = values.map(json => exactQuery(f.field(model), json))
+            val queries = values.map(json => exactQuery(f.field(m), json, mapName))
             val b = new BooleanQuery.Builder().setMinimumNumberShouldMatch(1)
             queries.foreach(q => b.add(q, BooleanClause.Occur.SHOULD))
             b.build()
           }
-        case Filter.RangeLong(fieldName, from, to) => LongField.newRangeQuery(fieldName, from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
-        case Filter.RangeDouble(fieldName, from, to) => DoubleField.newRangeQuery(fieldName, from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
-        case Filter.StartsWith(fieldName, query) => new RegexpQuery(new Term(fieldName, s"${LuceneStore.escapeRegexLiteral(query)}.*"))
-        case Filter.EndsWith(fieldName, query) => new RegexpQuery(new Term(fieldName, s".*${LuceneStore.escapeRegexLiteral(query)}"))
-        case Filter.Contains(fieldName, query) => new RegexpQuery(new Term(fieldName, s".*${LuceneStore.escapeRegexLiteral(query)}.*"))
-        case Filter.Exact(fieldName, query) => new TermQuery(new Term(fieldName, query))
+        case Filter.RangeLong(fieldName, from, to) =>
+          LongField.newRangeQuery(mapName(fieldName), from.getOrElse(Long.MinValue), to.getOrElse(Long.MaxValue))
+        case Filter.RangeDouble(fieldName, from, to) =>
+          DoubleField.newRangeQuery(mapName(fieldName), from.getOrElse(Double.MinValue), to.getOrElse(Double.MaxValue))
+        case Filter.StartsWith(fieldName, query) =>
+          new RegexpQuery(new Term(mapName(fieldName), s"${LuceneStore.escapeRegexLiteral(query)}.*"))
+        case Filter.EndsWith(fieldName, query) =>
+          new RegexpQuery(new Term(mapName(fieldName), s".*${LuceneStore.escapeRegexLiteral(query)}"))
+        case Filter.Contains(fieldName, query) =>
+          new RegexpQuery(new Term(mapName(fieldName), s".*${LuceneStore.escapeRegexLiteral(query)}.*"))
+        case Filter.Exact(fieldName, query) =>
+          new TermQuery(new Term(mapName(fieldName), query))
         case Filter.Distance(fieldName, from, radius) =>
+          val mapped = mapName(fieldName)
           val b = new BooleanQuery.Builder
-          b.add(LatLonPoint.newDistanceQuery(fieldName, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
-          b.add(LatLonPoint.newBoxQuery(fieldName, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
+          b.add(LatLonPoint.newDistanceQuery(mapped, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
+          b.add(LatLonPoint.newBoxQuery(mapped, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
           b.build()
         case Filter.Multi(minShould, clauses) =>
           val b = new BooleanQuery.Builder
@@ -359,7 +450,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           val minShouldMatch = if (hasShould) minShould else 0
           b.setMinimumNumberShouldMatch(minShouldMatch)
           clauses.foreach { c =>
-            val q = filter2Lucene(Some(c.filter))
+            val q = compileFilter(Some(c.filter.asInstanceOf[Filter[D]]), m, mapName, allowDrillDownFacets)
             val query = c.boost match {
               case Some(boost) => new BoostQuery(q, boost.toFloat)
               case None => q
@@ -377,39 +468,39 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           }
           b.build()
         case Filter.DrillDownFacetFilter(fieldName, path, showOnlyThisLevel) =>
-          val indexedFieldName = store.facetsConfig.getDimConfig(fieldName).indexFieldName
-          val exactPath = if (showOnlyThisLevel) {
-            path ::: List("$ROOT$")
-          } else {
-            path
+          if (!allowDrillDownFacets) {
+            throw new UnsupportedOperationException("DrillDownFacetFilter not supported in child constraints")
           }
+          val indexedFieldName = store.facetsConfig.getDimConfig(fieldName).indexFieldName
+          val exactPath = if (showOnlyThisLevel) path ::: List("$ROOT$") else path
           new TermQuery(DrillDownQuery.term(indexedFieldName, fieldName, exactPath: _*))
       }
-    case None => new MatchAllDocsQuery
+    case None =>
+      new MatchAllDocsQuery
   }
 
-  private def exactQuery(field: Field[Doc, _], json: Json): LuceneQuery = json match {
+  private def exactQuery[D <: Document[D]](field: Field[D, _], json: Json, mapName: String => String): LuceneQuery = json match {
     case Str(s, _) if field.isInstanceOf[Tokenized[_]] =>
       val b = new BooleanQuery.Builder
       s.split("\\s+").foreach { token =>
         val normalized = token.toLowerCase
-        b.add(new TermQuery(new Term(field.name, normalized)), BooleanClause.Occur.MUST)
+        b.add(new TermQuery(new Term(mapName(field.name), normalized)), BooleanClause.Occur.MUST)
       }
       b.build()
-    case Str(s, _) => new TermQuery(new Term(field.name, s))
-    case Bool(b, _) => IntPoint.newExactQuery(field.name, if (b) 1 else 0)
-    case NumInt(l, _) => LongPoint.newExactQuery(field.name, l)
-    case NumDec(bd, _) => DoublePoint.newExactQuery(field.name, bd.toDouble)
+    case Str(s, _) => new TermQuery(new Term(mapName(field.name), s))
+    case Bool(b, _) => IntPoint.newExactQuery(mapName(field.name), if (b) 1 else 0)
+    case NumInt(l, _) => LongPoint.newExactQuery(mapName(field.name), l)
+    case NumDec(bd, _) => DoublePoint.newExactQuery(mapName(field.name), bd.toDouble)
     case Arr(v, _) =>
       val b = new BooleanQuery.Builder
       v.foreach { json =>
-        val q = exactQuery(field, json)
+        val q = exactQuery(field, json, mapName)
         b.add(q, BooleanClause.Occur.MUST)
       }
       b.build()
     case Null => field.rw.definition match {
-      case DefType.Opt(DefType.Str) => new TermQuery(new Term(field.name, Field.NullString))
-      case _ => new TermQuery(new Term(field.name, "null"))
+      case DefType.Opt(DefType.Str) => new TermQuery(new Term(mapName(field.name), Field.NullString))
+      case _ => new TermQuery(new Term(mapName(field.name), "null"))
     }
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")
   }

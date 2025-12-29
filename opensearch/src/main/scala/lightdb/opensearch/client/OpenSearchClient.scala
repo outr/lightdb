@@ -10,6 +10,7 @@ import spice.http.content.Content
 import spice.net.{ContentType, URL}
 
 import java.util.concurrent.ThreadLocalRandom
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration.DurationLong
 import scala.util.{Failure, Success}
 
@@ -42,7 +43,11 @@ case class OpenSearchClient(config: OpenSearchConfig) {
 
   private def log(method: HttpMethod, u: URL, status: HttpStatus, tookMs: Long): Unit = {
     if (config.logRequests) {
-      scribe.info(s"OpenSearch ${method.value} ${u.path.decoded} -> ${status.code} (${tookMs}ms)")
+      val path = u.path.decoded
+      val excluded = config.logRequestsExcludePaths.exists(p => p.nonEmpty && path.contains(p))
+      if (!excluded) {
+        scribe.info(s"OpenSearch ${method.value} $path -> ${status.code} (${tookMs}ms)")
+      }
     }
   }
 
@@ -71,7 +76,44 @@ case class OpenSearchClient(config: OpenSearchConfig) {
 
     def attempt(n: Int, delayMs: Long): Task[HttpResponse] = Task.defer {
       val started = System.nanoTime()
-      req.send().map { resp =>
+      val completed = new AtomicBoolean(false)
+
+      def elapsedMs: Long = (System.nanoTime() - started) / 1000000L
+
+      def slowLogLoop(afterMs: Long): Task[Unit] = {
+        if (afterMs <= 0L) {
+          Task.unit
+        } else {
+          Task.sleep(afterMs.millis).next {
+            Task {
+              if (!completed.get()) {
+                scribe.warn(
+                  s"OpenSearch request still running after ${elapsedMs}ms: $name attempt=$n/$maxAttempts timeoutMs=${config.requestTimeout.toMillis}"
+                )
+              }
+            }.next {
+              if (!completed.get()) {
+                config.slowRequestLogEvery match {
+                  case Some(every) => slowLogLoop(every.toMillis)
+                  case None => Task.unit
+                }
+              } else {
+                Task.unit
+              }
+            }
+          }
+        }
+      }
+
+      // Fire-and-forget watchdog to log long-running requests.
+      config.slowRequestLogAfter.foreach { after =>
+        slowLogLoop(after.toMillis).start()
+      }
+
+      req
+        .send()
+        .guarantee(Task(completed.set(true)))
+        .map { resp =>
         val tookMs = (System.nanoTime() - started) / 1000000L
         log(req.method, req.url, resp.status, tookMs)
         if (config.metricsEnabled) {
