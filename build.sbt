@@ -17,7 +17,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.14.0-SNAPSHOT"
+ThisBuild / version := "4.14.0-SNAPSHOT1"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -114,7 +114,7 @@ val postgresqlVersion: String = "42.7.8"
 
 val chronicleMapVersion: String = "3.27ea2"
 
-val spiceVersion: String = "0.10.18"
+val spiceVersion: String = "0.10.19"
 
 val scalaTestVersion: String = "3.2.19"
 
@@ -251,6 +251,7 @@ lazy val lucene = project.in(file("lucene"))
 			"org.apache.lucene" % "lucene-facet" % luceneVersion,
 			"org.apache.lucene" % "lucene-highlighter" % luceneVersion,
 			"org.apache.lucene" % "lucene-grouping" % luceneVersion,
+			"org.apache.lucene" % "lucene-join" % luceneVersion,
 			"org.apache.lucene" % "lucene-backward-codecs" % luceneVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)

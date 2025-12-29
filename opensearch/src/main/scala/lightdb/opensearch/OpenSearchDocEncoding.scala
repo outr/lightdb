@@ -63,8 +63,9 @@ object OpenSearchDocEncoding {
     val withJoin = if (config.joinDomain.nonEmpty) {
       config.joinRole match {
         case Some("parent") =>
-          val join = obj("name" -> str(storeName))
-          obj((base.asObj.value.toSeq :+ (config.joinFieldName -> join)): _*)
+          // OpenSearch join field expects the parent value to be a string (the join "type").
+          // Child values are objects with { "name": "<childType>", "parent": "<parentId>" }.
+          obj((base.asObj.value.toSeq :+ (config.joinFieldName -> str(storeName))): _*)
         case Some("child") =>
           val parentId = joinParentId.getOrElse(throw new RuntimeException(
             s"Missing joinParentField='${config.joinParentField.getOrElse("")}' value for child document in joinDomain='${config.joinDomain.getOrElse("")}'"

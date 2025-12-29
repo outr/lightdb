@@ -9,6 +9,7 @@ import lightdb.opensearch.{OpenSearchJoinDomainCoordinator, OpenSearchQuerySynta
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
 
 @EmbeddedTest
@@ -36,16 +37,27 @@ class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with 
     override val storeManager: OpenSearchStore.type = OpenSearchStore
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
+    override def name: String = "OpenSearchJoinDomainCoordinatorCustomNamesSpec"
 
     // custom store names (not equal to model names)
-    lazy val parents: OpenSearchStore[Parent, Parent.type] = store(Parent, name = Some("ParentsCustom"))
-    lazy val children: OpenSearchStore[Child, Child.type] = store(Child, name = Some("ChildrenCustom"))
+    val parents: OpenSearchStore[Parent, Parent.type] = store(Parent, name = Some("ParentsCustom"))
+    val children: OpenSearchStore[Child, Child.type] = store(Child, name = Some("ChildrenCustom"))
   }
 
   private lazy val db = new DB
 
   "OpenSearchJoinDomainCoordinator" should {
     "configure join-domain using store names only (supports custom store names)" in {
+      val kLogRequests = "lightdb.opensearch.logRequests"
+      val kTimeout = "lightdb.opensearch.requestTimeoutMillis"
+      val prevLogRequests = Profig(kLogRequests).opt[Boolean]
+      val prevTimeout = Profig(kTimeout).opt[Long]
+
+      // This spec does a bit more OpenSearch setup work (custom names + join-domain). Increase timeouts and enable
+      // request logging for easier debugging when running under CI / slow docker.
+      Profig(kLogRequests).store(true)
+      Profig(kTimeout).store(30000L)
+
       val joinDomain = "coord-custom"
       val parentStoreName = "ParentsCustom"
       val childStoreName = "ChildrenCustom"
@@ -70,7 +82,7 @@ class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with 
           }
           matched <- db.parents.transaction { tx =>
             tx.query
-              .filter(_ => Parent.childFilter(cm => Filter.Equals(cm.value, "c1")))
+              .filter(_.childFilter(_.value === "c1"))
               .stream
               .toList
           }
@@ -79,7 +91,16 @@ class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with 
           matched.map(_._id.value) shouldBe List("p1")
         }
 
-        test
+        test.guarantee(Task {
+          prevLogRequests match {
+            case Some(v) => Profig(kLogRequests).store(v)
+            case None => Profig(kLogRequests).remove()
+          }
+          prevTimeout match {
+            case Some(v) => Profig(kTimeout).store(v)
+            case None => Profig(kTimeout).remove()
+          }
+        })
       }
     }
   }

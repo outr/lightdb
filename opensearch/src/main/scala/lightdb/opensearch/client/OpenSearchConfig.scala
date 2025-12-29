@@ -11,6 +11,19 @@ import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 case class OpenSearchConfig(baseUrl: String,
                             indexPrefix: Option[String] = None,
                             requestTimeout: FiniteDuration = 10.seconds,
+                            /**
+                             * If set, logs when an HTTP request has been in-flight longer than this duration.
+                             *
+                             * This is useful to distinguish "the system is stuck" from "we're waiting on a slow OpenSearch call".
+                             *
+                             * Set to None to disable.
+                             */
+                            slowRequestLogAfter: Option[FiniteDuration] = Some(60.seconds),
+                            /**
+                             * If `slowRequestLogAfter` is enabled, optionally re-log at this interval while the request is still running.
+                             * Set to None to only log once at `slowRequestLogAfter`.
+                             */
+                            slowRequestLogEvery: Option[FiniteDuration] = Some(60.seconds),
                             refreshPolicy: Option[String] = None,
                             authHeader: Option[String] = None,
                             /**
@@ -22,6 +35,11 @@ case class OpenSearchConfig(baseUrl: String,
                              * When enabled, logs OpenSearch requests (method, path, status, duration) including retries.
                              */
                             logRequests: Boolean = false,
+                            /**
+                             * Optional list of URL path fragments to exclude from request logging when logRequests=true.
+                             * Useful to avoid spamming logs with high-volume endpoints like `/_bulk`.
+                             */
+                            logRequestsExcludePaths: List[String] = Nil,
                             maxResultWindow: Int = 250_000,
                             /**
                              * If set, OpenSearch will compute exact totals only up to this threshold. Above it, totals become "gte".
@@ -132,12 +150,36 @@ object OpenSearchConfig {
       .orElse(optLong("lightdb.opensearch.requestTimeoutMillis"))
       .filter(_ > 0L)
       .getOrElse(10.seconds.toMillis)
+
+    val slowRequestLogAfterMillis =
+      optLong(s"lightdb.opensearch.$collectionName.slowRequest.logAfterMillis")
+        .orElse(optLong("lightdb.opensearch.slowRequest.logAfterMillis"))
+        .filter(_ > 0L)
+    val slowRequestLogEveryMillis =
+      optLong(s"lightdb.opensearch.$collectionName.slowRequest.logEveryMillis")
+        .orElse(optLong("lightdb.opensearch.slowRequest.logEveryMillis"))
+        .filter(_ > 0L)
+
+    val slowRequestLogAfter = slowRequestLogAfterMillis.map(_.millis).orElse(Some(60.seconds))
+    val slowRequestLogEvery = slowRequestLogEveryMillis.map(_.millis).orElse(Some(60.seconds))
     val indexPrefix = optString("lightdb.opensearch.indexPrefix")
+    // Default to `wait_for` so that once a LightDB transaction commits, subsequent OpenSearch-backed queries
+    // observe the changes without requiring arbitrary sleeps. This matches the common DB expectation of
+    // read-after-write consistency at transaction boundaries.
+    //
+    // Override to "false" for higher throughput when eventual visibility is acceptable.
     val refreshPolicy = optString(s"lightdb.opensearch.$collectionName.refreshPolicy")
       .orElse(optString("lightdb.opensearch.refreshPolicy"))
+      .orElse(Some("wait_for"))
 
     val opaqueId = optString("lightdb.opensearch.opaqueId")
     val logRequests = optBoolean("lightdb.opensearch.logRequests").getOrElse(false)
+    val logRequestsExcludePaths =
+      Profig("lightdb.opensearch.logRequestsExcludePaths")
+        .opt[List[String]]
+        .getOrElse(Nil)
+        .map(_.trim)
+        .filter(_.nonEmpty)
 
     val maxResultWindow = optInt("lightdb.opensearch.maxResultWindow")
       .filter(_ >= 1)
@@ -359,10 +401,13 @@ object OpenSearchConfig {
       baseUrl = baseUrl,
       indexPrefix = indexPrefix,
       requestTimeout = requestTimeoutMillis.millis,
+      slowRequestLogAfter = slowRequestLogAfter,
+      slowRequestLogEvery = slowRequestLogEvery,
       refreshPolicy = refreshPolicy,
       authHeader = authHeader,
       opaqueId = opaqueId,
       logRequests = logRequests,
+      logRequestsExcludePaths = logRequestsExcludePaths,
       maxResultWindow = maxResultWindow,
       trackTotalHitsUpTo = trackTotalHitsUpTo,
       useIndexAlias = useIndexAlias,

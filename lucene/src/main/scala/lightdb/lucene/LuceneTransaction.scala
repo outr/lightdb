@@ -16,6 +16,7 @@ import lightdb.store.Conversion
 import lightdb.transaction.{CollectionTransaction, Transaction}
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults, Sort}
+import lightdb.lucene.blockjoin.LuceneBlockJoinStore
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
@@ -26,7 +27,8 @@ import rapid.Task
 
 case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
                                                                                 state: LuceneState[Doc],
-                                                                                parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] {
+                                                                                parent: Option[Transaction[Doc, Model]],
+                                                                                ownedParent: Boolean = false) extends CollectionTransaction[Doc, Model] {
   private lazy val searchBuilder = new LuceneSearchBuilder[Doc, Model](store, store.model, this)
 
   override def jsonStream: rapid.Stream[Json] =
@@ -56,7 +58,22 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def _rollback: Task[Unit] = state.rollback
 
-  override protected def _close: Task[Unit] = state.close
+  override protected def _close: Task[Unit] = {
+    val releaseParent = if (ownedParent) {
+      store.storeMode match {
+        case lightdb.store.StoreMode.Indexes(storage) =>
+          parent match {
+            case Some(p) => storage.transaction.release(p.asInstanceOf[storage.TX]).unit
+            case None => Task.unit
+          }
+        case _ => Task.unit
+      }
+    } else {
+      Task.unit
+    }
+
+    releaseParent.next(state.close)
+  }
 
   def groupBy[G, V](query: Query[Doc, Model, V],
                     groupField: Field[Doc, G],
@@ -95,6 +112,11 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   } yield count
 
   private def addDoc(doc: Doc, upsert: Boolean): Task[Doc] = Task {
+    if (store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]]) {
+      throw new UnsupportedOperationException(
+        s"${store.name} is a LuceneBlockJoinStore. Use block indexing (children first, parent last) instead of insert/upsert."
+      )
+    }
     if (store.fields.tail.nonEmpty) {
       val id = doc._id
       val state = new IndexingState

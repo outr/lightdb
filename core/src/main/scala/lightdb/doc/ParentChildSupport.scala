@@ -18,6 +18,31 @@ trait ParentChildSupport[Doc <: Document[Doc], Child <: Document[Child], ChildMo
 
   def parentField(childModel: ChildModel): Field[Child, Id[Doc]]
 
+  /**
+   * Default join-domain name for backends that support a shared physical join-domain index (e.g. OpenSearch).
+   *
+   * This is intentionally expressed in terms of the resolved parent store name so applications that use custom store
+   * names can keep join-domain naming stable.
+   */
+  def joinDomainName(parentStoreName: String): String = parentStoreName
+
+  /**
+   * Name of the join field used by backends that support a physical join-domain.
+   */
+  def joinFieldName: String = "__lightdb_join"
+
+  /**
+   * Default child store name for join-domain helpers. Override if your child store name is customized.
+   *
+   * Note: this relies on `childStore` being wired, which is typically safe after stores are constructed.
+   */
+  def childStoreName: String = childStore.name
+
+  /**
+   * Default name of the child field containing the parent id (for join routing / join compilation).
+   */
+  def childJoinParentFieldName: String = parentField(childStore.model).name
+
   lazy val relation: ParentChildRelation.Aux[Doc, Child, ChildModel] = ParentChildRelation(childStore, parentField)
 
   /**

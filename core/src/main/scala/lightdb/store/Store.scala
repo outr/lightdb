@@ -123,6 +123,11 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     }
 
     def create(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
+      _ <- Task {
+        if (!lightDB.isInitialized && !lightDB.isInitStarted) {
+          throw new RuntimeException(s"Attempted to create a transaction for store '$name' before database initialization. Call db.init before using store.transaction(...).")
+        }
+      }
       _ <- logger.info(s"Creating new Transaction for $name").when(Store.LogTransactions)
       transaction <- createTransaction(parent)
       _ = set.add(transaction)

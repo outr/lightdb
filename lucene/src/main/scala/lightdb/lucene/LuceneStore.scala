@@ -57,8 +57,13 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   })
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
-    LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent)
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = storeMode match {
+    case StoreMode.Indexes(storage) if parent.isEmpty =>
+      storage.transaction.create(None).map { p =>
+        LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent = Some(p), ownedParent = true)
+      }
+    case _ =>
+      Task(LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent))
   }
 
   override def optimize(): Task[Unit] = Task {

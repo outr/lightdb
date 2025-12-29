@@ -100,6 +100,21 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         transaction.insert(names).map(_ should not be None)
       }
     }
+    "read-your-writes within a transaction for Option filters (insert then query)" in {
+      val tempId = Person.id("temp-city-option-ryw")
+      val temp = Person(name = "Temp", age = 21, city = Some(City("Austin")), _id = tempId)
+
+      val test = db.people.transaction { tx =>
+        for {
+          _ <- tx.insert(temp).map(_ => ())
+          ids <- tx.query.filter(_.city !== None).id.toList
+        } yield {
+          ids.toSet should contain(tempId)
+        }
+      }
+
+      test.guarantee(db.people.transaction(_.delete(_._id -> tempId)).unit)
+    }
     "retrieve the first record by _id -> id" in {
       db.people.transaction { transaction =>
         transaction(_._id -> adam._id).map(_ should be(adam))
@@ -343,6 +358,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     "search where city is set" in {
       db.people.transaction { transaction =>
         transaction.query.filter(_.builder.mustNot(_.city === None)).toList.map { people =>
+          people.map(_.name) should be(List("Evan"))
+        }
+      }
+    }
+    "search where city is set using !==" in {
+      db.people.transaction { transaction =>
+        transaction.query.filter(_.city !== None).toList.map { people =>
           people.map(_.name) should be(List("Evan"))
         }
       }

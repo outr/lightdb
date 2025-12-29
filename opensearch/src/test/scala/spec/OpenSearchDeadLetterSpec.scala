@@ -57,16 +57,32 @@ class OpenSearchDeadLetterSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
       val test = for {
         _ <- client.deleteIndex(strictIndex)
         _ <- client.deleteIndex(deadIndex)
-        // Create a strict mapping that rejects unknown fields; store init will not override existing indices.
-        _ <- client.createIndex(strictIndex, obj("mappings" -> obj("dynamic" -> str("strict"))))
+        // Create a mapping that will deterministically reject our inserts.
+        //
+        // When running against a developer's local OpenSearch cluster, there may be existing index templates that
+        // add mappings for common fields (like `name`), which can make `dynamic=strict` alone non-deterministic.
+        // For the purpose of this test we just need bulk item failures so the dead-letter path is exercised.
+        //
+        // By mapping `name` as a numeric field, indexing string values will reliably fail with a mapper exception.
+        // Store init will not override existing indices.
+        _ <- client.createIndex(strictIndex, obj(
+          "mappings" -> obj(
+            "dynamic" -> str("strict"),
+            "properties" -> obj(
+              "name" -> obj("type" -> str("long"))
+            )
+          )
+        ))
         _ <- db.init
         // Attempt insert: should fail due to strict mapping
         result <- db.docs.transaction { tx =>
-          tx.truncate.next(tx.insert(List(
+          // Do NOT truncate here: truncate may delete/recreate the index (faster path), which would remove the strict
+          // mapping we intentionally created above.
+          tx.insert(List(
             Doc("one", _id = Id("1")),
             Doc("two", _id = Id("2")),
             Doc("three", _id = Id("3"))
-          ))).next(tx.commit)
+          )).next(tx.commit)
         }.attempt
         _ = result.isFailure should be(true)
         _ <- client.refreshIndex(deadIndex).attempt.unit

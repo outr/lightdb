@@ -5,8 +5,17 @@ import lightdb.field.Field
 import lightdb.{Query, Sort}
 import lightdb.opensearch.util.OpenSearchCursor
 import rapid.Task
+import rapid.Stream
 
 object OpenSearchQuerySyntax {
+  private def splitSearching(tx: AnyRef): Option[Any] =
+    try {
+      val m = tx.getClass.getMethod("searching")
+      Some(m.invoke(tx))
+    } catch {
+      case _: Throwable => None
+    }
+
   implicit class OpenSearchGroupingOps[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](private val query: Query[Doc, Model, V]) extends AnyVal {
     def groupBy[G](field: Model => Field[Doc, G],
                    docsPerGroup: Option[Int] = None,
@@ -52,8 +61,45 @@ object OpenSearchQuerySyntax {
       case tx: OpenSearchTransaction[Doc, Model] =>
         val searchAfter = cursorToken.flatMap(OpenSearchCursor.decode)
         tx.doSearchAfter(query = query, searchAfter = searchAfter, pageSize = pageSize)
+      case tx: AnyRef if tx.getClass.getName.contains("SplitCollectionTransaction") =>
+        splitSearching(tx) match {
+          case Some(searchingAny) if searchingAny.isInstanceOf[OpenSearchTransaction[_, _]] =>
+            val os = searchingAny.asInstanceOf[OpenSearchTransaction[Doc, Model]]
+            val searchAfter = cursorToken.flatMap(OpenSearchCursor.decode)
+            os.doSearchAfter(query = query, searchAfter = searchAfter, pageSize = pageSize)
+          case _ =>
+            Task.error(new RuntimeException("OpenSearch cursor pagination is only supported when using an OpenSearch-backed collection"))
+        }
       case _ =>
         Task.error(new RuntimeException("OpenSearch cursor pagination is only supported when using an OpenSearch-backed collection"))
+    }
+
+    /**
+     * Returns a stream of results using OpenSearch cursor pagination (`search_after`) when supported.
+     *
+     * If the underlying collection is not OpenSearch-backed, this falls back to LightDB's default `Query.stream`.
+     */
+    def cursorStream(pageSize: Int = query.pageSize.getOrElse(1000)): Stream[V] = {
+      def loop(token: Option[String]): Stream[V] =
+        Stream.force {
+          cursorPage(cursorToken = token, pageSize = pageSize).map { page =>
+            val current = page.results.stream
+            page.nextCursorToken match {
+              case Some(next) => current.append(loop(Some(next)))
+              case None => current
+            }
+          }
+        }
+
+      query.transaction match {
+        case _: OpenSearchTransaction[_, _] => loop(None)
+        case tx: AnyRef if tx.getClass.getName.contains("SplitCollectionTransaction") =>
+          splitSearching(tx) match {
+            case Some(searchingAny) if searchingAny.isInstanceOf[OpenSearchTransaction[_, _]] => loop(None)
+            case _ => query.stream
+          }
+        case _ => query.stream
+      }
     }
   }
 }
