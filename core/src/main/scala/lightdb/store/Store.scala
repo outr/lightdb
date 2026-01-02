@@ -8,6 +8,7 @@ import lightdb.field.Field
 import lightdb.field.Field._
 import lightdb.id.Id
 import lightdb.lock.LockManager
+import lightdb.progress.ProgressManager
 import lightdb.transaction.Transaction
 import lightdb.trigger.StoreTriggers
 import lightdb.util.{Disposable, Initializable}
@@ -77,11 +78,11 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   private def releaseTransaction(transaction: TX): Task[Unit] = transaction.commit
 
-  def verify(): Task[Boolean] = Task.pure(false)
+  def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = Task.pure(false)
 
-  def reIndex(): Task[Boolean] = Task.pure(false)
+  def reIndex(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = Task.pure(false)
 
-  def reIndex(doc: Doc): Task[Boolean] = Task.pure(false)
+  def reIndexDoc(doc: Doc): Task[Boolean] = Task.pure(false)
 
   /**
    * Optimizes this store. This allows the implementation an opportunity to clean up, optimize, etc. to improve the

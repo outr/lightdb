@@ -83,12 +83,14 @@ object OpenSearchDsl {
                  from: Int,
                  size: Option[Int],
                  trackTotalHits: Boolean,
+                 trackScores: Boolean,
                  minScore: Option[Double]): Json = {
     val base = Vector(
       Some("query" -> filter),
       Some("from" -> num(from)),
       size.map(s => "size" -> num(s)),
       Some("track_total_hits" -> fabric.bool(trackTotalHits)),
+      if (trackScores) Some("track_scores" -> fabric.bool(true)) else None,
       minScore.map(ms => "min_score" -> num(ms))
     ).flatten
 

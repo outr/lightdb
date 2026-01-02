@@ -7,7 +7,7 @@ import fabric.rw._
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
-import lightdb.facet.FacetValue
+import lightdb.facet.{FacetQuery, FacetValue}
 import lightdb.filter.{FilterPlanner, QueryOptimizer}
 import lightdb.field.Field.FacetField
 import lightdb.field.Field.UniqueIndex
@@ -20,16 +20,17 @@ import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.opensearch.query.{OpenSearchDsl, OpenSearchSearchBuilder}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, Transaction}
-import lightdb.store.{Conversion, StoreMode}
+import lightdb.store.{BufferedWritingTransaction, Conversion, StoreMode, WriteOp}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.{Query, SearchResults, Sort}
 import lightdb.util.Aggregator
+import lightdb.opensearch.util.OpenSearchCursor
 import rapid.Task
 import rapid.taskSeq2Ops
 
 import java.util.concurrent.Semaphore
 import java.util.UUID
-import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 import lightdb.opensearch.OpenSearchMetrics
@@ -37,8 +38,10 @@ import lightdb.opensearch.OpenSearchMetrics
 case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: OpenSearchStore[Doc, Model],
                                                                                     config: OpenSearchConfig,
                                                                                     client: OpenSearchClient,
-                                                                                    parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] {
-  private val bufferedOps = mutable.ListBuffer.empty[OpenSearchBulkOp]
+                                                                                    parent: Option[Transaction[Doc, Model]])
+  extends CollectionTransaction[Doc, Model]
+    with PrefixScanningTransaction[Doc, Model]
+    with BufferedWritingTransaction[Doc, Model] {
   @volatile private var commitResult: Option[Try[Unit]] = None
   @volatile private var refreshPolicyOverride: Option[Option[String]] = None
 
@@ -50,7 +53,41 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
    * simplest way to preserve this expectation is to flush buffered ops before executing any reads.
    */
   private def flushBeforeRead: Task[Unit] =
-    if (bufferedOps.nonEmpty) commitOnce else Task.unit
+    // BufferedWritingTransaction only makes buffered writes visible to OpenSearch after flushing. For correctness
+    // (read-your-writes), we flush before any OpenSearch read/query APIs.
+    //
+    // IMPORTANT: this must NOT mark the transaction as "committed" (it is an internal flush), otherwise subsequent
+    // writes in the same transaction could be dropped (commit would become a no-op). So we flush the write buffer
+    // directly instead of calling `commit`.
+    flushPendingWrites
+
+  private def flushPendingWrites: Task[Unit] =
+    withWriteBuffer { wb =>
+      if (wb.map.nonEmpty) flushMap(wb.map) else Task.pure(wb)
+    }.unit
+
+  override protected def _commit: Task[Unit] = commitResult match {
+    case Some(Success(_)) => Task.unit
+    case Some(Failure(t)) => Task.error(t)
+    case None =>
+      super._commit.attempt.flatMap {
+        case Success(_) =>
+          commitResult = Some(Success(()))
+          Task.unit
+        case Failure(t) =>
+          // IMPORTANT:
+          // If a bulk flush fails (e.g. mapping error), we want subsequent commits (including Store.release's implicit
+          // commit) to rethrow the same error without re-flushing the same ops. Otherwise we can duplicate side-effects
+          // like dead-letter captures.
+          commitResult = Some(Failure(t))
+          Task.error(t)
+      }
+  }
+
+  override protected def _rollback: Task[Unit] = super._rollback.next(Task {
+    // Allow new work after a rollback.
+    commitResult = None
+  })
 
   private def cursorSafeFilterPath(base: Option[String]): Option[String] = base match {
     case None => None
@@ -66,9 +103,23 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
    * We must scope searches and aggregations to this logical collection's join-type; otherwise
    * hits/facets can include documents from other types in the same join index.
    */
+  private def joinTypeFilterDsl: Json = {
+    // Support both:
+    // 1) Proper OpenSearch join field mapping ("type":"join") where filtering uses `term(joinFieldName, "<type>")`
+    // 2) Legacy / dynamically-mapped object join field where child docs store `{ "name": "<type>", "parent": "<id>" }`
+    //    and filtering must use `term(joinFieldName.name.keyword, "<type>")` (or `.name` if no keyword subfield).
+    val typeValue = str(store.name)
+    val candidates = List(
+      OpenSearchDsl.term(config.joinFieldName, typeValue),
+      OpenSearchDsl.term(s"${config.joinFieldName}.name.keyword", typeValue),
+      OpenSearchDsl.term(s"${config.joinFieldName}.name", typeValue)
+    )
+    OpenSearchDsl.boolQuery(should = candidates, minimumShouldMatch = Some(1))
+  }
+
   private def applyJoinTypeFilter(body: Json): Json = {
     if (config.joinDomain.nonEmpty && config.joinRole.nonEmpty) {
-      val joinTerm = OpenSearchDsl.term(config.joinFieldName, str(store.name))
+      val joinTerm = joinTypeFilterDsl
       body match {
         case o: Obj =>
           val existingQuery = o.value.get("query").getOrElse(OpenSearchDsl.matchAll())
@@ -106,7 +157,10 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     new OpenSearchSearchBuilder[Doc, Model](
       store.model,
       joinScoreMode = effectiveJoinScoreMode(q),
-      keywordNormalize = config.keywordNormalize
+      keywordNormalize = config.keywordNormalize,
+      allowScriptSorts = config.allowScriptSorts,
+      facetAggMaxBuckets = config.facetAggMaxBuckets,
+      facetChildCountPageSize = config.facetChildCountPageSize
     )
 
   /**
@@ -264,7 +318,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
         // Scope group aggregations to this join type to avoid cross-type contamination in join-domain indices.
         OpenSearchDsl.boolQuery(
           must = List(qDsl0),
-          filter = List(OpenSearchDsl.term(config.joinFieldName, str(store.name)))
+          filter = List(joinTypeFilterDsl)
         )
       } else {
         qDsl0
@@ -449,41 +503,28 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   override def jsonStream: rapid.Stream[Json] =
     rapid.Stream.force(doSearch[Json](Query[Doc, Model, Json](this, Conversion.Json(store.fields))).map(_.stream))
 
+  /**
+   * BufferedWritingTransaction only supports `_id` reads by default. We preserve OpenSearchTransaction's richer
+   * behavior by delegating non-id unique reads to OpenSearch after flushing pending writes.
+   */
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = {
     if (index == store.idField) {
-      val id = value.asInstanceOf[Id[Doc]]
-      flushBeforeRead.next {
-        client.getDoc(store.readIndexName, id.value).map(_.map { json =>
-          stripInternalFields(sourceWithId(json, id)).as[Doc](store.model.rw)
-        })
-      }
+      // Use BufferedWritingTransaction logic for read-your-writes on `_id`.
+      super._get(index, value)
     } else {
-      // fallback to query by unique field (assumes field is indexed)
-      val filter = lightdb.filter.Filter.Equals[Doc, V](index.name, value)
-      val q = Query[Doc, Model, Doc](this, Conversion.Doc(), filter = Some(filter), limit = Some(1))
-      doSearch[Doc](q).flatMap(_.list).map(_.headOption)
+      // Fallback to query by unique field (assumes field is indexed).
+      flushBeforeRead.next {
+        val filter = lightdb.filter.Filter.Equals[Doc, V](index.name, value)
+        val q = Query[Doc, Model, Doc](this, Conversion.Doc(), filter = Some(filter), limit = Some(1))
+        doSearch[Doc](q).flatMap(_.list).map(_.headOption)
+      }
     }
   }
-
-  override protected def _insert(doc: Doc): Task[Doc] = Task {
-    val prepared = prepareForIndexing(doc)
-    bufferedOps += OpenSearchBulkOp.index(store.writeIndexName, doc._id.value, prepared.source, routing = prepared.routing)
-    doc
-  }
-
-  override protected def _upsert(doc: Doc): Task[Doc] = Task {
-    val prepared = prepareForIndexing(doc)
-    bufferedOps += OpenSearchBulkOp.index(store.writeIndexName, doc._id.value, prepared.source, routing = prepared.routing)
-    doc
-  }
-
-  override protected def _exists(id: lightdb.id.Id[Doc]): Task[Boolean] =
-    flushBeforeRead.next(client.getDoc(store.readIndexName, id.value).map(_.nonEmpty))
 
   override protected def _count: Task[Int] = flushBeforeRead.next {
     if (config.joinDomain.nonEmpty && config.joinRole.nonEmpty) {
       // In join-domains, multiple logical collections share a single index. Scope counts to this collection's join type.
-      client.count(store.readIndexName, obj("query" -> OpenSearchDsl.term(config.joinFieldName, str(store.name))))
+      client.count(store.readIndexName, obj("query" -> joinTypeFilterDsl))
     } else {
       client.count(store.readIndexName, obj("query" -> obj("match_all" -> obj())))
     }
@@ -491,155 +532,318 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
 
   override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = {
     if (index == store.idField) {
-      client.deleteDoc(store.writeIndexName, value.asInstanceOf[Id[Doc]].value, refresh = effectiveRefreshPolicy)
+      // Use BufferedWritingTransaction buffering semantics for deletes.
+      super._delete(index, value)
     } else {
-      // resolve by querying the doc then deleting by _id
+      // Resolve by querying the doc then delete by _id (buffered).
       _get(index, value).flatMap {
-        case Some(doc) => client.deleteDoc(store.writeIndexName, doc._id.value, refresh = effectiveRefreshPolicy)
+        case Some(doc) => super._delete(store.idField, doc._id)
         case None => Task.pure(false)
       }
     }
   }
 
-  override protected def _commit: Task[Unit] = commitResult match {
-    case Some(Success(_)) => Task.unit
-    case Some(Failure(t)) => Task.error(t)
-    case None =>
-      commitOnce.attempt.flatMap {
-        case Success(_) =>
-          commitResult = Some(Success(()))
-          Task.unit
-        case Failure(t) =>
-          commitResult = Some(Failure(t))
-          Task.error(t)
-      }
+  override protected def directGet[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = {
+    if (index == store.idField) {
+      val id = value.asInstanceOf[Id[Doc]]
+      client.getDoc(store.readIndexName, id.value).map(_.map { json =>
+        stripInternalFields(sourceWithId(json, id)).as[Doc](store.model.rw)
+      })
+    } else {
+      Task.error(new UnsupportedOperationException(s"OpenSearch directGet only supports _id, but ${index.name} was attempted"))
+    }
   }
 
-  private def commitOnce: Task[Unit] = {
-    val ops = bufferedOps.toList
-    if (ops.isEmpty) {
-      Task.unit
-    } else {
-      def withIngestPermit[A](task: => Task[A]): Task[A] =
-        OpenSearchIngestLimiter.withPermit(
-          key = config.normalizedBaseUrl,
-          maxConcurrent = config.ingestMaxConcurrentRequests
-        )(task)
+  /**
+   * Flush buffered write ops to OpenSearch using bulk indexing.
+   *
+   * NOTE: This may run before `commit` if the buffered map exceeds `BufferedWritingTransaction.MaxTransactionWriteBuffer`.
+   * In that case, rollback can no longer fully undo side effects. This tradeoff is intentional to avoid OOM.
+   */
+  override protected def flushBuffer(stream: rapid.Stream[WriteOp[Doc]]): Task[Unit] = Task.defer {
+    def withIngestPermit[A](task: => Task[A]): Task[A] =
+      OpenSearchIngestLimiter.withPermit(
+        key = config.normalizedBaseUrl,
+        maxConcurrent = config.ingestMaxConcurrentRequests
+      )(task)
 
-      def chunkOps(list: List[OpenSearchBulkOpIndex]): List[List[OpenSearchBulkOpIndex]] = {
-        val maxDocs = config.bulkMaxDocs
-        val maxBytes = config.bulkMaxBytes
-        val chunks = scala.collection.mutable.ListBuffer.empty[List[OpenSearchBulkOpIndex]]
-        val current = scala.collection.mutable.ListBuffer.empty[OpenSearchBulkOpIndex]
-        var currentBytes = 0
+    def chunkOps(list: List[OpenSearchBulkOp]): List[List[OpenSearchBulkOp]] = {
+      val maxDocs = config.bulkMaxDocs
+      val maxBytes = config.bulkMaxBytes
+      val chunks = scala.collection.mutable.ListBuffer.empty[List[OpenSearchBulkOp]]
+      val current = scala.collection.mutable.ListBuffer.empty[OpenSearchBulkOp]
+      var currentBytes = 0
 
-        def estimateBytes(op: OpenSearchBulkOpIndex): Int = {
-          val routingPart = op.routing.map(r => s""","routing":"$r"""").getOrElse("")
-          val meta = s"""{"index":{"_index":"${op.index}","_id":"${op.id}"$routingPart}}"""
-          val src = JsonFormatter.Compact(op.source)
+      def estimateBytes(op: OpenSearchBulkOp): Int = op match {
+        case OpenSearchBulkOpIndex(index, id, source, routing) =>
+          val routingPart = routing.map(r => s""","routing":"$r"""").getOrElse("")
+          val meta = s"""{"index":{"_index":"$index","_id":"$id"$routingPart}}"""
+          val src = JsonFormatter.Compact(source)
           meta.length + 1 + src.length + 1
-        }
-
-        list.foreach { op =>
-          val b = estimateBytes(op)
-          val wouldExceedDocs = current.nonEmpty && current.size >= maxDocs
-          val wouldExceedBytes = current.nonEmpty && (currentBytes + b) > maxBytes
-          if (wouldExceedDocs || wouldExceedBytes) {
-            chunks += current.toList
-            current.clear()
-            currentBytes = 0
-          }
-          current += op
-          currentBytes += b
-        }
-        if (current.nonEmpty) chunks += current.toList
-        chunks.toList
+        case OpenSearchBulkOpDelete(index, id, routing) =>
+          val routingPart = routing.map(r => s""","routing":"$r"""").getOrElse("")
+          val meta = s"""{"delete":{"_index":"$index","_id":"$id"$routingPart}}"""
+          meta.length + 1
       }
 
-      val task = ops match {
-        case (single: OpenSearchBulkOpIndex) :: Nil =>
-          withIngestPermit {
-            client.indexDoc(single.index, single.id, single.source, refresh = effectiveRefreshPolicy, routing = single.routing)
-          }
-        case many =>
-          val indices = many.collect { case i: OpenSearchBulkOpIndex => i }
-          val chunks = chunkOps(indices)
-          val bulkTask =
-            if (config.bulkConcurrency <= 1 || chunks.size <= 1) {
-              chunks.foldLeft(Task.unit) { (acc, chunk) =>
-                acc.next {
-                  val body = OpenSearchBulkRequest(chunk).toBulkNdjson
-                  if (config.metricsEnabled) {
-                    OpenSearchMetrics.recordBulkAttempt(config.normalizedBaseUrl, docs = chunk.size, bytes = body.length)
-                  }
-                  withIngestPermit {
-                    client.bulkResponse(body, refresh = effectiveRefreshPolicy)
-                  }.flatMap { json =>
-                    val errors = json.asObj.get("errors").exists(_.asBoolean)
-                    if (!errors) {
-                      Task.unit
-                    } else {
-                      if (config.metricsEnabled) {
-                        OpenSearchMetrics.recordFailure(config.normalizedBaseUrl)
-                      }
-                      captureBulkDeadLetters(chunk, json).attempt.unit.next {
-                        val firstError = json.asObj
-                          .get("items")
-                          .map(_.asArr.value.toList)
-                          .getOrElse(Nil)
-                          .iterator
-                          .flatMap(j => j.asObj.value.valuesIterator.flatMap(_.asObj.get("error")).toList)
-                          .take(1)
-                          .toList
-                          .headOption
-                        val msg = firstError.map(e => s" firstError=${JsonFormatter.Compact(e)}").getOrElse("")
-                        Task.error(new RuntimeException(s"OpenSearch bulk request reported errors=true.$msg"))
-                      }
-                    }
-                  }
-                }
-              }
-            } else {
-              parTraverseNUnit(chunks, config.bulkConcurrency) { chunk =>
-                val body = OpenSearchBulkRequest(chunk).toBulkNdjson
+      list.foreach { op =>
+        val b = estimateBytes(op)
+        val wouldExceedDocs = current.nonEmpty && current.size >= maxDocs
+        val wouldExceedBytes = current.nonEmpty && (currentBytes + b) > maxBytes
+        if (wouldExceedDocs || wouldExceedBytes) {
+          chunks += current.toList
+          current.clear()
+          currentBytes = 0
+        }
+        current += op
+        currentBytes += b
+      }
+      if (current.nonEmpty) chunks += current.toList
+      chunks.toList
+    }
+
+    stream.toList.flatMap { ops =>
+      val indexOps: List[OpenSearchBulkOp] = ops.flatMap {
+        case WriteOp.Insert(doc) =>
+          val prepared = prepareForIndexing(doc)
+          Some(OpenSearchBulkOp.index(store.writeIndexName, doc._id.value, prepared.source, prepared.routing))
+        case WriteOp.Upsert(doc) =>
+          val prepared = prepareForIndexing(doc)
+          Some(OpenSearchBulkOp.index(store.writeIndexName, doc._id.value, prepared.source, prepared.routing))
+        case WriteOp.Delete(_) =>
+          None
+      }
+
+      val deleteOps: List[OpenSearchBulkOp] =
+        ops.collect { case WriteOp.Delete(id) => id.value }.map { id =>
+          // Join-parent docs are indexed with routing = _id. Providing routing here avoids shard misroutes.
+          // For non-join or non-parent stores, routing is unnecessary.
+          val routing =
+            if (config.joinDomain.nonEmpty && config.joinRole.contains("parent")) Some(id) else None
+          OpenSearchBulkOp.delete(store.writeIndexName, id, routing = routing)
+        }
+
+      val bulkTask: Task[Unit] =
+        if (indexOps.isEmpty && deleteOps.isEmpty) Task.unit
+        else {
+          val allOps: List[OpenSearchBulkOp] = indexOps ::: deleteOps
+          val chunks = chunkOps(allOps)
+          val chunkTask = (chunk: List[OpenSearchBulkOp]) => {
+            val body = OpenSearchBulkRequest(chunk).toBulkNdjson
+            if (config.metricsEnabled) {
+              OpenSearchMetrics.recordBulkAttempt(config.normalizedBaseUrl, docs = chunk.size, bytes = body.length)
+            }
+            withIngestPermit {
+              client.bulkResponse(body, refresh = effectiveRefreshPolicy)
+            }.flatMap { json =>
+              val errors = json.asObj.get("errors").exists(_.asBoolean)
+              if (!errors) {
+                Task.unit
+              } else {
                 if (config.metricsEnabled) {
-                  OpenSearchMetrics.recordBulkAttempt(config.normalizedBaseUrl, docs = chunk.size, bytes = body.length)
+                  OpenSearchMetrics.recordFailure(config.normalizedBaseUrl)
                 }
-                withIngestPermit {
-                  client.bulkResponse(body, refresh = effectiveRefreshPolicy)
-                }.flatMap { json =>
-                  val errors = json.asObj.get("errors").exists(_.asBoolean)
-                  if (!errors) {
-                    Task.unit
-                  } else {
-                    if (config.metricsEnabled) {
-                      OpenSearchMetrics.recordFailure(config.normalizedBaseUrl)
-                    }
-                    captureBulkDeadLetters(chunk, json).attempt.unit.next {
-                      val firstError = json.asObj
-                        .get("items")
-                        .map(_.asArr.value.toList)
-                        .getOrElse(Nil)
-                        .iterator
-                        .flatMap(j => j.asObj.value.valuesIterator.flatMap(_.asObj.get("error")).toList)
-                        .take(1)
-                        .toList
-                        .headOption
-                      val msg = firstError.map(e => s" firstError=${JsonFormatter.Compact(e)}").getOrElse("")
-                      Task.error(new RuntimeException(s"OpenSearch bulk request reported errors=true.$msg"))
-                    }
-                  }
+                // Dead letters are only meaningful for index/upsert failures; deletes are best-effort.
+                val indexChunk = chunk.collect { case i: OpenSearchBulkOpIndex => i }
+                captureBulkDeadLetters(indexChunk, json).attempt.unit.next {
+                  val firstError = json.asObj
+                    .get("items")
+                    .map(_.asArr.value.toList)
+                    .getOrElse(Nil)
+                    .iterator
+                    .flatMap(j => j.asObj.value.valuesIterator.flatMap(_.asObj.get("error")).toList)
+                    .take(1)
+                    .toList
+                    .headOption
+                  val msg = firstError.map(e => s" firstError=${JsonFormatter.Compact(e)}").getOrElse("")
+                  Task.error(new RuntimeException(s"OpenSearch bulk request reported errors=true.$msg"))
                 }
               }
             }
-
-          bulkTask.flatTap { _ =>
-            if (effectiveRefreshPolicy.contains("true")) client.refreshIndex(store.writeIndexName) else Task.unit
           }
-      }
-      task.map(_ => bufferedOps.clear())
+
+          if (config.bulkConcurrency <= 1 || chunks.size <= 1) {
+            chunks.foldLeft(Task.unit)((acc, c) => acc.next(chunkTask(c)))
+          } else {
+            parTraverseNUnit(chunks, config.bulkConcurrency)(chunkTask)
+          }
+        }
+
+      // Keep explicit refresh behavior consistent with the previous implementation: if refresh=true, also call _refresh.
+      val maybeExtraRefresh: Task[Unit] =
+        if (effectiveRefreshPolicy.contains("true")) client.refreshIndex(store.writeIndexName) else Task.unit
+
+      bulkTask.next(maybeExtraRefresh)
     }
   }
+
+  private def truncateIndexLevel: Task[Int] = {
+    // NOTE: This truncates the ENTIRE physical index for this store (including join-domains).
+    // This avoids `_delete_by_query` which is often extremely slow at scale.
+
+    // BufferedWritingTransaction.truncate clears the write buffer before calling `_truncate`.
+    // We still need to reset OpenSearchTransaction-local commit memoization so subsequent ops are valid.
+    commitResult = None
+
+    def findJoinParentStoreAndConfig(): (DocumentModel[_], List[lightdb.field.Field[_, _]], OpenSearchConfig, String) = {
+      // If not a join-domain, the current store is the source of truth for mappings.
+      if (config.joinDomain.isEmpty) {
+        (store.model, store.fields, config, store.name)
+      } else {
+        val joinDomain = config.joinDomain.get
+        // IMPORTANT:
+        // In SplitCollection setups (ex: RocksDB storage + OpenSearch searching), the OpenSearchStore instances are not
+        // necessarily registered as top-level LightDB stores; only the SplitCollection is.
+        //
+        // Truncate needs the JOIN-PARENT store's template/mapping so we can recreate the shared join-domain index
+        // with `type: join` and correct facet mappings. So, search both:
+        // - direct OpenSearchStore instances in db.stores (OpenSearch-only DBs / tests)
+        // - OpenSearchStore instances nested under SplitCollection.searching (SplitCollection DBs like LogicalNetwork)
+        val candidateOpenSearchStores: List[OpenSearchStore[_, _]] =
+          store.lightDB.stores.flatMap {
+            case os: OpenSearchStore[_, _] @unchecked =>
+              List(os)
+            case sc: lightdb.store.split.SplitCollection[_, _, _, _] @unchecked =>
+              sc.searching match {
+                case os: OpenSearchStore[_, _] @unchecked => List(os)
+                case _ => Nil
+              }
+            case _ =>
+              Nil
+          }
+
+        val maybeParent = candidateOpenSearchStores.find { s =>
+          val c = OpenSearchConfig.from(store.lightDB, s.name)
+          c.joinDomain.contains(joinDomain) && c.joinRole.contains("parent")
+        }
+        val parentStore = maybeParent.getOrElse(store.asInstanceOf[OpenSearchStore[_, _]])
+        val parentConfig = OpenSearchConfig.from(store.lightDB, parentStore.name)
+        // Scala 2.13 struggles with the existential/path-dependent types here; cast explicitly.
+        (
+          parentStore.model.asInstanceOf[DocumentModel[_]],
+          parentStore.fields.asInstanceOf[List[lightdb.field.Field[_, _]]],
+          parentConfig,
+          parentStore.name
+        )
+      }
+    }
+
+    val (mappingModel, mappingFieldsAny, mappingConfig, mappingStoreName) = findJoinParentStoreAndConfig()
+    val mappingFields = mappingFieldsAny.asInstanceOf[List[lightdb.field.Field[Doc, _]]]
+    val body = OpenSearchTemplates.indexBody(mappingModel.asInstanceOf[Model], mappingFields, mappingConfig, mappingStoreName, maxResultWindow = mappingConfig.maxResultWindow)
+
+    val matchAll = obj("query" -> OpenSearchDsl.matchAll())
+
+    def isAlreadyExists(t: Throwable): Boolean = {
+      val msg = Option(t.getMessage).getOrElse("").toLowerCase
+      msg.contains("resource_already_exists_exception") || msg.contains("already exists")
+    }
+
+    def waitForIndexDeleted(index: String,
+                            maxWait: FiniteDuration = 30.minutes,
+                            poll: FiniteDuration = 1.second): Task[Unit] = Task.defer {
+      val startNanos = System.nanoTime()
+
+      def loop(): Task[Unit] =
+        client.indexExists(index).flatMap {
+          case false => Task.unit
+          case true =>
+            val elapsed = (System.nanoTime() - startNanos).nanos
+            if (elapsed >= maxWait) {
+              Task.error(new RuntimeException(s"Timed out waiting for OpenSearch index '$index' to be deleted (waited ${maxWait.toSeconds}s)"))
+            } else {
+              Task.sleep(poll).next(loop())
+            }
+        }
+
+      loop()
+    }
+
+    def createIndexEventually(index: String,
+                              maxWait: FiniteDuration = 30.minutes,
+                              poll: FiniteDuration = 1.second): Task[Unit] = Task.defer {
+      val startNanos = System.nanoTime()
+
+      def loop(): Task[Unit] =
+        client.createIndex(index, body).attempt.flatMap {
+          case Success(_) =>
+            Task.unit
+          case Failure(t) if isAlreadyExists(t) =>
+            // OpenSearch index deletion is asynchronous OR we raced another creator (ex: another thread calling
+            // ensureIndexReady while reindex/truncate is in-flight).
+            //
+            // In the "raced creator" case, createIndex will fail with already-exists even though the index is now
+            // present and usable. Treat that as success once we can confirm the index exists.
+            //
+            // In the "cluster-state lag" case, HEAD may flap; keep retrying until the index stabilizes or we timeout.
+            client.indexExists(index).flatMap {
+              case true =>
+                Task.unit
+              case false =>
+                val elapsed = (System.nanoTime() - startNanos).nanos
+                if (elapsed >= maxWait) Task.error(t)
+                else Task.sleep(poll).next(loop())
+            }
+          case Failure(t) =>
+            Task.error(t)
+        }
+
+      loop()
+    }
+
+    if (config.useIndexAlias) {
+      val readAlias = store.readIndexName
+      val physical = s"$readAlias${config.indexAliasSuffix}"
+      val writeAliasOpt = if (config.useWriteAlias) Some(s"$readAlias${config.writeAliasSuffix}") else None
+
+      client.aliasTargets(readAlias).flatMap { targets =>
+        val deletedCountTask =
+          if (targets.nonEmpty) {
+            // Count docs via alias before we delete physical indices.
+            client.count(readAlias, matchAll).attempt.map(_.getOrElse(0))
+          } else {
+            client.indexExists(physical).flatMap {
+              case true => client.count(physical, matchAll).attempt.map(_.getOrElse(0))
+              case false => Task.pure(0)
+            }
+          }
+
+        deletedCountTask.flatMap { deleted =>
+          targets.map(client.deleteIndex).tasks.unit
+            .next(client.deleteIndex(physical)) // best-effort in case a stale physical name exists without alias pointing
+            .next(waitForIndexDeleted(physical))
+            .next(createIndexEventually(physical))
+            .next(client.updateAliases(obj("actions" -> arr(
+              obj("add" -> obj("index" -> str(physical), "alias" -> str(readAlias)))
+            ))))
+            .next {
+              writeAliasOpt match {
+                case Some(writeAlias) =>
+                  client.updateAliases(obj("actions" -> arr(
+                    obj("add" -> obj("index" -> str(physical), "alias" -> str(writeAlias), "is_write_index" -> bool(true)))
+                  )))
+                case None => Task.unit
+              }
+            }
+            .map(_ => deleted)
+        }
+      }
+    } else {
+      val index = store.readIndexName
+      client.count(index, matchAll).flatMap { deleted =>
+        client
+          .deleteIndex(index)
+          .next(waitForIndexDeleted(index))
+          .next(createIndexEventually(index))
+          .map(_ => deleted)
+      }
+    }
+  }
+
+  // BufferedWritingTransaction requires an `_truncate` hook for its own `truncate` implementation.
+  // We implement it by delegating to our index-level truncate logic.
+  override protected def _truncate: Task[Int] =
+    truncateIndexLevel
 
   private def captureBulkDeadLetters(chunk: List[OpenSearchBulkOpIndex], bulkResponse: Json): Task[Unit] = {
     if (!config.deadLetterEnabled) {
@@ -706,11 +910,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     }.tasksPar.unit
   }
 
-  override protected def _rollback: Task[Unit] = Task {
-    bufferedOps.clear()
-  }
-
-  override protected def _close: Task[Unit] = Task.unit
+  // BufferedWritingTransaction provides _commit/_rollback/_close.
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
     Task.defer {
@@ -718,83 +918,198 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
         prepared(query).flatMap { q =>
           val body0 = applyTrackTotalHits(q, searchBuilderFor(q).build(q))
           val body = applyJoinTypeFilter(body0)
-          client.search(store.readIndexName, body).map { json =>
-        val hitsObj = json.asObj.get("hits").getOrElse(obj()).asObj
-        val total = if (q.countTotal) {
-          Some(hitsObj.get("total").getOrElse(obj()).asObj.get("value").getOrElse(num(0)).asInt)
-        } else {
-          None
-        }
-        val hitsArr = hitsObj.get("hits").getOrElse(arr()).asArr
-        val hits = hitsArr.value.toVector.map(_.asObj)
+          client.search(store.readIndexName, body).flatMap { json =>
+            val hitsObj = json.asObj.get("hits").getOrElse(obj()).asObj
+            val total = if (q.countTotal) {
+              Some(hitsObj.get("total").getOrElse(obj()).asObj.get("value").getOrElse(num(0)).asInt)
+            } else {
+              None
+            }
+            val hitsArr = hitsObj.get("hits").getOrElse(arr()).asArr
+            val hits = hitsArr.value.toVector.map(_.asObj)
 
-        val facetResults: Map[FacetField[Doc], FacetResult] = if (q.facets.nonEmpty) {
-          val aggs = json.asObj.get("aggregations").map(_.asObj).getOrElse(obj().asObj)
-          q.facets.map { fq =>
-            val aggName = s"facet_${fq.field.name}"
-            val bucketsAll = aggs
-              .get(aggName)
-              .map(_.asObj.get("buckets").getOrElse(arr()).asArr.value.toList)
-              .getOrElse(Nil)
-            val prefix = if (fq.path.isEmpty) "" else fq.path.mkString("/") + "/"
-            val buckets = bucketsAll.map(_.asObj).flatMap { b =>
-              for {
-                key <- b.get("key")
-                count <- b.get("doc_count")
-              } yield (key.asString, count.asInt)
-            }.filter {
-              case (token, _) if fq.path.isEmpty =>
+            val aggs = json.asObj.get("aggregations").map(_.asObj).getOrElse(obj().asObj)
+
+            def tokenIsChildAtPath(fq: FacetQuery[Doc], token: String): Boolean = {
+              val prefix = if (fq.path.isEmpty) "" else fq.path.mkString("/") + "/"
+              if (fq.path.isEmpty) {
                 token == "$ROOT$" || !token.contains("/")
-              case (token, _) =>
+              } else {
                 token.startsWith(prefix) && !token.drop(prefix.length).contains("/")
+              }
             }
-            val values = buckets.map {
-              case (token, count) =>
-                val label = if (fq.path.isEmpty) {
-                  token
-                } else if (token.startsWith(prefix)) {
-                  token.drop(prefix.length)
-                } else {
-                  token.split("/").lastOption.getOrElse(token)
-                }
-                FacetResultValue(label, count)
-            }
-            val childCount = buckets.length
-            val updatedValues = values
-              .filterNot(_.value == "$ROOT$")
-              .sortBy(v => (-v.count, v.value))
-            val totalCount = updatedValues.map(_.count).sum
-            fq.field -> FacetResult(updatedValues, childCount, totalCount)
-          }.toMap
-        } else {
-          Map.empty
-        }
 
-        val stream = rapid.Stream
-          .emits(hits.toList)
-          .evalMap { h =>
-            val id = Id[Doc](h.get("_id").getOrElse(throw new RuntimeException("OpenSearch hit missing _id")).asString)
-            val score = h.get("_score") match {
-              case Some(Null) | None => 0.0
-              case Some(j) => j.asDouble
+            def tokenToLabel(fq: FacetQuery[Doc], token: String): String = {
+              val prefix = if (fq.path.isEmpty) "" else fq.path.mkString("/") + "/"
+              if (fq.path.isEmpty) {
+                token
+              } else if (token.startsWith(prefix)) {
+                token.drop(prefix.length)
+              } else {
+                token.split("/").lastOption.getOrElse(token)
+              }
             }
-            val source = h.get("_source").getOrElse(obj())
-            val hydratedSource = stripInternalFields(sourceWithId(source, id))
-            materialize(q.conversion, id, hydratedSource).map(v => (v, score))
-          }
-        SearchResults(
-          model = store.model,
-          offset = q.offset,
-          limit = q.limit,
-          total = total,
-          streamWithScore = stream,
-          facetResults = facetResults,
-          transaction = this
-        )
+
+            def readFacetValues(fq: FacetQuery[Doc]): List[FacetResultValue] = {
+              val valuesAggName = s"facet_${fq.field.name}"
+              val bucketsAll = aggs
+                .get(valuesAggName)
+                .map(_.asObj.get("buckets").getOrElse(arr()).asArr.value.toList)
+                .getOrElse(Nil)
+              val buckets = bucketsAll.map(_.asObj).flatMap { b =>
+                for {
+                  key <- b.get("key")
+                  count <- b.get("doc_count")
+                } yield (key.asString, count.asInt)
+              }.filter { case (token, _) => tokenIsChildAtPath(fq, token) }
+              buckets.map { case (token, count) =>
+                FacetResultValue(tokenToLabel(fq, token), count)
+              }
+            }
+
+            def computeFacetChildCount(fq: FacetQuery[Doc]): Task[Int] = {
+              val countAggName = s"facet_count_${fq.field.name}"
+
+              def parseCountAgg(aggObj: fabric.Obj): (Int, Option[Json]) = {
+                val bucketsAll = aggObj.get("buckets").getOrElse(arr()).asArr.value.toList
+                val tokens = bucketsAll.map(_.asObj).flatMap(_.get("key").flatMap(_.asObj.get("token"))).map(_.asString)
+                val inc = tokens.count(t => tokenIsChildAtPath(fq, t))
+                val afterKey = aggObj.get("after_key")
+                (inc, afterKey)
+              }
+
+              def fetchNext(afterKey: Json): Task[(Int, Option[Json])] = {
+                val tokenField = s"${fq.field.name}__facet"
+                val composite = obj(
+                  "size" -> num(config.facetChildCountPageSize),
+                  "sources" -> arr(
+                    obj("token" -> obj("terms" -> obj("field" -> str(tokenField))))
+                  ),
+                  "after" -> afterKey
+                )
+                val countAgg = obj(countAggName -> obj("composite" -> composite))
+                val bodyNext0 = obj(
+                  "query" -> body0.asObj.get("query").getOrElse(OpenSearchDsl.matchAll()),
+                  "from" -> num(0),
+                  "size" -> num(0),
+                  "track_total_hits" -> bool(false),
+                  "aggregations" -> countAgg
+                )
+                val bodyNext = applyJoinTypeFilter(bodyNext0)
+                client.search(store.readIndexName, bodyNext).map { j =>
+                  val a = j.asObj
+                    .get("aggregations")
+                    .flatMap(_.asObj.get(countAggName))
+                    .map(_.asObj)
+                    .getOrElse(obj().asObj)
+                  parseCountAgg(a)
+                }
+              }
+
+              def loop(afterKey: Option[Json], pages: Int, acc: Int): Task[Int] = afterKey match {
+                case None => Task.pure(acc)
+                case Some(_) if pages >= config.facetChildCountMaxPages => Task.pure(acc)
+                case Some(ak) =>
+                  fetchNext(ak).flatMap { case (inc, nextAfter) =>
+                    loop(nextAfter, pages + 1, acc + inc)
+                  }
+              }
+
+              val firstAgg = aggs.get(countAggName).map(_.asObj).getOrElse(obj().asObj)
+              val (firstInc, firstAfter) = parseCountAgg(firstAgg)
+              loop(firstAfter, pages = 1, acc = firstInc)
+            }
+
+            val facetResultsT: Task[Map[FacetField[Doc], FacetResult]] =
+              if (q.facets.nonEmpty) {
+                val tasks = q.facets.map { fq =>
+                  val values = readFacetValues(fq)
+                    .filterNot(_.value == "$ROOT$")
+                    .sortBy(v => (-v.count, v.value))
+                  val totalCount = values.map(_.count).sum
+                  computeFacetChildCount(fq).map { cc =>
+                    fq.field -> FacetResult(values, cc, totalCount)
+                  }
+                }
+                sequence(tasks).map(_.toMap)
+              } else {
+                Task.pure(Map.empty)
+              }
+
+            val stream = rapid.Stream
+              .emits(hits.toList)
+              .evalMap { h =>
+                val id = Id[Doc](h.get("_id").getOrElse(throw new RuntimeException("OpenSearch hit missing _id")).asString)
+                val score = h.get("_score") match {
+                  case Some(Null) | None => 0.0
+                  case Some(j) => j.asDouble
+                }
+                val source = h.get("_source").getOrElse(obj())
+                val hydratedSource = stripInternalFields(sourceWithId(source, id))
+                materialize(q.conversion, id, hydratedSource).map(v => (v, score))
+              }
+
+            facetResultsT.map { facetResults =>
+              SearchResults(
+                model = store.model,
+                offset = q.offset,
+                limit = q.limit,
+                total = total,
+                streamWithScore = stream,
+                facetResults = facetResults,
+                transaction = this
+              )
+            }
           }
         }
       }
     }
+
+  /**
+   * Prefer keyset (cursor) pagination for streaming on OpenSearch when possible to avoid `max_result_window` limits.
+   *
+   * We only enable this when `offset == 0` (cursor pagination cannot jump to arbitrary offsets efficiently).
+   * Otherwise we fall back to the default offset-based implementation (which will enforce max_result_window).
+   */
+  override def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
+    // `pageSize=None` means "don't cap results to one page". On OpenSearch, omitting `size` defaults to 10 hits,
+    // so streaming can appear to "instantly complete" after a tiny first page. Normalize `None` to a sane default
+    // page size so we can use `search_after` streaming.
+    val normalizedQuery =
+      if (query.pageSize.isEmpty) query.copy(pageSize = Some(1000)) else query
+
+    if (normalizedQuery.pageSize.nonEmpty && normalizedQuery.offset == 0) {
+      val basePageSize = normalizedQuery.pageSize.getOrElse(1000)
+
+      def loop(cursorToken: Option[String], remaining: Option[Int]): rapid.Stream[(V, Double)] =
+        rapid.Stream.force {
+          val reqSize = remaining match {
+            case Some(r) if r <= 0 => 0
+            case Some(r) => math.min(r, basePageSize)
+            case None => basePageSize
+          }
+          if (reqSize <= 0) {
+            Task.pure(rapid.Stream.empty)
+          } else {
+            val searchAfter = cursorToken.flatMap(OpenSearchCursor.decode)
+            doSearchAfter(query = normalizedQuery, searchAfter = searchAfter, pageSize = reqSize).map { page =>
+              val current = page.results.streamWithScore
+              val nextRemaining = remaining.map(_ - reqSize)
+              page.nextCursorToken match {
+                case Some(next) if remaining.forall(_ > reqSize) =>
+                  current.append(loop(Some(next), nextRemaining))
+                case _ =>
+                  current
+              }
+            }
+          }
+        }
+
+      loop(cursorToken = None, remaining = normalizedQuery.limit)
+    } else {
+      super.streamScored(normalizedQuery)
+    }
+  }
 
   def doSearchAfter[V](query: Query[Doc, Model, V],
                        searchAfter: Option[Json],
@@ -825,7 +1140,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       client.search(store.readIndexName, body, filterPathOverride = filterPathOverride).map { json =>
         val hitsObj = json.asObj.get("hits").getOrElse(obj()).asObj
         val hitsArr = hitsObj.get("hits").getOrElse(arr()).asArr
-        val hits = hitsArr.value.toVector.map(_.asObj)
+        val hits = hitsArr.value.map(_.asObj)
 
         val total = None
 
@@ -860,10 +1175,15 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                 }
                 FacetResultValue(label, count)
             }
+            // `childCount` must represent total distinct children, not just the returned top-N.
             val childCount = buckets.length
-            val updatedValues = values
+            val updatedValuesAll = values
               .filterNot(_.value == "$ROOT$")
               .sortBy(v => (-v.count, v.value))
+            val updatedValues = fq.childrenLimit match {
+              case Some(l) => updatedValuesAll.take(l)
+              case None => updatedValuesAll
+            }
             val totalCount = updatedValues.map(_.count).sum
             fq.field -> FacetResult(updatedValues, childCount, totalCount)
           }.toMap
@@ -907,38 +1227,6 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
 
   override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] =
     aggregate(query).count
-
-  override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] =
-    super.doUpdate(query, updates)
-
-  override def doDelete[V](query: Query[Doc, Model, V]): Task[Int] =
-    super.doDelete(query)
-
-  override def truncate: Task[Int] = {
-    // In a join-domain, multiple logical LightDB collections share a single OpenSearch index.
-    // Truncate must therefore be scoped to this collection's documents; otherwise a join-child truncate would wipe parents.
-    //
-    // For non-join-domain stores (especially in tests), `_delete_by_query` can be significantly slower on a shared local
-    // OpenSearch cluster and may hit timeouts. When the store is not alias-backed we can safely drop/recreate the index,
-    // which is usually much faster and fully resets the collection.
-    if (config.joinDomain.nonEmpty && config.joinRole.nonEmpty) {
-      val query = OpenSearchDsl.term(config.joinFieldName, str(store.name))
-      client.deleteByQuery(store.writeIndexName, obj("query" -> query), refresh = refreshForDeleteByQuery)
-    } else if (config.useIndexAlias) {
-      // Alias-backed stores can point at physical indices; dropping indices here would require careful alias coordination.
-      // Keep truncate scoped via delete-by-query for correctness.
-      client.deleteByQuery(store.writeIndexName, obj("query" -> OpenSearchDsl.matchAll()), refresh = refreshForDeleteByQuery)
-    } else {
-      val body = OpenSearchTemplates.indexBody(store.model, store.fields, config, store.name, maxResultWindow = config.maxResultWindow)
-      val query = obj("query" -> OpenSearchDsl.matchAll())
-      client.count(store.indexName, query).flatMap { deleted =>
-        client
-          .deleteIndex(store.indexName)
-          .next(client.createIndex(store.indexName, body))
-          .map(_ => deleted)
-      }
-    }
-  }
 }
 
 private[opensearch] sealed trait OpenSearchBulkOp
@@ -946,9 +1234,14 @@ private[opensearch] sealed trait OpenSearchBulkOp
 private[opensearch] object OpenSearchBulkOp {
   def index(index: String, id: String, source: Json, routing: Option[String] = None): OpenSearchBulkOp =
     OpenSearchBulkOpIndex(index, id, source, routing)
+
+  def delete(index: String, id: String, routing: Option[String] = None): OpenSearchBulkOp =
+    OpenSearchBulkOpDelete(index, id, routing)
 }
 
 private[opensearch] case class OpenSearchBulkOpIndex(index: String, id: String, source: Json, routing: Option[String]) extends OpenSearchBulkOp
+
+private[opensearch] case class OpenSearchBulkOpDelete(index: String, id: String, routing: Option[String]) extends OpenSearchBulkOp
 
 private[opensearch] case class OpenSearchBulkRequest(ops: List[OpenSearchBulkOp]) {
   def toBulkNdjson: String = ops.map {
@@ -957,6 +1250,10 @@ private[opensearch] case class OpenSearchBulkRequest(ops: List[OpenSearchBulkOp]
       val meta = s"""{"index":{"_index":"$index","_id":"${escapeJson(id)}"$routingPart}}"""
       val src = JsonFormatter.Compact(source)
       s"$meta\n$src\n"
+    case OpenSearchBulkOpDelete(index, id, routing) =>
+      val routingPart = routing.map(r => s""","routing":"${escapeJson(r)}"""").getOrElse("")
+      val meta = s"""{"delete":{"_index":"$index","_id":"${escapeJson(id)}"$routingPart}}"""
+      s"$meta\n"
   }.mkString
 
   private def escapeJson(s: String): String =

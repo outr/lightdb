@@ -7,7 +7,7 @@ import lightdb.field.Field
 import lightdb.filter.FilterExtras
 import lightdb.id.Id
 import lightdb.lucene.blockjoin.LuceneBlockJoinStore
-import lightdb.lucene.blockjoin.LuceneBlockJoinStoreManager
+import lightdb.lucene.blockjoin.LuceneBlockJoinSyntax._
 import lightdb.lucene.LuceneStore
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.time.Timestamp
@@ -144,15 +144,11 @@ class LuceneBlockJoinExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec wi
     override def name: String = specName
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    private val blockJoinManager = LuceneBlockJoinStoreManager[Parent, Child, Child.type, Parent.type]()
-    private val parentsBase: Collection[Parent, Parent.type] =
-      storeCustom[Parent, Parent.type, LuceneBlockJoinStoreManager[Parent, Child, Child.type, Parent.type]](
-        model = Parent,
-        storeManager = blockJoinManager,
+    val parents: LuceneBlockJoinStore[Parent, Child, Child.type, Parent.type] =
+      this.blockJoinCollection[Parent, Child, Child.type, Parent.type](
+        parentModel = Parent,
         name = Some("entitySearch")
       )
-    val parents: LuceneBlockJoinStore[Parent, Child, Child.type, Parent.type] =
-      parentsBase.asInstanceOf[LuceneBlockJoinStore[Parent, Child, Child.type, Parent.type]]
     val childrenStoreForModelOnly: Collection[Child, Child.type] = store(Child) // not used for searching; just provides model+fields
 
     override def upgrades: List[DatabaseUpgrade] = Nil

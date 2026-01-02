@@ -7,7 +7,7 @@ import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.lucene.LuceneStore
 import lightdb.lucene.blockjoin.LuceneBlockJoinStore
-import lightdb.lucene.blockjoin.LuceneBlockJoinStoreManager
+import lightdb.lucene.blockjoin.LuceneBlockJoinSyntax._
 import lightdb.store.{Collection, StoreManager, StoreMode}
 import lightdb.store.hashmap.HashMapStore
 import lightdb.time.Timestamp
@@ -87,22 +87,14 @@ class LuceneBlockJoinIndexesStoreModeSpec extends AsyncWordSpec with AsyncTaskSp
     val childrenStoreForModelOnly: Collection[Child, Child.type] =
       storeCustom[Child, Child.type, lightdb.store.CollectionManager](Child, LuceneStore, name = Some("childrenModelOnly"))
 
-    private val blockJoinManager = LuceneBlockJoinStoreManager[Parent, Child, Child.type, Parent.type](
-      parentFieldFilter = f => f.name == "_id" || f.name == "name",    // keep it tiny; name is indexed but not stored
-      childFieldFilter = _.indexed,
-      childStoreAll = false
-    )
-
-    private val entitySearchBase: Collection[Parent, Parent.type] =
-      storeCustomWithMode[Parent, Parent.type, LuceneBlockJoinStoreManager[Parent, Child, Child.type, Parent.type]](
-        model = Parent,
-        storeManager = blockJoinManager,
-        storeMode = StoreMode.Indexes(parentsStorage),
-        name = Some("entitySearch")
-      )
-
     val entitySearch: LuceneBlockJoinStore[Parent, Child, Child.type, Parent.type] =
-      entitySearchBase.asInstanceOf[LuceneBlockJoinStore[Parent, Child, Child.type, Parent.type]]
+      this.blockJoinCollection[Parent, Child, Child.type, Parent.type](
+        parentModel = Parent,
+        name = Some("entitySearch"),
+        parentFieldFilter = (f: Field[Parent, _]) => f.name == "_id" || f.name == "name", // keep it tiny; name is indexed but not stored
+        childFieldFilter = (f: Field[Child, _]) => f.indexed,
+        childStoreAll = false
+      )(StoreMode.Indexes(parentsStorage))
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

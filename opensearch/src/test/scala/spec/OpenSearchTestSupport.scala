@@ -1,5 +1,8 @@
 package spec
 
+import fabric.rw._
+import profig.Profig
+
 /**
  * Test support for OpenSearch-backed specs.
  *
@@ -9,9 +12,6 @@ package spec
  * - Use refreshPolicy `true` for deterministic visibility in tests
  */
 trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suite =>
-  import fabric.rw._
-  import profig.Profig
-
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     initOpenSearchTestConfig()
@@ -87,6 +87,69 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
     // Use a per-JVM unique prefix to avoid index/mapping reuse across reruns (and between suites).
     if (!Profig("lightdb.opensearch.indexPrefix").exists()) {
       Profig("lightdb.opensearch.indexPrefix").store(s"lightdb_test_${java.util.UUID.randomUUID().toString.replace("-", "")}")
+    }
+
+    // When running against a persistent local OpenSearch, register ONE JVM shutdown hook to clean up our test indices.
+    // We intentionally do NOT delete indices during test execution because suites can share the same JVM and may run
+    // concurrently; deleting mid-run can cause 404s in other suites.
+    OpenSearchTestSupport.registerShutdownCleanupIfNeeded(resolvedBaseUrl)
+  }
+}
+
+object OpenSearchTestSupport {
+  @volatile private var shutdownHookRegistered: Boolean = false
+
+  def registerShutdownCleanupIfNeeded(resolvedBaseUrl: String): Unit = {
+    if (resolvedBaseUrl != "http://localhost:9200") return
+    if (shutdownHookRegistered) return
+    shutdownHookRegistered = true
+
+    sys.addShutdownHook {
+      try {
+        val baseUrl = profig.Profig("lightdb.opensearch.baseUrl").as[String]
+        val prefix = profig.Profig("lightdb.opensearch.indexPrefix").as[String]
+        if (baseUrl != "http://localhost:9200") return
+
+        def http(method: String, pathAndQuery: String): (Int, String) = {
+          val url = new java.net.URL(baseUrl + pathAndQuery)
+          val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
+          conn.setRequestMethod(method)
+          conn.setConnectTimeout(1000)
+          conn.setReadTimeout(5000)
+          conn.setInstanceFollowRedirects(false)
+          conn.connect()
+          val code = conn.getResponseCode
+          val is = if (code >= 200 && code < 400) conn.getInputStream else conn.getErrorStream
+          val body =
+            if (is != null) {
+              try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+              finally is.close()
+            } else ""
+          (code, body)
+        }
+
+        // Use _cat indices to list indices; then delete each index by exact name (compatible with destructive_requires_name).
+        val (code, body) = http("GET", s"/_cat/indices/${prefix}*?h=index&s=index")
+        if (code != 200) return
+        val indices = body
+          .split("\n")
+          .iterator
+          .map(_.trim)
+          .filter(s => s.nonEmpty && s.startsWith(prefix))
+          .toVector
+
+        indices.foreach { index =>
+          val (dCode, _) = http("DELETE", s"/$index")
+          if (dCode != 200 && dCode != 202 && dCode != 404) {
+            // Best-effort; never fail shutdown on cleanup.
+            scribe.warn(s"Unable to delete OpenSearch test index '$index' (status=$dCode)")
+          }
+        }
+      } catch {
+        case t: Throwable =>
+          // Best-effort; never fail shutdown on cleanup.
+          scribe.warn(s"OpenSearch shutdown cleanup failed: ${t.getMessage}")
+      }
     }
   }
 }

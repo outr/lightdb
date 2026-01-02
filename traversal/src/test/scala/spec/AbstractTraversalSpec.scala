@@ -5,8 +5,9 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.{EdgeId, Id}
 import lightdb.store.prefix.PrefixScanningStoreManager
+import lightdb.traversal.syntax._
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{LightDB, traverse}
+import lightdb.{LightDB, traversal}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid._
@@ -43,7 +44,6 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse graph from A to collect all reachable nodes" in {
       db.edges.transaction { tx =>
-        // Use transaction's bfs method
         tx.traverse.bfs[SimpleEdge, Node, Node](Id[Node]("A"))
           .targetIds
           .toList
@@ -52,23 +52,9 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
           }
       }
     }
-    /*"traverse graph in reverse from D to find parents" in {
-      db.edges.transaction { tx =>
-        // Create a GraphStep that traverses in reverse
-        val step = GraphStep.reverse[SimpleEdge, SimpleEdge.type, Node, Node](SimpleEdge)
-
-        // Use the step with the bfs method
-        tx.traverse.bfs[Node](Set(Id[Node]("D")), step)
-          .collectAllReachable()
-          .map { result =>
-            result should contain allOf(Id("B"), Id("C"))
-          }
-      }
-    }*/
     "traverse with depth limitation" in {
       val maxDepth = 1
       db.edges.transaction { tx =>
-        // Use transaction's bfs method with depth limit
         tx.traverse.bfs[SimpleEdge, Node, Node](Id[Node]("A"), maxDepth = maxDepth)
           .targetIds
           .toList
@@ -79,14 +65,9 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
     }
     "traverse using the step function approach" in {
       db.edges.transaction { tx =>
-        // Create a type-safe step function using our helper method
-        val step = traverse.createEdgeStepFunction[SimpleEdge, Node, SimpleEdge.type](tx)
-
-        // Use GraphTraversal.withStepFunction which mimics the old BFSEngine.withStepFunction
-        val traversal = traverse.withStepFunction(Set(Id[Node]("A")), step, maxDepth = Int.MaxValue)
-
-        // This call works the same as engine.collectAllReachable() did
-        traversal.collectAllReachable.map { result =>
+        val step = traversal.createEdgeStepFunction[SimpleEdge, Node, SimpleEdge.type](tx)
+        val t = traversal.withStepFunction(Set(Id[Node]("A")), step, maxDepth = Int.MaxValue)
+        t.collectAllReachable.map { result =>
           result should contain allOf(Id("B"), Id("C"), Id("D"))
         }
       }
@@ -131,3 +112,4 @@ object SimpleEdge extends EdgeModel[SimpleEdge, Node, Node] with JsonConversion[
 
   def apply(_from: Id[Node], _to: Id[Node], name: String): SimpleEdge = SimpleEdge(_from, _to, name, EdgeId(_from, _to))
 }
+

@@ -151,19 +151,34 @@ object OpenSearchTemplates {
   }
 
   private def stringMapping[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = {
-    val analyzer = if (field.isInstanceOf[Tokenized[_]]) "standard" else "standard"
     val keyword = if (config.keywordNormalize) {
       obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))
     } else {
       obj("type" -> str("keyword"))
     }
-    obj(
-      "type" -> str("text"),
-      "analyzer" -> str(analyzer),
-      "fields" -> obj(
-        "keyword" -> keyword
+
+    if (field.isInstanceOf[Tokenized[_]]) {
+      // Tokenized fields (ex: fullText) can be extremely large. Adding a `.keyword` subfield causes OpenSearch to
+      // attempt to index the entire string as a single keyword term, which can exceed the Lucene max term length
+      // (32766 bytes) and fail bulk indexing with "immense term" errors.
+      //
+      // LuceneStore doesn't need an "exact" keyword subfield for tokenized fulltext; it indexes terms for searching.
+      // Match that intent here by mapping tokenized fields as `text` only.
+      obj(
+        "type" -> str("text"),
+        "analyzer" -> str("standard")
       )
-    )
+    } else {
+      // Keep a text+keyword multifield mapping for non-tokenized strings for backward compatibility with
+      // existing indices and existing query/sort behavior (e.g. sorting on `<field>.keyword`).
+      obj(
+        "type" -> str("text"),
+        "analyzer" -> str("standard"),
+        "fields" -> obj(
+          "keyword" -> keyword
+        )
+      )
+    }
   }
 
   private def mappingForDefType[Doc <: Document[Doc]](field: Field[Doc, _], d: DefType, config: OpenSearchConfig): Json = d match {

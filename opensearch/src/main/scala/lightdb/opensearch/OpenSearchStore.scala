@@ -8,7 +8,7 @@ import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.{Collection, CollectionManager, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import rapid.Task
+import rapid.{Task, logger}
 
 import java.nio.file.Path
 import scala.language.implicitConversions
@@ -136,16 +136,21 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   // Backwards-compatible name used throughout the existing code: treat as the read target.
   lazy val indexName: String = readIndexName
 
-  override protected def initialize(): Task[Unit] = super.initialize().next {
+  // Ensure the OpenSearch index (and optional aliases) exist before the store is used.
+  // This is intentionally independent of transactions so it can be safely invoked from createTransaction to avoid
+  // startup races (db.init may be started but not completed when the first request arrives).
+  private lazy val ensureIndexReady: Task[Unit] = Task.defer {
     // In a join domain, only the join-parent should create/own the physical index mapping.
     // Child collections share the same index and can safely skip index creation during initialization.
     val isJoinChild: Boolean = config.joinDomain.nonEmpty && config.joinRole.contains("child")
 
     def checkMappingFor(targetIndex: String): Task[Unit] = {
+      val warn = config.mappingHashWarnOnly
       if (isJoinChild || config.ignoreMappingHash) {
         Task.unit
       } else {
-        val expected = OpenSearchTemplates.indexBody(model, fields, config, name, maxResultWindow = config.maxResultWindow)
+        val expectedBody = OpenSearchTemplates.indexBody(model, fields, config, name, maxResultWindow = config.maxResultWindow)
+        val expected = expectedBody
           .asObj.get("mappings")
           .flatMap(_.asObj.get("_meta"))
           .flatMap(_.asObj.get("lightdb"))
@@ -162,12 +167,34 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
               case Some(exp) if exp == actual =>
                 Task.unit
               case Some(exp) =>
-                Task.error(new RuntimeException(
-                  s"OpenSearch mapping hash mismatch for '$targetIndex' (expected=$exp actual=$actual). " +
-                    s"This usually means the DocumentModel/indexed fields changed incompatibly. " +
-                    s"Create a new physical index and swap the read/write alias (recommended), or set " +
-                    s"'lightdb.opensearch.ignoreMappingHash=true' to bypass this check."
-                ))
+                val msg =
+                  s"""OpenSearch mapping hash mismatch for '$targetIndex' (expected=$exp actual=$actual).
+                     |This usually means the DocumentModel/indexed fields changed incompatibly.
+                     |Create a new physical index and swap the read/write alias (recommended), or set
+                     |'lightdb.opensearch.ignoreMappingHash=true' to bypass this check.""".stripMargin.replace("\n", " ")
+                val canAutoMigrate =
+                  config.mappingHashAutoMigrate &&
+                    config.useIndexAlias && // safe migration requires aliases
+                    targetIndex != indexAliasName // if alias name is a real index, we can't safely alias-swap
+                if (canAutoMigrate) {
+                  logger.warn(s"$msg Auto-migrating via alias reindex+swap (mappingHashAutoMigrate=true)...")
+                  val writeAliasOpt = if (config.useWriteAlias) Some(writeAliasName) else None
+                  OpenSearchIndexMigration
+                    .reindexAndRepointAliases(
+                      client = client,
+                      readAlias = indexAliasName,
+                      writeAlias = writeAliasOpt,
+                      newIndexBody = expectedBody,
+                      defaultSuffix = config.indexAliasSuffix
+                    )
+                    .flatMap { newIndex =>
+                      logger.info(s"OpenSearch alias migration complete for '$indexAliasName' -> '$newIndex'")
+                    }
+                } else if (warn) {
+                  logger.warn(msg)
+                } else {
+                  Task.error(new RuntimeException(msg))
+                }
               case None =>
                 // Should not happen: our template always includes mapping_hash.
                 Task.unit
@@ -175,6 +202,21 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
         }
       }
     }
+
+    def isAlreadyExists(t: Throwable): Boolean = {
+      val msg = Option(t.getMessage).getOrElse("").toLowerCase
+      msg.contains("resource_already_exists_exception") || msg.contains("already exists")
+    }
+
+    def createIndexIdempotent(index: String, body: fabric.Json): Task[Unit] =
+      client.createIndex(index, body).attempt.flatMap {
+        case scala.util.Success(_) => Task.unit
+        case scala.util.Failure(t) if isAlreadyExists(t) =>
+          // Another node/process (or a concurrent transaction) created it first.
+          Task.unit
+        case scala.util.Failure(t) =>
+          Task.error(t)
+      }
 
     if (config.useIndexAlias) {
       // Ensure alias exists, creating a physical index + alias if needed.
@@ -191,23 +233,23 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
           if (isJoinChild) {
             Task.unit
           } else {
-          // If an index already exists with the alias name, we cannot create an alias with the same name.
-          // In that case, treat it as a non-aliased index (backward compatible).
-          client.indexExists(indexAliasName).flatMap {
-            case true =>
-              // Backward compatible: a real index exists with the alias name. We cannot safely create aliases.
-              checkMappingFor(indexAliasName)
-            case false =>
-              client.indexExists(physicalIndexName).flatMap {
-                case true =>
-                  checkMappingFor(physicalIndexName).next(createAliasesForPhysicalIndex())
-                case false =>
-                  val body = OpenSearchTemplates.indexBody(model, fields, config, name, maxResultWindow = config.maxResultWindow)
-                  client.createIndex(physicalIndexName, body)
-                    .next(checkMappingFor(physicalIndexName))
-                    .next(createAliasesForPhysicalIndex())
-              }
-          }
+            // If an index already exists with the alias name, we cannot create an alias with the same name.
+            // In that case, treat it as a non-aliased index (backward compatible).
+            client.indexExists(indexAliasName).flatMap {
+              case true =>
+                // Backward compatible: a real index exists with the alias name. We cannot safely create aliases.
+                checkMappingFor(indexAliasName)
+              case false =>
+                client.indexExists(physicalIndexName).flatMap {
+                  case true =>
+                    checkMappingFor(physicalIndexName).next(createAliasesForPhysicalIndex())
+                  case false =>
+                    val body = OpenSearchTemplates.indexBody(model, fields, config, name, maxResultWindow = config.maxResultWindow)
+                    createIndexIdempotent(physicalIndexName, body)
+                      .next(checkMappingFor(physicalIndexName))
+                      .next(createAliasesForPhysicalIndex())
+                }
+            }
           }
       }
     } else {
@@ -218,15 +260,18 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
           if (isJoinChild) {
             Task.unit
           } else {
-          // Minimal v1 index creation:
-          // - set max_result_window high enough for LightDB offset-based streaming in tests/specs
-          // - explicit mappings for indexed fields (strings/numbers/geo centers) to avoid sort/runtime 400s
-          val body = OpenSearchTemplates.indexBody(model, fields, config, name, maxResultWindow = config.maxResultWindow)
-          client.createIndex(indexName, body).next(checkMappingFor(indexName))
+            // Minimal v1 index creation:
+            // - set max_result_window high enough for LightDB offset-based streaming in tests/specs
+            // - explicit mappings for indexed fields (strings/numbers/geo centers) to avoid sort/runtime 400s
+            val body = OpenSearchTemplates.indexBody(model, fields, config, name, maxResultWindow = config.maxResultWindow)
+            createIndexIdempotent(indexName, body).next(checkMappingFor(indexName))
           }
       }
     }
-  }
+  }.singleton.unit
+
+  override protected def initialize(): Task[Unit] =
+    super.initialize().next(ensureIndexReady)
 
   private def createAliasesForPhysicalIndex(): Task[Unit] = {
     val actions = if (config.useWriteAlias) {
@@ -273,9 +318,8 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
-    OpenSearchTransaction(this, config, client, parent)
-  }
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] =
+    ensureIndexReady.next(Task(OpenSearchTransaction(this, config, client, parent)))
 }
 
 object OpenSearchStore extends CollectionManager with PrefixScanningStoreManager {

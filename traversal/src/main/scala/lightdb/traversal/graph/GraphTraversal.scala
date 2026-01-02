@@ -1,4 +1,4 @@
-package lightdb.traverse
+package lightdb.traversal.graph
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.graph.EdgeDocument
@@ -27,8 +27,6 @@ trait GraphTraversal {
   def fromStream[D <: Document[D]](idStream: Stream[Id[D]]): DocumentTraversalBuilder[D] =
     DocumentTraversalBuilder(idStream)
 
-  // Add this to the GraphTraversal object
-
   /**
    * Create a traversal using a step function, for compatibility with legacy code
    *
@@ -39,7 +37,8 @@ trait GraphTraversal {
    */
   def withStepFunction[N <: Document[N]](startIds: Set[Id[N]],
                                          step: Id[N] => Task[Set[Id[N]]],
-                                         maxDepth: Int = Int.MaxValue): StepFunctionTraversal[N] = StepFunctionTraversal[N](startIds, step, maxDepth)
+                                         maxDepth: Int = Int.MaxValue): StepFunctionTraversal[N] =
+    StepFunctionTraversal[N](startIds, step, maxDepth)
 
   /**
    * Create a type-safe step function from an edge type
@@ -48,9 +47,11 @@ trait GraphTraversal {
    * @param tx The transaction to use
    * @return A type-safe step function
    */
-  def createEdgeStepFunction[E <: EdgeDocument[E, N, N], N <: Document[N], M <: DocumentModel[E]](tx: PrefixScanningTransaction[E, M]): Id[N] => Task[Set[Id[N]]] = { id =>
-    // Use the transaction's traversal methods in a type-safe way
-    tx.traverse.edgesFor[E, N, N](id)
+  def createEdgeStepFunction[E <: EdgeDocument[E, N, N], N <: Document[N], M <: DocumentModel[E]](
+    tx: PrefixScanningTransaction[E, M]
+  ): Id[N] => Task[Set[Id[N]]] = { id =>
+    tx.prefixStream(id.value)
+      .filter(_._from == id)
       .map(_._to)
       .toList
       .map(_.toSet)
@@ -118,3 +119,4 @@ trait GraphTraversal {
     }
   }
 }
+

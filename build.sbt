@@ -74,11 +74,11 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.14.0"
 
-val reactifyVersion: String = "4.1.5"
-
 val rapidVersion: String = "2.3.1"
 
 val profigVersion: String = "3.4.18"
+
+val reactifyVersion: String = "4.1.5"
 
 val spatial4JVersion: String = "0.8"
 
@@ -134,6 +134,7 @@ lazy val core = crossProject(JVMPlatform)
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
+			"com.outr" %%% "reactify" % reactifyVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
 			"com.outr" %%% "profig" % profigVersion,
@@ -258,7 +259,7 @@ lazy val lucene = project.in(file("lucene"))
 	)
 
 lazy val opensearch = project.in(file("opensearch"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
 	.settings(
 		name := s"$projectName-opensearch",
 		fork := true,

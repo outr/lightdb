@@ -2,11 +2,13 @@ package lightdb.store.split
 
 import lightdb._
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.progress.ProgressManager
 import lightdb.store.{Collection, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import rapid.{Task, logger}
 
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import scala.language.implicitConversions
 
 class SplitCollection[
@@ -43,29 +45,29 @@ class SplitCollection[
     _ = t._searching = t2.asInstanceOf[t.store.searching.TX]
   } yield t
 
-  override def verify(): Task[Boolean] = transaction { transaction =>
+  override def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = transaction { transaction =>
     for {
       storageCount <- transaction.storage.count
       searchCount <- transaction.searching.count
       shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1 && SplitCollection.ReIndexWhenOutOfSync
       _ <- logger.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
-        .next(reIndexInternal(transaction))
+        .next(reIndexInternal(transaction, progressManager))
         .next(logger.info(s"$name re-indexed successfully!"))
         .when(shouldReIndex)
     } yield shouldReIndex
   }
 
-  override def reIndex(): Task[Boolean] = transaction { transaction =>
-    reIndexInternal(transaction).map(_ => true)
+  override def reIndex(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = transaction { transaction =>
+    reIndexInternal(transaction, progressManager).map(_ => true)
   }
 
-  override def reIndex(doc: Doc): Task[Boolean] = transaction { transaction =>
+  override def reIndexDoc(doc: Doc): Task[Boolean] = transaction { transaction =>
     transaction.upsert(doc).map(_ => true)
   }
 
   override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
 
-  private def reIndexInternal(transaction: TX): Task[Unit] = transaction.searching.truncate.flatMap { _ =>
+  private def reIndexInternal(transaction: TX, progressManager: ProgressManager): Task[Unit] = transaction.searching.truncate.flatMap { _ =>
     // IMPORTANT:
     // Some searching backends (notably OpenSearch) buffer writes and only flush on `commit`.
     // Doing `transaction.searching.insert(docs)` inside a parallel stream shares ONE searching transaction across
@@ -74,14 +76,24 @@ class SplitCollection[
     // - unbounded memory growth (buffering millions of ops before the outer transaction commits)
     //
     // To keep this safe and bounded, each chunk uses its own searching transaction and commits it immediately.
-    transaction.storage.stream
-      .chunk(SplitCollection.ReIndexChunkSize)
-      .par(SplitCollection.ReIndexMaxThreads) { docs =>
-        searching.transaction { stx =>
-          stx.insert(docs).next(stx.commit).unit
+    transaction.storage.count.flatMap { total =>
+      val counter = new AtomicInteger(0)
+      transaction.storage.stream
+        .chunk(SplitCollection.ReIndexChunkSize)
+        .par(SplitCollection.ReIndexMaxThreads) { docs =>
+          searching.transaction { stx =>
+            stx.insert(docs).next(stx.commit).function {
+              val count = counter.addAndGet(docs.length)
+              progressManager.percentage(
+                current = count,
+                total = total,
+                message = Some(s"Re-Indexing $name: $count of $total")
+              )
+            }
+          }
         }
-      }
-      .drain
+        .drain
+    }
   }
 
   override protected def doDispose(): Task[Unit] = storage.dispose.and(searching.dispose).next(super.doDispose())

@@ -21,7 +21,7 @@ import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, 
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
 import org.apache.lucene.index.Term
-import org.apache.lucene.search.MatchAllDocsQuery
+import org.apache.lucene.search.{MatchAllDocsQuery, ScoreDoc}
 import org.apache.lucene.util.BytesRef
 import rapid.Task
 
@@ -100,6 +100,45 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = searchBuilder(query)
+
+  /**
+   * Prefer keyset (searchAfter) pagination for streaming on Lucene when possible.
+   *
+   * We only enable this when `offset == 0` (keyset pagination cannot jump to arbitrary offsets efficiently).
+   * Otherwise we fall back to the default offset-based implementation.
+   */
+  override def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
+    if (query.pageSize.nonEmpty && query.offset == 0) {
+      val basePageSize = query.pageSize.getOrElse(1000)
+
+      def loop(after: Option[ScoreDoc], remaining: Option[Int]): rapid.Stream[(V, Double)] =
+        rapid.Stream.force {
+          val reqSize = remaining match {
+            case Some(r) if r <= 0 => 0
+            case Some(r) => math.min(r, basePageSize)
+            case None => basePageSize
+          }
+          if (reqSize <= 0) {
+            Task.pure(rapid.Stream.empty)
+          } else {
+            searchBuilder.streamPageAfter(query = query, after = after, pageSize = reqSize).map {
+              case (stream, nextAfter) =>
+                val nextRemaining = remaining.map(_ - reqSize)
+                nextAfter match {
+                  case Some(na) if remaining.forall(_ > reqSize) =>
+                    stream.append(loop(Some(na), nextRemaining))
+                  case _ =>
+                    stream
+                }
+            }
+          }
+        }
+
+      loop(after = None, remaining = query.limit)
+    } else {
+      super.streamScored(query)
+    }
+  }
 
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     Aggregator(query, store.model)
