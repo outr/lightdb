@@ -476,6 +476,10 @@ object OpenSearchRebuild {
         val meta = s"""{"index":{"_index":"$index","_id":"$id"$routingPart}}"""
         val src = JsonFormatter.Compact(source)
         meta.length + 1 + src.length + 1
+      case OpenSearchBulkOpDelete(index, id, routing) =>
+        val routingPart = routing.map(r => s""","routing":"$r"""").getOrElse("")
+        val meta = s"""{"delete":{"_index":"$index","_id":"$id"$routingPart}}"""
+        meta.length + 1
     }
 
     ops.foreach { op =>

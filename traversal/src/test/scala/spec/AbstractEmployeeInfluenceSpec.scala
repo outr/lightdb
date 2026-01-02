@@ -1,12 +1,13 @@
 package spec
 
 import fabric.rw._
-import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
 import lightdb.id.{EdgeId, Id}
 import lightdb.store.prefix.PrefixScanningStoreManager
+import lightdb.traversal.syntax._
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{LightDB, traversal}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
@@ -55,14 +56,22 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
         db.subordinates.transaction { subordinates =>
           def reportsAndCollaboratesStep: Id[Employee] => Task[Set[Id[Employee]]] = { id =>
             for {
-              reports <- subordinates.traverse.edgesFor[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee](id).map(_._to).toList.map(_.toSet)
-              collabs <- collaboratesWith.traverse.edgesFor[CollaboratesWith, Employee, Employee](id).map(_._to).toList.map(_.toSet)
+              reports <- subordinates.traverse
+                .edgesFor[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee](id)
+                .map(_._to)
+                .toList
+                .map(_.toSet)
+              collabs <- collaboratesWith.traverse
+                .edgesFor[CollaboratesWith, Employee, Employee](id)
+                .map(_._to)
+                .toList
+                .map(_.toSet)
             } yield reports ++ collabs
           }
 
           val start = Set(Id[Employee]("alice"))
 
-          traverse
+          traversal
             .withStepFunction(start, reportsAndCollaboratesStep, maxDepth = 10)
             .collectAllReachable
             .map { results =>
@@ -93,8 +102,10 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
     val reportsTo: S[ReportsTo, ReportsTo.type] = store[ReportsTo, ReportsTo.type](ReportsTo)
     val collaboratesWith: S[CollaboratesWith, CollaboratesWith.type] = store[CollaboratesWith, CollaboratesWith.type](CollaboratesWith)
 
-    val subordinatesModel: EdgeModel[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee] = ReverseEdgeDocument.createModel[ReportsTo, Employee, Employee]("subordinates")
-    val subordinates: S[ReverseEdgeDocument[ReportsTo, Employee, Employee], subordinatesModel.type] = reverseStore[ReportsTo, Employee, Employee, ReportsTo.type, subordinatesModel.type](subordinatesModel, reportsTo)
+    val subordinatesModel: EdgeModel[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee] =
+      ReverseEdgeDocument.createModel[ReportsTo, Employee, Employee]("subordinates")
+    val subordinates: S[ReverseEdgeDocument[ReportsTo, Employee, Employee], subordinatesModel.type] =
+      reverseStore[ReportsTo, Employee, Employee, ReportsTo.type, subordinatesModel.type](subordinatesModel, reportsTo)
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
@@ -125,3 +136,4 @@ object CollaboratesWith extends EdgeModel[CollaboratesWith, Employee, Employee] 
 
   def apply(_from: Id[Employee], _to: Id[Employee]): CollaboratesWith = CollaboratesWith(_from, _to, EdgeId(_from, _to))
 }
+

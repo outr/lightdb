@@ -91,10 +91,51 @@ case class OpenSearchConfig(baseUrl: String,
                              */
                             facetIncludeMissing: Boolean = false,
                             /**
+                             * OpenSearch facet implementation detail:
+                             *
+                             * LightDB needs Lucene-like facet semantics where:
+                             * - FacetResult.values can be limited (top-N)
+                             * - FacetResult.childCount reflects the TOTAL number of distinct children
+                             *
+                             * OpenSearch `terms` aggregations do not return the total number of distinct buckets. LightDB
+                             * computes `childCount` via a paged composite aggregation to avoid `search.max_buckets`.
+                             *
+                             * This setting acts as a safety cap for any facet aggregation that needs to fetch "many"
+                             * buckets (e.g. childrenLimit=None). It should generally be kept <= `search.max_buckets`.
+                             */
+                            facetAggMaxBuckets: Int = 65_536,
+                            /**
+                             * Page size for composite aggregations used to compute exact facet `childCount`.
+                             * Keep this well below `search.max_buckets` (default 65535).
+                             */
+                            facetChildCountPageSize: Int = 1000,
+                            /**
+                             * Safety cap: maximum number of composite pages to fetch when computing a facet `childCount`.
+                             * Prevents unbounded looping on extremely high-cardinality facets.
+                             */
+                            facetChildCountMaxPages: Int = 10_000,
+                            /**
                              * When true, skip mapping-hash verification during store initialization.
                              * This is primarily an escape hatch for existing indices created before mapping hashes existed.
                              */
                             ignoreMappingHash: Boolean = false,
+                            /**
+                             * When try, only warns when mapping-hash verification fails. Defaults to true.
+                             */
+                            mappingHashWarnOnly: Boolean = true,
+                            /**
+                             * When true (and useIndexAlias=true), automatically migrates mapping hash mismatches by:
+                             * - creating a new physical index (next generation)
+                             * - reindexing documents from the read alias into it
+                             * - atomically repointing read/write aliases
+                             *
+                             * This is intended for "derived index" usage (e.g. SplitCollection search backends) to provide
+                             * self-healing similar to SplitCollection's rebuild behavior.
+                             *
+                             * WARNING: This does not coordinate concurrent writes. For correctness under concurrent writes,
+                             * pause writes or perform a follow-up catch-up reindex before swapping.
+                             */
+                            mappingHashAutoMigrate: Boolean = false,
                             /**
                              * When enabled, bulk indexing failures will be captured into a dedicated dead-letter index
                              * (best-effort) before the transaction fails.
@@ -112,6 +153,16 @@ case class OpenSearchConfig(baseUrl: String,
                              * Default is false to preserve Lucene's case-sensitive exact matching semantics for non-tokenized fields.
                              */
                             keywordNormalize: Boolean = false,
+                            /**
+                             * When true, LightDB is allowed to emit OpenSearch `_script` sorts as a compatibility fallback
+                             * (e.g. for legacy indices missing `.keyword` subfields).
+                             *
+                             * WARNING: Script sorts can be extremely slow on large result sets and should generally be
+                             * avoided in production. Prefer fixing mappings / rebuilding indices instead.
+                             *
+                             * Default is false: never emit script sorts.
+                             */
+                            allowScriptSorts: Boolean = false,
                             joinDomain: Option[String] = None,
                             joinRole: Option[String] = None,
                             joinChildren: List[String] = Nil,
@@ -188,11 +239,17 @@ object OpenSearchConfig {
     val trackTotalHitsUpTo = optInt("lightdb.opensearch.trackTotalHitsUpTo")
       .filter(_ >= 1)
 
-    val useIndexAlias = optBoolean("lightdb.opensearch.useIndexAlias").getOrElse(false)
-    val indexAliasSuffix = optString("lightdb.opensearch.indexAliasSuffix")
+    val useIndexAlias = optBoolean(s"lightdb.opensearch.$collectionName.useIndexAlias")
+      .orElse(optBoolean("lightdb.opensearch.useIndexAlias"))
+      .getOrElse(false)
+    val indexAliasSuffix = optString(s"lightdb.opensearch.$collectionName.indexAliasSuffix")
+      .orElse(optString("lightdb.opensearch.indexAliasSuffix"))
       .getOrElse("_000001")
-    val useWriteAlias = optBoolean("lightdb.opensearch.useWriteAlias").getOrElse(false)
-    val writeAliasSuffix = optString("lightdb.opensearch.writeAliasSuffix")
+    val useWriteAlias = optBoolean(s"lightdb.opensearch.$collectionName.useWriteAlias")
+      .orElse(optBoolean("lightdb.opensearch.useWriteAlias"))
+      .getOrElse(false)
+    val writeAliasSuffix = optString(s"lightdb.opensearch.$collectionName.writeAliasSuffix")
+      .orElse(optString("lightdb.opensearch.writeAliasSuffix"))
       .getOrElse("_write")
 
     // Auth:
@@ -257,6 +314,12 @@ object OpenSearchConfig {
       .getOrElse(false)
 
     val ignoreMappingHash = optBoolean("lightdb.opensearch.ignoreMappingHash").getOrElse(false)
+    val mappingHashWarnOnly = optBoolean(s"lightdb.opensearch.$collectionName.mappingHash.warnOnly")
+      .orElse(optBoolean("lightdb.opensearch.mappingHash.warnOnly"))
+      .getOrElse(true)
+    val mappingHashAutoMigrate = optBoolean(s"lightdb.opensearch.$collectionName.mappingHash.autoMigrate")
+      .orElse(optBoolean("lightdb.opensearch.mappingHash.autoMigrate"))
+      .getOrElse(false)
 
     val deadLetterEnabled = optBoolean(s"lightdb.opensearch.$collectionName.deadLetter.enabled")
       .orElse(optBoolean("lightdb.opensearch.deadLetter.enabled"))
@@ -267,6 +330,10 @@ object OpenSearchConfig {
 
     val keywordNormalize = optBoolean(s"lightdb.opensearch.$collectionName.keyword.normalize")
       .orElse(optBoolean("lightdb.opensearch.keyword.normalize"))
+      .getOrElse(false)
+
+    val allowScriptSorts = optBoolean(s"lightdb.opensearch.$collectionName.allowScriptSorts")
+      .orElse(optBoolean("lightdb.opensearch.allowScriptSorts"))
       .getOrElse(false)
 
     def parseCsv(s: String): List[String] = s
@@ -426,9 +493,12 @@ object OpenSearchConfig {
       bulkConcurrency = bulkConcurrency,
       facetIncludeMissing = facetIncludeMissing,
       ignoreMappingHash = ignoreMappingHash,
+      mappingHashWarnOnly = mappingHashWarnOnly,
+      mappingHashAutoMigrate = mappingHashAutoMigrate,
       deadLetterEnabled = deadLetterEnabled,
       deadLetterIndexSuffix = deadLetterIndexSuffix,
       keywordNormalize = keywordNormalize,
+      allowScriptSorts = allowScriptSorts,
       joinDomain = joinDomain,
       joinRole = joinRole,
       joinChildren = joinChildren,

@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.field.Field
 import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
+import lightdb.progress.ProgressManager
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionManager}
 import lightdb.trigger.StoreTrigger
@@ -87,7 +88,14 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
    * stores to re-index or all stores will be invoked.
    */
-  def reIndex(stores: List[Store[_, _]] = stores): Task[Int] = stores.map(_.reIndex()).tasksPar.map(_.count(identity))
+  def reIndex(stores: List[Store[_, _]] = stores, progressManager: ProgressManager = ProgressManager.none): Task[Int] = if (stores.nonEmpty) {
+    val pms = progressManager.split(stores.length)
+    stores.zip(pms).map {
+      case (store, pm) => store.reIndex(pm)
+    }.tasksPar.map(_.count(identity))
+  } else {
+    Task.pure(0)
+  }
 
   /**
    * Offers each store the ability to optimize the store.
@@ -215,6 +223,24 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       _stores = _stores ::: List(store)
     }
     if (isInitialized) { // Already initialized database, init store immediately
+      store.init.sync()
+    }
+    store
+  }
+
+  /**
+   * Registers a pre-constructed store with this database.
+   *
+   * This exists to support advanced / specialized store construction paths that want to avoid going through
+   * StoreManager.create (e.g. to keep call sites and internal implementation fully type-safe without casts).
+   *
+   * The store will be initialized immediately if the database is already initialized.
+   */
+  def registerStore[Doc <: Document[Doc], Model <: DocumentModel[Doc], S0 <: Store[Doc, Model]](store: S0): S0 = {
+    synchronized {
+      _stores = _stores ::: List(store)
+    }
+    if (isInitialized) {
       store.init.sync()
     }
     store

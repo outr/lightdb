@@ -1,4 +1,4 @@
-package lightdb.traverse
+package lightdb.traversal.graph
 
 import lightdb.doc.Document
 import lightdb.graph.EdgeDocument
@@ -38,3 +38,4 @@ case class DocumentTraversalBuilder[D <: Document[D]](ids: Stream[Id[D]],
    */
   def documents(tx: Transaction[D, _]): Stream[D] = ids.evalMap(id => tx(id))
 }
+

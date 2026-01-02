@@ -1,4 +1,4 @@
-package lightdb.traverse
+package lightdb.traversal.graph
 
 import lightdb.doc.Document
 import lightdb.graph.EdgeDocument
@@ -23,3 +23,4 @@ case class TraversalPath[E <: EdgeDocument[E, From, To], From <: Document[From],
    */
   def length: Int = edges.length
 }
+

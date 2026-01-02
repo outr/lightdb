@@ -31,7 +31,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   protected def memoryOnly: Boolean = false
 
   private val adam = Person("Adam", 21, _id = Person.id("adam"))
-  private val brenda = Person("Brenda", 11, _id = Person.id("brenda"))
+  private val brenda = Person("Brenda", 11, bestFriend = Some(adam._id), _id = Person.id("brenda"))
   private val charlie = Person("Charlie", 35, _id = Person.id("charlie"))
   private val diana = Person("Diana", 15, _id = Person.id("diana"))
   private val evan = Person("Evan", 53, Some(City("Dallas")), _id = Person.id("evan"))
@@ -39,7 +39,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   private val greg = Person("Greg", 12, _id = Person.id("greg"))
   private val hanna = Person("Hanna", 62, _id = Person.id("hanna"))
   private val ian = Person("Ian", 89, _id = Person.id("ian"))
-  private val jenna = Person("Jenna", 4, _id = Person.id("jenna"))
+  private val jenna = Person("Jenna", 4, bestFriend = Some(hanna._id), _id = Person.id("jenna"))
   private val kevin = Person("Kevin", 33, _id = Person.id("kevin"))
   private val linda = Person("Linda", 72, _id = Person.id("linda"))
   private val mike = Person("Mike", 42, _id = Person.id("mike"))
@@ -176,6 +176,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.people.transaction { txn =>
         txn.query.filter(_.allNames.hasAny(List("greg", "hanna", "grouchy"))).toList.map { list =>
           list.map(_.name) should be(List("Greg", "Hanna", "Oscar"))
+        }
+      }
+    }
+    "verify in filter" in {
+      db.people.transaction { txn =>
+        txn.query.filter(_.bestFriend.in(List(Some(hanna._id), Some(ian._id)))).toList.map { list =>
+          list.map(_.name) should be(List("Jenna"))
         }
       }
     }
@@ -731,6 +738,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
                     city: Option[City] = None,
                     nicknames: Set[String] = Set.empty,
                     friends: List[Id[Person]] = Nil,
+                    bestFriend: Option[Id[Person]] = None,
                     gpa: Option[Double] = None,
                     created: Timestamp = Timestamp(),
                     modified: Timestamp = Timestamp(),
@@ -744,6 +752,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val city: I[Option[City]] = field.index(_.city)
     val nicknames: I[Set[String]] = field.index(_.nicknames)
     val friends: I[List[Id[Person]]] = field.index(_.friends)
+    val bestFriend: I[Option[Id[Person]]] = field.index(_.bestFriend)
     val gpa: I[Option[Double]] = field.index(_.gpa)
     val allNames: I[List[String]] = field.index(p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized((doc: Person) => s"${doc.name} ${doc.age}")

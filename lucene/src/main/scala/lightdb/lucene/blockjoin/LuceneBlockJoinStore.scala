@@ -64,13 +64,13 @@ class LuceneBlockJoinStore[
 
   private def selectedParentFields: List[Field[Parent, _]] = {
     val base = fields.filter(parentFieldFilter)
-    val id = model._id.asInstanceOf[Field[Parent, _]]
+    val id: Field[Parent, _] = model._id
     (id :: base).distinct
   }
 
   private def selectedChildFields: List[Field[Child, _]] = {
-    val base = model.childStore.model.fields.asInstanceOf[List[Field[Child, _]]].filter(childFieldFilter)
-    val id = model.childStore.model._id.asInstanceOf[Field[Child, _]]
+    val base = model.childStore.model.fields.filter(childFieldFilter)
+    val id: Field[Child, _] = model.childStore.model._id
     (id :: base).distinct
   }
 

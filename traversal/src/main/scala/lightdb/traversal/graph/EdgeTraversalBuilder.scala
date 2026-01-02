@@ -1,4 +1,4 @@
-package lightdb.traverse
+package lightdb.traversal.graph
 
 import lightdb.doc.Document
 import lightdb.graph.EdgeDocument
@@ -13,11 +13,13 @@ import rapid.Stream
  * @param tx       A transaction that supports prefix scanning for the edge type
  * @param maxDepth The maximum traversal depth
  */
-case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Document[T]](fromIds: Stream[Id[F]],
-                                                                                                tx: PrefixScanningTransaction[E, _],
-                                                                                                maxDepth: Int,
-                                                                                                edgeFilter: E => Boolean = (_: E) => true,
-                                                                                                strategy: TraversalStrategy = TraversalStrategy.BFS) {
+case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T <: Document[T]](
+  fromIds: Stream[Id[F]],
+  tx: PrefixScanningTransaction[E, _],
+  maxDepth: Int,
+  edgeFilter: E => Boolean = (_: E) => true,
+  strategy: TraversalStrategy = TraversalStrategy.BFS
+) {
   /**
    * Configure the maximum traversal depth
    */
@@ -277,3 +279,4 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
     findPaths()
   }
 }
+

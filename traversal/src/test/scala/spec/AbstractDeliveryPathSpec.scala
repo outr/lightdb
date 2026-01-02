@@ -1,12 +1,12 @@
 package spec
 
 import fabric.rw._
-import lightdb._
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.{EdgeId, Id}
 import lightdb.store.prefix.PrefixScanningStoreManager
 import lightdb.upgrade.DatabaseUpgrade
+import lightdb.{LightDB, traversal}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.{AsyncTaskSpec, Task}
@@ -54,7 +54,7 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
             }
           }
         }
-      }
+      }.succeed
     }
     "traverse full delivery path from warehouse to customer" in {
       db.shipsTo.transaction { shipsTo =>
@@ -63,7 +63,7 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
             db.deliversToCustomer.transaction { deliversToCustomer =>
               db.customers.transaction { customers =>
                 val warehouse: Id[Warehouse] = Id("warehouse1")
-                traverse
+                traversal
                   .from(warehouse)
                   .follow[ShipsTo, Truck](shipsTo)
                   .follow[DeliversToDepot, Depot](deliversToDepot)
@@ -148,30 +148,39 @@ object CustomerModel extends DocumentModel[Customer] with JsonConversion[Custome
   val name: F[String] = field(_.name)
 }
 
-case class ShipsTo(_from: Id[Warehouse], _to: Id[Truck], _id: EdgeId[ShipsTo, Warehouse, Truck]) extends EdgeDocument[ShipsTo, Warehouse, Truck] with Document[ShipsTo]
+case class ShipsTo(_from: Id[Warehouse], _to: Id[Truck], _id: EdgeId[ShipsTo, Warehouse, Truck])
+  extends EdgeDocument[ShipsTo, Warehouse, Truck] with Document[ShipsTo]
+
 object ShipsTo extends EdgeModel[ShipsTo, Warehouse, Truck] with JsonConversion[ShipsTo] {
   override implicit val rw: RW[ShipsTo] = RW.gen
 
   def apply(_from: Id[Warehouse], _to: Id[Truck]): ShipsTo = ShipsTo(_from, _to, EdgeId(_from, _to))
 }
 
-case class DeliversToDepot(_from: Id[Truck], _to: Id[Depot], _id: EdgeId[DeliversToDepot, Truck, Depot]) extends EdgeDocument[DeliversToDepot, Truck, Depot] with Document[DeliversToDepot]
+case class DeliversToDepot(_from: Id[Truck], _to: Id[Depot], _id: EdgeId[DeliversToDepot, Truck, Depot])
+  extends EdgeDocument[DeliversToDepot, Truck, Depot] with Document[DeliversToDepot]
+
 object DeliversToDepot extends EdgeModel[DeliversToDepot, Truck, Depot] with JsonConversion[DeliversToDepot] {
   override implicit val rw: RW[DeliversToDepot] = RW.gen
 
   def apply(_from: Id[Truck], _to: Id[Depot]): DeliversToDepot = DeliversToDepot(_from, _to, EdgeId(_from, _to))
 }
 
-case class LoadsTo(_from: Id[Depot], _to: Id[Drone], _id: EdgeId[LoadsTo, Depot, Drone]) extends EdgeDocument[LoadsTo, Depot, Drone] with Document[LoadsTo]
+case class LoadsTo(_from: Id[Depot], _to: Id[Drone], _id: EdgeId[LoadsTo, Depot, Drone])
+  extends EdgeDocument[LoadsTo, Depot, Drone] with Document[LoadsTo]
+
 object LoadsTo extends EdgeModel[LoadsTo, Depot, Drone] with JsonConversion[LoadsTo] {
   override implicit val rw: RW[LoadsTo] = RW.gen
 
   def apply(_from: Id[Depot], _to: Id[Drone]): LoadsTo = LoadsTo(_from, _to, EdgeId(_from, _to))
 }
 
-case class DeliversToCustomer(_from: Id[Drone], _to: Id[Customer], _id: EdgeId[DeliversToCustomer, Drone, Customer]) extends EdgeDocument[DeliversToCustomer, Drone, Customer] with Document[DeliversToCustomer]
+case class DeliversToCustomer(_from: Id[Drone], _to: Id[Customer], _id: EdgeId[DeliversToCustomer, Drone, Customer])
+  extends EdgeDocument[DeliversToCustomer, Drone, Customer] with Document[DeliversToCustomer]
+
 object DeliversToCustomer extends EdgeModel[DeliversToCustomer, Drone, Customer] with JsonConversion[DeliversToCustomer] {
   override implicit val rw: RW[DeliversToCustomer] = RW.gen
 
   def apply(_from: Id[Drone], _to: Id[Customer]): DeliversToCustomer = DeliversToCustomer(_from, _to, EdgeId(_from, _to))
 }
+

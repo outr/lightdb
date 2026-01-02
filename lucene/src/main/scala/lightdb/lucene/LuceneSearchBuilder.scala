@@ -131,9 +131,9 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
     )
   }
 
-  private def materializeScoreDocs[V](query: Query[Doc, Model, V],
-                                      scoreDocs: List[ScoreDoc],
-                                      storedFields: StoredFields): Iterator[(V, Double)] = {
+  private[lucene] def materializeScoreDocs[V](query: Query[Doc, Model, V],
+                                              scoreDocs: List[ScoreDoc],
+                                              storedFields: StoredFields): Iterator[(V, Double)] = {
     val storedIdFieldName = parentFieldName("_id")
     val idsAndScores = scoreDocs.map(doc => Id[Doc](storedFields.document(doc.doc).get(storedIdFieldName)) -> doc.score.toDouble)
     def jsonField[F](scoreDoc: ScoreDoc, field: Field[Doc, F]): Json = {
@@ -290,12 +290,51 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
     }
   }
 
-  private def sort(sort: List[Sort]): LuceneSort = {
+  private[lucene] def sort(sort: List[Sort]): LuceneSort = {
     val sortFields = sort match {
       case Nil => List(SortField.FIELD_SCORE)
       case _ => sort.map(sort2SortField)
     }
     new LuceneSort(sortFields: _*)
+  }
+
+  private[lucene] def streamPageAfter[V](query: Query[Doc, Model, V],
+                                         after: Option[ScoreDoc],
+                                         pageSize: Int): Task[(rapid.Stream[(V, Double)], Option[ScoreDoc])] = Task {
+    val indexSearcher = tx.state.indexSearcher
+    val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
+
+    // Enforce a stable sort for searchAfter:
+    val baseSort = if (query.sort.nonEmpty) query.sort else List(Sort.IndexOrder)
+    val stableSortList = if (baseSort.exists(_ == Sort.IndexOrder)) baseSort else baseSort ::: List(Sort.IndexOrder)
+    val s: LuceneSort = sort(stableSortList)
+
+    val limit = pageSize
+    if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
+
+    val top: TopFieldDocs =
+      indexSearcher.searchAfter(after.orNull, q, limit, s, query.scoreDocs)
+
+    val scoreDocs: List[ScoreDoc] = {
+      val list = top.scoreDocs.toList.map { scoreDoc =>
+        if (query.scoreDocs) {
+          val explanation = indexSearcher.explain(q, scoreDoc.doc)
+          new ScoreDoc(scoreDoc.doc, explanation.getValue.floatValue())
+        } else {
+          scoreDoc
+        }
+      }
+      query.minDocScore match {
+        case Some(min) => list.filter(_.score.toDouble >= min)
+        case None => list
+      }
+    }
+
+    val storedFields: StoredFields = indexSearcher.storedFields()
+    val iterator: Iterator[(V, Double)] = materializeScoreDocs(query, scoreDocs, storedFields)
+    val stream = rapid.Stream.fromIterator(Task(iterator))
+    val nextAfter = top.scoreDocs.lastOption
+    (stream, nextAfter)
   }
 
   private def sort2SortField(sort: Sort): SortField = {

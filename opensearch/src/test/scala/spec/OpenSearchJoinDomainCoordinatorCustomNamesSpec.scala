@@ -78,7 +78,8 @@ class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with 
             tx.truncate.next(tx.insert(p)).next(tx.commit)
           }
           _ <- db.children.transaction { tx =>
-            tx.truncate.next(tx.insert(c)).next(tx.commit)
+            // Truncate now drops/recreates the entire join-domain index; don't truncate from the child store here.
+            tx.insert(c).next(tx.commit)
           }
           matched <- db.parents.transaction { tx =>
             tx.query

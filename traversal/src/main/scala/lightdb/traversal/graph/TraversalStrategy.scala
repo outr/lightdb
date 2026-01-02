@@ -1,4 +1,4 @@
-package lightdb.traverse
+package lightdb.traversal.graph
 
 /**
  * Traversal strategies
@@ -9,3 +9,4 @@ object TraversalStrategy {
   case object BFS extends TraversalStrategy
   case object DFS extends TraversalStrategy
 }
+
