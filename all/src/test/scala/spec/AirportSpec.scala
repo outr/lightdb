@@ -8,7 +8,8 @@ import lightdb.id.{EdgeId, Id}
 import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.SplitStoreManager
-import lightdb.traverse.TraversalPath
+import lightdb.traversal.TraversalPath
+import lightdb.traversal.syntax._
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -211,7 +212,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val lax = Airport.id("LAX")
 
       DB.flights.transaction { tx =>
-        val reachable = traverse
+        val reachable = traversal
           .from(lax)
           .follow[Flight, Airport](tx.storage)
           .targetIds

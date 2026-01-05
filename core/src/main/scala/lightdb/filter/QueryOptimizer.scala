@@ -30,5 +30,5 @@ object QueryOptimizer {
    * For example, Must and Should conditions can be merged.
    */
   private def canMerge(condition: Condition): Boolean =
-    condition == Condition.Must || condition == Condition.Should
+    condition == Condition.Must || condition == Condition.Filter || condition == Condition.Should
 }

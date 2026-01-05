@@ -63,7 +63,18 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
   private lazy val dbPath: Path = Path.of(s"db/$specName")
   deleteDirectoryIfExists(dbPath)
 
-  protected var db: DB = new DB
+  protected var _db: DB = _
+
+  /**
+   * Lazily create the DB instance so store-specific test helpers (e.g. config via Profig) can run during subclass
+   * initialization before the first DB is constructed.
+   */
+  protected def db: DB = {
+    if (_db == null) {
+      _db = new DB
+    }
+    _db
+  }
 
   specName should {
     "initialize the database" in {

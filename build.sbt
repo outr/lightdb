@@ -17,7 +17,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.14.0-SNAPSHOT"
+ThisBuild / version := "4.14.0-SNAPSHOT1"
 ThisBuild / scalaVersion := scala3
 ThisBuild / crossScalaVersions := allScalaVersions
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
@@ -74,9 +74,11 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.14.0"
 
-val reactifyVersion: String = "4.1.5"
+val rapidVersion: String = "2.3.2"
 
-val rapidVersion: String = "2.3.1"
+val profigVersion: String = "3.4.18"
+
+val reactifyVersion: String = "4.1.5"
 
 val spatial4JVersion: String = "0.8"
 
@@ -112,10 +114,14 @@ val postgresqlVersion: String = "42.7.8"
 
 val chronicleMapVersion: String = "3.27ea2"
 
+val spiceVersion: String = "0.10.19"
+
 val scalaTestVersion: String = "3.2.19"
 
+val testcontainersVersion: String = "2.0.3"
+
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, sql, sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -128,8 +134,10 @@ lazy val core = crossProject(JVMPlatform)
 		name := s"$projectName-core",
 		libraryDependencies ++= Seq(
 			"com.outr" %%% "scribe" % scribeVersion,
+			"com.outr" %%% "reactify" % reactifyVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
 			"com.outr" %% "scribe-slf4j" % scribeVersion,
+			"com.outr" %%% "profig" % profigVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,
 			"com.outr" %%% "rapid-core" % rapidVersion,
@@ -168,6 +176,17 @@ lazy val sql = project.in(file("sql"))
 		libraryDependencies ++= Seq(
 			"com.zaxxer" % "HikariCP" % hikariCPVersion,
 			"org.apache.commons" % "commons-dbcp2" % commonsDBCP2Version,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val traversal = project.in(file("traversal"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-traversal",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
@@ -233,7 +252,21 @@ lazy val lucene = project.in(file("lucene"))
 			"org.apache.lucene" % "lucene-facet" % luceneVersion,
 			"org.apache.lucene" % "lucene-highlighter" % luceneVersion,
 			"org.apache.lucene" % "lucene-grouping" % luceneVersion,
+			"org.apache.lucene" % "lucene-join" % luceneVersion,
 			"org.apache.lucene" % "lucene-backward-codecs" % luceneVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val opensearch = project.in(file("opensearch"))
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
+	.settings(
+		name := s"$projectName-opensearch",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"com.outr" %% "spice-client-netty" % spiceVersion,
+			"org.testcontainers" % "testcontainers" % testcontainersVersion % Test,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
@@ -251,7 +284,7 @@ lazy val halodb = project.in(file("halodb"))
 	)
 
 lazy val rocksdb = project.in(file("rocksdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, traversal % "test->test")
 	.settings(
 		name := s"$projectName-rocks",
 		fork := true,
@@ -314,7 +347,7 @@ lazy val redis = project.in(file("redis"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", sqlite, postgresql, duckdb, h2, lucene, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
@@ -325,7 +358,7 @@ lazy val all = project.in(file("all"))
 	)
 
 lazy val benchmark = project.in(file("benchmark"))
-	.dependsOn(all)
+	.dependsOn(all, core.jvm, core.jvm % "test->test")
 	.enablePlugins(JmhPlugin)
 	.settings(
 		name := s"$projectName-benchmark",
@@ -343,7 +376,9 @@ lazy val benchmark = project.in(file("benchmark"))
 //			"com.outr" %% "lightdb-all" % "0.11.0",
 			"org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
 			"org.jooq" % "jooq" % "3.19.10",
-			"io.quickchart" % "QuickChart" % "1.2.0"
+			"io.quickchart" % "QuickChart" % "1.2.0",
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"com.outr" %%% "rapid-test" % rapidVersion % Test
 		)
 	)
 
