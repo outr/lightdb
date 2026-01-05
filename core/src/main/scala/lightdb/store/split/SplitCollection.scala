@@ -68,31 +68,18 @@ class SplitCollection[
   override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
 
   private def reIndexInternal(transaction: TX, progressManager: ProgressManager): Task[Unit] = transaction.searching.truncate.flatMap { _ =>
-    // IMPORTANT:
-    // Some searching backends (notably OpenSearch) buffer writes and only flush on `commit`.
-    // Doing `transaction.searching.insert(docs)` inside a parallel stream shares ONE searching transaction across
-    // threads and across the entire reindex. That can lead to:
-    // - thread-safety issues (lost buffered ops)
-    // - unbounded memory growth (buffering millions of ops before the outer transaction commits)
-    //
-    // To keep this safe and bounded, each chunk uses its own searching transaction and commits it immediately.
     transaction.storage.count.flatMap { total =>
       val counter = new AtomicInteger(0)
-      transaction.storage.stream
-        .chunk(SplitCollection.ReIndexChunkSize)
-        .par(SplitCollection.ReIndexMaxThreads) { docs =>
-          searching.transaction { stx =>
-            stx.insert(docs).next(stx.commit).function {
-              val count = counter.addAndGet(docs.length)
-              progressManager.percentage(
-                current = count,
-                total = total,
-                message = Some(s"Re-Indexing $name: $count of $total")
-              )
-            }
-          }
+      transaction.searching.insert(transaction.storage.stream.evalTap { _ =>
+        Task {
+          val count = counter.incrementAndGet()
+          progressManager.percentage(
+            current = count,
+            total = total,
+            message = Some(s"Re-Indexing $name: $count of $total")
+          )
         }
-        .drain
+      }).unit
     }
   }
 
@@ -100,7 +87,5 @@ class SplitCollection[
 }
 
 object SplitCollection {
-  var ReIndexMaxThreads: Int = 32
-  var ReIndexChunkSize: Int = 128
   var ReIndexWhenOutOfSync: Boolean = true
 }

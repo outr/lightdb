@@ -42,6 +42,14 @@ case class OpenSearchConfig(baseUrl: String,
                             logRequestsExcludePaths: List[String] = Nil,
                             maxResultWindow: Int = 250_000,
                             /**
+                             * Optional OpenSearch index sorting configuration.
+                             *
+                             * When configured, LightDB will emit `index.sort.field` / `index.sort.order` in the index settings
+                             * at index creation time. (Changing this requires creating a new index.)
+                             */
+                            indexSortFields: List[String] = Nil,
+                            indexSortOrders: List[String] = Nil,
+                            /**
                              * If set, OpenSearch will compute exact totals only up to this threshold. Above it, totals become "gte".
                              * This is a useful production knob to avoid expensive exact hit counts.
                              *
@@ -97,13 +105,30 @@ case class OpenSearchConfig(baseUrl: String,
                              * - FacetResult.values can be limited (top-N)
                              * - FacetResult.childCount reflects the TOTAL number of distinct children
                              *
-                             * OpenSearch `terms` aggregations do not return the total number of distinct buckets. LightDB
-                             * computes `childCount` via a paged composite aggregation to avoid `search.max_buckets`.
+                             * OpenSearch `terms` aggregations do not return the total number of distinct buckets.
+                             *
+                             * Default behavior:
+                             * - Use `cardinality` aggregation for fast (approximate) `childCount`.
+                             * - Allow opting into exact totals via composite aggregation paging when required.
                              *
                              * This setting acts as a safety cap for any facet aggregation that needs to fetch "many"
                              * buckets (e.g. childrenLimit=None). It should generally be kept <= `search.max_buckets`.
                              */
                             facetAggMaxBuckets: Int = 65_536,
+                            /**
+                             * Controls how OpenSearch computes FacetResult.childCount.
+                             *
+                             * - "cardinality" (default): fast approximate distinct count (one request).
+                             * - "composite": exact distinct count by paging composite aggs (many requests for high-cardinality facets).
+                             *
+                             * Note: hierarchical facet paths may force composite mode for correctness.
+                             */
+                            facetChildCountMode: String = "cardinality",
+                            /**
+                             * Optional OpenSearch cardinality precision threshold (1..40000). Higher values improve accuracy
+                             * at the cost of memory on the OpenSearch node. Only used when facetChildCountMode=cardinality.
+                             */
+                            facetChildCountPrecisionThreshold: Option[Int] = None,
                             /**
                              * Page size for composite aggregations used to compute exact facet `childCount`.
                              * Keep this well below `search.max_buckets` (default 65535).
@@ -194,6 +219,19 @@ object OpenSearchConfig {
     def optLong(key: String): Option[Long] =
       Profig(key).opt[Long]
 
+    def parseCsv(s: String): List[String] = s
+      .split(",")
+      .toList
+      .map(_.trim)
+      .filter(_.nonEmpty)
+
+    def optStringList(key: String): List[String] =
+      Profig(key)
+        .opt[List[String]]
+        .getOrElse(optString(key).map(parseCsv).getOrElse(Nil))
+        .map(_.trim)
+        .filter(_.nonEmpty)
+
     val baseUrl = optString("lightdb.opensearch.baseUrl")
       .getOrElse(throw new RuntimeException("Missing config: lightdb.opensearch.baseUrl"))
 
@@ -214,14 +252,12 @@ object OpenSearchConfig {
     val slowRequestLogAfter = slowRequestLogAfterMillis.map(_.millis).orElse(Some(60.seconds))
     val slowRequestLogEvery = slowRequestLogEveryMillis.map(_.millis).orElse(Some(60.seconds))
     val indexPrefix = optString("lightdb.opensearch.indexPrefix")
-    // Default to `wait_for` so that once a LightDB transaction commits, subsequent OpenSearch-backed queries
-    // observe the changes without requiring arbitrary sleeps. This matches the common DB expectation of
-    // read-after-write consistency at transaction boundaries.
-    //
-    // Override to "false" for higher throughput when eventual visibility is acceptable.
+    // Default to `false` for maximum ingest throughput. LightDB's OpenSearchTransaction will explicitly refresh
+    // at commit boundaries, so documents become searchable after the transaction completes without paying a
+    // per-bulk "wait_for" cost.
     val refreshPolicy = optString(s"lightdb.opensearch.$collectionName.refreshPolicy")
       .orElse(optString("lightdb.opensearch.refreshPolicy"))
-      .orElse(Some("wait_for"))
+      .orElse(Some("false"))
 
     val opaqueId = optString("lightdb.opensearch.opaqueId")
     val logRequests = optBoolean("lightdb.opensearch.logRequests").getOrElse(false)
@@ -235,6 +271,15 @@ object OpenSearchConfig {
     val maxResultWindow = optInt("lightdb.opensearch.maxResultWindow")
       .filter(_ >= 1)
       .getOrElse(250_000)
+
+    val indexSortFields = optStringList(s"lightdb.opensearch.$collectionName.index.sort.fields") match {
+      case Nil => optStringList("lightdb.opensearch.index.sort.fields")
+      case list => list
+    }
+    val indexSortOrders = optStringList(s"lightdb.opensearch.$collectionName.index.sort.orders") match {
+      case Nil => optStringList("lightdb.opensearch.index.sort.orders")
+      case list => list
+    }
 
     val trackTotalHitsUpTo = optInt("lightdb.opensearch.trackTotalHitsUpTo")
       .filter(_ >= 1)
@@ -297,6 +342,36 @@ object OpenSearchConfig {
     val searchFilterPath = optString(s"lightdb.opensearch.$collectionName.search.filterPath")
       .orElse(optString("lightdb.opensearch.search.filterPath"))
 
+    // Facet tuning (search-time)
+    val facetAggMaxBuckets = optInt(s"lightdb.opensearch.$collectionName.facetAggMaxBuckets")
+      .orElse(optInt("lightdb.opensearch.facetAggMaxBuckets"))
+      .filter(_ >= 1)
+      .getOrElse(65_536)
+
+    val facetChildCountMode = optString(s"lightdb.opensearch.$collectionName.facetChildCount.mode")
+      .orElse(optString("lightdb.opensearch.facetChildCount.mode"))
+      .map(_.trim.toLowerCase)
+      .filter(s => Set("cardinality", "composite").contains(s))
+      .getOrElse("cardinality")
+
+    val facetChildCountPrecisionThreshold = optInt(s"lightdb.opensearch.$collectionName.facetChildCount.precisionThreshold")
+      .orElse(optInt("lightdb.opensearch.facetChildCount.precisionThreshold"))
+      .filter(v => v >= 1 && v <= 40_000)
+
+    val facetChildCountPageSize = optInt(s"lightdb.opensearch.$collectionName.facetChildCount.pageSize")
+      .orElse(optInt("lightdb.opensearch.facetChildCount.pageSize"))
+      .orElse(optInt(s"lightdb.opensearch.$collectionName.facetChildCountPageSize"))
+      .orElse(optInt("lightdb.opensearch.facetChildCountPageSize"))
+      .filter(_ >= 1)
+      .getOrElse(1000)
+
+    val facetChildCountMaxPages = optInt(s"lightdb.opensearch.$collectionName.facetChildCount.maxPages")
+      .orElse(optInt("lightdb.opensearch.facetChildCount.maxPages"))
+      .orElse(optInt(s"lightdb.opensearch.$collectionName.facetChildCountMaxPages"))
+      .orElse(optInt("lightdb.opensearch.facetChildCountMaxPages"))
+      .filter(_ >= 1)
+      .getOrElse(10_000)
+
     // Bulk sizing controls
     val bulkMaxDocs = optInt("lightdb.opensearch.bulk.maxDocs")
       .filter(_ >= 1)
@@ -335,12 +410,6 @@ object OpenSearchConfig {
     val allowScriptSorts = optBoolean(s"lightdb.opensearch.$collectionName.allowScriptSorts")
       .orElse(optBoolean("lightdb.opensearch.allowScriptSorts"))
       .getOrElse(false)
-
-    def parseCsv(s: String): List[String] = s
-      .split(",")
-      .toList
-      .map(_.trim)
-      .filter(_.nonEmpty)
 
     def parseChildParentFields(s: String): Map[String, String] = {
       // Format: "ChildStoreA:parentIdField,ChildStoreB:parentIdField"
@@ -476,6 +545,8 @@ object OpenSearchConfig {
       logRequests = logRequests,
       logRequestsExcludePaths = logRequestsExcludePaths,
       maxResultWindow = maxResultWindow,
+      indexSortFields = indexSortFields,
+      indexSortOrders = indexSortOrders,
       trackTotalHitsUpTo = trackTotalHitsUpTo,
       useIndexAlias = useIndexAlias,
       indexAliasSuffix = indexAliasSuffix,
@@ -492,6 +563,11 @@ object OpenSearchConfig {
       searchFilterPath = searchFilterPath,
       bulkConcurrency = bulkConcurrency,
       facetIncludeMissing = facetIncludeMissing,
+      facetAggMaxBuckets = facetAggMaxBuckets,
+      facetChildCountMode = facetChildCountMode,
+      facetChildCountPrecisionThreshold = facetChildCountPrecisionThreshold,
+      facetChildCountPageSize = facetChildCountPageSize,
+      facetChildCountMaxPages = facetChildCountMaxPages,
       ignoreMappingHash = ignoreMappingHash,
       mappingHashWarnOnly = mappingHashWarnOnly,
       mappingHashAutoMigrate = mappingHashAutoMigrate,

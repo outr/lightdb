@@ -29,6 +29,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   protected def aggregationSupported: Boolean = true
   protected def filterBuilderSupported: Boolean = false
   protected def memoryOnly: Boolean = false
+  protected def readYourWritesWithinTransactionSupported: Boolean = true
 
   private val adam = Person("Adam", 21, _id = Person.id("adam"))
   private val brenda = Person("Brenda", 11, bestFriend = Some(adam._id), _id = Person.id("brenda"))
@@ -104,14 +105,19 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       val tempId = Person.id("temp-city-option-ryw")
       val temp = Person(name = "Temp", age = 21, city = Some(City("Austin")), _id = tempId)
 
-      val test = db.people.transaction { tx =>
-        for {
-          _ <- tx.insert(temp).map(_ => ())
-          ids <- tx.query.filter(_.city !== None).id.toList
-        } yield {
-          ids.toSet should contain(tempId)
+      val test =
+        if (readYourWritesWithinTransactionSupported) {
+          db.people.transaction { tx =>
+            for {
+              _ <- tx.insert(temp).map(_ => ())
+              ids <- tx.query.filter(_.city !== None).id.toList
+            } yield {
+              ids.toSet should contain(tempId)
+            }
+          }
+        } else {
+          Task.pure(succeed)
         }
-      }
 
       test.guarantee(db.people.transaction(_.delete(_._id -> tempId)).unit)
     }

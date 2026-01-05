@@ -2,6 +2,7 @@ package lightdb.transaction
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.field.FieldAndValue
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Collection, Conversion}
@@ -62,4 +63,14 @@ trait CollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] e
   def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]]
 
   def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int]
+
+  /**
+   * Backend-specific distinct value streaming.
+   *
+   * Default is not implemented. Backends should override (ex: OpenSearch uses composite aggregations).
+   */
+  def distinct[F](query: Query[Doc, Model, _],
+                  field: Field[Doc, F],
+                  pageSize: Int): rapid.Stream[F] =
+    throw new NotImplementedError(s"distinct is not implemented for transaction=${getClass.getName}")
 }

@@ -8,6 +8,7 @@ import lightdb.field.Field
 import lightdb.field.Field.Tokenized
 import lightdb.filter.Filter
 import lightdb.facet.FacetQuery
+import lightdb.store.Conversion
 import lightdb.{Query, Sort}
 
 /**
@@ -20,6 +21,8 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
                                                                                 keywordNormalize: Boolean = false,
                                                                                 allowScriptSorts: Boolean = false,
                                                                                 facetAggMaxBuckets: Int = 65_536,
+                                                                                facetChildCountMode: String = "cardinality",
+                                                                                facetChildCountPrecisionThreshold: Option[Int] = None,
                                                                                 facetChildCountPageSize: Int = 1000) {
   private val InternalIdFieldName: String = lightdb.opensearch.OpenSearchTemplates.InternalIdField
 
@@ -58,10 +61,53 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       trackScores = trackScores,
       minScore = query.minDocScore
     )
+    // PERF:
+    // For field-only conversions, request a filtered `_source` to avoid returning (and parsing) giant documents.
+    // This materially reduces memory/GC pressure for large scans such as:
+    // - Query.value(...)
+    // - Query.json(fields=...)
+    // - Query.materialized(fields=...)
+    val sourceFiltered: Json = {
+      val includes: Option[List[String]] = query.conversion match {
+        case Conversion.Value(field) =>
+          // `_id` is not in `_source` (it's a hit metadata field), so don't request it.
+          if (field.name == "_id") Some(Nil) else Some(List(field.name))
+        case Conversion.Json(fields) =>
+          Some(fields.map(_.name).filterNot(_ == "_id"))
+        case Conversion.Materialized(fields) =>
+          Some(fields.map(_.name).filterNot(_ == "_id"))
+        case _ =>
+          None
+      }
+
+      includes match {
+        case None =>
+          base
+        case Some(Nil) =>
+          // Only safe when the conversion doesn't need `_source` (ex: Value(_id)).
+          // Otherwise we'd produce Nulls for all requested fields.
+          query.conversion match {
+            case Conversion.Value(field) if field.name == "_id" =>
+              base match {
+                case o: Obj => obj((o.value.toSeq :+ ("_source" -> fabric.bool(false))): _*)
+                case other => other
+              }
+            case _ =>
+              base
+          }
+        case Some(fieldNames) =>
+          base match {
+            case o: Obj =>
+              obj((o.value.toSeq :+ ("_source" -> obj("includes" -> arr(fieldNames.map(str): _*)))): _*)
+            case other =>
+              other
+          }
+      }
+    }
     if (query.facets.nonEmpty) {
-      addFacetAggs(base, query.facets)
+      addFacetAggs(sourceFiltered, query.facets)
     } else {
-      base
+      sourceFiltered
     }
   }
 
@@ -75,7 +121,10 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val childBuilder = new OpenSearchSearchBuilder[f.Child, f.ChildModel](
           childModel,
           keywordNormalize = keywordNormalize,
-          facetAggMaxBuckets = facetAggMaxBuckets
+          facetAggMaxBuckets = facetAggMaxBuckets,
+          facetChildCountMode = facetChildCountMode,
+          facetChildCountPrecisionThreshold = facetChildCountPrecisionThreshold,
+          facetChildCountPageSize = facetChildCountPageSize
         )
         f.semantics match {
           case Filter.ChildSemantics.SameChildAll =>
@@ -98,7 +147,10 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           childModel,
           joinScoreMode = "none",
           keywordNormalize = keywordNormalize,
-          facetAggMaxBuckets = facetAggMaxBuckets
+          facetAggMaxBuckets = facetAggMaxBuckets,
+          facetChildCountMode = facetChildCountMode,
+          facetChildCountPrecisionThreshold = facetChildCountPrecisionThreshold,
+          facetChildCountPageSize = facetChildCountPageSize
         )
         val childQuery = childBuilder.filterToDsl(childFilter)
         OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode)
@@ -295,14 +347,27 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def facetAggChildCount(fq: FacetQuery[Doc]): Json = {
     val tokenField = s"${fq.field.name}__facet"
-    obj(
-      "composite" -> obj(
-        "size" -> num(facetChildCountPageSize),
-        "sources" -> arr(
-          obj("token" -> obj("terms" -> obj("field" -> str(tokenField))))
+    val mode = facetChildCountMode.trim.toLowerCase
+    // Hierarchical facets cannot use a plain cardinality aggregation because the indexed tokens include
+    // prefixes (year, year/month, year/month/day, ...). LightDB's `childCount` for hierarchical facets
+    // must reflect distinct children at the requested path, which requires composite token enumeration.
+    val useComposite = mode == "composite" || fq.path.nonEmpty || fq.field.hierarchical
+    if (useComposite) {
+      obj(
+        "composite" -> obj(
+          "size" -> num(facetChildCountPageSize),
+          "sources" -> arr(
+            obj("token" -> obj("terms" -> obj("field" -> str(tokenField))))
+          )
         )
       )
-    )
+    } else {
+      val parts = Vector(
+        Some("field" -> str(tokenField)),
+        facetChildCountPrecisionThreshold.map(pt => "precision_threshold" -> num(pt))
+      ).flatten
+      obj("cardinality" -> obj(parts: _*))
+    }
   }
 
   // Filtering is done in OpenSearchTransaction when parsing aggregation buckets.
@@ -310,7 +375,12 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   private def sorts2Dsl(sorts: List[Sort]): List[Json] = {
     sorts.map {
       case Sort.IndexOrder =>
-        obj("_id" -> obj("order" -> str("asc")))
+        // IMPORTANT:
+        // Do not sort on OpenSearch metadata field `_id`. Sorting on `_id` can trigger fielddata loading and trip
+        // the OpenSearch fielddata circuit breaker on large indices.
+        //
+        // `__lightdb_id` is a keyword field (doc_values) and is safe for stable sorting/pagination.
+        obj(InternalIdFieldName -> obj("order" -> str("asc")))
       case Sort.BestMatch(direction) =>
         val order = if (direction == lightdb.SortDirection.Descending) "desc" else "asc"
         obj("_score" -> obj("order" -> str(order)))

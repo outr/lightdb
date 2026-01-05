@@ -2,6 +2,7 @@ package spec
 
 import fabric.rw._
 import profig.Profig
+import rapid.Unique
 
 /**
  * Test support for OpenSearch-backed specs.
@@ -21,7 +22,7 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
     // Lightweight probe to detect an already-running local OpenSearch node.
     // We avoid instantiating the OpenSearch client here to keep bootstrap simple.
     try {
-      val url = new java.net.URL(baseUrl + "/")
+      val url = new java.net.URI(baseUrl + "/").toURL
       val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
       conn.setRequestMethod("GET")
       conn.setConnectTimeout(300)
@@ -86,7 +87,7 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
     }
     // Use a per-JVM unique prefix to avoid index/mapping reuse across reruns (and between suites).
     if (!Profig("lightdb.opensearch.indexPrefix").exists()) {
-      Profig("lightdb.opensearch.indexPrefix").store(s"lightdb_test_${java.util.UUID.randomUUID().toString.replace("-", "")}")
+      Profig("lightdb.opensearch.indexPrefix").store(s"lightdb_test_${Unique.sync()}")
     }
 
     // When running against a persistent local OpenSearch, register ONE JVM shutdown hook to clean up our test indices.
@@ -111,7 +112,7 @@ object OpenSearchTestSupport {
         if (baseUrl != "http://localhost:9200") return
 
         def http(method: String, pathAndQuery: String): (Int, String) = {
-          val url = new java.net.URL(baseUrl + pathAndQuery)
+          val url = new java.net.URI(baseUrl + pathAndQuery).toURL
           val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
           conn.setRequestMethod(method)
           conn.setConnectTimeout(1000)
@@ -120,11 +121,12 @@ object OpenSearchTestSupport {
           conn.connect()
           val code = conn.getResponseCode
           val is = if (code >= 200 && code < 400) conn.getInputStream else conn.getErrorStream
-          val body =
-            if (is != null) {
-              try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-              finally is.close()
-            } else ""
+          val body = if (is != null) {
+            try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+            finally is.close()
+          } else {
+            ""
+          }
           (code, body)
         }
 
