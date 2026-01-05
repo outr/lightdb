@@ -17,7 +17,18 @@ import java.nio.file.Path
 abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   protected lazy val specName: String = getClass.getSimpleName
 
-  protected var db: DB = new DB
+  protected var _db: DB = _
+
+  /**
+   * Lazily create the DB instance so store-specific test helpers (e.g. config via Profig) can run during subclass
+   * initialization before the first DB is constructed.
+   */
+  protected def db: DB = {
+    if (_db == null) {
+      _db = new DB
+    }
+    _db
+  }
 
   protected val one = Entry("One", List("Bob", "James"), List("support@one.com", "support@two.com"), PublishDate(2010, 10, 15))
   protected val two = Entry("Two", List("Lisa"), List("support@one.com"), PublishDate(2010, 10, 20))
@@ -285,6 +296,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
   class DB extends LightDB {
     override type SM = CollectionManager
     override val storeManager: CollectionManager = spec.storeManager
+    override def name: String = specName
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val entries: Collection[Entry, Entry.type] = store(Entry)

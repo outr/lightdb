@@ -8,7 +8,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.{FacetField, Tokenized}
 import lightdb.field.{Field, IndexingState}
-import lightdb.filter.Filter
+import lightdb.filter.{Filter, FilterPlanner, QueryOptimizer}
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
@@ -16,17 +16,19 @@ import lightdb.store.Conversion
 import lightdb.transaction.{CollectionTransaction, Transaction}
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults, Sort}
+import lightdb.lucene.blockjoin.LuceneBlockJoinStore
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
 import org.apache.lucene.index.Term
-import org.apache.lucene.search.MatchAllDocsQuery
+import org.apache.lucene.search.{MatchAllDocsQuery, ScoreDoc}
 import org.apache.lucene.util.BytesRef
 import rapid.Task
 
 case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
                                                                                 state: LuceneState[Doc],
-                                                                                parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] {
+                                                                                parent: Option[Transaction[Doc, Model]],
+                                                                                ownedParent: Boolean = false) extends CollectionTransaction[Doc, Model] {
   private lazy val searchBuilder = new LuceneSearchBuilder[Doc, Model](store, store.model, this)
 
   override def jsonStream: rapid.Stream[Json] =
@@ -56,7 +58,22 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def _rollback: Task[Unit] = state.rollback
 
-  override protected def _close: Task[Unit] = state.close
+  override protected def _close: Task[Unit] = {
+    val releaseParent = if (ownedParent) {
+      store.storeMode match {
+        case lightdb.store.StoreMode.Indexes(storage) =>
+          parent match {
+            case Some(p) => storage.transaction.release(p.asInstanceOf[storage.TX]).unit
+            case None => Task.unit
+          }
+        case _ => Task.unit
+      }
+    } else {
+      Task.unit
+    }
+
+    releaseParent.next(state.close)
+  }
 
   def groupBy[G, V](query: Query[Doc, Model, V],
                     groupField: Field[Doc, G],
@@ -84,10 +101,179 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = searchBuilder(query)
 
+  /**
+   * Prefer keyset (searchAfter) pagination for streaming on Lucene when possible.
+   *
+   * We only enable this when `offset == 0` (keyset pagination cannot jump to arbitrary offsets efficiently).
+   * Otherwise we fall back to the default offset-based implementation.
+   */
+  override def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
+    if (query.pageSize.nonEmpty && query.offset == 0) {
+      val basePageSize = query.pageSize.getOrElse(1000)
+
+      def loop(after: Option[ScoreDoc], remaining: Option[Int]): rapid.Stream[(V, Double)] =
+        rapid.Stream.force {
+          val reqSize = remaining match {
+            case Some(r) if r <= 0 => 0
+            case Some(r) => math.min(r, basePageSize)
+            case None => basePageSize
+          }
+          if (reqSize <= 0) {
+            Task.pure(rapid.Stream.empty)
+          } else {
+            searchBuilder.streamPageAfter(query = query, after = after, pageSize = reqSize).map {
+              case (stream, nextAfter) =>
+                val nextRemaining = remaining.map(_ - reqSize)
+                nextAfter match {
+                  case Some(na) if remaining.forall(_ > reqSize) =>
+                    stream.append(loop(Some(na), nextRemaining))
+                  case _ =>
+                    stream
+                }
+            }
+          }
+        }
+
+      loop(after = None, remaining = query.limit)
+    } else {
+      super.streamScored(query)
+    }
+  }
+
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
     Aggregator(query, store.model)
 
   override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] = aggregate(query).count
+
+  override def distinct[F](query: Query[Doc, Model, _],
+                           field: Field[Doc, F],
+                           pageSize: Int): rapid.Stream[F] = {
+    if (pageSize <= 0) {
+      rapid.Stream.empty
+    } else {
+      // Lucene can do exact "distinct with filters" via grouping (term grouping on docvalues).
+      //
+      // We only support distinct on fields that have a corresponding docvalues sort field (`<name>Sort`), i.e.:
+      // Str/Enum/Int/Dec and Option variants. (Arrays/objects don't have a single docvalues term.)
+      def supported(defType: DefType): Boolean = defType match {
+        case DefType.Str | DefType.Enum(_, _) | DefType.Int | DefType.Dec => true
+        case DefType.Opt(d) => supported(d)
+        case _ => false
+      }
+      if (!supported(field.rw.definition)) {
+        throw new NotImplementedError(s"distinct is not supported for field '${field.name}' (${field.rw.definition}) in Lucene")
+      } else {
+        rapid.Stream.force {
+          val resolveExistsChild = !store.supportsNativeExistsChild
+          FilterPlanner.resolve(query.filter, store.model, resolveExistsChild = resolveExistsChild).map { resolved =>
+            val optimizedFilter = if (query.optimize) resolved.map(QueryOptimizer.optimize) else resolved
+
+            val baseQ: Query[Doc, Model, Id[Doc]] = Query(this, Conversion.Value(store.model._id))
+              .copy(
+                filter = optimizedFilter,
+                sort = Nil,
+                offset = 0,
+                limit = None,
+                pageSize = None,
+                countTotal = false,
+                scoreDocs = false,
+                minDocScore = None,
+                facets = Nil,
+                optimize = false // already applied above
+              )
+
+            rapid.Stream(
+              Task.defer {
+                val lock = new AnyRef
+
+                var groupOffset: Int = 0
+                var emittedThisPage: Int = 0
+                var currentPull: rapid.Pull[F] = rapid.Pull.fromList(Nil)
+                var currentPullInitialized: Boolean = false
+                var done: Boolean = false
+
+                def closeCurrentPull(): Unit = {
+                  try currentPull.close.handleError(_ => Task.unit).sync()
+                  catch { case _: Throwable => () }
+                }
+
+                def fetchNextPull(): Unit = {
+                  closeCurrentPull()
+                  emittedThisPage = 0
+                  val groups = groupBy(
+                    query = baseQ,
+                    groupField = field,
+                    docsPerGroup = 1,
+                    groupOffset = groupOffset,
+                    groupLimit = Some(pageSize),
+                    groupSort = Nil,
+                    withinGroupSort = Nil,
+                    includeScores = false,
+                    includeTotalGroupCount = false
+                  ).sync()
+
+                  val values0 = groups.groups.iterator.map(_.group).toList
+                  // Drop missing values (matches OpenSearch composite agg semantics).
+                  val values = field.rw.definition match {
+                    case DefType.Opt(_) => values0.filterNot(_ == None)
+                    case _ => values0
+                  }
+                  currentPull = rapid.Pull.fromList(values)
+                  currentPullInitialized = true
+                }
+
+                val pullTask: Task[rapid.Step[F]] = Task {
+                  lock.synchronized {
+                    @annotation.tailrec
+                    def loop(): rapid.Step[F] = {
+                      if (done) {
+                        rapid.Step.Stop
+                      } else {
+                        if (!currentPullInitialized) {
+                          fetchNextPull()
+                        }
+
+                        currentPull.pull.sync() match {
+                          case e @ rapid.Step.Emit(_) =>
+                            emittedThisPage += 1
+                            e
+                          case rapid.Step.Skip =>
+                            loop()
+                          case rapid.Step.Concat(inner) =>
+                            currentPull = inner
+                            loop()
+                          case rapid.Step.Stop =>
+                            closeCurrentPull()
+                            if (emittedThisPage < pageSize) {
+                              done = true
+                              rapid.Step.Stop
+                            } else {
+                              groupOffset += pageSize
+                              currentPullInitialized = false
+                              loop()
+                            }
+                        }
+                      }
+                    }
+                    loop()
+                  }
+                }
+
+                val closeTask: Task[Unit] = Task {
+                  lock.synchronized {
+                    done = true
+                    closeCurrentPull()
+                  }
+                }
+
+                Task.pure(rapid.Pull(pullTask, closeTask))
+              }
+            )
+          }
+        }
+      }
+    }
+  }
 
   override def truncate: Task[Int] = for {
     count <- this.count
@@ -95,6 +281,11 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   } yield count
 
   private def addDoc(doc: Doc, upsert: Boolean): Task[Doc] = Task {
+    if (store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]]) {
+      throw new UnsupportedOperationException(
+        s"${store.name} is a LuceneBlockJoinStore. Use block indexing (children first, parent last) instead of insert/upsert."
+      )
+    }
     if (store.fields.tail.nonEmpty) {
       val id = doc._id
       val state = new IndexingState

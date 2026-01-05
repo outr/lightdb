@@ -29,9 +29,10 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   protected def aggregationSupported: Boolean = true
   protected def filterBuilderSupported: Boolean = false
   protected def memoryOnly: Boolean = false
+  protected def readYourWritesWithinTransactionSupported: Boolean = true
 
   private val adam = Person("Adam", 21, _id = Person.id("adam"))
-  private val brenda = Person("Brenda", 11, _id = Person.id("brenda"))
+  private val brenda = Person("Brenda", 11, bestFriend = Some(adam._id), _id = Person.id("brenda"))
   private val charlie = Person("Charlie", 35, _id = Person.id("charlie"))
   private val diana = Person("Diana", 15, _id = Person.id("diana"))
   private val evan = Person("Evan", 53, Some(City("Dallas")), _id = Person.id("evan"))
@@ -39,7 +40,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   private val greg = Person("Greg", 12, _id = Person.id("greg"))
   private val hanna = Person("Hanna", 62, _id = Person.id("hanna"))
   private val ian = Person("Ian", 89, _id = Person.id("ian"))
-  private val jenna = Person("Jenna", 4, _id = Person.id("jenna"))
+  private val jenna = Person("Jenna", 4, bestFriend = Some(hanna._id), _id = Person.id("jenna"))
   private val kevin = Person("Kevin", 33, _id = Person.id("kevin"))
   private val linda = Person("Linda", 72, _id = Person.id("linda"))
   private val mike = Person("Mike", 42, _id = Person.id("mike"))
@@ -73,7 +74,18 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   private lazy val dbPath: Path = Path.of(s"db/$specName")
   deleteDirectoryIfExists(dbPath)
 
-  protected var db: DB = new DB
+  protected var _db: DB = _
+
+  /**
+   * Lazily create the DB instance so store-specific test helpers (e.g. config via Profig) can run during subclass
+   * initialization before the first DB is constructed.
+   */
+  protected def db: DB = {
+    if (_db == null) {
+      _db = new DB
+    }
+    _db
+  }
 
   specName should {
     "initialize the database" in {
@@ -88,6 +100,26 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.people.transaction { transaction =>
         transaction.insert(names).map(_ should not be None)
       }
+    }
+    "read-your-writes within a transaction for Option filters (insert then query)" in {
+      val tempId = Person.id("temp-city-option-ryw")
+      val temp = Person(name = "Temp", age = 21, city = Some(City("Austin")), _id = tempId)
+
+      val test =
+        if (readYourWritesWithinTransactionSupported) {
+          db.people.transaction { tx =>
+            for {
+              _ <- tx.insert(temp).map(_ => ())
+              ids <- tx.query.filter(_.city !== None).id.toList
+            } yield {
+              ids.toSet should contain(tempId)
+            }
+          }
+        } else {
+          Task.pure(succeed)
+        }
+
+      test.guarantee(db.people.transaction(_.delete(_._id -> tempId)).unit)
     }
     "retrieve the first record by _id -> id" in {
       db.people.transaction { transaction =>
@@ -150,6 +182,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.people.transaction { txn =>
         txn.query.filter(_.allNames.hasAny(List("greg", "hanna", "grouchy"))).toList.map { list =>
           list.map(_.name) should be(List("Greg", "Hanna", "Oscar"))
+        }
+      }
+    }
+    "verify in filter" in {
+      db.people.transaction { txn =>
+        txn.query.filter(_.bestFriend.in(List(Some(hanna._id), Some(ian._id)))).toList.map { list =>
+          list.map(_.name) should be(List("Jenna"))
         }
       }
     }
@@ -261,7 +300,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         Task.unit.succeed
       } else {
         db.dispose.next {
-          db = new DB
+          _db = new DB
           db.init
         }.succeed
       }
@@ -332,6 +371,13 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     "search where city is set" in {
       db.people.transaction { transaction =>
         transaction.query.filter(_.builder.mustNot(_.city === None)).toList.map { people =>
+          people.map(_.name) should be(List("Evan"))
+        }
+      }
+    }
+    "search where city is set using !==" in {
+      db.people.transaction { transaction =>
+        transaction.query.filter(_.city !== None).toList.map { people =>
           people.map(_.name) should be(List("Evan"))
         }
       }
@@ -698,6 +744,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
                     city: Option[City] = None,
                     nicknames: Set[String] = Set.empty,
                     friends: List[Id[Person]] = Nil,
+                    bestFriend: Option[Id[Person]] = None,
                     gpa: Option[Double] = None,
                     created: Timestamp = Timestamp(),
                     modified: Timestamp = Timestamp(),
@@ -711,6 +758,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     val city: I[Option[City]] = field.index(_.city)
     val nicknames: I[Set[String]] = field.index(_.nicknames)
     val friends: I[List[Id[Person]]] = field.index(_.friends)
+    val bestFriend: I[Option[Id[Person]]] = field.index(_.bestFriend)
     val gpa: I[Option[Double]] = field.index(_.gpa)
     val allNames: I[List[String]] = field.index(p => (p.name :: p.nicknames.toList).map(_.toLowerCase))
     val search: T = field.tokenized((doc: Person) => s"${doc.name} ${doc.age}")

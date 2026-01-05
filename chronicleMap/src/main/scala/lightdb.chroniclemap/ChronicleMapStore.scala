@@ -16,8 +16,6 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            val storeMode: StoreMode[Doc, Model],
                                                                            lightDB: LightDB,
                                                                            storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
-  sys.props("net.openhft.chronicle.hash.impl.util.jna.PosixFallocate.fallocate") = "false"
-
   override type TX = ChronicleMapTransaction[Doc, Model]
 
   private lazy val db: ChronicleMap[String, String] = {

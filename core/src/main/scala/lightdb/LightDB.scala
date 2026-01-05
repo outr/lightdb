@@ -5,11 +5,13 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.field.Field
 import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
+import lightdb.progress.ProgressManager
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionManager}
 import lightdb.trigger.StoreTrigger
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
+import profig.Profig
 import rapid._
 
 import java.nio.file.Path
@@ -56,6 +58,17 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
 
   private var _stores = List.empty[Store[_, _ <: DocumentModel[_]]]
   private val _disposed = new AtomicBoolean(false)
+  @volatile private var initStarted = false
+
+  /**
+   * True if this database's initialization has started (db.init has been invoked), even if it hasn't completed yet.
+   *
+   * This is useful for enforcing invariants like "no transactions before init", while still allowing LightDB's own
+   * initialization process to transact as needed.
+   */
+  def isInitStarted: Boolean = initStarted
+
+  override protected def beforeInitialize(): Unit = initStarted = true
 
   /**
    * All stores registered with this database
@@ -75,7 +88,14 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
    * stores to re-index or all stores will be invoked.
    */
-  def reIndex(stores: List[Store[_, _]] = stores): Task[Int] = stores.map(_.reIndex()).tasksPar.map(_.count(identity))
+  def reIndex(stores: List[Store[_, _]] = stores, progressManager: ProgressManager = ProgressManager.none): Task[Int] = if (stores.nonEmpty) {
+    val pms = progressManager.split(stores.length)
+    stores.zip(pms).map {
+      case (store, pm) => store.reIndex(pm)
+    }.tasksPar.map(_.count(identity))
+  } else {
+    Task.pure(0)
+  }
 
   /**
    * Offers each store the ability to optimize the store.
@@ -95,6 +115,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   lazy val transactions: TransactionManager = new TransactionManager
 
   override protected def initialize(): Task[Unit] = for {
+    // NOTE: Profig initialization is owned by the application (or test bootstrap).
     _ <- logger.info(s"$name database initializing...")
     _ = backingStore
     _ <- logger.info(s"Initializing stores: ${stores.map(_.name).mkString(", ")}...")
@@ -144,6 +165,27 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   }
 
   /**
+   * Create a new store with an explicit StoreMode (advanced).
+   *
+   * This is useful for "search index + storage store" compositions where the searching store should be
+   * `StoreMode.Indexes(storage)` so that doc materialization happens from storage.
+   */
+  def storeWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                       storeMode: StoreMode[Doc, Model],
+                                                                       name: Option[String] = None): storeManager.S[Doc, Model] = {
+    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val path = directory.map(_.resolve(n))
+    val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
+    synchronized {
+      _stores = _stores ::: List(store)
+    }
+    if (isInitialized) { // Already initialized database, init store immediately
+      store.init.sync()
+    }
+    store
+  }
+
+  /**
    * Create a new store and associate it with this database. It is preferable that all stores be created
    * before the database is initialized, but stores that are added after init will automatically be initialized
    * during this method call.
@@ -162,6 +204,43 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       _stores = _stores ::: List(store)
     }
     if (isInitialized) { // Already initialized database, init store immediately
+      store.init.sync()
+    }
+    store
+  }
+
+  /**
+   * Create a new store with a specific StoreManager and explicit StoreMode (advanced).
+   */
+  def storeCustomWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
+                                                                                                 storeManager: SM,
+                                                                                                 storeMode: StoreMode[Doc, Model],
+                                                                                                 name: Option[String] = None): storeManager.S[Doc, Model] = {
+    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val path = directory.map(_.resolve(n))
+    val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
+    synchronized {
+      _stores = _stores ::: List(store)
+    }
+    if (isInitialized) { // Already initialized database, init store immediately
+      store.init.sync()
+    }
+    store
+  }
+
+  /**
+   * Registers a pre-constructed store with this database.
+   *
+   * This exists to support advanced / specialized store construction paths that want to avoid going through
+   * StoreManager.create (e.g. to keep call sites and internal implementation fully type-safe without casts).
+   *
+   * The store will be initialized immediately if the database is already initialized.
+   */
+  def registerStore[Doc <: Document[Doc], Model <: DocumentModel[Doc], S0 <: Store[Doc, Model]](store: S0): S0 = {
+    synchronized {
+      _stores = _stores ::: List(store)
+    }
+    if (isInitialized) {
       store.init.sync()
     }
     store

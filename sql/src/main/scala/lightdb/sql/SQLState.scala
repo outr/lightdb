@@ -63,11 +63,27 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
    * left alone to avoid breaking statement pooling/reuse.
    */
   def closePendingResults(): Unit = synchronized {
+    // Ensure read-your-writes semantics: SQLStoreTransaction buffers inserts/upserts using JDBC batches.
+    // Before executing any new statements (especially SELECTs), flush pending batches so subsequent reads
+    // within the same transaction can see the writes.
+    flushBatches()
+
     resultSets.foreach(rs => Try(rs.close()))
     resultSets = Nil
     val (prepared, regular) = statements.partition(_.isInstanceOf[java.sql.PreparedStatement])
     regular.foreach(s => Try(s.close()))
     statements = prepared
+  }
+
+  private def flushBatches(): Unit = synchronized {
+    if (batchInsert.get() > 0 && psInsert != null) {
+      psInsert.executeBatch()
+      batchInsert.set(0)
+    }
+    if (batchUpsert.get() > 0 && psUpsert != null) {
+      psUpsert.executeBatch()
+      batchUpsert.set(0)
+    }
   }
 
   def markDirty(): Unit = dirty = true
@@ -107,9 +123,11 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
       // TODO: SingleConnection shares
       if (batchInsert.get() > 0) {
         psInsert.executeBatch()
+        batchInsert.set(0)
       }
       if (batchUpsert.get() > 0) {
         psUpsert.executeBatch()
+        batchUpsert.set(0)
       }
       dirty = false
       commitInternal()
@@ -134,9 +152,11 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   def close: Task[Unit] = Task {
     if (batchInsert.get() > 0) {
       psInsert.executeBatch()
+      batchInsert.set(0)
     }
     if (batchUpsert.get() > 0) {
       psUpsert.executeBatch()
+      batchUpsert.set(0)
     }
     resultSets.foreach(rs => Try(rs.close()))
     statements.foreach(s => Try(s.close()))

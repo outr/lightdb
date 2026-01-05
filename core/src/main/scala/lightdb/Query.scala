@@ -15,6 +15,7 @@ import lightdb.spatial.{DistanceAndDoc, Geo, Point}
 import lightdb.store.{Collection, Conversion}
 import lightdb.transaction.CollectionTransaction
 import rapid.{Forge, Grouped, Pull, Task}
+import rapid.Stream
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transaction: CollectionTransaction[Doc, Model],
                                                                        conversion: Conversion[Doc, V],
@@ -177,25 +178,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   def stream: rapid.Stream[V] = streamScored.map(_._1)
 
   def streamScored: rapid.Stream[(V, Double)] = {
-    if (query.pageSize.nonEmpty) {
-      rapid.Stream.merge {
-        Task.defer {
-          copy(limit = Some(1), countTotal = true).search.map(_.total.get).map { total =>
-            val end = limit match {
-              case Some(l) => math.min(l, total)
-              case None => total
-            }
-            val pages = query.offset to end by query.pageSize.get
-            val iterator = pages.iterator.map { offset =>
-              rapid.Stream.force(copy(offset = offset).search.map(_.streamWithScore))
-            }
-            Pull.fromIterator(iterator)
-          }
-        }
-      }
-    } else {      // No pageSize defined...one stream
-      rapid.Stream.force(search.map(_.streamWithScore))
-    }
+    rapid.Stream.force(prepared.map(q => transaction.streamScored(q)))
   }
 
   /**
@@ -235,6 +218,20 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   def firstOption: Task[Option[V]] = limit(1).stream.firstOption
 
   def count: Task[Int] = limit(1).countTotal(true).search.map(_.total.get)
+
+  /**
+   * Returns a stream of distinct values for the given field under this query's filters.
+   *
+   * Note: This is backend-dependent. For now only OpenSearch implements this efficiently. Other backends throw
+   * NotImplementedError until implemented.
+   */
+  def distinct[F](f: Model => Field[Doc, F],
+                  pageSize: Int = 1000): Stream[F] =
+    transaction.distinct(query = this, field = f(model), pageSize = pageSize)
+
+  def distinctOption[F](f: Model => Field[Doc, Option[F]],
+                        pageSize: Int = 1000): Stream[F] =
+    distinct(f, pageSize).collect { case Some(v) => v }
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
     AggregateQuery(this, f(model))

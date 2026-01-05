@@ -14,14 +14,14 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def store: Store[Doc, Model]
   def parent: Option[Transaction[Doc, Model]]
 
-  final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this).flatMap { _ =>
-    _insert(doc)
-  }
-  def insert(docs: Seq[Doc]): Task[Seq[Doc]] = docs.map(insert).tasks
-  final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this).flatMap { _ =>
-    _upsert(doc)
-  }
-  def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = docs.map(upsert).tasks
+  final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this).next(_insert(doc))
+  def insert(stream: rapid.Stream[Doc]): Task[Int] = stream.evalMap(insert).count
+  final def insert(docs: Seq[Doc]): Task[Seq[Doc]] = insert(rapid.Stream.emits(docs)).map(_ => docs)
+
+  final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this).next(_upsert(doc))
+  def upsert(stream: rapid.Stream[Doc]): Task[Int] = stream.evalMap(upsert).count
+  final def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = upsert(rapid.Stream.emits(docs)).map(_ => docs)
+
   final def exists(id: Id[Doc]): Task[Boolean] = _exists(id)
   final def count: Task[Int] = _count
   final def delete[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Boolean] = {
