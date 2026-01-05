@@ -13,6 +13,7 @@ Computationally focused database using pluggable stores
 | [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅        | High-performance LSM tree             |
 | [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌        | Popular in-memory data structure store|
 | [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine |
+| [OpenSearch](https://opensearch.org)                                  | Search Server      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | ✅✅✅           | ❌        | Distributed search, joins, aggregations |
 | [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | 🟡        | Lightweight embedded SQL              |
 | [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
 | [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | 🟡        | Columnar, ideal for analytics         |
@@ -32,13 +33,144 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.13.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.14.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.13.0"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.14.0"
 ```
+
+For graph traversal utilities:
+```scala
+libraryDependencies += "com.outr" %% "lightdb-traversal" % "4.14.0"
+```
+
+For OpenSearch:
+```scala
+libraryDependencies += "com.outr" %% "lightdb-opensearch" % "4.14.0"
+```
+
+---
+
+## Recent Additions
+
+### Traversal module (`lightdb-traversal`)
+LightDB now includes a lightweight graph traversal DSL that works against any `PrefixScanningTransaction` (e.g. RocksDB / LMDB / MapDB B-Tree / traversal stores).
+
+- **Import**: `import lightdb.traversal.syntax._`
+- **Common helpers**:
+  - `tx.traverse.edgesFor[Edge, From, To](fromId)`
+  - `tx.traverse.reachableFrom[Edge, Node, Node](startId)`
+  - `tx.traverse.shortestPaths[Edge, From, To](fromId, toId)`
+  - `tx.traverse.bfs(...)` / `tx.traverse.dfs(...)`
+
+Example:
+```scala
+import lightdb.traversal.syntax._
+
+db.flights.transaction { tx =>
+  val lax = Airport.id("LAX")
+  tx.storage.traverse
+    .reachableFrom[Flight, Airport, Airport](lax)
+    .map(_._to)
+    .distinct
+    .toList
+}
+```
+
+### `Query.distinct(field)`
+LightDB now exposes a backend-agnostic `distinct` API:
+```scala
+db.people.transaction { tx =>
+  tx.query.distinct(_.city).toList
+}
+// res0: Task[List[Option[City]]] = FlatMap(
+//   input = FlatMap(
+//     input = Suspend(
+//       f = lightdb.store.Store$transaction$$$Lambda/0x0000000014652408@41c10fb,
+//       trace = SourcecodeTrace(
+//         file = File(
+//           "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
+//         ),
+//         line = Line(131),
+//         enclosing = Enclosing("lightdb.store.Store#transaction.create")
+//       )
+//     ),
+//     f = lightdb.store.Store$transaction$$$Lambda/0x0000000014656000@7435ada6,
+//     trace = SourcecodeTrace(
+//       file = File(
+//         "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
+//       ),
+//       line = Line(136),
+//       enclosing = Enclosing("lightdb.store.Store#transaction.create")
+//     )
+//   ),
+//   f = lightdb.store.Store$transaction$$$Lambda/0x0000000014656bb0@2332ad39,
+//   trace = SourcecodeTrace(
+//     file = File(
+//       "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
+//     ),
+//     line = Line(107),
+//     enclosing = Enclosing("lightdb.store.Store#transaction.apply")
+//   )
+// )
+```
+
+Supported backends:
+- **OpenSearch**: composite aggregations (paged)
+- **Lucene**: grouping (docvalues-based) for scalar fields (String/Enum/Int/Double and Option variants)
+- **SQL** (SQLite/H2/DuckDB/PostgreSQL): `SELECT DISTINCT ...` with paging
+- **SplitCollection**: delegates to the searching side (e.g. RocksDB + OpenSearch)
+
+---
+
+## OpenSearch Notes (LightDB backend)
+OpenSearch support has been expanded to better support large-scale ingestion and production usage.
+
+### Fast ingestion defaults (transactional)
+When using OpenSearch as a searching backend, LightDB favors **fast ingestion** over read-your-writes mid-transaction, and forces visibility at commit.
+
+### Facet childCount mode (speed vs exactness)
+OpenSearch cannot return an “exact distinct bucket count” for `terms` aggregations without paging.
+
+- Default is **fast/approximate** via `cardinality`.
+- You can opt into **exact** via composite paging.
+
+Config:
+```json
+{
+  "lightdb": {
+    "opensearch": {
+      "facetChildCount": {
+        "mode": "cardinality",
+        "precisionThreshold": 40000
+      }
+    }
+  }
+}
+```
+
+### Index sorting (OpenSearch)
+LightDB can emit OpenSearch index sorting settings at index creation time:
+```json
+{
+  "lightdb": {
+    "opensearch": {
+      "index": {
+        "sort": {
+          "fields": ["unifiedEntityId.keyword", "__lightdb_id"],
+          "orders": ["asc", "asc"]
+        }
+      }
+    }
+  }
+}
+```
+Note: index sorting requires a new index (it cannot be added to an existing index).
+
+### Truncate behavior
+On OpenSearch stores, `truncate` is implemented as **drop + recreate index**, which is dramatically faster than `_delete_by_query` for large indices.
 
 ## Videos
 Watch this [Java User Group demonstration of LightDB](https://www.youtube.com/live/E_5fwgbF4rc?si=cxyb0Br3oCEQInTW)
@@ -69,7 +201,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.13.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.14.0"
 ```
 
 ---
@@ -161,18 +293,18 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa")
+//   _id = StringId("AAGmPac35fkhX4pwacUuJ6lk0syGxFvk")
 // )
 db.people.transaction { implicit txn =>
   txn.insert(adam)
 }.sync()
-// res1: Person = Person(
+// res2: Person = Person(
 //   name = "Adam",
 //   age = 21,
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa")
+//   _id = StringId("AAGmPac35fkhX4pwacUuJ6lk0syGxFvk")
 // )
 ```
 
@@ -186,7 +318,7 @@ db.people.transaction { txn =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)))
 ```
 
 ---
@@ -226,7 +358,7 @@ db.people.transaction { txn =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 336},repl.MdocSession$MdocApp$Person$@6ecf94a7))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 399},repl.MdocSession$MdocApp$Person$@237a6f48))
 ```
 
 ### Grouping
@@ -237,7 +369,7 @@ db.people.transaction { txn =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)))))
 ```
 
 ---
@@ -251,14 +383,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
-// res5: Int = 17
+// res6: Int = 20
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res6: Int = 17
+// res7: Int = 20
 ```
 
 ---
@@ -326,9 +458,9 @@ object luceneDb extends LightDB {
 
 luceneDb.init.sync()
 luceneDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
-// res8: Note = Note(
+// res9: Note = Note(
 //   text = "the quick brown fox",
-//   _id = StringId("2wCZpCOI4OfTMwqVAKFCijhGbv9MKnPM")
+//   _id = StringId("4OqCXpl3ZZCf7CI4YIeD3OtbxLEQqtYy")
 // )
 val hits = luceneDb.notes.transaction { txn =>
   txn.query.search.flatMap(_.list)
@@ -353,6 +485,18 @@ val hits = luceneDb.notes.transaction { txn =>
 //   Note(
 //     text = "the quick brown fox",
 //     _id = StringId("2wCZpCOI4OfTMwqVAKFCijhGbv9MKnPM")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("luPUAWZ2XRxcPvChsiGAt1MEJB1rEr8D")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("ty8fBVxom4b4m12diBkul8aZ03AX7z83")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("4OqCXpl3ZZCf7CI4YIeD3OtbxLEQqtYy")
 //   )
 // )
 ```
@@ -386,10 +530,10 @@ object spatialDb extends LightDB {
 
 spatialDb.init.sync()
 spatialDb.places.transaction(_.insert(Place("NYC", Point(40.7142, -74.0119)))).sync()
-// res10: Place = Place(
+// res11: Place = Place(
 //   name = "NYC",
 //   loc = Point(latitude = 40.7142, longitude = -74.0119),
-//   _id = StringId("g0xpsXK3ez9sl6YihQZOp4KaxLcQDcAi")
+//   _id = StringId("Lajurby5inMeqzLnSjZtfsUtJFWVrmPe")
 // )
 // Distance filters are supported on spatial-capable backends; example filter:
 val nycFilter = Place.loc.distance(Point(40.7, -74.0), 5_000.meters)
@@ -484,12 +628,13 @@ object shardDb extends LightDB {
   val shards = multiStore[String, TenantDoc, TenantDoc.type](TenantDoc, key => s"tenant_$key")
 }
 
+shardDb.init.sync()
 val tenantA = shardDb.shards("tenantA")
-// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@65a27ad8
+// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@307c3915
 tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
-// res12: TenantDoc = TenantDoc(
+// res14: TenantDoc = TenantDoc(
 //   value = "hello",
-//   _id = StringId("cWoMwnTFe1RCBpTlJqRR32ngOAKAfxJL")
+//   _id = StringId("7EzO9h1h7ev9RBvL7pA5Ka1sjwNvbN5s")
 // )
 ```
 
@@ -510,12 +655,12 @@ cfgDb.init.sync()
 val featureFlag = cfgDb.stored[Boolean]("featureX", default = false)
 // featureFlag: StoredValue[Boolean] = StoredValue(
 //   key = "featureX",
-//   store = lightdb.store.hashmap.HashMapStore@56bef8a6,
-//   default = repl.MdocSession$MdocApp$$Lambda/0x000000003a7a4e70@484cf913,
+//   store = lightdb.store.hashmap.HashMapStore@6fd1ade2,
+//   default = repl.MdocSession$MdocApp$$Lambda/0x00000000147e9668@4fff1c49,
 //   persistence = Stored
 // )
 featureFlag.set(true).sync()
-// res14: Boolean = true
+// res16: Boolean = true
 ```
 
 ## SQL Stores (DuckDB / SQLite)
@@ -544,9 +689,9 @@ object sqlDb extends LightDB {
 
 sqlDb.init.sync()
 sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
-// res16: Row = Row(
+// res18: Row = Row(
 //   value = "hi sql",
-//   _id = StringId("19niIooa5wl1N2paoiEhw6owtswFdPN4")
+//   _id = StringId("6ms7NkWmMH6mazvlxWVRo75d0vvdoBSO")
 // )
 ```
 
