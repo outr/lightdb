@@ -13,6 +13,7 @@ Computationally focused database using pluggable stores
 | [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅        | High-performance LSM tree             |
 | [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌        | Popular in-memory data structure store|
 | [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine |
+| [OpenSearch](https://opensearch.org)                                  | Search Server      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | ✅✅✅           | ❌        | Distributed search, joins, aggregations |
 | [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | 🟡        | Lightweight embedded SQL              |
 | [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
 | [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | 🟡        | Columnar, ideal for analytics         |
@@ -39,6 +40,107 @@ For a specific implementation like Lucene:
 ```scala
 libraryDependencies += "com.outr" %% "lightdb-lucene" % "@VERSION@"
 ```
+
+For graph traversal utilities:
+```scala
+libraryDependencies += "com.outr" %% "lightdb-traversal" % "@VERSION@"
+```
+
+For OpenSearch:
+```scala
+libraryDependencies += "com.outr" %% "lightdb-opensearch" % "@VERSION@"
+```
+
+---
+
+## Recent Additions
+
+### Traversal module (`lightdb-traversal`)
+LightDB now includes a lightweight graph traversal DSL that works against any `PrefixScanningTransaction` (e.g. RocksDB / LMDB / MapDB B-Tree / traversal stores).
+
+- **Import**: `import lightdb.traversal.syntax._`
+- **Common helpers**:
+  - `tx.traverse.edgesFor[Edge, From, To](fromId)`
+  - `tx.traverse.reachableFrom[Edge, Node, Node](startId)`
+  - `tx.traverse.shortestPaths[Edge, From, To](fromId, toId)`
+  - `tx.traverse.bfs(...)` / `tx.traverse.dfs(...)`
+
+Example:
+```scala
+import lightdb.traversal.syntax._
+
+db.flights.transaction { tx =>
+  val lax = Airport.id("LAX")
+  tx.storage.traverse
+    .reachableFrom[Flight, Airport, Airport](lax)
+    .map(_._to)
+    .distinct
+    .toList
+}
+```
+
+### `Query.distinct(field)`
+LightDB now exposes a backend-agnostic `distinct` API:
+```scala mdoc
+db.people.transaction { tx =>
+  tx.query.distinct(_.city).toList
+}
+```
+
+Supported backends:
+- **OpenSearch**: composite aggregations (paged)
+- **Lucene**: grouping (docvalues-based) for scalar fields (String/Enum/Int/Double and Option variants)
+- **SQL** (SQLite/H2/DuckDB/PostgreSQL): `SELECT DISTINCT ...` with paging
+- **SplitCollection**: delegates to the searching side (e.g. RocksDB + OpenSearch)
+
+---
+
+## OpenSearch Notes (LightDB backend)
+OpenSearch support has been expanded to better support large-scale ingestion and production usage.
+
+### Fast ingestion defaults (transactional)
+When using OpenSearch as a searching backend, LightDB favors **fast ingestion** over read-your-writes mid-transaction, and forces visibility at commit.
+
+### Facet childCount mode (speed vs exactness)
+OpenSearch cannot return an “exact distinct bucket count” for `terms` aggregations without paging.
+
+- Default is **fast/approximate** via `cardinality`.
+- You can opt into **exact** via composite paging.
+
+Config:
+```json
+{
+  "lightdb": {
+    "opensearch": {
+      "facetChildCount": {
+        "mode": "cardinality",
+        "precisionThreshold": 40000
+      }
+    }
+  }
+}
+```
+
+### Index sorting (OpenSearch)
+LightDB can emit OpenSearch index sorting settings at index creation time:
+```json
+{
+  "lightdb": {
+    "opensearch": {
+      "index": {
+        "sort": {
+          "fields": ["unifiedEntityId.keyword", "__lightdb_id"],
+          "orders": ["asc", "asc"]
+        }
+      }
+    }
+  }
+}
+```
+Note: index sorting requires a new index (it cannot be added to an existing index).
+
+### Truncate behavior
+On OpenSearch stores, `truncate` is implemented as **drop + recreate index**, which is dramatically faster than `_delete_by_query` for large indices.
 
 ## Videos
 Watch this [Java User Group demonstration of LightDB](https://www.youtube.com/live/E_5fwgbF4rc?si=cxyb0Br3oCEQInTW)
@@ -427,6 +529,7 @@ object shardDb extends LightDB {
   val shards = multiStore[String, TenantDoc, TenantDoc.type](TenantDoc, key => s"tenant_$key")
 }
 
+shardDb.init.sync()
 val tenantA = shardDb.shards("tenantA")
 tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
 ```
