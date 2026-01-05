@@ -60,6 +60,19 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         transaction.insert(List(adam, brenda, charlie)).map(_ should not be None)
       }
     }
+    "support Query.distinct for indexed fields (with filters)" in {
+      db.people.transaction { transaction =>
+        for {
+          all <- transaction.query.distinct(_.gender).toList
+          donors <- transaction.query.filter(_.organDonor === true).distinct(_.gender).toList
+          donorsCount <- transaction.query.filter(_.organDonor === true).distinct(_.gender).count
+        } yield {
+          all.toSet should be(Set(Gender.Male, Gender.Female))
+          donors.toSet should be(Set(Gender.Female))
+          donorsCount should be(1)
+        }
+      }
+    }
     "query with an arbitrary query" in {
       db.people.transaction { transaction =>
         val txn = transaction

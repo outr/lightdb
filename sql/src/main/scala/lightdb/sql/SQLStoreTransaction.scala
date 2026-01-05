@@ -12,6 +12,7 @@ import lightdb.field.Field.Tokenized
 import lightdb.field.Field.FacetField
 import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter.{Condition, Filter}
+import lightdb.filter.{FilterPlanner, QueryOptimizer}
 import lightdb._
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
@@ -468,6 +469,142 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         None
       }
       execute[V](b.query, b.offset, b.limit, query.conversion, scoreCol, if (query.countTotal) Some(b.totalQuery) else None, fr)
+    }
+  }
+
+  override def distinct[F](query: Query[Doc, Model, _],
+                           field: Field[Doc, F],
+                           pageSize: Int): rapid.Stream[F] = {
+    if (pageSize <= 0) {
+      rapid.Stream.empty
+    } else {
+      // Streaming DISTINCT with paging.
+      //
+      // Notes:
+      // - This is exact.
+      // - Missing/null values are excluded (matches OpenSearch composite agg semantics).
+      // - We intentionally ignore Sort / offset / limit from the incoming query; distinct has its own paging.
+      rapid.Stream.force {
+        val resolveExistsChild = !store.supportsNativeExistsChild
+        FilterPlanner.resolve(query.filter, store.model, resolveExistsChild = resolveExistsChild).map { resolved =>
+          val optimizedFilter = if (query.optimize) resolved.map(QueryOptimizer.optimize) else resolved
+
+          // Build a base query so we can reuse existing SQL filter translation.
+          val baseQ: Query[Doc, Model, F] = Query(this, Conversion.Value(field))
+            .copy(
+              filter = optimizedFilter,
+              sort = Nil,
+              offset = 0,
+              limit = None,
+              pageSize = None,
+              countTotal = false,
+              scoreDocs = false,
+              minDocScore = None,
+              facets = Nil,
+              optimize = false // already applied above
+            )
+
+          rapid.Stream(
+            Task.defer {
+              val lock = new AnyRef
+
+              var offset: Int = 0
+              var emittedThisPage: Int = 0
+              var currentPull: rapid.Pull[F] = rapid.Pull.fromList(Nil)
+              var currentPullInitialized: Boolean = false
+              var done: Boolean = false
+
+              def closeCurrentPull(): Unit = {
+                try currentPull.close.handleError(_ => Task.unit).sync()
+                catch { case _: Throwable => () }
+              }
+
+              def nextPageStream(): rapid.Stream[F] = {
+                val qPage = baseQ.copy(offset = offset, limit = Some(pageSize))
+                val b0 = toSQL(qPage)
+
+                // Replace SELECT list with DISTINCT(field) and add NOT NULL constraint.
+                val distinctField = SQLPart.Fragment(s"DISTINCT ${field.name} AS ${field.name}")
+                val notNull = SQLPart.Fragment(s"${field.name} IS NOT NULL")
+
+                val b = b0.copy(
+                  fields = List(distinctField),
+                  filters = b0.filters ::: List(notNull),
+                  // Stable paging order.
+                  sort = List(SQLPart.Fragment(s"${field.name} ASC")),
+                  limit = Some(pageSize),
+                  offset = offset
+                )
+
+                rapid.Stream.fromIterator(Task {
+                  val results = resultsFor(b.query)
+                  val rs = results.rs
+                  val it = rs2Iterator(rs, Conversion.Value(field))
+                  ActionIterator(it, onClose = () => {
+                    Try(rs.close())
+                    results.release(state)
+                  })
+                })
+              }
+
+              def fetchNextPull(): Unit = {
+                closeCurrentPull()
+                emittedThisPage = 0
+                val stream = nextPageStream()
+                currentPull = rapid.Stream.task(stream).sync()
+                currentPullInitialized = true
+              }
+
+              val pullTask: Task[rapid.Step[F]] = Task {
+                lock.synchronized {
+                  @annotation.tailrec
+                  def loop(): rapid.Step[F] = {
+                    if (done) {
+                      rapid.Step.Stop
+                    } else {
+                      if (!currentPullInitialized) {
+                        fetchNextPull()
+                      }
+
+                      currentPull.pull.sync() match {
+                        case e @ rapid.Step.Emit(_) =>
+                          emittedThisPage += 1
+                          e
+                        case rapid.Step.Skip =>
+                          loop()
+                        case rapid.Step.Concat(inner) =>
+                          currentPull = inner
+                          loop()
+                        case rapid.Step.Stop =>
+                          // Page drained.
+                          closeCurrentPull()
+                          if (emittedThisPage < pageSize) {
+                            done = true
+                            rapid.Step.Stop
+                          } else {
+                            offset += pageSize
+                            currentPullInitialized = false
+                            loop()
+                          }
+                      }
+                    }
+                  }
+                  loop()
+                }
+              }
+
+              val closeTask: Task[Unit] = Task {
+                lock.synchronized {
+                  done = true
+                  closeCurrentPull()
+                }
+              }
+
+              Task.pure(rapid.Pull(pullTask, closeTask))
+            }
+          )
+        }
+      }
     }
   }
 

@@ -4,7 +4,7 @@ import lightdb.doc.Document
 import lightdb.graph.EdgeDocument
 import lightdb.id.Id
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
-import rapid.Stream
+import rapid.{Pull, Step, Stream, Task}
 
 /**
  * Builder for edge traversals
@@ -95,98 +95,201 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
    * Execute a BFS traversal that returns a stream of edges
    */
   private def executeBFSEdges(): Stream[E] = {
-    // We'll use a concurrent set to track visited nodes
-    val visited = new java.util.concurrent.ConcurrentHashMap[Id[F], Boolean]()
+    import scala.collection.mutable
 
-    // Function to process a level of the BFS
-    def processLevel(frontier: Stream[Id[F]], depth: Int): Stream[E] = {
-      if (depth > maxDepth) {
-        Stream.empty
-      } else {
-        // Process the current frontier
-        val edgesStream = frontier.flatMap { id =>
-          tx.prefixStream(id.value)
-            .filter(_._from == id)
-            .filter(edgeFilter)
+    Stream(
+      Task.defer {
+        val lock = new AnyRef
+
+        // BFS queue carries (node, depth)
+        val q: mutable.Queue[(Id[F], Int)] = mutable.Queue.empty
+        val visited = new java.util.concurrent.ConcurrentHashMap[Id[F], Boolean]()
+
+        // Materialize initial frontier once (typically tiny).
+        val starts: List[Id[F]] = fromIds.toList.sync()
+        starts.foreach { id =>
+          visited.put(id, true)
+          q.enqueue(id -> 1)
         }
 
-        // Collect target IDs for the next frontier
-        edgesStream.flatMap { edge =>
-          val targetId = edge._to.asInstanceOf[Id[F]] // Safe cast for reflexive graphs
+        var currentDepth: Int = 0
+        var currentPull: Pull[E] = Pull.fromList(Nil)
+        var currentPullInitialized: Boolean = false
+        var done: Boolean = false
 
-          // Emit the edge, and if targetId hasn't been visited, include it in next level
-          Stream.emit(edge).append {
-            // Use Option to safely handle null - None means the key wasn't in the map
-            Option(visited.putIfAbsent(targetId, true)) match {
-              case None =>
-                // The key wasn't previously in the map (null was returned)
-                // We'll create a stream with just this one ID for the next level
-                val nextFrontierStream = Stream.emit(targetId)
+        def closeCurrentPull(): Unit = {
+          try currentPull.close.handleError(_ => Task.unit).sync()
+          catch { case _: Throwable => () }
+        }
 
-                // Process the next level recursively - no need for Stream.defer as Stream is already lazy
-                processLevel(nextFrontierStream, depth + 1)
-              case Some(_) =>
-                // The key was already in the map
-                Stream.empty // Already visited, so don't include in next level
-            }
+        def fetchNextNode(): Boolean = {
+          closeCurrentPull()
+          if (q.isEmpty) {
+            done = true
+            currentPull = Pull.fromList(Nil)
+            currentPullInitialized = true
+            false
+          } else {
+            val (id, depth) = q.dequeue()
+            currentDepth = depth
+            val edgesStream: Stream[E] = tx
+              .prefixStream(id.value)
+              .asInstanceOf[Stream[E]]
+              .filter(_._from == id)
+              .filter(edgeFilter)
+            currentPull = Stream.task(edgesStream).sync()
+            currentPullInitialized = true
+            true
           }
         }
-      }
-    }
 
-    // Mark starting nodes as visited and begin traversal with a stream of ids
-    fromIds.foreach { id =>
-      visited.put(id, true)
-    }.flatMap { id =>
-      processLevel(Stream.emit(id), 1)
-    }
+        val pullTask: Task[Step[E]] = Task {
+          lock.synchronized {
+            @annotation.tailrec
+            def loop(): Step[E] = {
+              if (done) {
+                Step.Stop
+              } else {
+                if (!currentPullInitialized) {
+                  fetchNextNode()
+                }
+
+                currentPull.pull.sync() match {
+                  case e @ Step.Emit(edge) =>
+                    // Expand frontier if we have remaining depth.
+                    if (currentDepth < maxDepth) {
+                      val targetId = edge._to.asInstanceOf[Id[F]]
+                      if (Option(visited.putIfAbsent(targetId, true)).isEmpty) {
+                        q.enqueue(targetId -> (currentDepth + 1))
+                      }
+                    }
+                    e
+                  case Step.Skip =>
+                    loop()
+                  case Step.Concat(inner) =>
+                    currentPull = inner
+                    loop()
+                  case Step.Stop =>
+                    // Current node drained; move to next.
+                    currentPullInitialized = false
+                    loop()
+                }
+              }
+            }
+            loop()
+          }
+        }
+
+        val closeTask: Task[Unit] = Task {
+          lock.synchronized {
+            done = true
+            closeCurrentPull()
+          }
+        }
+
+        Task.pure(Pull(pullTask, closeTask))
+      }
+    )
   }
 
   /**
    * Execute a DFS traversal that returns a stream of edges
    */
   private def executeDFSEdges(): Stream[E] = {
-    // We'll use a concurrent set to track visited nodes
-    val visited = new java.util.concurrent.ConcurrentHashMap[Id[F], Boolean]()
+    // Iterative DFS (stack) for the same reasons as BFS: avoid recursive Stream.append chains.
+    import scala.collection.mutable
 
-    // Recursive function to perform DFS
-    def dfs(id: Id[F], depth: Int): Stream[E] = {
-      if (depth > maxDepth) {
-        Stream.empty
-      } else {
-        // Get edges from the current node
-        val edgesFromNode = tx.prefixStream(id.value)
-          .asInstanceOf[Stream[E]]
-          .filter(_._from == id)
-          .filter(edgeFilter)
+    Stream(
+      Task.defer {
+        val lock = new AnyRef
 
-        // For each edge, emit it and then visit its target
-        edgesFromNode.flatMap { edge =>
-          val targetId = edge._to.asInstanceOf[Id[F]] // Safe cast for reflexive graphs
+        // DFS stack carries (node, depth)
+        val stack: mutable.ArrayDeque[(Id[F], Int)] = mutable.ArrayDeque.empty
+        val visited = new java.util.concurrent.ConcurrentHashMap[Id[F], Boolean]()
 
-          // Emit the edge, then recursively visit the target if not visited
-          Stream.emit(edge).append {
-            // Use Option to safely handle null - None means the key wasn't in the map
-            Option(visited.putIfAbsent(targetId, true)) match {
-              case None =>
-                // The key wasn't previously in the map (null was returned)
-                // Stream is already lazy, so no need for Stream.defer
-                dfs(targetId, depth + 1)
-              case Some(_) =>
-                // The key was already in the map
-                Stream.empty
-            }
+        val starts: List[Id[F]] = fromIds.toList.sync()
+        // Push in reverse so iteration order is stable-ish.
+        starts.reverse.foreach { id =>
+          visited.put(id, true)
+          stack.prepend(id -> 1)
+        }
+
+        var currentDepth: Int = 0
+        var currentPull: Pull[E] = Pull.fromList(Nil)
+        var currentPullInitialized: Boolean = false
+        var done: Boolean = false
+
+        def closeCurrentPull(): Unit = {
+          try currentPull.close.handleError(_ => Task.unit).sync()
+          catch { case _: Throwable => () }
+        }
+
+        def fetchNextNode(): Boolean = {
+          closeCurrentPull()
+          if (stack.isEmpty) {
+            done = true
+            currentPull = Pull.fromList(Nil)
+            currentPullInitialized = true
+            false
+          } else {
+            val (id, depth) = stack.removeHead()
+            currentDepth = depth
+            val edgesStream: Stream[E] = tx
+              .prefixStream(id.value)
+              .asInstanceOf[Stream[E]]
+              .filter(_._from == id)
+              .filter(edgeFilter)
+            currentPull = Stream.task(edgesStream).sync()
+            currentPullInitialized = true
+            true
           }
         }
-      }
-    }
 
-    // Mark starting nodes as visited and begin traversal
-    fromIds.foreach { id =>
-      visited.put(id, true)
-    }.flatMap { id =>
-      dfs(id, 1)
-    }
+        val pullTask: Task[Step[E]] = Task {
+          lock.synchronized {
+            @annotation.tailrec
+            def loop(): Step[E] = {
+              if (done) {
+                Step.Stop
+              } else {
+                if (!currentPullInitialized) {
+                  fetchNextNode()
+                }
+
+                currentPull.pull.sync() match {
+                  case e @ Step.Emit(edge) =>
+                    if (currentDepth < maxDepth) {
+                      val targetId = edge._to.asInstanceOf[Id[F]]
+                      if (Option(visited.putIfAbsent(targetId, true)).isEmpty) {
+                        stack.prepend(targetId -> (currentDepth + 1))
+                      }
+                    }
+                    e
+                  case Step.Skip =>
+                    loop()
+                  case Step.Concat(inner) =>
+                    currentPull = inner
+                    loop()
+                  case Step.Stop =>
+                    currentPullInitialized = false
+                    loop()
+                }
+              }
+            }
+            loop()
+          }
+        }
+
+        val closeTask: Task[Unit] = Task {
+          lock.synchronized {
+            done = true
+            closeCurrentPull()
+          }
+        }
+
+        Task.pure(Pull(pullTask, closeTask))
+      }
+    )
   }
 
   /**

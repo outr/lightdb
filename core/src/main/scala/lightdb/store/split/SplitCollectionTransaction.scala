@@ -85,6 +85,11 @@ case class SplitCollectionTransaction[
   override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] =
     searching.aggregateCount(query)
 
+  override def distinct[F](query: Query[Doc, Model, _],
+                           field: lightdb.field.Field[Doc, F],
+                           pageSize: Int): rapid.Stream[F] =
+    searching.distinct(query.copy(transaction = searching), field, pageSize)
+
   override def truncate: Task[Int] = storage.truncate.flatTap { _ =>
     searchUpdateHandler.truncate
   }
