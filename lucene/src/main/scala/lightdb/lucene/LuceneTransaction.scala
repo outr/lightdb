@@ -8,7 +8,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.{FacetField, Tokenized}
 import lightdb.field.{Field, IndexingState}
-import lightdb.filter.Filter
+import lightdb.filter.{Filter, FilterPlanner, QueryOptimizer}
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
@@ -144,6 +144,136 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     Aggregator(query, store.model)
 
   override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] = aggregate(query).count
+
+  override def distinct[F](query: Query[Doc, Model, _],
+                           field: Field[Doc, F],
+                           pageSize: Int): rapid.Stream[F] = {
+    if (pageSize <= 0) {
+      rapid.Stream.empty
+    } else {
+      // Lucene can do exact "distinct with filters" via grouping (term grouping on docvalues).
+      //
+      // We only support distinct on fields that have a corresponding docvalues sort field (`<name>Sort`), i.e.:
+      // Str/Enum/Int/Dec and Option variants. (Arrays/objects don't have a single docvalues term.)
+      def supported(defType: DefType): Boolean = defType match {
+        case DefType.Str | DefType.Enum(_, _) | DefType.Int | DefType.Dec => true
+        case DefType.Opt(d) => supported(d)
+        case _ => false
+      }
+      if (!supported(field.rw.definition)) {
+        throw new NotImplementedError(s"distinct is not supported for field '${field.name}' (${field.rw.definition}) in Lucene")
+      } else {
+        rapid.Stream.force {
+          val resolveExistsChild = !store.supportsNativeExistsChild
+          FilterPlanner.resolve(query.filter, store.model, resolveExistsChild = resolveExistsChild).map { resolved =>
+            val optimizedFilter = if (query.optimize) resolved.map(QueryOptimizer.optimize) else resolved
+
+            val baseQ: Query[Doc, Model, Id[Doc]] = Query(this, Conversion.Value(store.model._id))
+              .copy(
+                filter = optimizedFilter,
+                sort = Nil,
+                offset = 0,
+                limit = None,
+                pageSize = None,
+                countTotal = false,
+                scoreDocs = false,
+                minDocScore = None,
+                facets = Nil,
+                optimize = false // already applied above
+              )
+
+            rapid.Stream(
+              Task.defer {
+                val lock = new AnyRef
+
+                var groupOffset: Int = 0
+                var emittedThisPage: Int = 0
+                var currentPull: rapid.Pull[F] = rapid.Pull.fromList(Nil)
+                var currentPullInitialized: Boolean = false
+                var done: Boolean = false
+
+                def closeCurrentPull(): Unit = {
+                  try currentPull.close.handleError(_ => Task.unit).sync()
+                  catch { case _: Throwable => () }
+                }
+
+                def fetchNextPull(): Unit = {
+                  closeCurrentPull()
+                  emittedThisPage = 0
+                  val groups = groupBy(
+                    query = baseQ,
+                    groupField = field,
+                    docsPerGroup = 1,
+                    groupOffset = groupOffset,
+                    groupLimit = Some(pageSize),
+                    groupSort = Nil,
+                    withinGroupSort = Nil,
+                    includeScores = false,
+                    includeTotalGroupCount = false
+                  ).sync()
+
+                  val values0 = groups.groups.iterator.map(_.group).toList
+                  // Drop missing values (matches OpenSearch composite agg semantics).
+                  val values = field.rw.definition match {
+                    case DefType.Opt(_) => values0.filterNot(_ == None)
+                    case _ => values0
+                  }
+                  currentPull = rapid.Pull.fromList(values)
+                  currentPullInitialized = true
+                }
+
+                val pullTask: Task[rapid.Step[F]] = Task {
+                  lock.synchronized {
+                    @annotation.tailrec
+                    def loop(): rapid.Step[F] = {
+                      if (done) {
+                        rapid.Step.Stop
+                      } else {
+                        if (!currentPullInitialized) {
+                          fetchNextPull()
+                        }
+
+                        currentPull.pull.sync() match {
+                          case e @ rapid.Step.Emit(_) =>
+                            emittedThisPage += 1
+                            e
+                          case rapid.Step.Skip =>
+                            loop()
+                          case rapid.Step.Concat(inner) =>
+                            currentPull = inner
+                            loop()
+                          case rapid.Step.Stop =>
+                            closeCurrentPull()
+                            if (emittedThisPage < pageSize) {
+                              done = true
+                              rapid.Step.Stop
+                            } else {
+                              groupOffset += pageSize
+                              currentPullInitialized = false
+                              loop()
+                            }
+                        }
+                      }
+                    }
+                    loop()
+                  }
+                }
+
+                val closeTask: Task[Unit] = Task {
+                  lock.synchronized {
+                    done = true
+                    closeCurrentPull()
+                  }
+                }
+
+                Task.pure(rapid.Pull(pullTask, closeTask))
+              }
+            )
+          }
+        }
+      }
+    }
+  }
 
   override def truncate: Task[Int] = for {
     count <- this.count
