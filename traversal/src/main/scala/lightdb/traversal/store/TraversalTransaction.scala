@@ -66,19 +66,18 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     }
   }
 
-  override def insert(docs: Seq[Doc]): Task[Seq[Doc]] = {
-    if (!store.persistedIndexEnabled || store.name == "_backingStore") super.insert(docs)
-    else {
+  override def insert(stream: rapid.Stream[Doc]): Task[Int] = {
+    if (!store.persistedIndexEnabled || store.name == "_backingStore") {
+      super.insert(stream)
+    } else {
       store.effectiveIndexBacking match {
-        case None =>
-          super.insert(docs)
+        case None => super.insert(stream)
         case Some(idx) =>
           // Bulk insert optimization: keep a single indexBacking transaction open and batch index writes per chunk.
           val ChunkSize: Int = 256
           idx.transaction { kv0 =>
             val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
-            rapid.Stream
-              .emits(docs.toList)
+            stream
               .chunk(ChunkSize)
               .evalMap { chunk =>
                 val list = chunk.toList
@@ -88,30 +87,28 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                     Task(store.indexCache.onInsert(d))
                   }
                 }.tasks.flatMap { inserted =>
-                  val postings = inserted.toList.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
+                  val postings = inserted.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
                   if (postings.isEmpty) Task.pure(inserted)
                   else kv.upsert(postings).unit.map(_ => inserted)
                 }
               }
-              .toList
-              .map(_.flatten)
-          }.attempt.map(_.getOrElse(docs)) // best-effort index maintenance; docs are already inserted
+              .count
+          }.attempt.map(_.getOrElse(-1)) // best-effort index maintenance; docs are already inserted
       }
     }
   }
 
-  override def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = {
-    if (!store.persistedIndexEnabled || store.name == "_backingStore") super.upsert(docs)
-    else {
+  override def upsert(stream: rapid.Stream[Doc]): Task[Int] = {
+    if (!store.persistedIndexEnabled || store.name == "_backingStore") {
+      super.upsert(stream)
+    } else {
       store.effectiveIndexBacking match {
-        case None =>
-          super.upsert(docs)
+        case None => super.upsert(stream)
         case Some(idx) =>
           val ChunkSize: Int = 256
-          idx.transaction { kv0 =>
-            val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
-            rapid.Stream
-              .emits(docs.toList)
+          idx.transaction { kv =>
+//            val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
+            stream
               .chunk(ChunkSize)
               .evalMap { chunk =>
                 val list = chunk.toList
@@ -133,7 +130,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                     val deleteTask =
                       if (deleteIds.isEmpty) Task.unit else deleteIds.map(kv.delete).tasks.unit
 
-                    val upsertPostings = upserted.toList.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
+                    val upsertPostings = upserted.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
                     deleteTask.next {
                       if (upsertPostings.isEmpty) Task.pure(upserted)
                       else kv.upsert(upsertPostings).unit.map(_ => upserted)
@@ -141,9 +138,8 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   }
                 }
               }
-              .toList
-              .map(_.iterator.flatten.toList)
-          }.attempt.map(_.getOrElse(docs)) // best-effort index maintenance
+              .count
+          }.attempt.map(_.getOrElse(-1)) // best-effort index maintenance
       }
     }
   }
@@ -727,7 +723,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
             // Not supported yet (would require emitting multiple rows); keep deterministic placeholder.
             new AggComputer {
               override val name: String = f.name
-              override val rw: RW[Any] = rw
+              override val rw: RW[Any] = throw new UnsupportedOperationException()
               override def update(docId: String, doc: Doc): Unit = ()
               override def value(): Any = null
             }

@@ -9,6 +9,7 @@ import lightdb.id.Id
 import lightdb.opensearch.OpenSearchIndexName
 import lightdb.opensearch.OpenSearchStore
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
+import lightdb.store.BufferedWritingTransaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.LightDB
 import org.scalatest.matchers.should.Matchers
@@ -64,11 +65,16 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
         ))
         _ <- db.init
 
+        // Force an early flush (without commit) to validate refresh behavior at the bulk request level.
+        prevBuf <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer)
+        _ <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer = 1)
+
         _ <- db.docs.transaction { tx =>
           tx.truncate
-            .next(tx.insert(Doc("no-refresh", _id = Id("a"))))
-            .next(tx.commit)
-        }.attempt // should succeed even without refresh
+            .next(tx.insert(Doc("no-refresh-a", _id = Id("a"))))
+            .next(tx.insert(Doc("no-refresh-b", _id = Id("b")))) // triggers early flush (buffer > 1)
+            .next(Task.error(new RuntimeException("abort-before-commit")))
+        }.attempt
 
         // With refresh_interval=-1 and no explicit refresh, doc should not be visible yet.
         before <- db.docs.transaction { tx =>
@@ -83,25 +89,27 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
           tx0 match {
             case tx: lightdb.opensearch.OpenSearchTransaction[Doc, Doc.type] =>
               tx.withRefreshPolicy(Some("true"))
-                .insert(Doc("with-refresh", _id = Id("b")))
-                .next(tx.commit)
+                .insert(Doc("with-refresh-c", _id = Id("c")))
+                .next(tx.insert(Doc("with-refresh-d", _id = Id("d")))) // triggers early flush (buffer > 1)
+                .next(Task.error(new RuntimeException("abort-before-commit")))
             case _ =>
               Task.error(new RuntimeException("Expected OpenSearchTransaction"))
           }
-        }
+        }.attempt
 
         after <- db.docs.transaction { tx =>
           tx.query
-            .filter(m => Filter.Equals[Doc, Id[Doc]](m._id.name, Id[Doc]("b")))
+            .filter(m => Filter.Equals[Doc, Id[Doc]](m._id.name, Id[Doc]("c")))
             .countTotal(true)
             .search
             .flatMap(_.list)
         }
 
         _ <- db.dispose
+        _ <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer = prevBuf)
       } yield {
         before shouldBe Nil
-        after.map(_._id.value) shouldBe List("b")
+        after.map(_._id.value) shouldBe List("c")
       }
 
       test.guarantee(restoreProps())

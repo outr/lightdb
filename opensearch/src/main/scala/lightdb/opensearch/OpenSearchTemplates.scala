@@ -40,13 +40,32 @@ object OpenSearchTemplates {
                                                                    maxResultWindow: Int = 250_000): Json = {
     val props = properties(model, fields, config, storeName)
     val hash = mappingHash(props)
+    val indexObjBase: List[(String, Json)] =
+      List("max_result_window" -> num(maxResultWindow))
+
+    val sortFields: List[String] = config.indexSortFields.map(_.trim).filter(_.nonEmpty)
+    val sortOrdersRaw: List[String] = config.indexSortOrders.map(_.trim.toLowerCase).filter(_.nonEmpty)
+    val sortOrders: List[String] =
+      if (sortFields.isEmpty) Nil
+      else if (sortOrdersRaw.isEmpty) List.fill(sortFields.length)("asc")
+      else if (sortOrdersRaw.length == 1) List.fill(sortFields.length)(sortOrdersRaw.head)
+      else if (sortOrdersRaw.length >= sortFields.length) sortOrdersRaw.take(sortFields.length)
+      else sortOrdersRaw ::: List.fill(sortFields.length - sortOrdersRaw.length)("asc")
+
+    val indexObj: Json = if (sortFields.nonEmpty) {
+      obj((indexObjBase ++ List(
+        "sort.field" -> arr(sortFields.map(str): _*),
+        "sort.order" -> arr(sortOrders.map(str): _*)
+      )): _*)
+    } else {
+      obj(indexObjBase: _*)
+    }
+
     val settings = if (config.keywordNormalize) {
       // Keyword fields (non-tokenized strings) are case-sensitive by default (Lucene parity).
       // When enabled, normalize keyword terms for both indexing and query literals.
       obj(
-        "index" -> obj(
-          "max_result_window" -> num(maxResultWindow)
-        ),
+        "index" -> indexObj,
         "analysis" -> obj(
           "normalizer" -> obj(
             KeywordNormalizerName -> obj(
@@ -58,9 +77,7 @@ object OpenSearchTemplates {
       )
     } else {
       obj(
-        "index" -> obj(
-          "max_result_window" -> num(maxResultWindow)
-        )
+        "index" -> indexObj
       )
     }
     obj(
@@ -107,7 +124,7 @@ object OpenSearchTemplates {
     } else {
       Nil
     }
-    val props = fields.collect {
+    val props0 = fields.collect {
       case f if f.name == "_id" => Nil
       case f if f.isSpatial =>
         // Store the original GeoJSON in the field itself (dynamic mapping is fine),
@@ -122,7 +139,42 @@ object OpenSearchTemplates {
         // If we don't have an explicit mapping (empty object), omit the property and let OpenSearch infer it.
         if (mapping.asObj.value.nonEmpty) List(f.name -> mapping) else Nil
     }.flatten
-    obj((baseProps ++ joinProps ++ props): _*)
+
+    // Index sorting requires sort fields to be present in the mapping at index creation time.
+    // In join-domain indices, the join-parent's model may not declare child-only fields (ex: EntityRecord fields),
+    // but users still may want to index-sort on them. Support this by injecting minimal mappings for configured
+    // sort fields when they're missing.
+    def injectedSortProps(existing: Map[String, Json]): List[(String, Json)] = {
+      val sortFields = config.indexSortFields.map(_.trim).filter(_.nonEmpty)
+      sortFields.flatMap {
+        case f if f == InternalIdField =>
+          Nil // already present
+        case f if f.endsWith(".keyword") =>
+          val base = f.stripSuffix(".keyword")
+          if (base.isEmpty || existing.contains(base)) Nil
+          else {
+            // Create a text+keyword multifield mapping so `<base>.keyword` exists for sort usage.
+            val keyword = if (config.keywordNormalize) {
+              obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))
+            } else {
+              obj("type" -> str("keyword"))
+            }
+            List(base -> obj(
+              "type" -> str("text"),
+              "analyzer" -> str("standard"),
+              "fields" -> obj("keyword" -> keyword)
+            ))
+          }
+        case f =>
+          // For non-multifield paths, only inject if it doesn't exist; map as keyword for safe sorting.
+          if (existing.contains(f)) Nil
+          else List(f -> obj("type" -> str("keyword")))
+      }
+    }
+
+    val baseMap = (baseProps ++ joinProps ++ props0).toMap
+    val props = baseProps ++ joinProps ++ props0 ++ injectedSortProps(baseMap)
+    obj(props: _*)
   }
 
   private def mappingForField[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = field.rw.definition match {

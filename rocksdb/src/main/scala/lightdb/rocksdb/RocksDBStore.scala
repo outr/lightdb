@@ -6,7 +6,9 @@ import lightdb.store._
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.transaction.Transaction
 import org.rocksdb.{ColumnFamilyDescriptor, ColumnFamilyHandle, DBOptions, FlushOptions, Options, RocksDB}
+import profig.Profig
 import rapid.Task
+import fabric.rw.intRW
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
@@ -23,6 +25,10 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX = RocksDBTransaction[Doc, Model]
 
+  private val iteratorThreads: Int = Profig("lightdb.rocksdb.iteratorThreadPoolSize").opt[Int].getOrElse(16)
+  private[rocksdb] val iteratorThreadPool: RocksDBIteratorThreadPool =
+    new RocksDBIteratorThreadPool(namePrefix = s"rocksdb-$name", size = iteratorThreads)
+
   private[rocksdb] var handle: Option[ColumnFamilyHandle] = None
   resetHandle()
 
@@ -37,16 +43,19 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     RocksDBTransaction(this, parent)
   }
 
-  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {
-    val o = new FlushOptions
-    handle match {
-      case Some(h) =>
-        rocksDB.flush(o, h)
-      case None =>
-        rocksDB.flush(o)
-        rocksDB.closeE()
-    }
-  })
+  override protected def doDispose(): Task[Unit] =
+    super.doDispose()
+      .next(iteratorThreadPool.dispose())
+      .next(Task {
+        val o = new FlushOptions
+        handle match {
+          case Some(h) =>
+            rocksDB.flush(o, h)
+          case None =>
+            rocksDB.flush(o)
+            rocksDB.closeE()
+        }
+      })
 }
 
 object RocksDBStore extends PrefixScanningStoreManager {

@@ -15,6 +15,7 @@ import lightdb.spatial.{DistanceAndDoc, Geo, Point}
 import lightdb.store.{Collection, Conversion}
 import lightdb.transaction.CollectionTransaction
 import rapid.{Forge, Grouped, Pull, Task}
+import rapid.Stream
 
 case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transaction: CollectionTransaction[Doc, Model],
                                                                        conversion: Conversion[Doc, V],
@@ -217,6 +218,20 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   def firstOption: Task[Option[V]] = limit(1).stream.firstOption
 
   def count: Task[Int] = limit(1).countTotal(true).search.map(_.total.get)
+
+  /**
+   * Returns a stream of distinct values for the given field under this query's filters.
+   *
+   * Note: This is backend-dependent. For now only OpenSearch implements this efficiently. Other backends throw
+   * NotImplementedError until implemented.
+   */
+  def distinct[F](f: Model => Field[Doc, F],
+                  pageSize: Int = 1000): Stream[F] =
+    transaction.distinct(query = this, field = f(model), pageSize = pageSize)
+
+  def distinctOption[F](f: Model => Field[Doc, Option[F]],
+                        pageSize: Int = 1000): Stream[F] =
+    distinct(f, pageSize).collect { case Some(v) => v }
 
   def aggregate(f: Model => List[AggregateFunction[_, _, Doc]]): AggregateQuery[Doc, Model] =
     AggregateQuery(this, f(model))

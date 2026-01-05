@@ -11,7 +11,7 @@ import spice.net.{ContentType, URL}
 
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.concurrent.duration.DurationLong
+import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.util.{Failure, Success}
 
 import lightdb.opensearch.OpenSearchMetrics
@@ -66,6 +66,22 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   private def send(req: HttpClient): Task[HttpResponse] =
     sendWithRetry(req, name = opName(req))
 
+  /**
+   * Lightweight connectivity check to distinguish a slow query from an unreachable OpenSearch node.
+   *
+   * Uses a short per-request timeout regardless of the configured requestTimeout.
+   */
+  def ping(timeout: FiniteDuration = 2.seconds): Task[Boolean] = Task.defer {
+    val req = client
+      .get
+      .modifyUrl(_.withPath("/"))
+      .timeout(timeout)
+    req.send().attempt.map {
+      case Success(resp) => resp.status.isSuccess
+      case Failure(_) => false
+    }
+  }
+
   private def sendWithRetry(req: HttpClient, name: String): Task[HttpResponse] = Task.defer {
     val maxAttempts = math.max(1, config.retryMaxAttempts)
     val initialDelayMs = math.max(0L, config.retryInitialDelay.toMillis)
@@ -85,11 +101,17 @@ case class OpenSearchClient(config: OpenSearchConfig) {
           Task.unit
         } else {
           Task.sleep(afterMs.millis).next {
-            Task {
+            Task.defer {
               if (!completed.get()) {
-                scribe.warn(
-                  s"OpenSearch request still running after ${elapsedMs}ms: $name attempt=$n/$maxAttempts timeoutMs=${config.requestTimeout.toMillis}"
-                )
+                // Check if OpenSearch is reachable right now (short timeout) to disambiguate "slow" vs "down".
+                ping(timeout = 2.seconds).map { ok =>
+                  val health = if (ok) "reachable" else "unreachable"
+                  scribe.warn(
+                    s"OpenSearch request still running after ${elapsedMs}ms: $name attempt=$n/$maxAttempts timeoutMs=${config.requestTimeout.toMillis} opensearch=$health"
+                  )
+                }
+              } else {
+                Task.unit
               }
             }.next {
               if (!completed.get()) {
@@ -235,6 +257,34 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   def refreshIndex(index: String): Task[Unit] = {
     val req = client.method(HttpMethod.Post).url(url(s"/$index/_refresh"))
     send(req).flatMap(resp => require2xx(s"refreshIndex($index)", resp))
+  }
+
+  def indexSettings(index: String,
+                    flatSettings: Boolean = true,
+                    includeDefaults: Boolean = true): Task[Json] = {
+    val req = client
+      .get
+      .modifyUrl { u =>
+        u.withPath(s"/$index/_settings")
+          .withParam("flat_settings", if (flatSettings) "true" else "false")
+          .withParam("include_defaults", if (includeDefaults) "true" else "false")
+      }
+    send(req).flatMap { resp =>
+      if (!resp.status.isSuccess) {
+        readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch indexSettings failed (${resp.status.code}) for $index: ${b.getOrElse("")}")))
+      } else {
+        readBody(resp).map(_.getOrElse("{}")).map(JsonParser(_))
+      }
+    }
+  }
+
+  def updateIndexSettings(index: String, settings: Json): Task[Unit] = {
+    val req = client
+      .method(HttpMethod.Put)
+      .header(Headers.`Content-Type`(ContentType.`application/json`))
+      .modifyUrl(_.withPath(s"/$index/_settings"))
+      .json(settings)
+    send(req).flatMap(resp => require2xx(s"updateIndexSettings($index)", resp))
   }
 
   def indexDoc(index: String,

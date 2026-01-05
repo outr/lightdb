@@ -74,7 +74,7 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.14.0"
 
-val rapidVersion: String = "2.3.1"
+val rapidVersion: String = "2.3.2"
 
 val profigVersion: String = "3.4.18"
 

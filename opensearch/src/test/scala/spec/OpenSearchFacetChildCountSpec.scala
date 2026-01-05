@@ -10,6 +10,7 @@ import lightdb.opensearch.OpenSearchStore
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
+import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path
@@ -45,7 +46,14 @@ class OpenSearchFacetChildCountSpec extends AsyncWordSpec with AsyncTaskSpec wit
   private lazy val db = new DB
 
   "OpenSearch facets" should {
-    "return accurate childCount even when values are limited" in {
+    "allow opting into exact childCount (composite paging) via config" in {
+      // Force exact mode but cap paging so we can prove the mode switches behavior deterministically.
+      //
+      // Use per-collection config so we don't affect other OpenSearch facet suites.
+      Profig("lightdb.opensearch.Doc.facetChildCount.mode").store("composite")
+      Profig("lightdb.opensearch.Doc.facetChildCount.pageSize").store(5)
+      Profig("lightdb.opensearch.Doc.facetChildCount.maxPages").store(1)
+
       val unique = 25
       val topN = 10
 
@@ -63,12 +71,12 @@ class OpenSearchFacetChildCountSpec extends AsyncWordSpec with AsyncTaskSpec wit
               .map { results =>
                 val facet = results.facet(_.tagFacet)
                 facet.values.size should be(topN)
-                facet.childCount should be(unique)
-                facet.totalCount should be(topN) // all buckets have count=1; totalCount is sum of returned bucket counts
+                // With exact composite paging and maxPages=1, childCount is limited to the first composite page.
+                facet.childCount should be(5)
               }
           }
-        }.guarantee(db.dispose)
-      }
+        }
+      }.guarantee(db.dispose)
     }
   }
 }

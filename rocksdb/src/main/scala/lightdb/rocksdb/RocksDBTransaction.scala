@@ -7,9 +7,10 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.rocksdb.RocksDBTransaction.writeOptions
+import lightdb.store.Store
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.rocksdb.{RocksIterator, WriteBatch, WriteOptions}
-import rapid.Task
+import rapid._
 
 import java.nio.charset.StandardCharsets
 import scala.jdk.CollectionConverters._
@@ -62,6 +63,12 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override protected def _insert(doc: Doc): Task[Doc] = _upsert(doc)
 
+  override def insert(stream: rapid.Stream[Doc]): Task[Int] = Task.defer {
+    batchUpsert(stream.evalTap { doc =>
+      store.trigger.insert(doc, this)
+    })
+  }
+
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val json = doc.json(store.model.rw)
     val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
@@ -70,6 +77,36 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case None => store.rocksDB.put(writeOptions, doc._id.bytes, bytes)
     }
     doc
+  }
+
+  override def upsert(stream: rapid.Stream[Doc]): Task[Int] = Task.defer {
+    batchUpsert(stream.evalTap { doc =>
+      store.trigger.upsert(doc, this)
+    })
+  }
+
+  private def batchUpsert(stream: rapid.Stream[Doc]): Task[Int] = Task.defer {
+    // Chunk to bound batch size and memory usage.
+    val chunkSize = math.max(1, Store.MaxInsertBatch)
+    stream
+      .chunk(chunkSize)
+      .fold(0)((total, chunk) => Task {
+        val batch = new WriteBatch
+        try {
+          chunk.foreach { doc =>
+            val json = doc.json(store.model.rw)
+            val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
+            store.handle match {
+              case Some(h) => batch.put(h, doc._id.bytes, bytes)
+              case None => batch.put(doc._id.bytes, bytes)
+            }
+          }
+          store.rocksDB.write(writeOptions, batch)
+          total + chunk.length
+        } finally {
+          batch.close()
+        }
+      })
   }
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = Task {
@@ -145,7 +182,9 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def iterator(value: Boolean = true,
                        prefix: Option[String] = None): Iterator[Array[Byte]] with AutoCloseable = {
-    new ThreadConfinedBufferedIterator[Array[Byte]](new Iterator[Array[Byte]] with AutoCloseable {
+    val lease = store.iteratorThreadPool.acquire()
+    new ThreadConfinedBufferedIterator[Array[Byte]](
+      mk = new Iterator[Array[Byte]] with AutoCloseable {
       private lazy val rocksIterator = {
         val i = store.handle match {
           case Some(h) => store.rocksDB.newIterator(h)
@@ -188,7 +227,14 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       }
 
       override def close(): Unit = rocksIterator.close()
-    })
+    },
+      name = s"rocksdb-iterator-${store.name}",
+      batchSize = 1024,
+      sharedAgent = Some(lease),
+      onClose = () => {
+        store.iteratorThreadPool.release(lease)
+      }
+    )
   }
 }
 
