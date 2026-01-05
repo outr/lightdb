@@ -37,7 +37,8 @@ class LuceneDistinctSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers 
     override lazy val directory: Option[java.nio.file.Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs = store(Doc)
+    // Scala 2.13 struggles to infer local Doc/Model types here; spell them out.
+    val docs: lightdb.store.Collection[Doc, Doc.type] = store[Doc, Doc.type](Doc)
   }
 
   "Lucene distinct" should {

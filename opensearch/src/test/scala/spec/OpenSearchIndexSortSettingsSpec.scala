@@ -30,7 +30,7 @@ class OpenSearchIndexSortSettingsSpec extends AnyWordSpec with Matchers {
         indexSortOrders = List("asc", "asc")
       )
 
-      val body = OpenSearchTemplates.indexBody(
+      val body = OpenSearchTemplates.indexBody[Doc, Doc.type](
         model = Doc,
         fields = Doc.fields,
         config = cfg,
@@ -54,7 +54,7 @@ class OpenSearchIndexSortSettingsSpec extends AnyWordSpec with Matchers {
       )
 
       // Pass NO fields from the model to simulate a join-parent index body that doesn't include the child field.
-      val body = OpenSearchTemplates.indexBody(
+      val body = OpenSearchTemplates.indexBody[Doc, Doc.type](
         model = Doc,
         fields = Nil,
         config = cfg,
