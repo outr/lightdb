@@ -39,10 +39,7 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
           case _ => // Ignore others
         }
       }
-      stream
-        .map(_.as[Doc](store.model.rw))
-        .evalMap(transaction.insert)
-        .count
+      transaction.insert(stream.map(_.as[Doc](store.model.rw)))
     }
 
     def stream[Return](f: rapid.Stream[Json] => Task[Return]): Task[Return] = store.transaction(t => f(t.jsonStream))
