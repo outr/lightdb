@@ -101,7 +101,8 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
               case None => batch.put(doc._id.bytes, bytes)
             }
           }
-          store.rocksDB.write(writeOptions, batch)
+          // Bulk writes can optionally skip WAL for faster rebuild/regeneration jobs.
+          store.rocksDB.write(RocksDBTransaction.bulkWriteOptions, batch)
           total + chunk.length
         } finally {
           batch.close()
@@ -239,7 +240,27 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 }
 
 object RocksDBTransaction {
+  /**
+   * Default write options (WAL enabled). This is used for single-document writes and deletes.
+   */
   val writeOptions: WriteOptions = new WriteOptions()
     .setSync(false)
     .setDisableWAL(false)
+
+  private val bulkWriteOptionsWAL: WriteOptions = new WriteOptions()
+    .setSync(false)
+    .setDisableWAL(false)
+
+  private val bulkWriteOptionsNoWAL: WriteOptions = new WriteOptions()
+    .setSync(false)
+    .setDisableWAL(true)
+
+  /**
+   * When true, bulk batched writes (stream insert/upsert) will disable WAL for higher throughput.
+   * Defaults to false for safety.
+   */
+  @volatile var disableWALForBulkWrites: Boolean = false
+
+  def bulkWriteOptions: WriteOptions =
+    if (disableWALForBulkWrites) bulkWriteOptionsNoWAL else bulkWriteOptionsWAL
 }
