@@ -88,11 +88,14 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   }
                 }.tasks.flatMap { inserted =>
                   val postings = inserted.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
-                  if (postings.isEmpty) Task.pure(inserted)
-                  else kv.upsert(postings).unit.map(_ => inserted)
+                  if (postings.isEmpty) {
+                    Task.pure(inserted.length)
+                  } else {
+                    kv.upsert(postings).unit.map(_ => inserted.length)
+                  }
                 }
               }
-              .count
+              .fold(0)((total, inserted) => Task.pure(total + inserted))
           }.attempt.map(_.getOrElse(-1)) // best-effort index maintenance; docs are already inserted
       }
     }
@@ -132,13 +135,16 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
 
                     val upsertPostings = upserted.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
                     deleteTask.next {
-                      if (upsertPostings.isEmpty) Task.pure(upserted)
-                      else kv.upsert(upsertPostings).unit.map(_ => upserted)
+                      if (upsertPostings.isEmpty) {
+                        Task.pure(upserted.length)
+                      } else {
+                        kv.upsert(upsertPostings).unit.map(_ => upserted.length)
+                      }
                     }
                   }
                 }
               }
-              .count
+              .fold(0)((total, inserted) => Task.pure(total + inserted))
           }.attempt.map(_.getOrElse(-1)) // best-effort index maintenance
       }
     }
