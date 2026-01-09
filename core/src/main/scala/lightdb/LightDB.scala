@@ -153,7 +153,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    */
   def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
                                                                name: Option[String] = None): storeManager.S[Doc, Model] = {
-    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
+    val n = name.getOrElse(model.modelName)
     val path = directory.map(_.resolve(n))
     val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
     synchronized {
@@ -247,34 +247,43 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     store
   }
 
-  def multiStore[
-    Doc <: Document[Doc],
-    Model <: DocumentModel[Doc],
-    Txn <: Transaction[Doc, Model],
-    S <: Store[Doc, Model] { type TX = Txn },
-    Key
-  ](model: Model, keys: Key*)(implicit key2Name: Key => String): MultiStore[Doc, Model, Txn, S, Key] = {
-    val stores: Map[Key, S] = keys.map { key =>
-      val s = store[Doc, Model](model, name = Some(key2Name(key))).asInstanceOf[S]
-      key -> s
-    }.toMap
-    new MultiStore[Doc, Model, Txn, S, Key](stores)
-  }
-
-  def multiStoreCustom[
+  case class MultiStoreBuilder[
     Doc <: Document[Doc],
     Model <: DocumentModel[Doc],
     Txn <: Transaction[Doc, Model],
     S <: Store[Doc, Model] { type TX = Txn },
     SM <: StoreManager,
     Key
-  ](model: Model, storeManager: SM, keys: Key*)(implicit key2Name: Key => String): MultiStore[Doc, Model, Txn, S, Key] = {
-    val stores: Map[Key, S] = keys.map { key =>
-      val s = storeCustom[Doc, Model, SM](model, storeManager, name = Some(key2Name(key))).asInstanceOf[S]
-      key -> s
-    }.toMap
-    new MultiStore[Doc, Model, Txn, S, Key](stores)
+  ](model: Model,
+    keys: List[Key],
+    storeManager: SM,
+    namePrefix: String,
+    key2Name: Key => String
+   ) {
+    def withKeys(keys: Key*): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
+      copy(keys = (this.keys ::: keys.toList).distinct)
+    def withNamePrefix(prefix: String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
+      copy(namePrefix = prefix)
+    def withStoreManager[CSM <: StoreManager](storeManager: CSM): MultiStoreBuilder[Doc, Model, Txn, S, CSM, Key] =
+      copy[Doc, Model, Txn, S, CSM, Key](storeManager = storeManager)
+    def create(): MultiStore[Doc, Model, Txn, S, Key] = {
+      val stores: Map[Key, S] = keys.map { key =>
+        val storeName = s"${namePrefix}_${key2Name(key)}"
+        val s = storeCustom[Doc, Model, SM](model, storeManager, name = Some(storeName)).asInstanceOf[S]
+        key -> s
+      }.toMap
+      new MultiStore[Doc, Model, Txn, S, Key](stores)
+    }
   }
+
+  def multiStore[
+    Doc <: Document[Doc],
+    Model <: DocumentModel[Doc],
+    Txn <: Transaction[Doc, Model],
+    S <: Store[Doc, Model] { type TX = Txn },
+    Key
+  ](model: Model)(implicit key2Name: Key => String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
+    MultiStoreBuilder[Doc, Model, Txn, S, SM, Key](model, Nil, storeManager, model.modelName, key2Name)
 
   def reverseStore[
     E <: EdgeDocument[E, F, T],
