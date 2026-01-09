@@ -17,6 +17,8 @@ import scala.language.implicitConversions
 trait DocumentModel[Doc <: Document[Doc]] { model =>
   implicit def rw: RW[Doc]
 
+  lazy val modelName: String = getClass.getSimpleName.replace("$", "")
+
   private var _fields = List.empty[Field[Doc, _]]
   private var _compositeIndexes = List.empty[CompositeIndex[Doc]]
 
