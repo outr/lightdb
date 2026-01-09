@@ -6,6 +6,7 @@ import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.field.Field
 import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
 import lightdb.progress.ProgressManager
+import lightdb.store.multi.MultiStore
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionManager}
 import lightdb.trigger.StoreTrigger
@@ -246,14 +247,34 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     store
   }
 
-  def multiStore[Key, Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                                         nameFromKey: Key => String = (k: Key) => k.toString): MultiStore[Key, Doc, Model, SM] =
-    MultiStore(model, storeManager, nameFromKey, this)
+  def multiStore[
+    Doc <: Document[Doc],
+    Model <: DocumentModel[Doc],
+    Txn <: Transaction[Doc, Model],
+    S <: Store[Doc, Model] { type TX = Txn },
+    Key
+  ](model: Model, keys: Key*)(implicit key2Name: Key => String): MultiStore[Doc, Model, Txn, S, Key] = {
+    val stores: Map[Key, S] = keys.map { key =>
+      val s = store[Doc, Model](model, name = Some(key2Name(key))).asInstanceOf[S]
+      key -> s
+    }.toMap
+    new MultiStore[Doc, Model, Txn, S, Key](stores)
+  }
 
-  def multiStoreCustom[Key, Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
-                                                                                                   storeManager: SM,
-                                                                                                   nameFromKey: Key => String = (k: Key) => k.toString): MultiStore[Key, Doc, Model, SM] =
-    MultiStore(model, storeManager, nameFromKey, this)
+  def multiStoreCustom[
+    Doc <: Document[Doc],
+    Model <: DocumentModel[Doc],
+    Txn <: Transaction[Doc, Model],
+    S <: Store[Doc, Model] { type TX = Txn },
+    SM <: StoreManager,
+    Key
+  ](model: Model, storeManager: SM, keys: Key*)(implicit key2Name: Key => String): MultiStore[Doc, Model, Txn, S, Key] = {
+    val stores: Map[Key, S] = keys.map { key =>
+      val s = storeCustom[Doc, Model, SM](model, storeManager, name = Some(key2Name(key))).asInstanceOf[S]
+      key -> s
+    }.toMap
+    new MultiStore[Doc, Model, Txn, S, Key](stores)
+  }
 
   def reverseStore[
     E <: EdgeDocument[E, F, T],

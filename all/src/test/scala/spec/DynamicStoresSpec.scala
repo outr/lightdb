@@ -5,7 +5,8 @@ import lightdb.chroniclemap.ChronicleMapStore
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.upgrade.DatabaseUpgrade
-import lightdb.{LightDB, MultiStore}
+import lightdb.LightDB
+import lightdb.store.multi.MultiStore
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec
@@ -34,6 +35,15 @@ class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         users.map(_.name) should be(List("B"))
       }
     }
+    "user a multi-transaction" in {
+      DB.users.transaction { txn =>
+        for {
+          users1 <- txn("users1").stream.toList
+          users2 <- txn("users2").stream.toList
+          users = users1 ::: users2
+        } yield users.map(_.name) should be(List("A", "B"))
+      }
+    }
     "truncate the database" in {
       DB.truncate().succeed
     }
@@ -48,7 +58,8 @@ class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
     override lazy val directory: Option[Path] = Some(Path.of("db/DynamicStoresSpec"))
 
-    private val users: MultiStore[String, User, User.type, SM] = multiStore(User)
+    val users: MultiStore[User, User.type, S[User, User.type]#TX, S[User, User.type], String] =
+      multiStore(User, "users1", "users2")
 
     lazy val users1: S[User, User.type] = users("users1")
     lazy val users2: S[User, User.type] = users("users2")
