@@ -56,11 +56,9 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
     val defaultLocal = "http://localhost:9200"
     val currentBaseUrl = Profig("lightdb.opensearch.baseUrl").opt[String].getOrElse(defaultLocal)
     val resolvedBaseUrl: String =
-      if (currentBaseUrl == defaultLocal && probeOpenSearch(defaultLocal)) {
-        // If a local OpenSearch is already running, use it (and do not start Testcontainers).
-        defaultLocal
-      } else if (useTestcontainers && currentBaseUrl == defaultLocal) {
-        // Prefer Testcontainers unless the user explicitly pointed at a non-local endpoint.
+      if (useTestcontainers && currentBaseUrl == defaultLocal) {
+        // Prefer Testcontainers by default to avoid polluting / depending on a developer's persistent local OpenSearch.
+        // This also avoids shard-limit and index-name collision issues across repeated sbt runs.
         try {
           OpenSearchTestContainer.baseUrl
         } catch {
@@ -69,6 +67,9 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
             scribe.warn(s"Unable to start OpenSearch via Testcontainers. Falling back to localhost: ${t.getMessage}")
             defaultLocal
         }
+      } else if (currentBaseUrl == defaultLocal && probeOpenSearch(defaultLocal)) {
+        // If the user disabled Testcontainers and a local OpenSearch is running, use it.
+        defaultLocal
       } else {
         currentBaseUrl
       }
@@ -90,6 +91,19 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
       Profig("lightdb.opensearch.indexPrefix").store(s"lightdb_test_${Unique.sync()}")
     }
 
+    // IMPORTANT (local dev safety):
+    // When using a persistent local OpenSearch node, old test indices can accumulate across sbt runs if the JVM is
+    // killed before shutdown hooks run. This can exhaust cluster shard limits and cause unrelated tests to fail.
+    //
+    // We keep this cleanup:
+    // - best-effort (never fails the suite)
+    // - localhost-only
+    // - prefix-scoped to LightDB test indices (`lightdb_test_*`)
+    //
+    // Note: this can interfere with concurrent test runs against the same local OpenSearch; in that scenario,
+    // point `lightdb.opensearch.baseUrl` at a dedicated node or use Testcontainers.
+    OpenSearchTestSupport.cleanupAllTestIndicesOnStartup(resolvedBaseUrl)
+
     // When running against a persistent local OpenSearch, register ONE JVM shutdown hook to clean up our test indices.
     // We intentionally do NOT delete indices during test execution because suites can share the same JVM and may run
     // concurrently; deleting mid-run can cause 404s in other suites.
@@ -99,6 +113,58 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
 
 object OpenSearchTestSupport {
   @volatile private var shutdownHookRegistered: Boolean = false
+  @volatile private var startupCleanupRan: Boolean = false
+
+  def cleanupAllTestIndicesOnStartup(resolvedBaseUrl: String): Unit = {
+    if (resolvedBaseUrl != "http://localhost:9200") return
+    if (startupCleanupRan) return
+    startupCleanupRan = true
+
+    try {
+      val baseUrl = profig.Profig("lightdb.opensearch.baseUrl").as[String]
+      if (baseUrl != "http://localhost:9200") return
+
+      def http(method: String, pathAndQuery: String): (Int, String) = {
+        val url = new java.net.URI(baseUrl + pathAndQuery).toURL
+        val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
+        conn.setRequestMethod(method)
+        conn.setConnectTimeout(1000)
+        conn.setReadTimeout(5000)
+        conn.setInstanceFollowRedirects(false)
+        conn.connect()
+        val code = conn.getResponseCode
+        val is = if (code >= 200 && code < 400) conn.getInputStream else conn.getErrorStream
+        val body = if (is != null) {
+          try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+          finally is.close()
+        } else {
+          ""
+        }
+        (code, body)
+      }
+
+      val (code, body) = http("GET", "/_cat/indices/lightdb_test_*?h=index&s=index")
+      if (code != 200) return
+      val indices = body
+        .split("\n")
+        .iterator
+        .map(_.trim)
+        .filter(s => s.nonEmpty && s.startsWith("lightdb_test_"))
+        .toVector
+
+      indices.foreach { index =>
+        val (dCode, _) = http("DELETE", s"/$index")
+        if (dCode != 200 && dCode != 202 && dCode != 404) {
+          // Best-effort.
+          scribe.warn(s"Unable to delete OpenSearch stale test index '$index' (status=$dCode)")
+        }
+      }
+    } catch {
+      case t: Throwable =>
+        // Best-effort.
+        scribe.warn(s"OpenSearch startup cleanup failed: ${t.getMessage}")
+    }
+  }
 
   def registerShutdownCleanupIfNeeded(resolvedBaseUrl: String): Unit = {
     if (resolvedBaseUrl != "http://localhost:9200") return

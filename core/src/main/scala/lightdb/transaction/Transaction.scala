@@ -24,6 +24,11 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
 
   final def exists(id: Id[Doc]): Task[Boolean] = _exists(id)
   final def count: Task[Int] = _count
+
+  /**
+   * Gets an estimated count if supported by database. Falls back to using count.
+   */
+  def estimatedCount: Task[Int] = count
   final def delete[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Boolean] = {
     val (field, value) = f(store.model)
     store.trigger.delete(field, value, this).flatMap(_ => _delete(field, value))

@@ -9,7 +9,7 @@ import lightdb.id.Id
 import lightdb.rocksdb.RocksDBTransaction.writeOptions
 import lightdb.store.Store
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
-import org.rocksdb.{RocksIterator, WriteBatch, WriteOptions}
+import org.rocksdb.{ReadOptions, RocksIterator, Slice, WriteBatch, WriteOptions}
 import rapid._
 
 import java.nio.charset.StandardCharsets
@@ -26,6 +26,14 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream
     .fromIterator(Task(iterator(prefix = Some(prefix)))).map(bytes2Json)
+
+  /**
+   * Key-only prefix scan. This avoids JSON parsing and document decoding and is much cheaper when the caller
+   * only needs to count/inspect ids to detect fanout.
+   */
+  def keyPrefixStream(prefix: String): rapid.Stream[String] = rapid.Stream
+    .fromIterator(Task(iterator(value = false, prefix = Some(prefix))))
+    .map(bytes => new String(bytes, StandardCharsets.UTF_8))
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream
     .fromIterator(Task(iterator())).map(bytes2Json)
@@ -126,7 +134,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
   }
 
-  def estimatedCount: Task[Int] = Task {
+  override def estimatedCount: Task[Int] = Task {
     store.rocksDB.getLongProperty(store.handle.orNull, "rocksdb.estimate-num-keys").toInt
   }
 
@@ -186,10 +194,46 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val lease = store.iteratorThreadPool.acquire()
     new ThreadConfinedBufferedIterator[Array[Byte]](
       mk = new Iterator[Array[Byte]] with AutoCloseable {
+      private def prefixUpperBoundBytes(p: Array[Byte]): Option[Array[Byte]] = {
+        // Compute the shortest byte array that is lexicographically greater than any key starting with p.
+        // Example: "abc" => "abd" (as bytes). If p is all 0xFF, there is no upper bound.
+        var i = p.length - 1
+        while (i >= 0 && (p(i) & 0xff) == 0xff) i -= 1
+        if (i < 0) None
+        else {
+          val out = java.util.Arrays.copyOf(p, i + 1)
+          out(i) = (out(i) + 1).toByte
+          Some(out)
+        }
+      }
+
+      private def startsWithBytes(key: Array[Byte], p: Array[Byte]): Boolean = {
+        if (key.length < p.length) return false
+        var i = 0
+        while (i < p.length) {
+          if (key(i) != p(i)) return false
+          i += 1
+        }
+        true
+      }
+
+      private lazy val readOptions: ReadOptions = {
+        val ro = new ReadOptions()
+        // For prefix scans, tell RocksDB we only care about keys sharing the seek prefix.
+        // This can reduce internal work during iteration.
+        if (prefix.nonEmpty) ro.setPrefixSameAsStart(true)
+        ro
+      }
+      private lazy val prefixBytes: Option[Array[Byte]] = prefix.map(_.getBytes(StandardCharsets.UTF_8))
+      private lazy val upperBoundSlice: Option[Slice] =
+        prefixBytes.flatMap(prefixUpperBoundBytes).map(new Slice(_))
       private lazy val rocksIterator = {
+        // If we can compute an exclusive upper bound for this prefix, let RocksDB enforce it.
+        // This avoids per-entry prefix checking (and allocations) in our iterator loop.
+        upperBoundSlice.foreach(readOptions.setIterateUpperBound)
         val i = store.handle match {
-          case Some(h) => store.rocksDB.newIterator(h)
-          case None => store.rocksDB.newIterator()
+          case Some(h) => store.rocksDB.newIterator(h, readOptions)
+          case None => store.rocksDB.newIterator(readOptions)
         }
         i
       }
@@ -199,15 +243,14 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         case None => rocksIterator.seekToFirst()                    // Seek to the provided value as the start position
       }
 
-      val prefixBytes: Option[Array[Byte]] = prefix.map(_.getBytes(StandardCharsets.UTF_8))
-
       val isValid: () => Boolean = prefixBytes match {
-        case Some(pBytes) =>
-          () => rocksIterator.isValid && {
-            val key = rocksIterator.key()
-            key.length >= pBytes.length && java.util.Arrays.equals(key.take(pBytes.length), pBytes)
-          }
+        case Some(pBytes) if upperBoundSlice.isEmpty =>
+          // No upper bound available (pathological), so fall back to a cheap, allocation-free prefix check.
+          () => rocksIterator.isValid && startsWithBytes(rocksIterator.key(), pBytes)
         case None =>
+          () => rocksIterator.isValid
+        case Some(_) =>
+          // Upper bound is enforced by RocksDB; no need for manual prefix checks.
           () => rocksIterator.isValid
       }
 
@@ -227,7 +270,14 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         result
       }
 
-      override def close(): Unit = rocksIterator.close()
+      override def close(): Unit = {
+        try {
+          rocksIterator.close()
+        } finally {
+          upperBoundSlice.foreach(_.close())
+          readOptions.close()
+        }
+      }
     },
       name = s"rocksdb-iterator-${store.name}",
       batchSize = 1024,

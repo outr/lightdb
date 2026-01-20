@@ -254,9 +254,79 @@ case class OpenSearchClient(config: OpenSearchConfig) {
     }
   }
 
+  /**
+   * Force refresh so recent writes become searchable.
+   *
+   * IMPORTANT:
+   * OpenSearch may return HTTP 200 while still reporting shard failures in the body.
+   * To honor LightDB's "commit means searchable" contract, we validate the `_shards` response and
+   * retry briefly if refresh was only partially successful.
+   */
   def refreshIndex(index: String): Task[Unit] = {
-    val req = client.method(HttpMethod.Post).url(url(s"/$index/_refresh"))
-    send(req).flatMap(resp => require2xx(s"refreshIndex($index)", resp))
+    val maxAttempts = 6
+    val initialDelayMs = 25L
+    val maxDelayMs = 1000L
+
+    def validateRefreshBody(body: String): Task[Unit] = Task {
+      // Typical response:
+      // { "_shards": { "total": 2, "successful": 1, "failed": 0 } }
+      val json = JsonParser(body)
+      val shards = json.asObj.get("_shards").map(_.asObj).getOrElse(obj().asObj)
+      val total = shards.get("total").map(_.asInt).getOrElse(0)
+      val successful = shards.get("successful").map(_.asInt).getOrElse(0)
+      val failed = shards.get("failed").map(_.asInt).getOrElse(0)
+
+      // If OpenSearch omits shard info, assume success (best effort) but keep a warning for visibility.
+      if (total == 0 && successful == 0 && failed == 0) {
+        scribe.warn(s"OpenSearch refreshIndex($index) returned body without _shards stats; assuming success. body=${body.take(512)}")
+      } else if (failed > 0) {
+        throw new RuntimeException(
+          s"OpenSearch refreshIndex($index) incomplete: total=$total successful=$successful failed=$failed body=${body.take(512)}"
+        )
+      } else if (total > 0 && successful <= 0) {
+        // Extremely unlikely, but treat as failure because refresh had no acknowledged shards.
+        throw new RuntimeException(
+          s"OpenSearch refreshIndex($index) reported successful=0 (total=$total failed=$failed) body=${body.take(512)}"
+        )
+      } else if (total > 0 && successful != total) {
+        // Replica shards may be unassigned in single-node clusters (common in tests), resulting in successful < total.
+        // This does not break read-after-write on primary shards, so warn but do not fail.
+        scribe.warn(
+          s"OpenSearch refreshIndex($index) partial success (likely unassigned replicas): total=$total successful=$successful failed=$failed"
+        )
+      }
+    }
+
+    def nextDelayMs(current: Long): Long =
+      math.min(maxDelayMs, math.max(0L, current * 2L))
+
+    def attempt(n: Int, delayMs: Long): Task[Unit] = Task.defer {
+      val req = client.method(HttpMethod.Post).url(url(s"/$index/_refresh"))
+      send(req).flatMap { resp =>
+        require2xx(s"refreshIndex($index)", resp).next {
+          readBody(resp).flatMap {
+            case Some(body) =>
+              validateRefreshBody(body).attempt.flatMap {
+                case Success(_) => Task.unit
+                case Failure(t) if n < maxAttempts =>
+                  // If refresh was partial, backoff + retry. This usually indicates shard not ready immediately after truncate/reindex.
+                  val sleepMs = jitterDelay(delayMs)
+                  if (config.logRequests) {
+                    scribe.warn(s"OpenSearch refreshIndex retrying index=$index attempt=$n/$maxAttempts sleepMs=$sleepMs (${t.getClass.getSimpleName}: ${t.getMessage})")
+                  }
+                  Task.sleep(sleepMs.millis).next(attempt(n + 1, nextDelayMs(delayMs)))
+                case Failure(t) =>
+                  Task.error(t)
+              }
+            case None =>
+              // No body; we can't validate shard status. Treat as success.
+              Task.unit
+          }
+        }
+      }
+    }
+
+    attempt(n = 1, delayMs = initialDelayMs)
   }
 
   def indexSettings(index: String,

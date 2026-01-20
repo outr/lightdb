@@ -69,12 +69,16 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
         prevBuf <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer)
         _ <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer = 1)
 
-        _ <- db.docs.transaction { tx =>
+        // IMPORTANT:
+        // Store.transaction(...) always commits in `guarantee(...)` even if the user task fails.
+        // To test "early flush without commit refresh", we must explicitly rollback (no commit).
+        _ <- db.docs.transaction.create(None).flatMap { tx =>
           tx.truncate
             .next(tx.insert(Doc("no-refresh-a", _id = Id("a"))))
             .next(tx.insert(Doc("no-refresh-b", _id = Id("b")))) // triggers early flush (buffer > 1)
-            .next(Task.error(new RuntimeException("abort-before-commit")))
-        }.attempt
+            .next(tx.rollback)
+            .guarantee(db.docs.transaction.release(tx))
+        }
 
         // With refresh_interval=-1 and no explicit refresh, doc should not be visible yet.
         before <- db.docs.transaction { tx =>
@@ -91,11 +95,11 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
               tx.withRefreshPolicy(Some("true"))
                 .insert(Doc("with-refresh-c", _id = Id("c")))
                 .next(tx.insert(Doc("with-refresh-d", _id = Id("d")))) // triggers early flush (buffer > 1)
-                .next(Task.error(new RuntimeException("abort-before-commit")))
+                .next(tx.rollback)
             case _ =>
               Task.error(new RuntimeException("Expected OpenSearchTransaction"))
           }
-        }.attempt
+        }
 
         after <- db.docs.transaction { tx =>
           tx.query

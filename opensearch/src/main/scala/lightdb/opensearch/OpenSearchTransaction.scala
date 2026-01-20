@@ -25,7 +25,7 @@ import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.{Query, SearchResults, Sort}
 import lightdb.util.Aggregator
 import lightdb.opensearch.util.OpenSearchCursor
-import rapid.Task
+import rapid.{Task, logger}
 import rapid.taskSeq2Ops
 
 import java.util.concurrent.Semaphore
@@ -45,6 +45,9 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   @volatile private var commitResult: Option[Try[Unit]] = None
   @volatile private var refreshPolicyOverride: Option[Option[String]] = None
   @volatile private var wroteToIndex: Boolean = false
+  // A best-effort "searchable barrier" for strict read-after-commit semantics:
+  // we remember a recently indexed document id and confirm it is visible via a search API after refresh.
+  @volatile private var lastIndexedIdForSearchBarrier: Option[String] = None
   @volatile private var refreshIntervalOverride: Option[String] = None
   @volatile private var restoreRefreshIntervalOnClose: Boolean = false
   @volatile private var originalRefreshInterval: Option[String] = None
@@ -132,8 +135,46 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     case None =>
       // Commit buffered writes, then (if we wrote) force a refresh so documents are searchable immediately after the
       // LightDB transaction completes (without per-bulk wait_for overhead).
-      val refreshIfWrote = if (wroteToIndex) client.refreshIndex(store.writeIndexName) else Task.unit
-      super._commit.next(refreshIfWrote).attempt.flatMap {
+      def awaitSearchableBarrier: Task[Unit] = lastIndexedIdForSearchBarrier match {
+        case None => Task.unit
+        case Some(id) =>
+          // If the index was just recreated (common in reIndex), OpenSearch can report refresh success but still
+          // not immediately return hits for the freshly written docs. We guard against that by polling a cheap
+          // count query on _id until it becomes visible.
+          val query = obj("query" -> obj("ids" -> obj("values" -> arr(str(id)))))
+          def loop(attempt: Int, delay: FiniteDuration): Task[Unit] = {
+            client.count(store.readIndexName, query).flatMap { c =>
+              if (c > 0) {
+                Task.unit
+              } else if (attempt >= 6) {
+                Task.error(new RuntimeException(
+                  s"OpenSearch commit barrier failed: doc not searchable after refresh (index=${store.readIndexName} id=$id)"
+                ))
+              } else {
+                // Retry with a small backoff; also re-refresh (best effort).
+                client.refreshIndex(store.writeIndexName)
+                  .attempt
+                  .unit
+                  .next(Task.sleep(delay))
+                  .next(loop(attempt + 1, (delay * 2).min(1.second)))
+              }
+            }
+          }
+          loop(attempt = 0, delay = 10.millis)
+      }
+
+      // IMPORTANT:
+      // `wroteToIndex` is flipped inside `flushBuffer`, which runs during `super._commit`.
+      // So we must decide whether to refresh AFTER `super._commit` has executed.
+      val refreshAndBarrierIfWrote: Task[Unit] = Task.defer {
+        // NOTE:
+        // `refreshPolicy` controls per-bulk behavior (OpenSearch `refresh` query param) and defaults to false for
+        // throughput. LightDB's contract is "searchable after commit", so we still force a refresh at commit
+        // boundaries when we've written to the index.
+        if (wroteToIndex) client.refreshIndex(store.writeIndexName).next(awaitSearchableBarrier) else Task.unit
+      }
+
+      super._commit.next(refreshAndBarrierIfWrote).attempt.flatMap {
         case Success(_) =>
           commitResult = Some(Success(()))
           Task.unit
@@ -781,16 +822,37 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
           if (indexOps.isEmpty && deleteOps.isEmpty) Task.unit
           else {
             wroteToIndex = true
+            // TEMP DEBUG: record when we start pushing bulks for a store during a long reindex.
+            scribe.warn(s"[reindex-trace] OpenSearch flushBuffer store=${store.name} index=${store.writeIndexName} ops=${ops.size} indexOps=${indexOps.size} deleteOps=${deleteOps.size} refresh=${effectiveRefreshPolicy.getOrElse("<default>")}")
+            // Track a recent indexed document id so commit can validate searchability post-refresh.
+            // (Only meaningful for index/upsert, not pure deletes.)
+            indexOps.lastOption match {
+              case Some(OpenSearchBulkOpIndex(_, id, _, _)) =>
+                lastIndexedIdForSearchBarrier = Some(id)
+              case _ => // ignore
+            }
             val allOps: List[OpenSearchBulkOp] = indexOps ::: deleteOps
             val chunks = chunkOps(allOps)
             val chunkTask = (chunk: List[OpenSearchBulkOp]) => {
+              // TEMP DEBUG: only log the first chunk of each flushBuffer invocation to avoid flooding logs.
+              // If it hangs here, we'll see it.
+              if (chunk eq chunks.head) {
+                scribe.warn(s"[reindex-trace] OpenSearch bulk start store=${store.name} docs=${chunk.size} bytes~=${chunk.size} (building request)")
+              }
               val body = OpenSearchBulkRequest(chunk).toBulkNdjson
+              if (chunk eq chunks.head) {
+                scribe.warn(s"[reindex-trace] OpenSearch bulk send store=${store.name} bytes=${body.length} docs=${chunk.size}")
+              }
               if (config.metricsEnabled) {
                 OpenSearchMetrics.recordBulkAttempt(config.normalizedBaseUrl, docs = chunk.size, bytes = body.length)
               }
               withIngestPermit {
                 client.bulkResponse(body, refresh = effectiveRefreshPolicy)
               }.flatMap { json =>
+                if (chunk eq chunks.head) {
+                  val hasErrors = json.asObj.get("errors").exists(_.asBoolean)
+                  scribe.warn(s"[reindex-trace] OpenSearch bulk response store=${store.name} received (errors=$hasErrors)")
+                }
                 val errors = json.asObj.get("errors").exists(_.asBoolean)
                 if (!errors) {
                   Task.unit
@@ -833,10 +895,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     )
   }
 
-  private def truncateIndexLevel: Task[Int] = {
-    // NOTE: This truncates the ENTIRE physical index for this store (including join-domains).
-    // This avoids `_delete_by_query` which is often extremely slow at scale.
-
+  private def truncateWholeIndex: Task[Int] = {
     // BufferedWritingTransaction.truncate clears the write buffer before calling `_truncate`.
     // We still need to reset OpenSearchTransaction-local commit memoization so subsequent ops are valid.
     commitResult = None
@@ -993,6 +1052,62 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
           .next(createIndexEventually(index))
           .map(_ => deleted)
       }
+    }
+  }
+
+  private def truncateIndexLevel: Task[Int] = {
+    // Truncate semantics:
+    //
+    // - Non-join indices: delete/recreate the entire physical index (fast, avoids `_delete_by_query`).
+    // - Join-domain indices: multiple logical LightDB collections share a single physical index.
+    //   In that case, we MUST NOT delete/recreate the entire index when truncating one collection,
+    //   otherwise we'd wipe documents belonging to other join types (ex: parent/child).
+    //   Instead, delete only this store's join type via `_delete_by_query`.
+
+    // BufferedWritingTransaction.truncate clears the write buffer before calling `_truncate`.
+    // We still need to reset OpenSearchTransaction-local commit memoization so subsequent ops are valid.
+    commitResult = None
+
+    // Join-domain safe truncate: delete only docs for this logical store type in the shared index.
+    if (config.joinDomain.nonEmpty && config.joinRole.nonEmpty) {
+      val q = obj("query" -> joinTypeFilterDsl)
+      val startNanos = System.nanoTime()
+      def elapsedMs: Long = (System.nanoTime() - startNanos) / 1_000_000L
+
+      logger
+        .warn(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} starting count (elapsedMs=$elapsedMs) ...")
+        .next {
+          client.count(store.readIndexName, q)
+        }
+        .flatMap { deleted =>
+          logger
+            .warn(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} count=$deleted; starting deleteByQuery refresh=$refreshForDeleteByQuery (elapsedMs=$elapsedMs) ...")
+            .next {
+              client.deleteByQuery(store.readIndexName, q, refresh = refreshForDeleteByQuery)
+            }
+            .map { _ =>
+              scribe.warn(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} deleteByQuery done (elapsedMs=$elapsedMs).")
+              deleted
+            }
+        }
+    } else {
+      truncateWholeIndex
+    }
+  }
+
+  /**
+   * Truncate all documents in the physical OpenSearch index, even for join-domain stores.
+   * This is intended for full rebuilds where both parent + child docs are being reindexed.
+   */
+  def truncateAll: Task[Int] = Task.defer {
+    var count = 0
+    withWriteBuffer { wb =>
+      Task {
+        count = wb.map.size
+        wb.copy(Map.empty)
+      }
+    }.flatMap { _ =>
+      truncateWholeIndex.map(_ + count)
     }
   }
 

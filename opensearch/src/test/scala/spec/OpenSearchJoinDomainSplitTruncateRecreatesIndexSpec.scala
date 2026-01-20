@@ -16,12 +16,11 @@ import rapid.{AsyncTaskSpec, Task}
 
 /**
  * Regression:
- * In SplitCollection DBs, the OpenSearchStore instances (searching) are nested under SplitCollection and may not be
- * present in LightDB.stores. `OpenSearchTransaction.truncate` must still recreate join-domain indices using the
- * JOIN-PARENT store mapping (so the join field is `type: join`, and facet `__facet` fields are keyword).
+ * Join-domain indices are shared by multiple logical collections (parent/child).
+ * `truncate` must not wipe other join types in the same physical index.
  */
 @EmbeddedTest
-class OpenSearchJoinDomainSplitTruncateRecreatesIndexSpec
+class OpenSearchJoinDomainSplitTruncateIsolationSpec
     extends AsyncWordSpec
     with AsyncTaskSpec
     with Matchers
@@ -47,7 +46,7 @@ class OpenSearchJoinDomainSplitTruncateRecreatesIndexSpec
   object DB extends LightDB {
     override type SM = SplitStoreManager[HashMapStore.type, lightdb.opensearch.OpenSearchStore.type]
     override val storeManager: SM = SplitStoreManager(HashMapStore, lightdb.opensearch.OpenSearchStore)
-    override def name: String = "OpenSearchJoinDomainSplitTruncateRecreatesIndexSpec"
+    override def name: String = "OpenSearchJoinDomainSplitTruncateIsolationSpec"
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
@@ -56,46 +55,46 @@ class OpenSearchJoinDomainSplitTruncateRecreatesIndexSpec
   }
 
   "OpenSearchTransaction.truncate (SplitCollection join-domain)" should {
-    "delete and recreate the shared index using the join-parent mapping (type: join)" in {
-      // Force join-domain registry/config to initialize by touching the searching store.
-      val indexName = DB.children.searching.readIndexName
-      val config = OpenSearchConfig.from(DB, collectionName = DB.children.searching.name)
-      val client = OpenSearchClient(config)
-      val joinFieldName = "__split_join"
-
-      // Create a legacy/bad index: dynamic mapping, then index a child doc which maps join field as an object.
-      val badDoc = obj(
-        OpenSearchTemplates.InternalIdField -> str("c1"),
-        "parentId" -> str("p1"),
-        "value" -> str("v1"),
-        joinFieldName -> obj("name" -> str("SplitChild"), "parent" -> str("p1"))
-      )
+    "only delete the current store's join type (and preserve other join types)" in {
+      val p1 = Parent("p1")
+      val p2 = Parent("p2")
+      val c1 = Child(parentId = p1._id, value = "c1")
+      val c2 = Child(parentId = p2._id, value = "c2")
 
       val test = for {
-        _ <- client.deleteIndex(indexName)
-        _ <- client.createIndex(indexName, obj("mappings" -> obj("dynamic" -> bool(true))))
-        _ <- client.indexDoc(indexName, "c1", badDoc, refresh = Some("true"))
-
         _ <- DB.init
-        // Trigger truncate via the searching store transaction (what SplitCollection.reIndex does).
-        _ <- DB.children.searching.transaction(_.truncate)
+        _ <- DB.parents.transaction(_.truncate)
+        _ <- DB.children.transaction(_.truncate)
+        _ <- DB.parents.transaction(_.insert(List(p1, p2)))
+        _ <- DB.children.transaction(_.insert(List(c1, c2)))
 
-        // If truncate recreated the index using the join-parent template, OpenSearch will accept parent-style join values (string)
-        // and will reject them if the join field is still mapped as an object.
-        _ <- client.indexDoc(
-          index = indexName,
-          id = "p1",
-          source = obj(
-            OpenSearchTemplates.InternalIdField -> str("p1"),
-            "name" -> str("parent-name"),
-            joinFieldName -> str("SplitParent")
-          ),
-          refresh = Some("true")
-        )
+        parentsBefore <- DB.parents.searching.transaction(_.count)
+        childrenBefore <- DB.children.searching.transaction(_.count)
+
+        // Truncate parents type only: children should remain.
+        _ <- DB.parents.searching.transaction(_.truncate)
+        parentsAfterParentTruncate <- DB.parents.searching.transaction(_.count)
+        childrenAfterParentTruncate <- DB.children.searching.transaction(_.count)
+
+        // Re-insert parents so we can validate child truncate isolation too.
+        _ <- DB.parents.transaction(_.insert(List(p1, p2)))
+
+        // Truncate children type only: parents should remain.
+        _ <- DB.children.searching.transaction(_.truncate)
+        parentsAfterChildTruncate <- DB.parents.searching.transaction(_.count)
+        childrenAfterChildTruncate <- DB.children.searching.transaction(_.count)
+
+        _ <- DB.truncate()
         _ <- DB.dispose
-        _ <- client.deleteIndex(indexName)
       } yield {
-        succeed
+        parentsBefore shouldBe 2
+        childrenBefore shouldBe 2
+
+        parentsAfterParentTruncate shouldBe 0
+        childrenAfterParentTruncate shouldBe 2
+
+        parentsAfterChildTruncate shouldBe 2
+        childrenAfterChildTruncate shouldBe 0
       }
 
       test
