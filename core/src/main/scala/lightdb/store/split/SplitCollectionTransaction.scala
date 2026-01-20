@@ -52,6 +52,8 @@ case class SplitCollectionTransaction[
 
   override protected def _count: Task[Int] = storage.count
 
+  override def estimatedCount: Task[Int] = storage.estimatedCount
+
   override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] =
     storage.delete(_ => index -> value).flatTap { _ =>
       searchUpdateHandler.delete(index, value)

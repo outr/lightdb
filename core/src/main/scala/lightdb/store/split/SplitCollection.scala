@@ -45,16 +45,20 @@ class SplitCollection[
     _ = t._searching = t2.asInstanceOf[t.store.searching.TX]
   } yield t
 
-  override def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = transaction { transaction =>
-    for {
-      storageCount <- transaction.storage.count
-      searchCount <- transaction.searching.count
-      shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1 && SplitCollection.ReIndexWhenOutOfSync
-      _ <- logger.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
-        .next(reIndexInternal(transaction, progressManager))
-        .next(logger.info(s"$name re-indexed successfully!"))
-        .when(shouldReIndex)
-    } yield shouldReIndex
+  override def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = if (SplitCollection.ReIndexWhenOutOfSync) {
+    transaction { transaction =>
+      for {
+        storageCount <- transaction.storage.count
+        searchCount <- transaction.searching.count
+        shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1
+        _ <- logger.warn(s"$name out of sync! Storage Count: $storageCount, Search Count: $searchCount. Re-Indexing...")
+          .next(reIndexInternal(transaction, progressManager))
+          .next(logger.info(s"$name re-indexed successfully!"))
+          .when(shouldReIndex)
+      } yield shouldReIndex
+    }
+  } else {
+    Task.pure(false)
   }
 
   override def reIndex(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = transaction { transaction =>
@@ -67,19 +71,50 @@ class SplitCollection[
 
   override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
 
-  private def reIndexInternal(transaction: TX, progressManager: ProgressManager): Task[Unit] = transaction.searching.truncate.flatMap { _ =>
-    transaction.storage.count.flatMap { total =>
-      val counter = new AtomicInteger(0)
-      transaction.searching.insert(transaction.storage.stream.evalTap { _ =>
+  private def reIndexInternal(transaction: TX, progressManager: ProgressManager): Task[Unit] = Task.defer {
+    val startNanos = System.nanoTime()
+    def elapsedMs: Long = (System.nanoTime() - startNanos) / 1_000_000L
+
+    Task {
+      scribe.warn(s"[reindex-trace] $name reIndexInternal starting (elapsedMs=$elapsedMs) ...")
+    }.next {
+      Task {
+        scribe.warn(s"[reindex-trace] $name starting searching.truncate (elapsedMs=$elapsedMs) ...")
+      }.next {
+        transaction.searching.truncate
+      }.flatMap { deleted =>
         Task {
-          val count = counter.incrementAndGet()
-          progressManager.percentage(
-            current = count,
-            total = total,
-            message = Some(s"Re-Indexing $name: $count of $total")
-          )
+          scribe.warn(s"[reindex-trace] $name searching.truncate completed deleted=$deleted (elapsedMs=$elapsedMs). Starting storage.count ...")
+        }.next {
+          transaction.storage.count
+        }.flatMap { total =>
+          Task {
+            scribe.warn(s"[reindex-trace] $name storage.count=$total (elapsedMs=$elapsedMs). Starting searching.insert(stream) ...")
+          }.next {
+            val counter = new AtomicInteger(0)
+            val LogEvery = 100_000
+            transaction.searching.insert(
+              transaction.storage.stream.evalTap { _ =>
+                Task {
+                  val count = counter.incrementAndGet()
+                  if (count == 1 || count % LogEvery == 0 || count == total) {
+                    scribe.warn(s"[reindex-trace] $name streamed=$count/$total (elapsedMs=$elapsedMs)")
+                  }
+                  progressManager.percentage(
+                    current = count,
+                    total = total,
+                    message = Some(s"Re-Indexing $name: $count of $total")
+                  )
+                }
+              }
+            ).unit
+          }.next(Task {
+            scribe.warn(s"[reindex-trace] $name searching.insert(stream) completed (elapsedMs=$elapsedMs).")
+          })
         }
-      }).unit
+      }.next(Task {
+        scribe.warn(s"[reindex-trace] $name reIndexInternal finished (elapsedMs=$elapsedMs).")
+      })
     }
   }
 

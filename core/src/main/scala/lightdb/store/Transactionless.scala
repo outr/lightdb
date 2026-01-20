@@ -57,5 +57,7 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
 
   def count: Task[Int] = store.transaction(_.count)
 
+  def estimatedCount: Task[Int] = store.transaction(_.estimatedCount)
+
   def truncate: Task[Int] = store.transaction(_.truncate)
 }

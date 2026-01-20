@@ -121,6 +121,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     _ = backingStore
     _ <- logger.info(s"Initializing stores: ${stores.map(_.name).mkString(", ")}...")
     _ <- stores.map(_.init).tasks
+    _ <- logger.info("Initialization complete.")
     // Truncate the database before we do anything if specified
     _ <- truncate().next(logger.info("Truncating database...")).when(truncateOnInit)
     // Determine if this is an uninitialized database
@@ -264,8 +265,6 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       copy(keys = (this.keys ::: keys.toList).distinct)
     def withNamePrefix(prefix: String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
       copy(namePrefix = prefix)
-    def withStoreManager[CSM <: StoreManager](storeManager: CSM): MultiStoreBuilder[Doc, Model, Txn, S, CSM, Key] =
-      copy[Doc, Model, Txn, S, CSM, Key](storeManager = storeManager)
     def create(): MultiStore[Doc, Model, Txn, S, Key] = {
       val stores: Map[Key, S] = keys.map { key =>
         val storeName = s"${namePrefix}_${key2Name(key)}"
@@ -283,6 +282,16 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     S <: Store[Doc, Model] { type TX = Txn },
     Key
   ](model: Model)(implicit key2Name: Key => String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
+    MultiStoreBuilder[Doc, Model, Txn, S, SM, Key](model, Nil, storeManager, model.modelName, key2Name)
+
+  def multiStore[
+    Doc <: Document[Doc],
+    Model <: DocumentModel[Doc],
+    Txn <: Transaction[Doc, Model],
+    S <: Store[Doc, Model] { type TX = Txn },
+    SM <: StoreManager,
+    Key
+  ](model: Model, storeManager: SM)(implicit key2Name: Key => String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
     MultiStoreBuilder[Doc, Model, Txn, S, SM, Key](model, Nil, storeManager, model.modelName, key2Name)
 
   def reverseStore[

@@ -29,12 +29,12 @@ trait BufferedWritingTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
 
   protected def writeMod(f: Map[Id[Doc], WriteOp[Doc]] => Task[Map[Id[Doc], WriteOp[Doc]]]): Task[WriteBuffer[Doc]] = withWriteBuffer { b =>
     val s = b.map.size
-    f(b.map).map { map =>
+    f(b.map).flatMap { map =>
       val d = map.size - s
-      if (b.map.size > maxTransactionWriteBuffer) {
-        flushMap(map).sync()
+      if (map.size > maxTransactionWriteBuffer) {
+        flushMap(map)
       } else {
-        b.copy(map, d)
+        Task(b.copy(map, d))
       }
     }
   }

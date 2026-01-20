@@ -14,19 +14,32 @@ class MultiStore[
   Txn <: Transaction[Doc, Model],
   S <: Store[Doc, Model] { type TX = Txn },
   Key
-](stores: Map[Key, S]) {
-  def apply(key: Key): S = stores(key)
+](storesMap: Map[Key, S]) { ms =>
+  def apply(key: Key): S = storesMap.getOrElse(key, throw new RuntimeException(s"Unable to find $key. Available keys: ${storesMap.keys.mkString(", ")}"))
+
+  def stores: List[S] = storesMap.values.iterator.toList
+
+  lazy val keyStream: rapid.Stream[Key] = rapid.Stream.fromIterator(Task(storesMap.keys.iterator))
+  lazy val storesStream: rapid.Stream[S] = rapid.Stream.fromIterator(Task(storesMap.values.iterator))
 
   def transaction[Return](f: TXN => Task[Return]): Task[Return] = Task.defer {
     val txn = new TXN
     Task.defer(f(txn)).guarantee(txn.release)
   }
 
+  def truncate: Task[Int] = transaction { txn =>
+    keyStream
+      .evalMap { key =>
+        txn(key).truncate
+      }
+      .fold(0)((total, count) => Task.pure(total + count))
+  }
+
   class TXN {
     private val transactions = new ConcurrentHashMap[Key, Txn]
 
     def apply(key: Key): Txn = transactions.computeIfAbsent(key, _ => {
-      val s = stores(key)
+      val s = ms(key)
       s.transaction.create(None).sync()
     })
 
@@ -34,7 +47,7 @@ class MultiStore[
       .entrySet()
       .asScala
       .map { e =>
-        val s = stores(e.getKey)
+        val s = ms(e.getKey)
         s.transaction.release(e.getValue)
       }
       .tasks
