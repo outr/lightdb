@@ -91,7 +91,7 @@ object Accumulator {
             }
           }
 
-          val pq = mutable.PriorityQueue.empty[(K, Long)](worstFirst)
+          val pq = mutable.PriorityQueue.empty[(K, Long)]
           state.foreach { case kv @ (_, _) =>
             pq.enqueue(kv)
             if (pq.size > lim) pq.dequeue()
