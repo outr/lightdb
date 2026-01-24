@@ -6,7 +6,7 @@
 //import lightdb.field.Field
 //import lightdb.store.{Collection, Store}
 //import lightdb.transaction.Transaction
-//import rapid._
+//import rapid.*
 //
 //import java.util.concurrent.atomic.AtomicInteger
 //

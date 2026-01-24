@@ -1,6 +1,6 @@
 package lightdb.opensearch.client
 
-import fabric._
+import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
 import rapid.Task
 import rapid.taskTaskOps

@@ -1,6 +1,6 @@
 package lightdb
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.id.Id
 import lightdb.store.Store
 import rapid.Task

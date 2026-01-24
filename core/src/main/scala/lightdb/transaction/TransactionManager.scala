@@ -2,7 +2,7 @@ package lightdb.transaction
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.Store
-import rapid._
+import rapid.*
 
 class TransactionManager {
   def apply[

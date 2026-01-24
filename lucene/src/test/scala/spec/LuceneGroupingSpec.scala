@@ -1,8 +1,8 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.id.Id
 import lightdb.lucene.{LuceneQuerySyntax, LuceneStore}
 import lightdb.time.Timestamp
@@ -14,7 +14,7 @@ import rapid.AsyncTaskSpec
 
 @EmbeddedTest
 class LuceneGroupingSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
-  import LuceneQuerySyntax._
+  import LuceneQuerySyntax.*
 
   case class GroupedRecord(name: String,
                            groupId: String,

@@ -5,8 +5,8 @@ import lightdb.filter.Filter
 import lightdb.traversal.store.{TraversalIndexCache, TraversalQueryEngine}
 import lightdb.transaction.PrefixScanningTransaction
 import profig.Profig
-import fabric.rw._
-import rapid._
+import fabric.rw.*
+import rapid.*
 
 /**
  * A typed, Doc-aware pipeline that can leverage traversal candidate seeding for Match-like stages.

@@ -1,9 +1,9 @@
 package spec
 
 import fabric.io.JsonParser
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
-import lightdb.distance._
+import lightdb.distance.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.spatial.{Geo, Point, Polygon}

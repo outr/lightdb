@@ -1,8 +1,8 @@
 package lightdb.sql.query
 
-import fabric._
+import fabric.*
 import fabric.io.JsonFormatter
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
 import lightdb.sql.SQLStoreTransaction

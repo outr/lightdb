@@ -2,7 +2,7 @@ package spec
 
 import lightdb.doc.Document
 import lightdb.id.Id
-import lightdb.traversal.syntax._
+import lightdb.traversal.syntax.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec

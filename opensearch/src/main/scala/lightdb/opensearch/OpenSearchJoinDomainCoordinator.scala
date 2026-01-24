@@ -3,7 +3,7 @@ package lightdb.opensearch
 import lightdb.doc.{Document, ParentChildSupport}
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import fabric.Json
-import fabric.rw._
+import fabric.rw.*
 import profig.Profig
 import rapid.Task
 

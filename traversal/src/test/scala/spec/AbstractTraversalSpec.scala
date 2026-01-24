@@ -1,16 +1,16 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.{EdgeId, Id}
 import lightdb.store.prefix.PrefixScanningStoreManager
-import lightdb.traversal.syntax._
+import lightdb.traversal.syntax.*
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB, traversal}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import rapid._
+import rapid.*
 
 import java.nio.file.Path
 

@@ -1,7 +1,7 @@
 package spec
 
-import fabric.rw._
-import lightdb._
+import fabric.rw.*
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.graph.{EdgeDocument, EdgeModel}
 import lightdb.id.{EdgeId, Id}
@@ -9,7 +9,7 @@ import lightdb.lucene.LuceneStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.store.split.SplitStoreManager
 import lightdb.traversal.TraversalPath
-import lightdb.traversal.syntax._
+import lightdb.traversal.syntax.*
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec

@@ -2,7 +2,7 @@ package lightdb.sql
 
 import fabric.define.DefType
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw._
+import fabric.rw.*
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str, arr, bool, num, obj, str}
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.distance.Distance
@@ -13,7 +13,7 @@ import lightdb.field.Field.FacetField
 import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter.{Condition, Filter}
 import lightdb.filter.{FilterPlanner, QueryOptimizer}
-import lightdb._
+import lightdb.*
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo}

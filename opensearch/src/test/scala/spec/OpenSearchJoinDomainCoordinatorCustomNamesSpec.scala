@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion, ParentChildSupport}
 import lightdb.filter.Filter
@@ -14,7 +14,7 @@ import rapid.{AsyncTaskSpec, Task}
 
 @EmbeddedTest
 class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with OpenSearchTestSupport {
-  import OpenSearchQuerySyntax._
+  import OpenSearchQuerySyntax.*
 
   case class Parent(name: String, _id: Id[Parent] = Parent.id()) extends Document[Parent]
   case class Child(parentId: Id[Parent], value: String, _id: Id[Child] = Child.id()) extends Document[Child]

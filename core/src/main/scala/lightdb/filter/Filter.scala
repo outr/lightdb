@@ -1,7 +1,7 @@
 package lightdb.filter
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.spatial.{Geo, Point}

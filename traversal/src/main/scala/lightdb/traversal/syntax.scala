@@ -20,7 +20,7 @@ object syntax {
 }
 
 /**
- * Per-transaction traversal helpers (exposed via `import lightdb.traversal.syntax._`).
+ * Per-transaction traversal helpers (exposed via `import lightdb.traversal.syntax.*`).
  */
 final class TransactionTraverse[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   private val tx: PrefixScanningTransaction[Doc, Model]

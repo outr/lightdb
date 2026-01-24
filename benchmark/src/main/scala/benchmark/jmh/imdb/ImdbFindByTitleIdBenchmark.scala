@@ -1,6 +1,6 @@
 package benchmark.jmh.imdb
 
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 
 class ImdbFindByTitleIdBenchmark {

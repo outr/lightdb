@@ -1,6 +1,6 @@
 package lightdb.util
 
-import rapid._
+import rapid.*
 
 /**
  * Provides simple initialization support to avoid initialization being invoked more

@@ -1,7 +1,7 @@
 package lightdb.postgresql
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.query.SQLPart
 import lightdb.sql.{SQLState, SQLStoreTransaction}

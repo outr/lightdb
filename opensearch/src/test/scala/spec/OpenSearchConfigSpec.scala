@@ -8,7 +8,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import profig.Profig
-import fabric.rw._
+import fabric.rw.*
 
 import java.nio.file.Path
 

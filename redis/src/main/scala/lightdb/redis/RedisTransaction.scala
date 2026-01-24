@@ -8,7 +8,7 @@ import lightdb.transaction.Transaction
 import rapid.Task
 import redis.clients.jedis.Jedis
 
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 case class RedisTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RedisStore[Doc, Model],
                                                                                jedis: Jedis,

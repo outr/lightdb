@@ -2,7 +2,7 @@ package lightdb.traversal.store
 
 import fabric.Json
 import fabric.obj
-import fabric.rw._
+import fabric.rw.*
 import lightdb.KeyValue
 import lightdb.SortDirection
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}

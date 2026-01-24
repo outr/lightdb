@@ -1,8 +1,8 @@
 package lightdb.rocksdb
 
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.store._
+import lightdb.store.*
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.transaction.Transaction
 import org.rocksdb.{BlockBasedTableConfig, BloomFilter, ColumnFamilyDescriptor, ColumnFamilyHandle, ColumnFamilyOptions, DBOptions, FlushOptions, LRUCache, Options, RocksDB}

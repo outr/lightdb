@@ -4,7 +4,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.transaction.Transaction
-import rapid._
+import rapid.*
 
 trait BufferedWritingTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends Transaction[Doc, Model] { transaction =>
   protected def maxTransactionWriteBuffer: Int = BufferedWritingTransaction.MaxTransactionWriteBuffer

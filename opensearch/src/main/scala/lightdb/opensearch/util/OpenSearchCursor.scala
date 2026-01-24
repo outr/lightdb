@@ -1,6 +1,6 @@
 package lightdb.opensearch.util
 
-import fabric._
+import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
 
 import java.util.Base64

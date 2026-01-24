@@ -2,7 +2,7 @@ package lightdb.rocksdb
 
 import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
@@ -10,10 +10,10 @@ import lightdb.rocksdb.RocksDBTransaction.writeOptions
 import lightdb.store.Store
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.rocksdb.{ReadOptions, RocksIterator, Slice, WriteBatch, WriteOptions}
-import rapid._
+import rapid.*
 
 import java.nio.charset.StandardCharsets
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model],
                                                                                  parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] { tx =>

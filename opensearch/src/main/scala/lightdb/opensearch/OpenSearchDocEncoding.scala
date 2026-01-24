@@ -1,8 +1,8 @@
 package lightdb.opensearch
 
-import fabric._
+import fabric.*
 import fabric.io.JsonFormatter
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.Document
 import lightdb.field.Field.FacetField
 import lightdb.field.{Field, IndexingState}

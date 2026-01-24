@@ -1,7 +1,7 @@
 package lightdb.opensearch.client
 
 import fabric.Null
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.opensearch.OpenSearchJoinDomainRegistry
 import profig.Profig

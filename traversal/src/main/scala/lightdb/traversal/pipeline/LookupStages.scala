@@ -4,7 +4,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.IndexingState
 import lightdb.id.Id
 import lightdb.transaction.{CollectionTransaction, Transaction}
-import rapid._
+import rapid.*
 
 /**
  * MongoDB-style $lookup stages (correctness-first).

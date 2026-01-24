@@ -1,9 +1,9 @@
 package spec
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import fabric.io.{JsonFormatter, JsonParser}
-import lightdb.spatial._
+import lightdb.spatial.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 

@@ -1,11 +1,11 @@
 package lightdb.redis
 
 import _root_.redis.clients.jedis.{JedisPool, JedisPoolConfig}
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import rapid._
+import rapid.*
 
 import java.nio.file.Path
 

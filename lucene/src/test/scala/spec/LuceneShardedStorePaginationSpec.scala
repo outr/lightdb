@@ -1,9 +1,9 @@
 // TODO: Revisit!
 //package spec
 //
-//import fabric.rw._
-//import lightdb._
-//import lightdb.doc._
+//import fabric.rw.*
+//import lightdb.*
+//import lightdb.doc.*
 //import lightdb.field.Field
 //import lightdb.lucene.LuceneStore
 //import lightdb.store.Collection

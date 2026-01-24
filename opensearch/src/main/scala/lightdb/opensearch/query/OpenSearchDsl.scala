@@ -1,6 +1,6 @@
 package lightdb.opensearch.query
 
-import fabric._
+import fabric.*
 
 object OpenSearchDsl {
   def matchAll(): Json = obj("match_all" -> obj())

@@ -5,14 +5,14 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.error.ModelMissingFieldsException
 import lightdb.field.Field
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.id.Id
 import lightdb.lock.LockManager
 import lightdb.progress.ProgressManager
 import lightdb.transaction.Transaction
 import lightdb.trigger.StoreTriggers
 import lightdb.util.{Disposable, Initializable}
-import rapid._
+import rapid.*
 
 import java.io.File
 import java.nio.file.Path

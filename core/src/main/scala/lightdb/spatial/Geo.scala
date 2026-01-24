@@ -1,8 +1,8 @@
 package lightdb.spatial
 
-import fabric._
+import fabric.*
 import fabric.io.JsonFormatter
-import fabric.rw._
+import fabric.rw.*
 
 trait Geo {
   def center: Point
@@ -52,7 +52,7 @@ object Geo {
     r = geo => geo.toJson,
     w = json => parse(json),
     d = {
-      import fabric._
+      import fabric.*
       import fabric.define.DefType
       import fabric.define.DefType.{Arr, Dec, Enum, Json, Obj, Poly}
 

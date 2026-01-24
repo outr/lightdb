@@ -5,8 +5,8 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreMode}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.transaction.Transaction
-import org.lmdbjava._
-import rapid._
+import org.lmdbjava.*
+import rapid.*
 
 import java.nio.file.{Files, Path}
 import scala.language.implicitConversions

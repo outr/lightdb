@@ -1,6 +1,6 @@
 package lightdb.opensearch
 
-import fabric._
+import fabric.*
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 

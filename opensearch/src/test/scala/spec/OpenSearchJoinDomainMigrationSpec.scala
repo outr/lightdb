@@ -1,6 +1,6 @@
 package spec
 
-import fabric._
+import fabric.*
 import lightdb.LightDB
 import lightdb.opensearch.{OpenSearchIndexMigration, OpenSearchJoinDomainCoordinator}
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
@@ -8,7 +8,7 @@ import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import profig.Profig
-import fabric.rw._
+import fabric.rw.*
 import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path

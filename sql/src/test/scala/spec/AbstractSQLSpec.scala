@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import fabric.str
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.id.Id
@@ -10,7 +10,7 @@ import lightdb.store.CollectionManager
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{CompositeIndex, LightDB, StoredValue}
 import lightdb.time.Timestamp
-import lightdb.filter._
+import lightdb.filter.*
 import lightdb.sql.dsl.SQLDsl
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -98,7 +98,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
     "query with an arbitrary query via SQLDsl" in {
       db.people.transaction { transaction =>
-        import SQLDsl._
+        import SQLDsl.*
         val txn = transaction
         val q = SQLDsl
           .select(col(Person.name))
@@ -112,7 +112,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
     "query with an arbitrary query via SQLDsl (self-join)" in {
       db.people.transaction { transaction =>
-        import SQLDsl._
+        import SQLDsl.*
         val txn = transaction
         val p = table(db.people).as("p")
         val p2 = table(db.people).as("p2")

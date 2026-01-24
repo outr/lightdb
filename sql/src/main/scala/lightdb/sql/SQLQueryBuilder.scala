@@ -1,7 +1,7 @@
 package lightdb.sql
 
-import fabric.rw._
-import lightdb._
+import fabric.rw.*
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.FieldAndValue
 import lightdb.sql.query.{SQLPart, SQLQuery}

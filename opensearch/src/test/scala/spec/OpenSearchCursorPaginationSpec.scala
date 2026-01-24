@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.opensearch.{OpenSearchQuerySyntax, OpenSearchStore}
@@ -12,7 +12,7 @@ import rapid.{AsyncTaskSpec, Task}
 
 @EmbeddedTest
 class OpenSearchCursorPaginationSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with OpenSearchTestSupport {
-  import OpenSearchQuerySyntax._
+  import OpenSearchQuerySyntax.*
 
   case class CursorDoc(name: String, weight: Int, _id: Id[CursorDoc] = CursorDoc.id()) extends Document[CursorDoc]
   object CursorDoc extends DocumentModel[CursorDoc] with JsonConversion[CursorDoc] {

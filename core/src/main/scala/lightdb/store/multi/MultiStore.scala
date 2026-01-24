@@ -3,10 +3,10 @@ package lightdb.store.multi
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.Store
 import lightdb.transaction.Transaction
-import rapid._
+import rapid.*
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 class MultiStore[
   Doc <: Document[Doc],

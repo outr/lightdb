@@ -1,6 +1,6 @@
 package spec
 
-import fabric._
+import fabric.*
 import lightdb.opensearch.OpenSearchRebuild
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import org.scalatest.matchers.should.Matchers

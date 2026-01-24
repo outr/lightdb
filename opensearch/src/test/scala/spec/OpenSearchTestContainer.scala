@@ -5,7 +5,7 @@ import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.utility.DockerImageName
 
 import java.time.Duration
-import fabric.rw._
+import fabric.rw.*
 import profig.Profig
 
 private[spec] object OpenSearchTestContainer {

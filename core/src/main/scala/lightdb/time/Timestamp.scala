@@ -2,9 +2,9 @@ package lightdb.time
 
 import fabric.{NumInt, Str}
 import fabric.define.DefType
-import fabric.rw._
+import fabric.rw.*
 import perfolation.long2Implicits
-import lightdb._
+import lightdb.*
 
 import java.util.Calendar
 import scala.concurrent.duration.FiniteDuration

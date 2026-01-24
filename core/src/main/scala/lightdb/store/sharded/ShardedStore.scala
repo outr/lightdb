@@ -2,17 +2,17 @@
 //package lightdb.store.sharded
 //
 //import fabric.Json
-//import lightdb._
+//import lightdb.*
 //import lightdb.aggregate.AggregateQuery
 //import lightdb.doc.{Document, DocumentModel}
 //import lightdb.facet.{FacetResult, FacetResultValue}
-//import lightdb.field.Field._
+//import lightdb.field.Field.*
 //import lightdb.field.{Field, IndexingState}
 //import lightdb.materialized.MaterializedAggregate
 //import lightdb.store.sharded.manager.ShardManagerInstance
 //import lightdb.store.{Collection, CollectionManager, StoreMode}
 //import lightdb.transaction.Transaction
-//import rapid._
+//import rapid.*
 //
 //import java.nio.file.Path
 //import scala.language.implicitConversions

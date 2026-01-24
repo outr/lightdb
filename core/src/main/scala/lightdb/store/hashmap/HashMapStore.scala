@@ -1,6 +1,6 @@
 package lightdb.store.hashmap
 
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
 import lightdb.store.{Store, StoreManager, StoreMode}

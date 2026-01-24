@@ -1,6 +1,6 @@
 package lightdb.h2
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.SortDirection
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field

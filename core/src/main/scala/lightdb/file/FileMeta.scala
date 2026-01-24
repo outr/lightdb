@@ -1,6 +1,6 @@
 package lightdb.file
 
-import fabric.rw._
+import fabric.rw.*
 
 case class FileMeta(fileId: String,
                     fileName: String,

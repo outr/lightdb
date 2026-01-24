@@ -1,8 +1,8 @@
 package lightdb.lucene
 
-import org.apache.lucene.document._
+import org.apache.lucene.document.*
 import org.apache.lucene.index.StoredFields
-import org.apache.lucene.search._
+import org.apache.lucene.search.*
 
 case class LucenePaginatedIterator(searcher: IndexSearcher,
                                    query: Query,

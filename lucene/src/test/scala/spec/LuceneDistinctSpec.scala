@@ -1,9 +1,9 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.id.Id
 import lightdb.lucene.LuceneStore
 import lightdb.time.Timestamp
