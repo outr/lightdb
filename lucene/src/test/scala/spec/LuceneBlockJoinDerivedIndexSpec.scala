@@ -46,10 +46,10 @@ class LuceneBlockJoinDerivedIndexSpec extends AsyncWordSpec with AsyncTaskSpec w
     }
     "execute ExistsChild queries against the derived block-join index" in {
       DB.joined.transaction { tx =>
-        for {
+        for
           wy <- tx.query.filter(_.childFilter(_.state === Some("WY"))).id.toList
           ut <- tx.query.filter(_.childFilter(_.state === Some("UT"))).id.toList
-        } yield {
+        yield {
           wy.toSet shouldBe Set(alpha._id, bravo._id)
           ut.toSet shouldBe Set(bravo._id)
         }

@@ -34,7 +34,7 @@ case class SplitCollectionTransaction[
 
   override def jsonStream: rapid.Stream[Json] = storage.jsonStream
 
-  override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if (index == store.idField) {
+  override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if index == store.idField then {
     storage.get(value.asInstanceOf[Id[Doc]])
   } else {
     searching.get(_ => index -> value)
@@ -59,21 +59,21 @@ case class SplitCollectionTransaction[
       searchUpdateHandler.delete(index, value)
     }
 
-  override protected def _commit: Task[Unit] = for {
+  override protected def _commit: Task[Unit] = for
     _ <- storage.commit
     _ <- searchUpdateHandler.commit
-  } yield ()
+  yield ()
 
-  override protected def _rollback: Task[Unit] = for {
+  override protected def _rollback: Task[Unit] = for
     _ <- storage.rollback
     _ <- searchUpdateHandler.rollback
-  } yield ()
+  yield ()
 
-  override protected def _close: Task[Unit] = for {
+  override protected def _close: Task[Unit] = for
     _ <- store.storage.transaction.release(storage)
     _ <- searchUpdateHandler.close
     _ <- store.searching.transaction.release(searching)
-  } yield ()
+  yield ()
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
     searching.doSearch(query)

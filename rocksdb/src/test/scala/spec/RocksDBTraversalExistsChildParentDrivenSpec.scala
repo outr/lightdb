@@ -99,7 +99,7 @@ class RocksDBTraversalExistsChildParentDrivenSpec
         Child(bravo._id, state = Some("UT"))
       )
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.truncate()
         _ <- DB.parents.transaction(_.insert(List(alpha, bravo)))
@@ -113,7 +113,7 @@ class RocksDBTraversalExistsChildParentDrivenSpec
             .id
             .toList
         }
-      } yield {
+      yield {
         ids shouldBe List(alpha._id)
       }
     }

@@ -50,7 +50,7 @@ class OpenSearchJoinDomainMigrationSpec extends AsyncWordSpec with AsyncTaskSpec
       def matchAllCount(idx: String): Task[Int] =
         client.count(idx, obj("query" -> obj("match_all" -> obj())))
 
-      val test = for {
+      val test = for
         // cleanup from any prior run
         existingR <- client.aliasTargets(readAlias)
         _ <- existingR.foldLeft(Task.unit)((acc, idx) => acc.next(client.deleteIndex(idx)))
@@ -82,7 +82,7 @@ class OpenSearchJoinDomainMigrationSpec extends AsyncWordSpec with AsyncTaskSpec
         // cleanup
         _ <- client.deleteIndex(oldPhysical)
         _ <- client.deleteIndex(newPhysical)
-      } yield {
+      yield {
         try {
           before should be(2)
           after should be(2)

@@ -56,7 +56,7 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
         }
       }
 
-      val test = for {
+      val test = for
         _ <- client.deleteIndex(index)
         // Create index with refresh disabled so visibility is deterministic unless refresh=true is used.
         _ <- client.createIndex(index, obj(
@@ -111,7 +111,7 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
 
         _ <- db.dispose
         _ <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer = prevBuf)
-      } yield {
+      yield {
         before shouldBe Nil
         after.map(_._id.value) shouldBe List("c")
       }

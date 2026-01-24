@@ -154,7 +154,7 @@ object Geo {
     val cleaned = ring.replace("(", "").replace(")", "").trim
     val pts = cleaned.split("""\s*,\s*""").toList.map { p =>
       val parts = p.trim.split("""\s+""")
-      if (parts.length < 2)
+      if parts.length < 2 then
         throw new RuntimeException(s"Bad coordinate: '$p' in ring '$ring'")
       val lon = parts(0).toDouble
       val lat = parts(1).toDouble

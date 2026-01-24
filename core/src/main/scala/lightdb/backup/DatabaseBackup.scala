@@ -20,7 +20,7 @@ object DatabaseBackup {
   def archive(stores: List[Store[_, _]],
               archive: File = new File("backup.zip")): Task[Int] = Task {
     Option(archive.getParentFile).foreach(_.mkdirs())
-    if (archive.exists()) archive.delete()
+    if archive.exists() then archive.delete()
     val out = new ZipOutputStream(new FileOutputStream(archive))
     process(stores) {
       case (store, stream) => Task {

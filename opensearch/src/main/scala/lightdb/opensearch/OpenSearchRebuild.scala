@@ -92,7 +92,7 @@ object OpenSearchRebuild {
   def collectCatchUpBatches(catchUp: CatchUpFn, maxBatches: Int): Task[List[CatchUpBatch]] = {
     val max = math.max(1, maxBatches)
     def loop(token: Option[String], n: Int, acc: List[CatchUpBatch]): Task[List[CatchUpBatch]] = {
-      if (n > max) {
+      if n > max then {
         Task.error(new RuntimeException(s"OpenSearchRebuild catch-up exceeded maxCatchUpBatches=$max"))
       } else {
         catchUp(token).flatMap {
@@ -122,7 +122,7 @@ object OpenSearchRebuild {
       val nextIndex = OpenSearchIndexMigration.nextPhysicalIndexName(readAlias, existing, defaultSuffix = defaultSuffix)
       client.createIndex(nextIndex, indexBody)
         .next(indexAll(client, index = nextIndex, docs = docs, config = config))
-        .next(if (refreshAfter) client.refreshIndex(nextIndex) else Task.unit)
+        .next(if refreshAfter then client.refreshIndex(nextIndex) else Task.unit)
         .next(OpenSearchIndexMigration.repointReadWriteAliases(client, readAlias, writeAlias, nextIndex))
         .map(_ => nextIndex)
     }
@@ -151,7 +151,7 @@ object OpenSearchRebuild {
             acc.next(src.indexInto(client, index = nextIndex, bulkConfig = config))
           }
         }
-        .next(if (refreshAfter) client.refreshIndex(nextIndex) else Task.unit)
+        .next(if refreshAfter then client.refreshIndex(nextIndex) else Task.unit)
         .next(OpenSearchIndexMigration.repointReadWriteAliases(client, readAlias, writeAlias, nextIndex))
         .map(_ => nextIndex)
     }
@@ -245,14 +245,14 @@ object OpenSearchRebuild {
       indexBody = indexBody,
       initialDocs = initialDocs,
       catchUp = _ =>
-        if (used) {
+        if used then {
           Task.pure(None)
         } else {
           used = true
           catchUpDocs
             .flatMap(s => s.toList)
             .map { list =>
-              if (list.isEmpty) None else Some(CatchUpBatch(docs = list, nextToken = None))
+              if list.isEmpty then None else Some(CatchUpBatch(docs = list, nextToken = None))
             }
         },
       config = config,
@@ -291,10 +291,10 @@ object OpenSearchRebuild {
       val nextIndex = OpenSearchIndexMigration.nextPhysicalIndexName(readAlias, existing, defaultSuffix = defaultSuffix)
       client.createIndex(nextIndex, indexBody)
         .next(indexAll(client, index = nextIndex, docs = initialDocs, config = config))
-        .next(if (refreshAfterInitial) client.refreshIndex(nextIndex) else Task.unit)
+        .next(if refreshAfterInitial then client.refreshIndex(nextIndex) else Task.unit)
         .next(repointWriteAlias(client, writeAlias = writeAlias, targetIndex = nextIndex))
         .next(runCatchUpBatches(client, index = nextIndex, catchUp = catchUp, config = config, refreshBetween = refreshBetweenCatchUpBatches, maxBatches = maxCatchUpBatches))
-        .next(if (refreshAfterCatchUp) client.refreshIndex(nextIndex) else Task.unit)
+        .next(if refreshAfterCatchUp then client.refreshIndex(nextIndex) else Task.unit)
         .next(OpenSearchIndexMigration.repointAlias(client, alias = readAlias, targetIndex = nextIndex))
         .map(_ => nextIndex)
     }
@@ -308,7 +308,7 @@ object OpenSearchRebuild {
                                 maxBatches: Int): Task[Unit] = {
     val max = math.max(1, maxBatches)
     def loop(token: Option[String], n: Int): Task[Unit] = {
-      if (n > max) {
+      if n > max then {
         Task.error(new RuntimeException(s"OpenSearchRebuild catch-up exceeded maxCatchUpBatches=$max"))
       } else {
         catchUp(token).flatMap {
@@ -317,7 +317,7 @@ object OpenSearchRebuild {
           case Some(batch) =>
             val docs = rapid.Stream.emits(batch.docs)
             indexAll(client, index = index, docs = docs, config = config)
-              .next(if (refreshBetween) client.refreshIndex(index) else Task.unit)
+              .next(if refreshBetween then client.refreshIndex(index) else Task.unit)
               .next(loop(batch.nextToken, n + 1))
         }
       }
@@ -344,7 +344,7 @@ object OpenSearchRebuild {
       .deleteByQuery(index, obj("query" -> deleteQuery), refresh = Some("false"))
       .flatMap { deleted =>
         indexAll(client, index = index, docs = docs, config = config)
-          .next(if (refreshAfter) client.refreshIndex(index) else Task.unit)
+          .next(if refreshAfter then client.refreshIndex(index) else Task.unit)
           .map(_ => deleted)
       }
   }
@@ -392,7 +392,7 @@ object OpenSearchRebuild {
                                        childParentFields: Map[String, String],
                                        parentIds: List[String]): Json = {
     val ids = parentIds.distinct
-    if (ids.isEmpty) {
+    if ids.isEmpty then {
       // No-op: delete nothing.
       obj("bool" -> obj("must_not" -> arr(obj("match_all" -> obj()))))
     } else {
@@ -436,7 +436,7 @@ object OpenSearchRebuild {
         val chunkTasks = chunks.map { c =>
           Task.defer {
             val body = OpenSearchBulkRequest(c).toBulkNdjson
-            if (config.metricsEnabled) {
+            if config.metricsEnabled then {
               OpenSearchMetrics.recordBulkAttempt(config.normalizedBaseUrl, docs = c.size, bytes = body.length)
             }
             withIngestPermit {
@@ -444,7 +444,7 @@ object OpenSearchRebuild {
             }
           }
         }
-        if (config.bulkConcurrency <= 1 || chunkTasks.size <= 1) {
+        if config.bulkConcurrency <= 1 || chunkTasks.size <= 1 then {
           chunkTasks.foldLeft(Task.unit)((acc, t) => acc.next(t))
         } else {
           // bounded parallelism across bulk chunks (still protected by global ingest limiter)
@@ -486,7 +486,7 @@ object OpenSearchRebuild {
       val b = estimateBytes(op)
       val wouldExceedDocs = current.nonEmpty && current.size >= md
       val wouldExceedBytes = current.nonEmpty && (currentBytes + b) > mb
-      if (wouldExceedDocs || wouldExceedBytes) {
+      if wouldExceedDocs || wouldExceedBytes then {
         chunks += current.toList
         current.clear()
         currentBytes = 0
@@ -495,7 +495,7 @@ object OpenSearchRebuild {
       currentBytes += b
     }
 
-    if (current.nonEmpty) chunks += current.toList
+    if current.nonEmpty then chunks += current.toList
     chunks.toList
   }
 }

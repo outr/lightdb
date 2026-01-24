@@ -45,12 +45,12 @@ trait FilterSupport[F, Doc, Filter] {
       .getOrElse(throw new NullPointerException("Range must have at least one specified (from and/or to)"))
       .json match {
       case NumInt(_, _) => rangeLong(
-        from.map(l => l.toLong + (if (includeFrom) 0 else 1)),
-        to.map(l => l.toLong - (if (includeTo) 0 else 1))
+        from.map(l => l.toLong + (if includeFrom then 0 else 1)),
+        to.map(l => l.toLong - (if includeTo then 0 else 1))
       )
       case NumDec(_, _) => rangeDouble(
-        from.map(d => d.toDouble + (if (includeFrom) 0.0 else doublePrecision)),
-        to.map(d => d.toDouble - (if (includeTo) 0.0 else doublePrecision))
+        from.map(d => d.toDouble + (if includeFrom then 0.0 else doublePrecision)),
+        to.map(d => d.toDouble - (if includeTo then 0.0 else doublePrecision))
       )
       case json => throw new UnsupportedOperationException(s"Unsupported value for range query: $json")
     }

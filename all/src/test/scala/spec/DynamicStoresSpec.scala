@@ -37,11 +37,11 @@ class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     }
     "user a multi-transaction" in {
       DB.users.transaction { txn =>
-        for {
+        for
           users1 <- txn("users1").stream.toList
           users2 <- txn("users2").stream.toList
           users = users1 ::: users2
-        } yield users.map(_.name) should be(List("A", "B"))
+        yield users.map(_.name) should be(List("A", "B"))
       }
     }
     "truncate the database" in {

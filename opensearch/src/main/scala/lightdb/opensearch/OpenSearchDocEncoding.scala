@@ -48,7 +48,7 @@ object OpenSearchDocEncoding {
           case other =>
             other
         }
-        if (config.joinDomain.nonEmpty && config.joinRole.contains("child") && config.joinParentField.contains(f.name)) {
+        if config.joinDomain.nonEmpty && config.joinRole.contains("child") && config.joinParentField.contains(f.name) then {
           joinParentId = value match {
             case Str(s, _) => Some(s)
             case other => Some(other.toString)
@@ -60,7 +60,7 @@ object OpenSearchDocEncoding {
 
     val base = obj(((OpenSearchTemplates.InternalIdField, Str(doc._id.value)) :: pairs): _*)
 
-    val withJoin = if (config.joinDomain.nonEmpty) {
+    val withJoin = if config.joinDomain.nonEmpty then {
       config.joinRole match {
         case Some("parent") =>
           // OpenSearch join field expects the parent value to be a string (the join "type").
@@ -81,7 +81,7 @@ object OpenSearchDocEncoding {
 
     val source = augmentFacetTokens(augmentSpatialCenters(withJoin, fields), doc, fields, state, config)
 
-    val routing = if (config.joinDomain.nonEmpty) {
+    val routing = if config.joinDomain.nonEmpty then {
       config.joinRole match {
         case Some("parent") => Some(doc._id.value)
         case Some("child") => joinParentId
@@ -115,7 +115,7 @@ object OpenSearchDocEncoding {
   def escapeReservedIds(json: Json): Json = json match {
     case o: Obj =>
       val updated = o.value.toSeq.map { case (k, v) =>
-        val key = if (k == "_id") OpenSearchTemplates.InternalIdField else k
+        val key = if k == "_id" then OpenSearchTemplates.InternalIdField else k
         key -> escapeReservedIds(v)
       }
       obj(updated: _*)
@@ -127,7 +127,7 @@ object OpenSearchDocEncoding {
   def unescapeReservedIds(json: Json): Json = json match {
     case o: Obj =>
       val updated = o.value.toSeq.map { case (k, v) =>
-        val key = if (k == OpenSearchTemplates.InternalIdField) "_id" else k
+        val key = if k == OpenSearchTemplates.InternalIdField then "_id" else k
         key -> unescapeReservedIds(v)
       }
       obj(updated: _*)
@@ -153,7 +153,7 @@ object OpenSearchDocEncoding {
             case Some(j) =>
               Try(j.as[Geo]).toOption.toList
           }
-          val centers: List[Json] = if (geos.isEmpty) {
+          val centers: List[Json] = if geos.isEmpty then {
             // Match Lucene behavior: index a dummy point so docvalues exist, and exclude it at query-time.
             List(geoPoint(0.0, 0.0))
           } else {
@@ -174,15 +174,15 @@ object OpenSearchDocEncoding {
       case ff: lightdb.field.Field.FacetField[_] =>
         ff.asInstanceOf[FacetField[Doc]]
     }
-    if (facetFields.isEmpty) {
+    if facetFields.isEmpty then {
       source
     } else {
       val extras = facetFields.map { ff =>
         val values: List[FacetValue] = ff.get(doc, ff, state)
         val tokens: List[String] = values.flatMap { fv =>
           val p = fv.path
-          if (ff.hierarchical) {
-            if (p.isEmpty) {
+          if ff.hierarchical then {
+            if p.isEmpty then {
               List(RootMarker)
             } else {
               val prefixes = p.indices.map(i => p.take(i + 1).mkString("/")).toList
@@ -190,10 +190,10 @@ object OpenSearchDocEncoding {
               prefixes ::: List(terminal)
             }
           } else {
-            if (p.isEmpty) Nil else List(p.mkString("/"))
+            if p.isEmpty then Nil else List(p.mkString("/"))
           }
         }.distinct
-        val finalTokens = if (tokens.isEmpty && config.facetIncludeMissing) {
+        val finalTokens = if tokens.isEmpty && config.facetIncludeMissing then {
           List(MissingMarker)
         } else {
           tokens

@@ -53,7 +53,7 @@ class RocksDBTraversalGroupedAggregateSpec
 
   specName should {
     "group aggregates with having + sort" in {
-      for {
+      for
         _ <- DB.init
         _ <- DB.sales.transaction(_.insert(List(
           Sale("A", 10, _id = Id("a1")),
@@ -73,7 +73,7 @@ class RocksDBTraversalGroupedAggregateSpec
             .sort(m => m.amount.sum, SortDirection.Descending)
             .toList
         }
-      } yield {
+      yield {
         val cats = rows.map(_(_ => Sale.category.group))
         cats shouldBe List("A", "B")
         val sums = rows.map(_(_ => Sale.amount.sum))
@@ -84,7 +84,7 @@ class RocksDBTraversalGroupedAggregateSpec
     }
 
     "apply HAVING to global aggregates (single row)" in {
-      for {
+      for
         _ <- DB.truncate()
         _ <- DB.sales.transaction(_.insert(List(
           Sale("A", 10, _id = Id("a1")),
@@ -102,7 +102,7 @@ class RocksDBTraversalGroupedAggregateSpec
             .filter(m => m.amount.sum === 14)
             .toList
         }
-      } yield {
+      yield {
         rows1.map(_(_ => Sale.amount.sum)) shouldBe List(15)
         rows2 shouldBe Nil
       }

@@ -25,7 +25,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   private def ensureAutoJoinDomainRegistry(): Unit = {
     // Respect explicit configuration and programmatic registry entries.
-    if (OpenSearchJoinDomainRegistry.get(lightDB.name, name).nonEmpty) return
+    if OpenSearchJoinDomainRegistry.get(lightDB.name, name).nonEmpty then return
 
     def hasExplicitJoinKeys(storeName: String): Boolean = {
       val prefix = s"lightdb.opensearch.$storeName."
@@ -39,7 +39,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       keys.exists(k => profig.Profig(k).exists())
     }
 
-    if (hasExplicitJoinKeys(name)) return
+    if hasExplicitJoinKeys(name) then return
 
     // Build relationship candidates from all stores in this DB by inspecting ParentChildSupport models.
     // This is safe under the "no transactions before init" invariant and the fact that all stores are constructed
@@ -129,7 +129,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   lazy val deadLetterIndexName: String = OpenSearchDeadLetterIndexName.default(lightDB.name, name, config)
 
   lazy val writeIndexName: String = {
-    if (config.useIndexAlias && config.useWriteAlias) writeAliasName
+    if config.useIndexAlias && config.useWriteAlias then writeAliasName
     else indexAliasName
   }
 
@@ -146,7 +146,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
     def checkMappingFor(targetIndex: String): Task[Unit] = {
       val warn = config.mappingHashWarnOnly
-      if (isJoinChild || config.ignoreMappingHash) {
+      if isJoinChild || config.ignoreMappingHash then {
         Task.unit
       } else {
         val expectedBody = OpenSearchTemplates.indexBody(model, fields, config, name, maxResultWindow = config.maxResultWindow)
@@ -176,9 +176,9 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                   config.mappingHashAutoMigrate &&
                     config.useIndexAlias && // safe migration requires aliases
                     targetIndex != indexAliasName // if alias name is a real index, we can't safely alias-swap
-                if (canAutoMigrate) {
+                if canAutoMigrate then {
                   logger.warn(s"$msg Auto-migrating via alias reindex+swap (mappingHashAutoMigrate=true)...")
-                  val writeAliasOpt = if (config.useWriteAlias) Some(writeAliasName) else None
+                  val writeAliasOpt = if config.useWriteAlias then Some(writeAliasName) else None
                   OpenSearchIndexMigration
                     .reindexAndRepointAliases(
                       client = client,
@@ -190,7 +190,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                     .flatMap { newIndex =>
                       logger.info(s"OpenSearch alias migration complete for '$indexAliasName' -> '$newIndex'")
                     }
-                } else if (warn) {
+                } else if warn then {
                   logger.warn(msg)
                 } else {
                   Task.error(new RuntimeException(msg))
@@ -218,7 +218,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
           Task.error(t)
       }
 
-    if (config.useIndexAlias) {
+    if config.useIndexAlias then {
       // Ensure alias exists, creating a physical index + alias if needed.
       client.aliasExists(indexAliasName).flatMap {
         case true =>
@@ -230,7 +230,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
           }.next(ensureWriteAliasIfConfigured())
         case false =>
           // For join-child stores, do not create the shared index or aliases. The join-parent should own index creation.
-          if (isJoinChild) {
+          if isJoinChild then {
             Task.unit
           } else {
             // If an index already exists with the alias name, we cannot create an alias with the same name.
@@ -257,7 +257,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
         case true => checkMappingFor(indexName)
         case false =>
           // For join-child stores, do not create the shared index. The join-parent should own index creation.
-          if (isJoinChild) {
+          if isJoinChild then {
             Task.unit
           } else {
             // Minimal v1 index creation:
@@ -274,7 +274,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     super.initialize().next(ensureIndexReady)
 
   private def createAliasesForPhysicalIndex(): Task[Unit] = {
-    val actions = if (config.useWriteAlias) {
+    val actions = if config.useWriteAlias then {
       arr(
         obj("add" -> obj("index" -> str(physicalIndexName), "alias" -> str(indexAliasName))),
         obj("add" -> obj("index" -> str(physicalIndexName), "alias" -> str(writeAliasName), "is_write_index" -> bool(true)))
@@ -288,7 +288,7 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   private def ensureWriteAliasIfConfigured(): Task[Unit] = {
-    if (!config.useWriteAlias) {
+    if !config.useWriteAlias then {
       Task.unit
     } else {
       client.aliasExists(writeAliasName).flatMap {

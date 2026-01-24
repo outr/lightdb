@@ -24,7 +24,7 @@ trait CollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] e
    * Stores can override this for more efficient streaming (ex: keyset / cursor pagination).
    */
   def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
-    if (query.pageSize.nonEmpty) {
+    if query.pageSize.nonEmpty then {
       rapid.Stream.merge {
         Task.defer {
           // Use an initial query to determine total so we can compute end bounds for offset pagination.

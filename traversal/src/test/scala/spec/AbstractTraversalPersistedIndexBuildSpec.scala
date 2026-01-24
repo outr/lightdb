@@ -42,7 +42,7 @@ abstract class AbstractTraversalPersistedIndexBuildSpec
     "build persisted index and expose ready + postings (eq + ngram)" in {
       DB.entries.transaction { tx =>
         val store = tx.store
-        for {
+        for
           _ <- tx.insert(List(
             Entry(name = "Alice", age = 10, _id = Id("a")),
             Entry(name = "Bob", age = 30, _id = Id("b")),
@@ -60,7 +60,7 @@ abstract class AbstractTraversalPersistedIndexBuildSpec
           rl <- store.persistedRangeLongPostings(fieldName = "age", from = Some(5L), to = Some(15L))
           rl2 <- store.persistedRangeLongPostings(fieldName = "age", from = Some(15L), to = Some(25L))
           rlFromOnly <- store.persistedRangeLongPostings(fieldName = "age", from = Some(15L), to = None)
-        } yield {
+        yield {
           // New DBs start with an empty store, so "ready" is set immediately, and write-through indexing keeps it ready.
           readyBefore shouldBe true
           readyAfter shouldBe true

@@ -19,10 +19,10 @@ object LuceneBlockJoinFields {
   val ChildPrefix: String = "c."
 
   def mapParentFieldName(name: String): String =
-    if (name == "_id") name else s"$ParentPrefix$name"
+    if name == "_id" then name else s"$ParentPrefix$name"
 
   def mapChildFieldName(name: String): String =
-    if (name == "_id") name else s"$ChildPrefix$name"
+    if name == "_id" then name else s"$ChildPrefix$name"
 }
 
 

@@ -68,13 +68,13 @@ class OpenSearchAutoJoinDomainFromParentChildSupportSpec
 
   "OpenSearchStore auto join-domain config" should {
     "auto-register join-domain config from ParentChildSupport without any Profig join keys" in {
-      val test = for {
+      val test = for
         _ <- DB.init
         // Trigger config evaluation via store init, then validate it via OpenSearchConfig.from.
         parentCfg = OpenSearchConfig.from(DB, "AutoParent")
         childCfg = OpenSearchConfig.from(DB, "AutoChild")
         _ <- DB.dispose
-      } yield {
+      yield {
         parentCfg.joinDomain shouldBe Some("auto_join_domain")
         parentCfg.joinRole shouldBe Some("parent")
         parentCfg.joinChildren shouldBe List("AutoChild")

@@ -14,7 +14,7 @@ case class HaloDBTransaction[Doc <: Document [Doc], Model <: DocumentModel[Doc]]
   override def jsonStream: rapid.Stream[Json] = instance.stream
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = {
-    if (index == store.idField) {
+    if index == store.idField then {
       instance.get(value.asInstanceOf[Id[Doc]]).map(_.map(_.as[Doc](store.model.rw)))
     } else {
       throw new UnsupportedOperationException(s"HaloDBStore can only get on _id, but ${index.name} was attempted")
@@ -33,7 +33,7 @@ case class HaloDBTransaction[Doc <: Document [Doc], Model <: DocumentModel[Doc]]
   override protected def _count: Task[Int] = instance.count
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = {
-    if (index == store.idField) {
+    if index == store.idField then {
       instance.delete(value.asInstanceOf[Id[Doc]]).map(_ => true)
     } else {
       throw new UnsupportedOperationException(s"HaloDBStore can only get on _id, but ${index.name} was attempted")

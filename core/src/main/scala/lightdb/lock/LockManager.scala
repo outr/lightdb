@@ -8,7 +8,7 @@ class LockManager[K, V] {
   private val locks = new ConcurrentHashMap[K, Lock[V]]()
 
   def apply(key: K, value: => Task[Option[V]], establishLock: Boolean = true)
-           (f: Forge[Option[V], Option[V]]): Task[Option[V]] = if (establishLock) {
+           (f: Forge[Option[V], Option[V]]): Task[Option[V]] = if establishLock then {
     acquire(key, value).flatMap { v =>
       f(v).guarantee(release(key, v).unit)
     }
@@ -33,7 +33,7 @@ class LockManager[K, V] {
       // Update the value associated with the lock.
       existingLock.lock.release()
 
-      if (existingLock.lock.availablePermits() > 0) {
+      if existingLock.lock.availablePermits() > 0 then {
         // No other threads are waiting, so remove the lock entry.
         null
       } else {

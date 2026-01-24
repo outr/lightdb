@@ -17,7 +17,7 @@ case class HaloDBSharedStore(directory: Path, useNameAsPrefix: Boolean = false) 
   private val counter = new AtomicInteger(0)
   private var prefixMap = Map.empty[String, String]
 
-  private def prefixFor(db: LightDB, name: String): String = if (useNameAsPrefix) {
+  private def prefixFor(db: LightDB, name: String): String = if useNameAsPrefix then {
     name
   } else {
     synchronized {

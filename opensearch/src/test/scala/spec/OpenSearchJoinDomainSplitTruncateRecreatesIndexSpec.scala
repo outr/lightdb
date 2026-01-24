@@ -61,7 +61,7 @@ class OpenSearchJoinDomainSplitTruncateIsolationSpec
       val c1 = Child(parentId = p1._id, value = "c1")
       val c2 = Child(parentId = p2._id, value = "c2")
 
-      val test = for {
+      val test = for
         _ <- DB.init
         _ <- DB.parents.transaction(_.truncate)
         _ <- DB.children.transaction(_.truncate)
@@ -86,7 +86,7 @@ class OpenSearchJoinDomainSplitTruncateIsolationSpec
 
         _ <- DB.truncate()
         _ <- DB.dispose
-      } yield {
+      yield {
         parentsBefore shouldBe 2
         childrenBefore shouldBe 2
 

@@ -30,7 +30,7 @@ case class Index(path: Option[Path]) {
   private lazy val taxonomyPath = path.map(p => p.resolve("taxonomy"))
   private var taxonomyLoaded = false
   private lazy val taxonomyDirectory: BaseDirectory = taxonomyPath.map { path =>
-    if (!Files.exists(path)) {
+    if !Files.exists(path) then {
       Files.createDirectories(path)
     }
     taxonomyLoaded = true
@@ -52,14 +52,14 @@ case class Index(path: Option[Path]) {
   def commit(): Unit = {
     indexWriter.flush()
     indexWriter.commit()
-    if (taxonomyLoaded) {
+    if taxonomyLoaded then {
       taxonomyWriter.commit()
     }
   }
 
   def rollback(): Unit = {
     indexWriter.rollback()
-    if (taxonomyLoaded) {
+    if taxonomyLoaded then {
       taxonomyWriter.rollback()
     }
   }
@@ -67,7 +67,7 @@ case class Index(path: Option[Path]) {
   def dispose(): Unit = {
     commit()
     indexWriter.close()
-    if (taxonomyLoaded) {
+    if taxonomyLoaded then {
       taxonomyDirectory.close()
     }
   }

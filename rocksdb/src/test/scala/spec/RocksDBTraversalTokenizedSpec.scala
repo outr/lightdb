@@ -74,7 +74,7 @@ class RocksDBTraversalTokenizedSpec
         Person("d", "something else", _id = Id("d"))
       )
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
@@ -86,7 +86,7 @@ class RocksDBTraversalTokenizedSpec
         neNames <- DB.people.transaction { tx =>
           tx.query.filter(_.bio !== "quick fox").toList.map(_.map(_.name).sorted)
         }
-      } yield {
+      yield {
         eqNames shouldBe List("a", "b")
         neNames.toSet shouldBe Set("c", "d")
       }
@@ -100,7 +100,7 @@ class RocksDBTraversalTokenizedSpec
         Person("d", "something else", _id = Id("d"))
       )
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -127,7 +127,7 @@ class RocksDBTraversalTokenizedSpec
             .toList
             .map(_.map(_.name))
         }
-      } yield {
+      yield {
         page1 shouldBe List("a")
         page2 shouldBe List("b")
       }
@@ -141,7 +141,7 @@ class RocksDBTraversalTokenizedSpec
       )
       val docs = common ++ hits
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -169,7 +169,7 @@ class RocksDBTraversalTokenizedSpec
             .toList
             .map(_.map(_.name))
         }
-      } yield {
+      yield {
         page1 shouldBe List("a")
         page2 shouldBe List("b")
       }
@@ -183,7 +183,7 @@ class RocksDBTraversalTokenizedSpec
         Person("d", "something else", rank = 1L, _id = Id("d"))
       )
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -199,7 +199,7 @@ class RocksDBTraversalTokenizedSpec
             .toList
             .map(_.map(_.name))
         }
-      } yield {
+      yield {
         page shouldBe List("a", "b")
       }
     }

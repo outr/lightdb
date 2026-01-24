@@ -27,13 +27,13 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
           db.depots.transaction { depots =>
             db.drones.transaction { drones =>
               db.customers.transaction { customers =>
-                for {
+                for
                   _ <- warehouses.insert(Warehouse("Warehouse 1", Id("warehouse1")))
                   _ <- trucks.insert(Truck("Truck 1", Id("truck1")))
                   _ <- depots.insert(Depot("Depot 1", Id("depot1")))
                   _ <- drones.insert(Drone("Drone 1", Id("drone1")))
                   _ <- customers.insert(Customer("Customer 1", Id("customer1")))
-                } yield succeed
+                yield succeed
               }
             }
           }
@@ -45,12 +45,12 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
         db.deliversToDepot.transaction { deliversToDepot =>
           db.loadsTo.transaction { loadsTo =>
             db.deliversToCustomer.transaction { deliversToCustomer =>
-              for {
+              for
                 _ <- shipsTo.insert(ShipsTo(Id("warehouse1"), Id("truck1")))
                 _ <- deliversToDepot.insert(DeliversToDepot(Id("truck1"), Id("depot1")))
                 _ <- loadsTo.insert(LoadsTo(Id("depot1"), Id("drone1")))
                 _ <- deliversToCustomer.insert(DeliversToCustomer(Id("drone1"), Id("customer1")))
-              } yield succeed
+              yield succeed
             }
           }
         }

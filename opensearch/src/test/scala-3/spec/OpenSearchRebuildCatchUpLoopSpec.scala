@@ -14,12 +14,12 @@ class OpenSearchRebuildCatchUpLoopSpec extends AsyncWordSpec with AsyncTaskSpec 
 
     override def apply(token: Option[String]): Task[Option[OpenSearchRebuild.CatchUpBatch]] = Task {
       n += 1
-      if (n == 1) {
+      if n == 1 then {
         Some(OpenSearchRebuild.CatchUpBatch(
           docs = List(OpenSearchRebuild.RebuildDoc("d2", obj("v" -> str("two_updated")))),
           nextToken = Some("t1")
         ))
-      } else if (n == 2) {
+      } else if n == 2 then {
         Some(OpenSearchRebuild.CatchUpBatch(
           docs = List(OpenSearchRebuild.RebuildDoc("d3", obj("v" -> str("three")))),
           nextToken = None
@@ -58,7 +58,7 @@ class OpenSearchRebuildCatchUpLoopSpec extends AsyncWordSpec with AsyncTaskSpec 
 
       val catchUp = new CatchUpImpl
 
-      val test = for {
+      val test = for
         // cleanup from any prior run
         existingR <- client.aliasTargets(readAlias)
         _ <- existingR.foldLeft(Task.unit)((acc, idx) => acc.next(client.deleteIndex(idx)))
@@ -97,7 +97,7 @@ class OpenSearchRebuildCatchUpLoopSpec extends AsyncWordSpec with AsyncTaskSpec 
 
         _ <- client.deleteIndex(oldPhysical)
         _ <- client.deleteIndex(newPhysical)
-      } yield {
+      yield {
         before shouldBe 2
         after shouldBe 3
         d2.flatMap(_.asObj.get("v")).map(_.asString) shouldBe Some("two_updated")

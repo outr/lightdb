@@ -38,7 +38,7 @@ class H2MultiValueTrigger extends Trigger {
     val marker = "__mv__"
     val lower = triggerName.toLowerCase
     val idx = lower.indexOf(marker)
-    if (idx == -1) throw new IllegalStateException(s"Unexpected trigger name: $triggerName")
+    if idx == -1 then throw new IllegalStateException(s"Unexpected trigger name: $triggerName")
     val after = triggerName.substring(idx + marker.length)
     val field = after.split("__").headOption.getOrElse(throw new IllegalStateException(s"Unable to parse field from: $triggerName"))
     fieldName = field
@@ -48,33 +48,33 @@ class H2MultiValueTrigger extends Trigger {
     // H2 provides COLUMN_ID as 1-based ordinal.
     val cols = conn.getMetaData.getColumns(null, schemaName, tableName, null)
     try {
-      while (cols.next()) {
+      while cols.next() do {
         val colName = cols.getString("COLUMN_NAME")
         val ordinal = cols.getInt("ORDINAL_POSITION") - 1
-        if (colName.equalsIgnoreCase("_id")) idIndex = ordinal
-        if (colName.equalsIgnoreCase(fieldName)) fieldIndex = ordinal
+        if colName.equalsIgnoreCase("_id") then idIndex = ordinal
+        if colName.equalsIgnoreCase(fieldName) then fieldIndex = ordinal
       }
     } finally {
       cols.close()
     }
 
-    if (idIndex < 0) throw new IllegalStateException(s"Unable to find _id column index for $schemaName.$tableName")
-    if (fieldIndex < 0) throw new IllegalStateException(s"Unable to find '$fieldName' column index for $schemaName.$tableName")
+    if idIndex < 0 then throw new IllegalStateException(s"Unable to find _id column index for $schemaName.$tableName")
+    if fieldIndex < 0 then throw new IllegalStateException(s"Unable to find '$fieldName' column index for $schemaName.$tableName")
   }
 
   override def fire(conn: Connection, oldRow: Array[AnyRef], newRow: Array[AnyRef]): Unit = {
     val ownerId: String =
-      if (newRow != null) Option(newRow(idIndex)).map(_.toString).orNull
+      if newRow != null then Option(newRow(idIndex)).map(_.toString).orNull
       else Option(oldRow(idIndex)).map(_.toString).orNull
 
-    if (ownerId == null) return
+    if ownerId == null then return
 
     deleteOwner(conn, ownerId)
 
     // INSERT/UPDATE: re-add from new value
-    if (newRow != null) {
+    if newRow != null then {
       val jsonStr = Option(newRow(fieldIndex)).map(_.toString).orNull
-      if (jsonStr != null && jsonStr.nonEmpty) {
+      if jsonStr != null && jsonStr.nonEmpty then {
         valuesFromJson(jsonStr).foreach { v =>
           insertValue(conn, ownerId, v)
         }
@@ -124,7 +124,7 @@ class H2MultiValueTrigger extends Trigger {
     case Str(s, _) => Some(s)
     case NumInt(l, _) => Some(l.toString)
     case NumDec(bd, _) => Some(bd.toString)
-    case Bool(b, _) => Some(if (b) "1" else "0")
+    case Bool(b, _) => Some(if b then "1" else "0")
     case other => Some(other.toString)
   }
 

@@ -33,7 +33,7 @@ object Accumulator {
         val b = f(value)
         state match {
           case None => Some(b)
-          case Some(prev) => Some(if (ord.lteq(b, prev)) b else prev)
+          case Some(prev) => Some(if ord.lteq(b, prev) then b else prev)
         }
       }
       override def result(state: Option[B]): Option[B] = state
@@ -46,7 +46,7 @@ object Accumulator {
         val b = f(value)
         state match {
           case None => Some(b)
-          case Some(prev) => Some(if (ord.gteq(b, prev)) b else prev)
+          case Some(prev) => Some(if ord.gteq(b, prev) then b else prev)
         }
       }
       override def result(state: Option[B]): Option[B] = state
@@ -75,18 +75,18 @@ object Accumulator {
       }
 
       override def result(state: mutable.HashMap[K, Long]): List[(K, Long)] = {
-        if (lim == 0) Nil
+        if lim == 0 then Nil
         else {
           def better(a: (K, Long), b: (K, Long)): Boolean = {
             val c = java.lang.Long.compare(a._2, b._2)
-            if (c != 0) c > 0
+            if c != 0 then c > 0
             else ord.compare(a._1, b._1) < 0
           }
 
           implicit val worstFirst: Ordering[(K, Long)] = new Ordering[(K, Long)] {
             override def compare(x: (K, Long), y: (K, Long)): Int = {
-              if (better(x, y)) -1
-              else if (better(y, x)) 1
+              if better(x, y) then -1
+              else if better(y, x) then 1
               else 0
             }
           }
@@ -94,7 +94,7 @@ object Accumulator {
           val pq = mutable.PriorityQueue.empty[(K, Long)]
           state.foreach { case kv @ (_, _) =>
             pq.enqueue(kv)
-            if (pq.size > lim) pq.dequeue()
+            if pq.size > lim then pq.dequeue()
           }
 
           pq.clone().dequeueAll.toList.sortWith((a, b) => better(a, b))

@@ -36,7 +36,7 @@ class SQLiteFTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "SQLite FTS" should {
     "support tokenized search via FTS (no throw)" in {
       withDB { TestDB =>
-        for {
+        for
           _ <- TestDB.docs.transaction { txn =>
           txn.insert(List(
             Doc(name = "Adam", _id = Doc.id("adam")),
@@ -51,13 +51,13 @@ class SQLiteFTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
             .search
             .map(_.total.getOrElse(0))
           }
-        } yield total should be >= 1
+        yield total should be >= 1
       }
     }
 
     "support BestMatch ranking (bm25) and non-constant scores" in {
       withDB { TestDB =>
-        for {
+        for
           _ <- TestDB.docs.transaction { txn =>
           txn.truncate.unit.next {
             txn.insert(List(
@@ -76,7 +76,7 @@ class SQLiteFTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
             .streamScoredPage
             .toList
           }
-        } yield {
+        yield {
           scored.map(_._1.name).toSet should be(Set("adam", "adam adam adam"))
           scored.map(_._2).distinct.size should be >= 2
         }

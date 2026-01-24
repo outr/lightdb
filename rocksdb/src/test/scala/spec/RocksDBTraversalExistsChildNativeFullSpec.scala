@@ -105,7 +105,7 @@ class RocksDBTraversalExistsChildNativeFullSpec
         Child(parentId = charlie._id, state = Some("UT"))
       )
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.truncate()
         _ <- DB.parents.transaction(_.insert(List(alpha, bravo, charlie)))
@@ -118,7 +118,7 @@ class RocksDBTraversalExistsChildNativeFullSpec
             .search
         }
         ids <- results.list
-      } yield {
+      yield {
         results.total shouldBe Some(2)
         ids.toSet shouldBe Set(alpha._id, bravo._id)
       }

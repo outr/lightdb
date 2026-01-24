@@ -36,8 +36,8 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   private val ngrams = mutable.HashMap.empty[String, mutable.HashMap[String, mutable.HashSet[String]]]
 
   def ensureBuilt(buildFromDocs: => Iterator[Doc]): Unit = lock.synchronized {
-    if (!enabled) return
-    if (built) return
+    if !enabled then return
+    if built then return
     eq.clear()
     numLong.clear()
     numDouble.clear()
@@ -48,7 +48,7 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   def clear(): Unit = lock.synchronized {
-    if (!enabled) return
+    if !enabled then return
     eq.clear()
     numLong.clear()
     numDouble.clear()
@@ -57,33 +57,33 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   def onInsert(doc: Doc): Unit = lock.synchronized {
-    if (!enabled) return
-    if (!built) return
+    if !enabled then return
+    if !built then return
     addDoc(new IndexingState, doc)
   }
 
   def onUpsert(oldDoc: Option[Doc], newDoc: Doc): Unit = lock.synchronized {
-    if (!enabled) return
-    if (!built) return
+    if !enabled then return
+    if !built then return
     val state = new IndexingState
     oldDoc.foreach(removeDoc(state, _))
     addDoc(state, newDoc)
   }
 
   def onDelete(doc: Doc): Unit = lock.synchronized {
-    if (!enabled) return
-    if (!built) return
+    if !enabled then return
+    if !built then return
     removeDoc(new IndexingState, doc)
   }
 
   def equalsPostings(fieldName: String, value: Any): Set[String] = lock.synchronized {
-    if (!enabled) return Set.empty
+    if !enabled then return Set.empty
     val required = TraversalIndex.valuesForIndexValue(value).map {
       case null => "null"
       case s: String => s.toLowerCase
       case v => v.toString
     }
-    if (required.isEmpty) Set.empty
+    if required.isEmpty then Set.empty
     else {
       val sets = required.map { v =>
         eq.get(fieldName).flatMap(_.get(v)).map(_.toSet).getOrElse(Set.empty[String])
@@ -93,7 +93,7 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   def startsWithPostings(fieldName: String, prefix: String): Set[String] = lock.synchronized {
-    if (!enabled) return Set.empty
+    if !enabled then return Set.empty
     val p = prefix.toLowerCase
     eq.get(fieldName).toList.flatMap { byValue =>
       byValue.collect { case (v, ids) if v.startsWith(p) => ids }.flatMap(_.toSet)
@@ -101,22 +101,22 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   def containsPostings(fieldName: String, query: String): Set[String] = lock.synchronized {
-    if (!enabled) return Set.empty
+    if !enabled then return Set.empty
     val q = Option(query).getOrElse("").toLowerCase
-    if (q.length < ngramSize) return Set.empty
+    if q.length < ngramSize then return Set.empty
     val grams = gramsOf(q)
     val byGram = ngrams.get(fieldName).getOrElse(mutable.HashMap.empty)
     val sets = grams.map(g => byGram.get(g).map(_.toSet).getOrElse(Set.empty[String]))
-    if (sets.isEmpty) Set.empty else sets.reduce(_ intersect _)
+    if sets.isEmpty then Set.empty else sets.reduce(_ intersect _)
   }
 
   def rangeLongPostings(fieldName: String, from: Option[Long], to: Option[Long]): Set[String] = lock.synchronized {
-    if (!enabled) return Set.empty
+    if !enabled then return Set.empty
     val map = numLong.getOrElse(fieldName, new TreeMap[Long, mutable.HashSet[String]]())
-    if (map.isEmpty) return Set.empty
+    if map.isEmpty then return Set.empty
     val f = from.getOrElse(map.firstKey())
     val t = to.getOrElse(map.lastKey())
-    if (f > t) return Set.empty
+    if f > t then return Set.empty
     map.subMap(f, true, t, true).values().toArray.toList
       .asInstanceOf[List[mutable.HashSet[String]]]
       .flatMap(_.toSet)
@@ -124,12 +124,12 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   def rangeDoublePostings(fieldName: String, from: Option[Double], to: Option[Double]): Set[String] = lock.synchronized {
-    if (!enabled) return Set.empty
+    if !enabled then return Set.empty
     val map = numDouble.getOrElse(fieldName, new TreeMap[Double, mutable.HashSet[String]]())
-    if (map.isEmpty) return Set.empty
+    if map.isEmpty then return Set.empty
     val f = from.getOrElse(map.firstKey())
     val t = to.getOrElse(map.lastKey())
-    if (f > t) return Set.empty
+    if f > t then return Set.empty
     map.subMap(f, true, t, true).values().toArray.toList
       .asInstanceOf[List[mutable.HashSet[String]]]
       .flatMap(_.toSet)
@@ -145,9 +145,9 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
         ids += doc._id.value
 
         // N-gram postings for string-ish index values (used for contains prefilter).
-        if (v != null) {
+        if v != null then {
           val s = v.toString.toLowerCase
-          if (s.length >= ngramSize) {
+          if s.length >= ngramSize then {
             val byGram = ngrams.getOrElseUpdate(f.name, mutable.HashMap.empty)
             gramsOf(s).foreach { gram =>
               val gset = byGram.getOrElseUpdate(gram, mutable.HashSet.empty)
@@ -198,19 +198,19 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
       values.foreach { v =>
         eq.get(f.name).flatMap(_.get(v)).foreach { ids =>
           ids -= doc._id.value
-          if (ids.isEmpty) {
+          if ids.isEmpty then {
             eq.get(f.name).foreach(_.remove(v))
           }
         }
 
-        if (v != null) {
+        if v != null then {
           val s = v.toString.toLowerCase
-          if (s.length >= ngramSize) {
+          if s.length >= ngramSize then {
             ngrams.get(f.name).foreach { byGram =>
               gramsOf(s).foreach { gram =>
                 byGram.get(gram).foreach { ids =>
                   ids -= doc._id.value
-                  if (ids.isEmpty) byGram.remove(gram)
+                  if ids.isEmpty then byGram.remove(gram)
                 }
               }
             }
@@ -225,7 +225,7 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
           numLong.get(f.name).foreach { m =>
             Option(m.get(t.value)).foreach { ids =>
               ids -= doc._id.value
-              if (ids.isEmpty) m.remove(t.value)
+              if ids.isEmpty then m.remove(t.value)
             }
           }
         case n: java.lang.Number =>
@@ -233,14 +233,14 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
           numLong.get(f.name).foreach { m =>
             Option(m.get(lv)).foreach { ids =>
               ids -= doc._id.value
-              if (ids.isEmpty) m.remove(lv)
+              if ids.isEmpty then m.remove(lv)
             }
           }
           val dv = n.doubleValue()
           numDouble.get(f.name).foreach { m =>
             Option(m.get(dv)).foreach { ids =>
               ids -= doc._id.value
-              if (ids.isEmpty) m.remove(dv)
+              if ids.isEmpty then m.remove(dv)
             }
           }
         case _ => // ignore
@@ -250,7 +250,7 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
 
   private def gramsOf(s: String): Set[String] = {
     val n = ngramSize
-    if (s.length < n) Set.empty
+    if s.length < n then Set.empty
     else (0 to (s.length - n)).iterator.map(i => s.substring(i, i + n)).toSet
   }
 }

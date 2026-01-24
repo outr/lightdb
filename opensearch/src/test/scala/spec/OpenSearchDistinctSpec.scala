@@ -40,7 +40,7 @@ class OpenSearchDistinctSpec extends AsyncWordSpec with AsyncTaskSpec with Match
         DistinctDoc("c", 5, Id("5"))
       )
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.insert(records)).next(tx.commit)
@@ -64,7 +64,7 @@ class OpenSearchDistinctSpec extends AsyncWordSpec with AsyncTaskSpec with Match
             .toList
         }
         _ <- db.dispose
-      } yield {
+      yield {
         groups.toSet should be(Set("a", "b", "c"))
         groupCount should be(3)
         filtered.toSet should be(Set("b", "c"))

@@ -160,13 +160,13 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val lax = Airport.id("LAX")
 
       DB.flights.transaction { tx =>
-        for {
+        for
           // Get all direct connections from LAX (1-hop)
           directConnections <- tx.storage.traverse.edgesFor[Flight, Airport, Airport](lax)
             .map(_._to)
             .distinct
             .toList
-        } yield {
+        yield {
           // Verify direct connections from LAX
           directConnections.length should be > 50
           directConnections should contain(Airport.id("SFO"))
@@ -183,7 +183,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       val jfk = Airport.id("JFK")
 
       DB.flights.transaction { tx =>
-        for {
+        for
           // Get all airports reachable from BIS in 1 hop
           oneHopConnections <- tx.storage.traverse.edgesFor[Flight, Airport, Airport](bis)
             .map(_._to)
@@ -196,7 +196,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
           }).map(_.flatten)
           // Combine 1-hop and 2-hop destinations
           allReachable = (oneHopConnections ++ twoHopConnections).distinct
-        } yield {
+        yield {
           // JFK should be reachable from BIS within 2 hops
           allReachable should contain(jfk)
 
@@ -224,10 +224,10 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
           .targetIds
           .toList
 
-        for {
+        for
           viaTraverse <- reachable
           viaBfs <- bfs.map(_.toSet)
-        } yield {
+        yield {
           val viaTraverseSet = viaTraverse.toSet
           viaTraverseSet should be(viaBfs)
           viaTraverseSet.size should be(286)
@@ -273,7 +273,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
     override def id(value: String = Unique.sync()): Id[Airport] = {
       val index = value.indexOf('/')
-      val v = if (index != -1) {
+      val v = if index != -1 then {
         value.substring(index + 1)
       } else {
         value
@@ -360,10 +360,10 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         val entries = ListBuffer.empty[String]
         val b = new mutable.StringBuilder
         s.foreach { c =>
-          if (c == '"') {
+          if c == '"' then {
             open = !open
-          } else if (c == ',' && !open) {
-            if (b.nonEmpty) {
+          } else if c == ',' && !open then {
+            if b.nonEmpty then {
               entries += b.toString().trim
               b.clear()
             }
@@ -371,12 +371,12 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
             b.append(c)
           }
         }
-        if (b.nonEmpty) entries += b.toString().trim
+        if b.nonEmpty then entries += b.toString().trim
         entries.toVector
       }
     }
 
-    override def upgrade(db: LightDB): Task[Unit] = for {
+    override def upgrade(db: LightDB): Task[Unit] = for
       _ <- logger.info("Data Importing...")
       airports = rapid.Stream.fromIterator(Task(csv2Iterator("airports.csv").map { d =>
         Airport(
@@ -424,7 +424,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
           .count
       }
       _ = insertedFlights should be(286463)
-    } yield ()
+    yield ()
   }
 
   case class Trip(path: TraversalPath[Flight, Airport, Airport]) {

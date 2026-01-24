@@ -24,7 +24,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
    * initialization before the first DB is constructed.
    */
   protected def db: DB = {
-    if (_db == null) {
+    if _db == null then {
       _db = new DB
     }
     _db
@@ -320,7 +320,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     val authorsFacet: FF = field.facet("authorsFacet", _.authors.map(a => FacetValue(a)), FacetConfig(multiValued = true))
     val keywordsFacet: FF = field.facet("keywordsFacet", _.keywords.map(k => FacetValue(k)), FacetConfig(multiValued = true))
-    val publishDateFacet: FF = field.facet("publishDateFacet", doc => List(FacetValue(List(doc.publishDate.year, doc.publishDate.month, doc.publishDate.day).flatMap(i => if (i == -1) None else Some(i)).map(_.toString))), FacetConfig(hierarchical = true))
+    val publishDateFacet: FF = field.facet("publishDateFacet", doc => List(FacetValue(List(doc.publishDate.year, doc.publishDate.month, doc.publishDate.day).flatMap(i => if i == -1 then None else Some(i)).map(_.toString))), FacetConfig(hierarchical = true))
   }
 
   case class PublishDate(year: Int = -1, month: Int = -1, day: Int = -1)

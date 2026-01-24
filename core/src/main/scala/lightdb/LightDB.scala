@@ -89,7 +89,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
    * stores to re-index or all stores will be invoked.
    */
-  def reIndex(stores: List[Store[_, _]] = stores, progressManager: ProgressManager = ProgressManager.none): Task[Int] = if (stores.nonEmpty) {
+  def reIndex(stores: List[Store[_, _]] = stores, progressManager: ProgressManager = ProgressManager.none): Task[Int] = if stores.nonEmpty then {
     val pms = progressManager.split(stores.length)
     stores.zip(pms).map {
       case (store, pm) => store.reIndex(pm)
@@ -115,7 +115,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
 
   lazy val transactions: TransactionManager = new TransactionManager
 
-  override protected def initialize(): Task[Unit] = for {
+  override protected def initialize(): Task[Unit] = for
     // NOTE: Profig initialization is owned by the application (or test bootstrap).
     _ <- logger.info(s"$name database initializing...")
     _ = backingStore
@@ -142,7 +142,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     }))
     // Set initialized
     _ <- databaseInitialized.set(true)
-  } yield ()
+  yield ()
 
   /**
    * Create a new store and associate it with this database. It is preferable that all stores be created
@@ -160,7 +160,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     synchronized {
       _stores = _stores ::: List(store)
     }
-    if (isInitialized) { // Already initialized database, init store immediately
+    if isInitialized then { // Already initialized database, init store immediately
       store.init.sync()
     }
     store
@@ -181,7 +181,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     synchronized {
       _stores = _stores ::: List(store)
     }
-    if (isInitialized) { // Already initialized database, init store immediately
+    if isInitialized then { // Already initialized database, init store immediately
       store.init.sync()
     }
     store
@@ -205,7 +205,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     synchronized {
       _stores = _stores ::: List(store)
     }
-    if (isInitialized) { // Already initialized database, init store immediately
+    if isInitialized then { // Already initialized database, init store immediately
       store.init.sync()
     }
     store
@@ -224,7 +224,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     synchronized {
       _stores = _stores ::: List(store)
     }
-    if (isInitialized) { // Already initialized database, init store immediately
+    if isInitialized then { // Already initialized database, init store immediately
       store.init.sync()
     }
     store
@@ -242,7 +242,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     synchronized {
       _stores = _stores ::: List(store)
     }
-    if (isInitialized) {
+    if isInitialized then {
       store.init.sync()
     }
     store
@@ -400,7 +400,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
             .error(s"Database Upgrade: ${upgrade.label} failed", throwable)
             .map(_ => throw throwable)
         }
-      if (stillBlocking && !continueBlocking) {
+      if stillBlocking && !continueBlocking then {
         task.start()
         Task.unit
       } else {
@@ -409,7 +409,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     case None => logger.info("Upgrades completed successfully")
   }
 
-  override protected def doDispose(): Task[Unit] = if (_disposed.compareAndSet(false, true)) {
+  override protected def doDispose(): Task[Unit] = if _disposed.compareAndSet(false, true) then {
     stores.map(_.asInstanceOf[Store[KeyValue, KeyValue.type]]).map { store =>
       store.dispose
     }.tasks.flatMap { _ =>

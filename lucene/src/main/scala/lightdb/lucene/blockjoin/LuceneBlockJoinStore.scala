@@ -115,7 +115,7 @@ class LuceneBlockJoinStore[
               truncateFirst: Boolean = true,
               commitEvery: Int = 0): Task[Unit] = {
     val start: Task[Unit] =
-      if (truncateFirst) Task(index.indexWriter.deleteAll()).unit else Task.unit
+      if truncateFirst then Task(index.indexWriter.deleteAll()).unit else Task.unit
 
     start.next {
       var n = 0
@@ -123,7 +123,7 @@ class LuceneBlockJoinStore[
         childrenForParent(p).flatMap { kids =>
           indexBlock(p, kids).flatTap { _ =>
             n += 1
-            if (commitEvery > 0 && n % commitEvery == 0) commitIndex() else Task.unit
+            if commitEvery > 0 && n % commitEvery == 0 then commitIndex() else Task.unit
           }
         }
       }.drain.next(commitIndex())

@@ -17,11 +17,11 @@ class LMDBValueIterator(dbi: Dbi[ByteBuffer], txn: Txn[ByteBuffer], prefix: Opti
       val keyBuffer = ByteBuffer.allocateDirect(pb.length)
       keyBuffer.put(pb).flip()
       val found = cursor.get(keyBuffer, GetOp.MDB_SET_RANGE)
-      if (!found || !keyMatchesPrefix) {
+      if !found || !keyMatchesPrefix then {
         close()
       } else {
         val bb = cursor.`val`()
-        if (bb != null && bb.remaining() > 0) {
+        if bb != null && bb.remaining() > 0 then {
           current = Some(bb)
         } else {
           advanceCursor()
@@ -40,7 +40,7 @@ class LMDBValueIterator(dbi: Dbi[ByteBuffer], txn: Txn[ByteBuffer], prefix: Opti
     case None => true
     case Some(pb) =>
       val k = cursor.key()
-      if (k == null || k.remaining() < pb.length) {
+      if k == null || k.remaining() < pb.length then {
         false
       } else {
         val arr = new Array[Byte](pb.length)
@@ -51,14 +51,14 @@ class LMDBValueIterator(dbi: Dbi[ByteBuffer], txn: Txn[ByteBuffer], prefix: Opti
   }
 
   private def advanceCursor(): Boolean = {
-    while (open && cursor.next()) {
-      if (keyMatchesPrefix) {
+    while open && cursor.next() do {
+      if keyMatchesPrefix then {
         val bb = cursor.`val`()
-        if (bb != null && bb.remaining() > 0) {
+        if bb != null && bb.remaining() > 0 then {
           current = Some(bb)
           return true
         }
-      } else if (prefixBytes.nonEmpty) {
+      } else if prefixBytes.nonEmpty then {
         // keys are sorted; once prefix no longer matches, stop
         close()
       }
@@ -68,12 +68,12 @@ class LMDBValueIterator(dbi: Dbi[ByteBuffer], txn: Txn[ByteBuffer], prefix: Opti
   }
 
   override def hasNext: Boolean = {
-    if (open && current.isEmpty) advanceCursor()
+    if open && current.isEmpty then advanceCursor()
     current.nonEmpty
   }
 
   override def next(): ByteBuffer = {
-    if (!hasNext) throw new NoSuchElementException("No more values in iterator")
+    if !hasNext then throw new NoSuchElementException("No more values in iterator")
     val result = current.get
     current = None
     result

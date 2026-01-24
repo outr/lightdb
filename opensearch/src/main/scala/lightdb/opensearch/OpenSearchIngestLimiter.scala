@@ -21,7 +21,7 @@ object OpenSearchIngestLimiter {
   }
 
   def withPermit[A](key: String, maxConcurrent: Int)(task: => Task[A]): Task[A] = {
-    if (maxConcurrent == Int.MaxValue) {
+    if maxConcurrent == Int.MaxValue then {
       task
     } else {
       val st = stateFor(key, maxConcurrent)

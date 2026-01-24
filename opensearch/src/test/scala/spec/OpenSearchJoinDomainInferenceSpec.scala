@@ -41,7 +41,7 @@ class OpenSearchJoinDomainInferenceSpec extends AsyncWordSpec with AsyncTaskSpec
 
   "OpenSearch join-domain config inference" should {
     "infer child join config from parent joinChildParentFields and execute native has_child" in {
-      val test = for {
+      val test = for
         _ <- DB.init
         _ <- DB.parents.transaction(_.truncate)
         _ <- DB.children.transaction(_.truncate)
@@ -55,7 +55,7 @@ class OpenSearchJoinDomainInferenceSpec extends AsyncWordSpec with AsyncTaskSpec
         }
         _ <- DB.truncate()
         _ <- DB.dispose
-      } yield {
+      yield {
         ids.toSet should be(Set(alpha._id, bravo._id))
       }
       test

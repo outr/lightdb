@@ -85,7 +85,7 @@ class OpenSearchJoinDomainRebuildFromStoresSpec extends AsyncWordSpec with Async
           maxResultWindow = cfgParent.maxResultWindow
         )
 
-        val test = for {
+        val test = for
           _ <- SourceDB.init
           _ <- SourceDB.parents.t.truncate
           _ <- SourceDB.children.t.truncate
@@ -146,7 +146,7 @@ class OpenSearchJoinDomainRebuildFromStoresSpec extends AsyncWordSpec with Async
           }
 
           _ <- client.deleteIndex(newPhysical)
-        } yield {
+        yield {
           ids.toSet shouldBe Set(p1._id.value)
         }
 

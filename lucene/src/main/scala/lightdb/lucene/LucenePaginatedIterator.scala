@@ -18,7 +18,7 @@ case class LucenePaginatedIterator(searcher: IndexSearcher,
   lazy val storedFields: StoredFields = searcher.storedFields()
 
   def total: Int = {
-    if (totalHits == -1) {
+    if totalHits == -1 then {
       fetchPage()
     }
     totalHits
@@ -26,19 +26,19 @@ case class LucenePaginatedIterator(searcher: IndexSearcher,
 
   // Collect results page by page
   private def fetchPage(): Unit = {
-    if (exhausted) return
+    if exhausted then return
 
     val start = currentPageIndex * pageSize
 
-    val threshold = if (totalHits == -1) Int.MaxValue else 0
+    val threshold = if totalHits == -1 then Int.MaxValue else 0
 
     val after = currentDocs.lastOption.map(_.asInstanceOf[FieldDoc]).orNull
     val collectorManager = new TopFieldCollectorManager(sort, pageSize, after, threshold)
     val topDocs = searcher.search(query, collectorManager)
 
-    if (currentPageIndex == 0) totalHits = topDocs.totalHits.value.toInt
+    if currentPageIndex == 0 then totalHits = topDocs.totalHits.value.toInt
 
-    if (start >= totalHits) {
+    if start >= totalHits then {
       exhausted = true
       return
     }
@@ -49,7 +49,7 @@ case class LucenePaginatedIterator(searcher: IndexSearcher,
   }
 
   override def hasNext: Boolean = {
-    if (currentIndexInPage < currentDocs.length) {
+    if currentIndexInPage < currentDocs.length then {
       true
     } else {
       fetchPage()
@@ -58,7 +58,7 @@ case class LucenePaginatedIterator(searcher: IndexSearcher,
   }
 
   override def next(): (Document, Double) = {
-    if (!hasNext) {
+    if !hasNext then {
       throw new NoSuchElementException("No more documents")
     }
     val scoreDoc = currentDocs(currentIndexInPage)

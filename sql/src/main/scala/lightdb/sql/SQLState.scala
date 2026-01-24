@@ -34,7 +34,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
       ps
     }
 
-    if (caching) {
+    if caching then {
       val q = cache.computeIfAbsent(sql, _ => new ConcurrentLinkedQueue[PreparedStatement])
       val ps = Option(q.poll()) match {
         case Some(ps) => ps
@@ -48,8 +48,8 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = {
-    if (ps == null) return
-    if (caching) {
+    if ps == null then return
+    if caching then {
       cache.computeIfAbsent(sql, _ => new ConcurrentLinkedQueue[PreparedStatement]).add(ps)
     } else {
       Try(ps.close())
@@ -76,11 +76,11 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   private def flushBatches(): Unit = synchronized {
-    if (batchInsert.get() > 0 && psInsert != null) {
+    if batchInsert.get() > 0 && psInsert != null then {
       psInsert.executeBatch()
       batchInsert.set(0)
     }
-    if (batchUpsert.get() > 0 && psUpsert != null) {
+    if batchUpsert.get() > 0 && psUpsert != null then {
       psUpsert.executeBatch()
       batchUpsert.set(0)
     }
@@ -89,7 +89,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   def markDirty(): Unit = dirty = true
 
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
-      if (psInsert == null) {
+      if psInsert == null then {
         val connection = connectionManager.getConnection(this)
         psInsert = connection.prepareStatement(store.insertSQL)
       }
@@ -98,7 +98,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
-      if (psUpsert == null) {
+      if psUpsert == null then {
         val connection = connectionManager.getConnection(this)
         psUpsert = connection.prepareStatement(store.upsertSQL)
       }
@@ -119,13 +119,13 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def commit: Task[Unit] = Task {
-    if (dirty) {
+    if dirty then {
       // TODO: SingleConnection shares
-      if (batchInsert.get() > 0) {
+      if batchInsert.get() > 0 then {
         psInsert.executeBatch()
         batchInsert.set(0)
       }
-      if (batchUpsert.get() > 0) {
+      if batchUpsert.get() > 0 then {
         psUpsert.executeBatch()
         batchUpsert.set(0)
       }
@@ -141,7 +141,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def rollback: Task[Unit] = Task {
-    if (dirty) {
+    if dirty then {
       dirty = false
       Try(connectionManager.getConnection(this).rollback()).failed.foreach { t =>
         scribe.warn(s"Rollback failed: ${t.getMessage}")
@@ -150,18 +150,18 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def close: Task[Unit] = Task {
-    if (batchInsert.get() > 0) {
+    if batchInsert.get() > 0 then {
       psInsert.executeBatch()
       batchInsert.set(0)
     }
-    if (batchUpsert.get() > 0) {
+    if batchUpsert.get() > 0 then {
       psUpsert.executeBatch()
       batchUpsert.set(0)
     }
     resultSets.foreach(rs => Try(rs.close()))
     statements.foreach(s => Try(s.close()))
-    if (psInsert != null) psInsert.close()
-    if (psUpsert != null) psUpsert.close()
+    if psInsert != null then psInsert.close()
+    if psUpsert != null then psUpsert.close()
     connectionManager.releaseConnection(this)
   }
 }

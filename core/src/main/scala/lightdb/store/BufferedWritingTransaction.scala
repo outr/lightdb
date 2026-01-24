@@ -31,7 +31,7 @@ trait BufferedWritingTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     val s = b.map.size
     f(b.map).flatMap { map =>
       val d = map.size - s
-      if (map.size > maxTransactionWriteBuffer) {
+      if map.size > maxTransactionWriteBuffer then {
         flushMap(map)
       } else {
         Task(b.copy(map, d))
@@ -42,7 +42,7 @@ trait BufferedWritingTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   protected def directGet[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task.defer {
-    if (index == store.idField) {
+    if index == store.idField then {
       writeBuffer.map.get(value.asInstanceOf[Id[Doc]]) match {
         case Some(WriteOp.Delete(_)) => Task.pure(None)
         case Some(WriteOp.Insert(doc)) => Task.pure(Some(doc))
@@ -64,7 +64,7 @@ trait BufferedWritingTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = _get(store.idField, id).map(_.nonEmpty)
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = if (index == store.idField) {
+  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = if index == store.idField then {
     writeMod { map =>
       Task {
         val id = value.asInstanceOf[Id[Doc]]

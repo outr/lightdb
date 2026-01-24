@@ -68,8 +68,8 @@ class RocksDBTraversalFastTotalFromPrefixPostingsSpec
   specName should {
     "compute total from prefix postings count for StartsWith when seed materialization is disabled" in {
       val docs =
-        (1 to 50).toList.map(i => Person(name = if (i <= 40) s"abc$i" else s"zzz$i", _id = Id(s"p$i")))
-      for {
+        (1 to 50).toList.map(i => Person(name = if i <= 40 then s"abc$i" else s"zzz$i", _id = Id(s"p$i")))
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -84,15 +84,15 @@ class RocksDBTraversalFastTotalFromPrefixPostingsSpec
             .filter(_.name.startsWith("abc"))
             .search
         }
-      } yield {
+      yield {
         results.total shouldBe Some(40)
       }
     }
 
     "compute total from prefix postings count for EndsWith when seed materialization is disabled" in {
       val docs =
-        (1 to 50).toList.map(i => Person(name = if (i <= 12) s"p${i}_xyz" else s"p${i}_zzz", _id = Id(s"e$i")))
-      for {
+        (1 to 50).toList.map(i => Person(name = if i <= 12 then s"p${i}_xyz" else s"p${i}_zzz", _id = Id(s"e$i")))
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -107,7 +107,7 @@ class RocksDBTraversalFastTotalFromPrefixPostingsSpec
             .filter(_.name.endsWith("xyz"))
             .search
         }
-      } yield {
+      yield {
         results.total shouldBe Some(12)
       }
     }

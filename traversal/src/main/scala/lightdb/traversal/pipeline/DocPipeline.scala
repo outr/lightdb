@@ -31,7 +31,7 @@ final case class DocPipeline[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       // - in-memory cache is opt-in
       // - otherwise, prefer persisted postings if enabled on the underlying TraversalTransaction
       val seedIdsTask: Task[Option[Set[lightdb.id.Id[Doc]]]] =
-        if (indexCache.enabled) {
+        if indexCache.enabled then {
           tx.stream.toList.map { docs =>
             indexCache.ensureBuilt(docs.iterator)
             TraversalQueryEngine

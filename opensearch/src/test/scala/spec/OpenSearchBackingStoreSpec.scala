@@ -40,7 +40,7 @@ class OpenSearchBackingStoreSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
   "OpenSearch backingStore" should {
     "persist multiple StoredValues as distinct KeyValue docs" in {
-      val test = for {
+      val test = for
         _ <- DB.init
         c <- DB.backingStore.t.count
         ids <- DB.backingStore.transaction { tx =>
@@ -50,7 +50,7 @@ class OpenSearchBackingStoreSpec extends AsyncWordSpec with AsyncTaskSpec with M
         // Expect at least: _databaseInitialized, _appliedUpgrades, a, b
         _ <- Task(c should be >= 4)
         _ <- DB.dispose
-      } yield succeed
+      yield succeed
       test
     }
   }

@@ -19,9 +19,9 @@ class OpenSearchIngestLimiterSpec extends AsyncWordSpec with AsyncTaskSpec with 
 
       def updatePeak(v: Int): Unit = {
         var done = false
-        while (!done) {
+        while !done do {
           val p = peak.get()
-          if (v > p) done = peak.compareAndSet(p, v) else done = true
+          if v > p then done = peak.compareAndSet(p, v) else done = true
         }
       }
 

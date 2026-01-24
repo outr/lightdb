@@ -15,7 +15,7 @@ trait ConnectionManager extends Disposable {
 
   def release(): Task[Unit] = {
     val current = using.decrementAndGet()
-    if (current <= 0) {
+    if current <= 0 then {
       doDispose()
     } else {
       Task.unit

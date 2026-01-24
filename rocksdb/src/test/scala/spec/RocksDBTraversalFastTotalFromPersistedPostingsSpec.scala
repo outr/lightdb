@@ -64,8 +64,8 @@ class RocksDBTraversalFastTotalFromPersistedPostingsSpec
 
   specName should {
     "compute total from persisted postings count when seed materialization is disabled" in {
-      val docs = (1 to 20).toList.map(i => Person(name = s"p$i", age = if (i <= 12) 1 else 2, _id = Id(s"p$i")))
-      for {
+      val docs = (1 to 20).toList.map(i => Person(name = s"p$i", age = if i <= 12 then 1 else 2, _id = Id(s"p$i")))
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         // Ensure persisted index is ready so query engine can use it.
@@ -80,7 +80,7 @@ class RocksDBTraversalFastTotalFromPersistedPostingsSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         results.total shouldBe Some(12)
         list.size shouldBe 1
       }

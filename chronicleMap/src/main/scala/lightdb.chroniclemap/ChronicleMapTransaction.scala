@@ -21,7 +21,7 @@ case class ChronicleMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[
   })
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
-    if (index == store.idField) {
+    if index == store.idField then {
       Option(db.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
     } else {
       throw new UnsupportedOperationException(s"ChronicleMapStore can only get on _id, but ${index.name} was attempted")
@@ -29,7 +29,7 @@ case class ChronicleMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[
   }
 
   override protected def _insert(doc: Doc): Task[Doc] = Task {
-    if (db.putIfAbsent(doc._id.value, toString(doc)) != null) {
+    if db.putIfAbsent(doc._id.value, toString(doc)) != null then {
       throw new RuntimeException(s"${doc._id.value} already exists")
     }
     doc
@@ -47,7 +47,7 @@ case class ChronicleMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[
   override protected def _count: Task[Int] = Task(db.size())
 
   override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
-    if (index == store.idField) {
+    if index == store.idField then {
       db.remove(value.asInstanceOf[Id[Doc]].value) != null
     } else {
       throw new UnsupportedOperationException(s"ChronicleMapStore can only get on _id, but ${index.name} was attempted")

@@ -69,7 +69,7 @@ class RocksDBTraversalFastTotalFromTokenizedPostingsSpec
         Person("b", "quick brown", _id = Id("b")),
         Person("c", "something else", _id = Id("c"))
       )
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -84,7 +84,7 @@ class RocksDBTraversalFastTotalFromTokenizedPostingsSpec
             .filter(_.bio === "quick")
             .search
         }
-      } yield {
+      yield {
         results.total shouldBe Some(2)
       }
     }
@@ -96,7 +96,7 @@ class RocksDBTraversalFastTotalFromTokenizedPostingsSpec
         Person("c", "quick brown", _id = Id("c")),
         Person("d", "something else", _id = Id("d"))
       )
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -111,7 +111,7 @@ class RocksDBTraversalFastTotalFromTokenizedPostingsSpec
             .filter(_.bio === "quick fox")
             .search
         }
-      } yield {
+      yield {
         results.total shouldBe Some(2)
       }
     }

@@ -36,7 +36,7 @@ class OpenSearchIdSortSpec extends AsyncWordSpec with AsyncTaskSpec with Matcher
         IdSortDoc("c", Id("c"))
       )
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.insert(docs)).next(tx.commit)
@@ -50,7 +50,7 @@ class OpenSearchIdSortSpec extends AsyncWordSpec with AsyncTaskSpec with Matcher
             .toList
         }
         _ <- db.dispose
-      } yield {
+      yield {
         result shouldBe List("a", "b", "c")
       }
 

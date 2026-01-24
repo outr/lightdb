@@ -19,11 +19,11 @@ object TimestampParser {
     val in = s.trim
 
     // 1) Pure digits? Treat as epoch seconds or millis.
-    if (in.matches("^-?\\d+$")) {
+    if in.matches("^-?\\d+$") then {
       val n = Try(in.toLong).toOption
       n.map { v =>
         // Heuristic: 13+ digits => millis; 10 digits => seconds.
-        if (math.abs(v) >= 100000000000L) v else v * 1000L
+        if math.abs(v) >= 100000000000L then v else v * 1000L
       }.map(Timestamp.apply)
     } else {
       // 2) Try very common, highly standard formats first (fast path).
@@ -33,7 +33,7 @@ object TimestampParser {
         Try(OffsetDateTime.parse(in, DateTimeFormatter.ISO_OFFSET_DATE_TIME)).map(_.toInstant.toEpochMilli),
         Try(OffsetDateTime.parse(in, DateTimeFormatter.RFC_1123_DATE_TIME)).map(_.toInstant.toEpochMilli)
       ).collectFirst { case t if t.isSuccess => t.get }
-      if (fast.isDefined) {
+      if fast.isDefined then {
         fast.map(Timestamp.apply)
       } else {
         // 3) Broader set of patterns (both US/EU styles, with/without time/zone).
@@ -100,15 +100,15 @@ object TimestampParser {
     // Generate [date] + optional ([join] + [time]) + optional [zone]
     def cross(date: String, times: List[String]) = {
       val base = List(date)
-      val with24 = for (j <- joins; t <- t24) yield s"$date$j$t"
-      val with12 = for (j <- joins; t <- t12) yield s"$date$j$t"
+      val with24 = for j <- joins; t <- t24 yield s"$date$j$t"
+      val with12 = for j <- joins; t <- t12 yield s"$date$j$t"
       // Attach zone variants
-      (base ++ with24 ++ with12).flatMap(p => zones.map(z => (p + (if (z.isEmpty) "" else s" $z")).trim))
+      (base ++ with24 ++ with12).flatMap(p => zones.map(z => (p + (if z.isEmpty then "" else s" $z")).trim))
     }
 
     // Order matters: choose ambiguous preference
     val dateOrder =
-      if (preferDayFirst) List(dmy, mdy) else List(mdy, dmy)
+      if preferDayFirst then List(dmy, mdy) else List(mdy, dmy)
 
     val allPatterns: List[String] =
       List(ymd, basic, dMonY) ++ dateOrder ++

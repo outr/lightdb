@@ -24,7 +24,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     val cols = fields.map(_.name)
     val values = cols.map(_ => "?")
     val assignments = fields.filterNot(_ == model._id).map(f => s"${f.name}=excluded.${f.name}")
-    val update = if (assignments.nonEmpty) assignments.mkString(", ") else s"${model._id.name}=${model._id.name}"
+    val update = if assignments.nonEmpty then assignments.mkString(", ") else s"${model._id.name}=${model._id.name}"
     s"INSERT INTO $fqn(${cols.mkString(", ")}) VALUES(${values.mkString(", ")}) ON CONFLICT(${model._id.name}) DO UPDATE SET $update"
   }
 
@@ -43,14 +43,14 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   }*/
 
   override protected def indexes(connection: Connection): Set[String] = {
-    val sql = if (supportsSchemas) {
+    val sql = if supportsSchemas then {
       s"SELECT LOWER(index_name) AS name FROM duckdb_indexes() WHERE LOWER(schema_name) = LOWER(?) AND LOWER(table_name) = LOWER(?)"
     } else {
       s"SELECT LOWER(index_name) AS name FROM duckdb_indexes() WHERE LOWER(table_name) = LOWER(?)"
     }
     val ps = connection.prepareStatement(sql)
     try {
-      if (supportsSchemas) {
+      if supportsSchemas then {
         ps.setString(1, lightDB.name)
         ps.setString(2, name)
       } else {
@@ -59,7 +59,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       val rs = ps.executeQuery()
       try {
         var set = Set.empty[String]
-        while (rs.next()) {
+        while rs.next() do {
           set += rs.getString("name")
         }
         set
@@ -77,7 +77,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       val rs = ps.executeQuery()
       try {
         var set = Set.empty[String]
-        while (rs.next()) {
+        while rs.next() do {
           set += rs.getString("table_name").toLowerCase
         }
         set

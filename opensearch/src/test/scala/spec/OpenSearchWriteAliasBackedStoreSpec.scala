@@ -40,14 +40,14 @@ class OpenSearchWriteAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSp
       Profig(k2).store("true")
 
       val db = new DB
-      val test = (for {
+      val test = (for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.upsert(WriteAliasDoc("one", Id[WriteAliasDoc]("one")))).next(tx.commit)
         }
         v <- db.docs.transaction(_.get(Id[WriteAliasDoc]("one"))).map(_.map(_.value))
         _ <- db.dispose
-      } yield {
+      yield {
         v should be(Some("one"))
       }).guarantee(Task {
         prevUseIndexAlias match {

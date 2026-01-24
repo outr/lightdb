@@ -46,13 +46,13 @@ object OpenSearchTemplates {
     val sortFields: List[String] = config.indexSortFields.map(_.trim).filter(_.nonEmpty)
     val sortOrdersRaw: List[String] = config.indexSortOrders.map(_.trim.toLowerCase).filter(_.nonEmpty)
     val sortOrders: List[String] =
-      if (sortFields.isEmpty) Nil
-      else if (sortOrdersRaw.isEmpty) List.fill(sortFields.length)("asc")
-      else if (sortOrdersRaw.length == 1) List.fill(sortFields.length)(sortOrdersRaw.head)
-      else if (sortOrdersRaw.length >= sortFields.length) sortOrdersRaw.take(sortFields.length)
+      if sortFields.isEmpty then Nil
+      else if sortOrdersRaw.isEmpty then List.fill(sortFields.length)("asc")
+      else if sortOrdersRaw.length == 1 then List.fill(sortFields.length)(sortOrdersRaw.head)
+      else if sortOrdersRaw.length >= sortFields.length then sortOrdersRaw.take(sortFields.length)
       else sortOrdersRaw ::: List.fill(sortFields.length - sortOrdersRaw.length)("asc")
 
-    val indexObj: Json = if (sortFields.nonEmpty) {
+    val indexObj: Json = if sortFields.nonEmpty then {
       obj((indexObjBase ++ List(
         "sort.field" -> arr(sortFields.map(str): _*),
         "sort.order" -> arr(sortOrders.map(str): _*)
@@ -61,7 +61,7 @@ object OpenSearchTemplates {
       obj(indexObjBase: _*)
     }
 
-    val settings = if (config.keywordNormalize) {
+    val settings = if config.keywordNormalize then {
       // Keyword fields (non-tokenized strings) are case-sensitive by default (Lucene parity).
       // When enabled, normalize keyword terms for both indexing and query literals.
       obj(
@@ -102,7 +102,7 @@ object OpenSearchTemplates {
     val baseProps = List(
       InternalIdField -> obj("type" -> str("keyword"))
     )
-    val effectiveJoinChildren: List[String] = if (config.joinChildren.nonEmpty) {
+    val effectiveJoinChildren: List[String] = if config.joinChildren.nonEmpty then {
       config.joinChildren
     } else {
       model match {
@@ -114,7 +114,7 @@ object OpenSearchTemplates {
           Nil
       }
     }
-    val joinProps: List[(String, Json)] = if (config.joinDomain.nonEmpty && config.joinRole.contains("parent") && effectiveJoinChildren.nonEmpty) {
+    val joinProps: List[(String, Json)] = if config.joinDomain.nonEmpty && config.joinRole.contains("parent") && effectiveJoinChildren.nonEmpty then {
       val children = arr(effectiveJoinChildren.map(str): _*)
       val relations = obj(storeName -> children)
       List(config.joinFieldName -> obj(
@@ -137,7 +137,7 @@ object OpenSearchTemplates {
       case f =>
         val mapping = mappingForField(f, config)
         // If we don't have an explicit mapping (empty object), omit the property and let OpenSearch infer it.
-        if (mapping.asObj.value.nonEmpty) List(f.name -> mapping) else Nil
+        if mapping.asObj.value.nonEmpty then List(f.name -> mapping) else Nil
     }.flatten
 
     // Index sorting requires sort fields to be present in the mapping at index creation time.
@@ -151,10 +151,10 @@ object OpenSearchTemplates {
           Nil // already present
         case f if f.endsWith(".keyword") =>
           val base = f.stripSuffix(".keyword")
-          if (base.isEmpty || existing.contains(base)) Nil
+          if base.isEmpty || existing.contains(base) then Nil
           else {
             // Create a text+keyword multifield mapping so `<base>.keyword` exists for sort usage.
-            val keyword = if (config.keywordNormalize) {
+            val keyword = if config.keywordNormalize then {
               obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))
             } else {
               obj("type" -> str("keyword"))
@@ -167,7 +167,7 @@ object OpenSearchTemplates {
           }
         case f =>
           // For non-multifield paths, only inject if it doesn't exist; map as keyword for safe sorting.
-          if (existing.contains(f)) Nil
+          if existing.contains(f) then Nil
           else List(f -> obj("type" -> str("keyword")))
       }
     }
@@ -203,13 +203,13 @@ object OpenSearchTemplates {
   }
 
   private def stringMapping[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = {
-    val keyword = if (config.keywordNormalize) {
+    val keyword = if config.keywordNormalize then {
       obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))
     } else {
       obj("type" -> str("keyword"))
     }
 
-    if (field.isInstanceOf[Tokenized[_]]) {
+    if field.isInstanceOf[Tokenized[_]] then {
       // Tokenized fields (ex: fullText) can be extremely large. Adding a `.keyword` subfield causes OpenSearch to
       // attempt to index the entire string as a single keyword term, which can exceed the Lucene max term length
       // (32766 bytes) and fail bulk indexing with "immense term" errors.

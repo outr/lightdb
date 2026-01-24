@@ -46,7 +46,7 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
       val s = c.createStatement()
       try {
         // Apply optional SQL features (multi-valued indexing helpers)
-        if (H2Store.EnableMultiValueIndexes) {
+        if H2Store.EnableMultiValueIndexes then {
           // Create auxiliary tables + triggers for array-like indexed fields.
           val arrayIndexed = fields.collect { case f if f.indexed && f.isArr => f }
           arrayIndexed.foreach { f =>
@@ -83,7 +83,7 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
       val rs = ps.executeQuery()
       try {
         var set = Set.empty[String]
-        while (rs.next()) {
+        while rs.next() do {
           set += rs.getString("TABLE_NAME").toLowerCase
         }
         set

@@ -11,7 +11,7 @@ case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](que
                                                                              sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
   def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AggregateQuery[Doc, Model] = {
     val filter = f(query.model)
-    if (and && this.filter.nonEmpty) {
+    if and && this.filter.nonEmpty then {
       copy(filter = Some(this.filter.get && filter))
     } else {
       copy(filter = Some(filter))
@@ -20,7 +20,7 @@ case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](que
 
   def filters(f: Model => List[AggregateFilter[Doc]]): AggregateQuery[Doc, Model] = {
     val filters = f(query.model)
-    if (filters.nonEmpty) {
+    if filters.nonEmpty then {
       var filter = filters.head
       filters.tail.foreach { f =>
         filter = filter && f

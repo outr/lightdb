@@ -38,14 +38,14 @@ class OpenSearchAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
       Profig(key).store("true")
 
       val db = new DB
-      val test = (for {
+      val test = (for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.upsert(AliasDoc("one", Id[AliasDoc]("one")))).next(tx.commit)
         }
         v <- db.docs.transaction(_.get(Id[AliasDoc]("one"))).map(_.map(_.value))
         _ <- db.dispose
-      } yield {
+      yield {
         v should be(Some("one"))
       }).guarantee(Task {
         previous match {

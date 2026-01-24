@@ -81,8 +81,8 @@ class RocksDBTraversalPersistedStreamingSeedSpec
 
   specName should {
     "use persisted streaming seed for page-only equals when seed materialization is skipped" in {
-      val docs = (1 to 50).toList.map(i => Person(name = s"p$i", age = if (i <= 40) 1 else 2, _id = Id(s"p$i")))
-      for {
+      val docs = (1 to 50).toList.map(i => Person(name = s"p$i", age = if i <= 40 then 1 else 2, _id = Id(s"p$i")))
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
@@ -97,15 +97,15 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 1
         list.head.age shouldBe 1
       }
     }
 
     "use persisted streaming seed for page-only startsWith when seed materialization is skipped" in {
-      val docs = (1 to 50).toList.map(i => Person(name = if (i <= 40) s"abc$i" else s"zzz$i", age = i, _id = Id(s"s$i")))
-      for {
+      val docs = (1 to 50).toList.map(i => Person(name = if i <= 40 then s"abc$i" else s"zzz$i", age = i, _id = Id(s"s$i")))
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -121,7 +121,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 1
         list.head.name.startsWith("abc") shouldBe true
       }
@@ -133,7 +133,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       val good = (1 to 10).toList.map(i => Person(name = s"${q}__ok$i", age = i, _id = Id(f"z$i%03d")))
       val bad = (1 to 200).toList.map(i => Person(name = s"abcdefghXX_bad$i", age = i, _id = Id(f"a$i%03d")))
       val docs = bad ++ good
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -149,7 +149,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 5
         all(list.map(_.name.startsWith(q))) shouldBe true
       }
@@ -160,7 +160,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       val good = (1 to 10).toList.map(i => Person(name = s"${q}__ok$i", age = 1, _id = Id(f"z2$i%03d")))
       val bad = (1 to 200).toList.map(i => Person(name = s"abcdefghXX_bad$i", age = 1, _id = Id(f"a2$i%03d")))
       val docs = bad ++ good
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -176,7 +176,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 5
         all(list.map(_.age == 1)) shouldBe true
         all(list.map(_.name.startsWith(q))) shouldBe true
@@ -191,7 +191,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       val otherStarting = (1 to 50).toList.map(i => Person(name = s"${q}__other$i", age = 2, rank = 0L, _id = Id(f"b9$i%03d")))
       val other = (1 to 50).toList.map(i => Person(name = s"other$i", age = 2, rank = 0L, _id = Id(f"c9$i%03d")))
       val docs = excluded ++ good ++ otherStarting ++ other
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -217,7 +217,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 5
         all(list.map(_.age == 1)) shouldBe true
         all(list.map(_.name.startsWith(q))) shouldBe true
@@ -232,7 +232,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       val good2 = (1 to 10).toList.map(i => Person(name = s"${q2}__ok$i", age = 1, _id = Id(f"z4$i%03d")))
       val bad = (1 to 200).toList.map(i => Person(name = s"prefixXXXXXX_bad$i", age = 1, _id = Id(f"a3$i%03d")))
       val docs = bad ++ good1 ++ good2
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -248,7 +248,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 5
         all(list.map(p => p.name.startsWith(q1) || p.name.startsWith(q2))) shouldBe true
       }
@@ -258,10 +258,10 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       val q1 = "orX"
       val q2 = "orY"
       val docs =
-        (1 to 50).toList.map(i => Person(name = s"${q1}_$i", age = 1, rank = if (i <= 10) 999L else 1L, _id = Id(f"o1$i%03d"))) ++
+        (1 to 50).toList.map(i => Person(name = s"${q1}_$i", age = 1, rank = if i <= 10 then 999L else 1L, _id = Id(f"o1$i%03d"))) ++
           (1 to 50).toList.map(i => Person(name = s"${q2}_$i", age = 1, rank = 1L, _id = Id(f"o2$i%03d")))
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -287,7 +287,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 10
         all(list.map(p => p.name.startsWith(q1) || p.name.startsWith(q2))) shouldBe true
         all(list.map(_.rank != 999L)) shouldBe true
@@ -296,9 +296,9 @@ class RocksDBTraversalPersistedStreamingSeedSpec
 
     "support Multi IndexOrder intersection for RangeLong + Equals (page-only) with maxSeedSize=1" in {
       val docs = (1 to 200).toList.map { i =>
-        Person(name = s"p$i", age = if (i % 2 == 0) 1 else 2, rank = i.toLong, _id = Id(f"m$i%04d"))
+        Person(name = s"p$i", age = if i % 2 == 0 then 1 else 2, rank = i.toLong, _id = Id(f"m$i%04d"))
       }
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -315,7 +315,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.nonEmpty shouldBe true
         all(list.map(_.age)) shouldBe 1
         all(list.map(_.rank)) should (be >= 50L and be <= 150L)
@@ -327,7 +327,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       val aDocs = (1 to 50).toList.map(i => Person(name = s"a$i", age = 1, _id = Id(f"a$i%03d")))
       val zDoc = Person(name = "z", age = 1, _id = Id("z999"))
       val docs = aDocs :+ zDoc
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -343,14 +343,14 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.map(_._id.value) shouldBe List("a001", "a002", "a003", "a004", "a005")
       }
     }
 
     "use persisted streaming seed for page-only IN when seed materialization is skipped" in {
-      val docs = (1 to 60).toList.map(i => Person(name = s"n$i", age = if (i <= 50) 1 else 2, _id = Id(s"i$i")))
-      for {
+      val docs = (1 to 60).toList.map(i => Person(name = s"n$i", age = if i <= 50 then 1 else 2, _id = Id(s"i$i")))
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -366,7 +366,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 3
         all(list.map(_.age)) should (be(1) or be(2))
       }
@@ -378,11 +378,11 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       val docs =
         (1 to 200).toList.map { i =>
           val id =
-            if (i < 50) Id[Person](f"a$i%03d") // out-of-range and lexicographically early
+            if i < 50 then Id[Person](f"a$i%03d") // out-of-range and lexicographically early
             else Id[Person](f"z$i%03d")        // in-range and lexicographically late
           Person(name = s"r$i", age = i, rank = i.toLong, _id = id)
         }
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -398,7 +398,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         list.size shouldBe 5
         all(list.map(_.rank)) should (be >= 50L and be <= 150L)
       }

@@ -17,7 +17,7 @@ final class ThreadConfinedBufferedIterator[A](mk: => Iterator[A],
   // If a shared agent is provided (ex: transaction-scoped), we reuse it to avoid creating a new OS thread per iterator.
   // Otherwise, preserve the previous behavior: one agent (and one dedicated OS thread) per iterator.
   private val localAgent: SingleThreadAgent[Iterator[A]] =
-    if (sharedAgent.isEmpty) SingleThreadAgent[Iterator[A]](s"$name-iter")(Task(mk)) else null
+    if sharedAgent.isEmpty then SingleThreadAgent[Iterator[A]](s"$name-iter")(Task(mk)) else null
 
   // Under shared agent mode, we create the underlying iterator on the agent thread lazily and keep it here.
   private var sharedIt: Iterator[A] = _
@@ -26,7 +26,7 @@ final class ThreadConfinedBufferedIterator[A](mk: => Iterator[A],
     sharedAgent match {
       case Some(agent) =>
         agent { _ =>
-          if (sharedIt == null) sharedIt = mk
+          if sharedIt == null then sharedIt = mk
           f(sharedIt)
         }.sync()
       case None =>
@@ -39,12 +39,12 @@ final class ThreadConfinedBufferedIterator[A](mk: => Iterator[A],
   private var i, len = 0
 
   private def refill(): Unit = {
-    if (i < len) return
+    if i < len then return
     // One hop: pull up to batchSize items on the agent thread
     val v: Vector[A] = onAgent { it =>
       val out = new ArrayBuffer[A](batchSize)
       var n = 0
-      while (n < batchSize && it.hasNext) {
+      while n < batchSize && it.hasNext do {
         out += it.next(); n += 1
       }
       out.toVector
@@ -60,7 +60,7 @@ final class ThreadConfinedBufferedIterator[A](mk: => Iterator[A],
   }
 
   override def next(): A = {
-    if (!hasNext) throw new NoSuchElementException("exhausted")
+    if !hasNext then throw new NoSuchElementException("exhausted")
     val a = buf(i)
     i += 1
     a

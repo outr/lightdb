@@ -41,7 +41,7 @@ final class InMemoryDisjointSet extends DisjointSet {
   private val rank = mutable.HashMap.empty[String, Int]
 
   private def ensure(id: String): Unit = {
-    if (!parent.contains(id)) {
+    if !parent.contains(id) then {
       parent.put(id, id)
       rank.put(id, 0)
     }
@@ -53,13 +53,13 @@ final class InMemoryDisjointSet extends DisjointSet {
 
     // Find root
     var r = parent(id)
-    while (r != parent(r)) {
+    while r != parent(r) do {
       r = parent(r)
     }
 
     // Path compression
     var cur = id
-    while (parent(cur) != r) {
+    while parent(cur) != r do {
       val next = parent(cur)
       parent.put(cur, r)
       cur = next
@@ -75,12 +75,12 @@ final class InMemoryDisjointSet extends DisjointSet {
   override def union(a: String, b: String): Task[Unit] = Task {
     val ra = findSync(a)
     val rb = findSync(b)
-    if (ra != rb) {
+    if ra != rb then {
       val rka = rank.getOrElse(ra, 0)
       val rkb = rank.getOrElse(rb, 0)
-      if (rka < rkb) {
+      if rka < rkb then {
         parent.put(ra, rb)
-      } else if (rkb < rka) {
+      } else if rkb < rka then {
         parent.put(rb, ra)
       } else {
         parent.put(rb, ra)
@@ -145,32 +145,32 @@ final class KeyValueDisjointSet(
       }
     }
 
-    for {
+    for
       tup <- loop(id, Nil)
       (root, path) = tup
       _ <- path.map(n => setParent(n, root)).tasks.unit
-    } yield root
+    yield root
   }
 
   override def union(a0: String, b0: String): Task[Unit] = {
     val a = Option(a0).getOrElse("")
     val b = Option(b0).getOrElse("")
-    for {
+    for
       _ <- add(a)
       _ <- add(b)
       ra <- find(a)
       rb <- find(b)
       _ <-
-        if (ra == rb) Task.unit
-        else for {
+        if ra == rb then Task.unit
+        else for
           rka <- getRank(ra)
           rkb <- getRank(rb)
           _ <-
-            if (rka < rkb) setParent(ra, rb)
-            else if (rkb < rka) setParent(rb, ra)
+            if rka < rkb then setParent(ra, rb)
+            else if rkb < rka then setParent(rb, ra)
             else setParent(rb, ra).next(setRank(ra, rka + 1))
-        } yield ()
-    } yield ()
+        yield ()
+    yield ()
   }
 }
 

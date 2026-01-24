@@ -69,14 +69,14 @@ object FilterPlanner {
           .stream
           .evalMap { pid =>
             rapid.Task {
-              if (pid != null && seen.add(pid) && seen.size > maxDistinct) throw new TooManyParents
+              if pid != null && seen.add(pid) && seen.size > maxDistinct then throw new TooManyParents
             }
           }
           .drain
           .attempt
           .map {
             case scala.util.Success(_) =>
-              if (seen.isEmpty) Filter.MatchNone[Parent]()
+              if seen.isEmpty then Filter.MatchNone[Parent]()
               else Filter.In[Parent, lightdb.id.Id[Parent]](parentIdField, seen.toSeq)
             case scala.util.Failure(_: TooManyParents) =>
               throw new IllegalArgumentException(

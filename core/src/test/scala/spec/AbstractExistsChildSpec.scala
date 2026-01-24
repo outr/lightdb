@@ -39,10 +39,10 @@ abstract class AbstractExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec 
       DB.init.succeed
     }
     "insert parents and children" in {
-      for {
+      for
         _ <- DB.parents.transaction(_.insert(List(alpha, bravo, charlie, delta, echo)))
         _ <- DB.children.transaction(_.insert(children))
-      } yield succeed
+      yield succeed
     }
     "match parents when a child satisfies a single condition" in {
       DB.parents.transaction { tx =>

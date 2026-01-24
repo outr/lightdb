@@ -20,7 +20,7 @@ trait MaterializedBatchModel[Doc <: Document[Doc], MaterialDoc <: Document[Mater
       state
     })
     val state = map.get(transaction)
-    if (state.size > maxBatchSize) {
+    if state.size > maxBatchSize then {
       val list = state.process()
       process(list)
     } else {
@@ -43,7 +43,7 @@ trait MaterializedBatchModel[Doc <: Document[Doc], MaterialDoc <: Document[Mater
 
   override protected def transactionEnd(transaction: Transaction[MaterialDoc, MaterialModel]): Task[Unit] = Task {
     Option(map.get(transaction)).foreach { state =>
-      if (state.size > 0) {
+      if state.size > 0 then {
         val list = state.process()
         process(list).sync()
       }

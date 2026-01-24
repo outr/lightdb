@@ -46,7 +46,7 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     }
   }.flatten.unit
 
-  override protected def directGet[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if (index == store.idField) {
+  override protected def directGet[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if index == store.idField then {
     Task(instance.get(readTxn, value.asInstanceOf[Id[Doc]].bytes).map(bytes2Doc))
   } else {
     throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${index.name} was attempted")
@@ -94,7 +94,7 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     val bytes = new Array[Byte](bb.remaining())
     bb.get(bytes)
     val jsonString = new String(bytes, StandardCharsets.UTF_8)
-    if (jsonString.isEmpty) {
+    if jsonString.isEmpty then {
       Null
     } else {
       JsonParser(jsonString)

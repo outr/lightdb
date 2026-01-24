@@ -23,7 +23,7 @@ case class SplitStoreManager[Storage <: StoreManager, Searching <: CollectionMan
       name = name,
       model = model,
       storage = storage,
-      searching = searching.create[Doc, Model](db, model, name, path.map(_.resolve("search")), if (searchIndexAll) StoreMode.All() else StoreMode.Indexes(storage)),
+      searching = searching.create[Doc, Model](db, model, name, path.map(_.resolve("search")), if searchIndexAll then StoreMode.All() else StoreMode.Indexes(storage)),
       storeMode = storeMode,
       db = db,
       path = path,

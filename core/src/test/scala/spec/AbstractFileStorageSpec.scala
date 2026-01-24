@@ -45,7 +45,7 @@ abstract class AbstractFileStorageSpec[SM <: PrefixScanningStoreManager](val sto
   private var firstFileId: String = _
   private var secondFileId: String = _
   private var thirdFileId: String = _
-  private val expectedChunkCount: Int = firstChunks.map(ch => if (ch.isEmpty) 0 else ((ch.length + chunkSize - 1) / chunkSize)).sum
+  private val expectedChunkCount: Int = firstChunks.map(ch => if ch.isEmpty then 0 else ((ch.length + chunkSize - 1) / chunkSize)).sum
   private val expectedFirst: Array[Byte] = firstChunks.foldLeft(Array.emptyByteArray)(_ ++ _)
   private val expectedSecond: Array[Byte] = secondChunks.foldLeft(Array.emptyByteArray)(_ ++ _)
   private val expectedThird: Array[Byte] = thirdChunks.foldLeft(Array.emptyByteArray)(_ ++ _)
@@ -60,12 +60,12 @@ abstract class AbstractFileStorageSpec[SM <: PrefixScanningStoreManager](val sto
       }.succeed
     }
     "write additional files" in {
-      for {
+      for
         meta2 <- DB.fs.put("second.txt", Stream.emits(secondChunks), chunkSize)
         meta3 <- DB.fs.put("third.bin", Stream.emits(thirdChunks), chunkSize)
         _ = secondFileId = meta2.fileId
         _ = thirdFileId = meta3.fileId
-      } yield succeed
+      yield succeed
     }
     "get a file with expected chunking" in {
       DB.fs.get(firstFileId).map { metaOpt =>
@@ -98,10 +98,10 @@ abstract class AbstractFileStorageSpec[SM <: PrefixScanningStoreManager](val sto
       }
     }
     "delete the uploaded first file" in {
-      for {
+      for
         _ <- DB.fs.delete(firstFileId)
         after <- DB.fs.get(firstFileId)
-      } yield after should be(None)
+      yield after should be(None)
     }
     "retain other files after delete" in {
       DB.fs.list.map { listed =>

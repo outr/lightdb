@@ -57,11 +57,11 @@ class OpenSearchBufferedWritingFlushSpec extends AsyncWordSpec with AsyncTaskSpe
           val insertAll = tx.truncate.next(tx.insert(docs))
           val after = Task(OpenSearchMetrics.snapshot(baseUrlKey))
 
-          for {
+          for
             b <- before
             _ <- insertAll
             a <- after
-          } yield {
+          yield {
             // If we flushed before commit, bulkDocs should have increased within the transaction body.
             (a.bulkDocs - b.bulkDocs) should be > 0L
           }

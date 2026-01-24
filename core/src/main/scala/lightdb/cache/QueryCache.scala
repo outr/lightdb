@@ -47,9 +47,9 @@ trait QueryCache {
    * Retrieve or start the search for `query`. If it's already in the map,
    * we update its usage (increment reference count, update timestamp).
    */
-  def apply(key: Key, query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = if (!enabled) {
+  def apply(key: Key, query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = if !enabled then {
     query.search
-  } else if (onlyFirstPage && query.offset > 0) {
+  } else if onlyFirstPage && query.offset > 0 then {
     query.search
   } else {
     map.computeIfAbsent(key -> query, _ => {
@@ -75,9 +75,9 @@ trait QueryCache {
     map.entrySet().asScala.filter(_.getKey._1 == key).foreach { entry =>
       val task = entry.getValue.task.flatMap { results =>
         results.streamWithScore.toList.map { list =>
-          if (list.exists { case (value, _) => id(value) == docId }) {
+          if list.exists { case (value, _) => id(value) == docId } then {
             val updatedList = list.map { case (value, score) =>
-              if (id(value) == docId) (v, score) else (value, score)
+              if id(value) == docId then (v, score) else (value, score)
             }
             results.copy(streamWithScore = rapid.Stream.emits(updatedList))
           } else {
@@ -105,10 +105,10 @@ trait QueryCache {
       // Remove timed-out entries
       timeout.foreach { to =>
         val iterator = map.entrySet().iterator()
-        while (iterator.hasNext) {
+        while iterator.hasNext do {
           val entry = iterator.next()
           val cached = entry.getValue
-          if (cached.lastAccess.isExpired(to)) {
+          if cached.lastAccess.isExpired(to) then {
             iterator.remove()
           }
         }
@@ -117,7 +117,7 @@ trait QueryCache {
       // Clear out old and less used entries
       maxEntries.foreach { max =>
         val size = map.size()
-        if (size > max) {
+        if size > max then {
           val removeCount = size - max
           map.entrySet().asScala.toList.sortBy { entry =>
             val cached = entry.getValue

@@ -55,11 +55,11 @@ object TxnSqlDsl {
 
     def toSQLQuery: SQLQuery = {
       val fieldParts: List[SQLPart] =
-        if (selected.isEmpty) List(SQLPart.Fragment("*"))
+        if selected.isEmpty then List(SQLPart.Fragment("*"))
         else selected.map(f => SQLPart.Fragment(f.name)).intersperse(SQLPart.Fragment(", "))
 
       val whereParts: List[SQLPart] =
-        if (filters.isEmpty) Nil
+        if filters.isEmpty then Nil
         else {
           val parts = filters.map(txn.filterToSQLPart)
           SQLPart.Fragment(" WHERE ") :: parts.intersperse(SQLPart.Fragment(" AND "))

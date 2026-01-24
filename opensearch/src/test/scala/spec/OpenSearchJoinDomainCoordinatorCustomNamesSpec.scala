@@ -72,7 +72,7 @@ class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with 
         val p = Parent("p1", Id("p1"))
         val c = Child(parentId = p._id, value = "c1", _id = Id("c1"))
 
-        val test = for {
+        val test = for
           _ <- db.init
           _ <- db.parents.transaction { tx =>
             tx.truncate.next(tx.insert(p)).next(tx.commit)
@@ -88,7 +88,7 @@ class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with 
               .toList
           }
           _ <- db.dispose
-        } yield {
+        yield {
           matched.map(_._id.value) shouldBe List("p1")
         }
 

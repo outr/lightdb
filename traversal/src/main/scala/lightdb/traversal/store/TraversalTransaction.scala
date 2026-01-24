@@ -30,11 +30,11 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = backing.jsonPrefixStream(prefix)
 
-  override def truncate: Task[Int] = for {
+  override def truncate: Task[Int] = for
     c <- backing.truncate
     _ <- Task(store.indexCache.clear())
     _ <- (
-      if (store.persistedIndexEnabled && store.name != "_backingStore") {
+      if store.persistedIndexEnabled && store.name != "_backingStore" then {
         store.effectiveIndexBacking match {
           case Some(idx) =>
             idx.transaction { kv =>
@@ -44,7 +44,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         }
       } else Task.unit
     )
-  } yield c
+  yield c
 
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] =
     backing.get(_ => index -> value)
@@ -52,7 +52,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   override protected def _insert(doc: Doc): Task[Doc] = backing.insert(doc).flatTap { d =>
     Task(store.indexCache.onInsert(d)).next {
       // best-effort persisted postings. Skip when we're already operating on _backingStore.
-      if (store.persistedIndexEnabled && store.name != "_backingStore") {
+      if store.persistedIndexEnabled && store.name != "_backingStore" then {
         store.effectiveIndexBacking match {
           case Some(idx) =>
             idx.transaction { kv =>
@@ -67,7 +67,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   override def insert(stream: rapid.Stream[Doc]): Task[Int] = {
-    if (!store.persistedIndexEnabled || store.name == "_backingStore") {
+    if !store.persistedIndexEnabled || store.name == "_backingStore" then {
       super.insert(stream)
     } else {
       store.effectiveIndexBacking match {
@@ -88,7 +88,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   }
                 }.tasks.flatMap { inserted =>
                   val postings = inserted.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
-                  if (postings.isEmpty) {
+                  if postings.isEmpty then {
                     Task.pure(inserted.length)
                   } else {
                     kv.upsert(postings).unit.map(_ => inserted.length)
@@ -102,7 +102,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   override def upsert(stream: rapid.Stream[Doc]): Task[Int] = {
-    if (!store.persistedIndexEnabled || store.name == "_backingStore") {
+    if !store.persistedIndexEnabled || store.name == "_backingStore" then {
       super.upsert(stream)
     } else {
       store.effectiveIndexBacking match {
@@ -131,11 +131,11 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   upsertTasks.tasks.flatMap { upserted =>
                     val deleteIds = existingList.flatMap(d => TraversalPersistedIndex.idsForDoc(store.name, store.model, d))
                     val deleteTask =
-                      if (deleteIds.isEmpty) Task.unit else deleteIds.map(kv.delete).tasks.unit
+                      if deleteIds.isEmpty then Task.unit else deleteIds.map(kv.delete).tasks.unit
 
                     val upsertPostings = upserted.flatMap(d => TraversalPersistedIndex.postingsForDoc(store.name, store.model, d))
                     deleteTask.next {
-                      if (upsertPostings.isEmpty) {
+                      if upsertPostings.isEmpty then {
                         Task.pure(upserted.length)
                       } else {
                         kv.upsert(upsertPostings).unit.map(_ => upserted.length)
@@ -150,12 +150,12 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     }
   }
 
-  override protected def _upsert(doc: Doc): Task[Doc] = for {
+  override protected def _upsert(doc: Doc): Task[Doc] = for
     existing <- backing.get(doc._id)
     d <- backing.upsert(doc)
     _ <- Task(store.indexCache.onUpsert(existing, d))
     _ <- (
-      if (store.persistedIndexEnabled && store.name != "_backingStore") {
+      if store.persistedIndexEnabled && store.name != "_backingStore" then {
         store.effectiveIndexBacking match {
           case Some(idx) =>
             idx.transaction { kv =>
@@ -171,18 +171,18 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         }
       } else Task.unit
     )
-  } yield d
+  yield d
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = backing.exists(id)
 
   override protected def _count: Task[Int] = backing.count
 
-  override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = for {
+  override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = for
     existing <- backing.get(_ => index -> value)
     deleted <- backing.delete(_ => index -> value)
     _ <- Task(existing.foreach(store.indexCache.onDelete))
     _ <- (
-      if (store.persistedIndexEnabled && store.name != "_backingStore") {
+      if store.persistedIndexEnabled && store.name != "_backingStore" then {
         (existing, store.effectiveIndexBacking) match {
           case (Some(old), Some(idx)) =>
             idx.transaction { kv =>
@@ -193,14 +193,14 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         }
       } else Task.unit
     )
-  } yield deleted
+  yield deleted
 
   override protected def _commit: Task[Unit] = backing.commit
   override protected def _rollback: Task[Unit] = backing.rollback
   override protected def _close: Task[Unit] = store.backing.transaction.release(backing)
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
-    if (store.persistedIndexEnabled && store.name != "_backingStore") {
+    if store.persistedIndexEnabled && store.name != "_backingStore" then {
       store.effectiveIndexBacking match {
         case Some(idx) =>
           idx.transaction { kv =>
@@ -216,7 +216,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
 
   // Query.update/delete are provided by CollectionTransaction defaults; override not required initially.
   override def doUpdate[V](query: Query[Doc, Model, V], updates: List[FieldAndValue[Doc, _]]): Task[Int] =
-    if (!store.persistedIndexEnabled || store.name == "_backingStore") super.doUpdate(query, updates)
+    if !store.persistedIndexEnabled || store.name == "_backingStore" then super.doUpdate(query, updates)
     else {
       // Important: avoid streaming reads + writes against the same RocksDB transaction/iterator.
       // We materialize IDs first, then mutate in chunks.
@@ -227,7 +227,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
           .chunk(ChunkSize)
           .evalMap { chunk =>
             val idChunk = chunk.toList
-            if (idChunk.isEmpty) Task.pure(0)
+            if idChunk.isEmpty then Task.pure(0)
             else {
               backing.getAll(idChunk).toList.flatMap { existingDocs =>
                 val updatedDocs: List[Doc] = existingDocs.map { d =>
@@ -235,7 +235,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   val updatedJson = updates.foldLeft(json)((json, fv) => fv.update(json))
                   store.model.rw.write(updatedJson)
                 }
-                if (updatedDocs.isEmpty) Task.pure(0)
+                if updatedDocs.isEmpty then Task.pure(0)
                 else upsert(updatedDocs).map(_.size)
               }
             }
@@ -246,7 +246,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     }
 
   override def doDelete[V](query: Query[Doc, Model, V]): Task[Int] =
-    if (!store.persistedIndexEnabled || store.name == "_backingStore") super.doDelete(query)
+    if !store.persistedIndexEnabled || store.name == "_backingStore" then super.doDelete(query)
     else {
       store.effectiveIndexBacking match {
         case None =>
@@ -261,19 +261,19 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
               .chunk(ChunkSize)
               .evalMap { chunk =>
                 val idChunk = chunk.toList
-                if (idChunk.isEmpty) Task.pure(0)
+                if idChunk.isEmpty then Task.pure(0)
                 else {
                   idx.transaction { kv0 =>
                     val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
-                    for {
+                    for
                       existingList <- backing.getAll(idChunk).toList
                       deleteIds = existingList.flatMap(d => TraversalPersistedIndex.idsForDoc(store.name, store.model, d))
-                      _ <- if (deleteIds.isEmpty) Task.unit else deleteIds.map(kv.delete).tasks.unit
+                      _ <- if deleteIds.isEmpty then Task.unit else deleteIds.map(kv.delete).tasks.unit
                       bools <- idChunk.map { id =>
                         store.trigger.delete(store.idField, id, this).flatMap(_ => backing.delete(_ => backing.store.idField -> id))
                       }.tasks
                       _ <- Task(existingList.foreach(store.indexCache.onDelete))
-                    } yield bools.count(_ == true)
+                    yield bools.count(_ == true)
                   }
                 }
               }
@@ -346,7 +346,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
       }
 
       // Grouped aggregation (multiple rows).
-      if (groupFunctions.nonEmpty) {
+      if groupFunctions.nonEmpty then {
         val state = new IndexingState
 
         final case class AggSpec(
@@ -384,19 +384,19 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
             spec.`type` match {
               case AggregateType.Min =>
                 val v = raw
-                if (v != null) {
+                if v != null then {
                   val next =
-                    if (current == null) v
-                    else if (TraversalQueryEngine.compareAny(v, current) < 0) v
+                    if current == null then v
+                    else if TraversalQueryEngine.compareAny(v, current) < 0 then v
                     else current
                   gs.values.update(spec.name, next)
                 }
               case AggregateType.Max =>
                 val v = raw
-                if (v != null) {
+                if v != null then {
                   val next =
-                    if (current == null) v
-                    else if (TraversalQueryEngine.compareAny(v, current) > 0) v
+                    if current == null then v
+                    else if TraversalQueryEngine.compareAny(v, current) > 0 then v
                     else current
                   gs.values.update(spec.name, next)
                 }
@@ -420,16 +420,16 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                     val d = n.doubleValue()
                     def isWholeLong(dd: Double): Boolean =
                       dd.isFinite && dd >= Long.MinValue.toDouble && dd <= Long.MaxValue.toDouble && dd.toLong.toDouble == dd
-                    if (!hasFrac && isWholeLong(d)) {
+                    if !hasFrac && isWholeLong(d) then {
                       gs.values.update(spec.name, (false, sumL + n.longValue(), sumD, true))
                     } else {
-                      val baseD = if (hasFrac) sumD else sumL.toDouble
+                      val baseD = if hasFrac then sumD else sumL.toDouble
                       gs.values.update(spec.name, (true, sumL, baseD + d, true))
                     }
                   case _ => // ignore
                 }
               case AggregateType.Count =>
-                if (raw != null) {
+                if raw != null then {
                   val c = current match {
                     case i: Int => i
                     case _ => 0
@@ -437,7 +437,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   gs.values.update(spec.name, c + 1)
                 }
               case AggregateType.CountDistinct =>
-                if (raw != null) {
+                if raw != null then {
                   val set = current match {
                     case s: scala.collection.mutable.HashSet[Any] @unchecked => s
                     case _ => scala.collection.mutable.HashSet.empty[Any]
@@ -446,7 +446,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   gs.values.update(spec.name, set)
                 }
               case AggregateType.Concat =>
-                if (raw != null) {
+                if raw != null then {
                   val buf = current match {
                     case b: scala.collection.mutable.ArrayBuffer[(String, Any)] @unchecked => b
                     case _ => scala.collection.mutable.ArrayBuffer.empty[(String, Any)]
@@ -455,13 +455,13 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                   gs.values.update(spec.name, buf)
                 }
               case AggregateType.ConcatDistinct =>
-                if (raw != null) {
+                if raw != null then {
                   val pair = current match {
                     case p: (scala.collection.mutable.ArrayBuffer[(String, Any)], scala.collection.mutable.HashSet[Any]) @unchecked => p
                     case _ => (scala.collection.mutable.ArrayBuffer.empty[(String, Any)], scala.collection.mutable.HashSet.empty[Any])
                   }
                   val (buf, seen) = pair
-                  if (seen.add(raw)) buf += (docId -> raw)
+                  if seen.add(raw) then buf += (docId -> raw)
                   gs.values.update(spec.name, (buf, seen))
                 }
               case AggregateType.Group =>
@@ -490,7 +490,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
             // Add group fields (both alias and raw field.name for Sort.ByField compatibility).
             groupSpecs.zip(key).foreach { case (gs, v0) =>
               base.update(gs.name, v0)
-              if (!base.contains(gs.field.name)) base.update(gs.field.name, v0)
+              if !base.contains(gs.field.name) then base.update(gs.field.name, v0)
             }
 
             // Finalize non-group values.
@@ -499,15 +499,15 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
               val out: Any = spec.`type` match {
                 case AggregateType.Avg =>
                   cur match {
-                    case (sum: Double, count: Long) => if (count == 0L) 0.0 else sum / count.toDouble
+                    case (sum: Double, count: Long) => if count == 0L then 0.0 else sum / count.toDouble
                     case _ => 0.0
                   }
                 case AggregateType.Sum =>
                   cur match {
                     case (hasFrac: Boolean, sumL: Long, sumD: Double, sawAny: Boolean) =>
-                      if (!sawAny) 0
-                      else if (hasFrac) sumD
-                      else if (sumL.isValidInt) sumL.toInt
+                      if !sawAny then 0
+                      else if hasFrac then sumD
+                      else if sumL.isValidInt then sumL.toInt
                       else sumL
                     case _ => 0
                   }
@@ -551,13 +551,13 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
               case other => throw new UnsupportedOperationException(s"Unsupported aggregate sort: $other")
             }
 
-          if (sortKeys.nonEmpty) {
+          if sortKeys.nonEmpty then {
             rows = rows.sortWith { (a, b) =>
               val cmp = sortKeys.iterator.map { case (k, dir) =>
                 val base = TraversalQueryEngine.compareAny(a.getOrElse(k, null), b.getOrElse(k, null))
-                if (dir == SortDirection.Descending) -base else base
+                if dir == SortDirection.Descending then -base else base
               }.find(_ != 0).getOrElse(0)
-              if (cmp != 0) cmp < 0
+              if cmp != 0 then cmp < 0
               else a.toString < b.toString
             }
           } else {
@@ -601,9 +601,9 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         private var cur: Any = null
         override def update(docId: String, doc: Doc): Unit = {
           val v = field.get(doc, field, state)
-          if (v != null) {
-            if (cur == null) cur = v
-            else if (TraversalQueryEngine.compareAny(v, cur) < 0) cur = v
+          if v != null then {
+            if cur == null then cur = v
+            else if TraversalQueryEngine.compareAny(v, cur) < 0 then cur = v
           }
         }
         override def value(): Any = cur
@@ -613,9 +613,9 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         private var cur: Any = null
         override def update(docId: String, doc: Doc): Unit = {
           val v = field.get(doc, field, state)
-          if (v != null) {
-            if (cur == null) cur = v
-            else if (TraversalQueryEngine.compareAny(v, cur) > 0) cur = v
+          if v != null then {
+            if cur == null then cur = v
+            else if TraversalQueryEngine.compareAny(v, cur) > 0 then cur = v
           }
         }
         override def value(): Any = cur
@@ -632,7 +632,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
             case _ => // ignore
           }
         }
-        override def value(): Any = if (count == 0L) 0.0 else sum / count.toDouble
+        override def value(): Any = if count == 0L then 0.0 else sum / count.toDouble
       }
 
       final case class SumAgg(name: String, rw: RW[Any], field: Field[Doc, Any]) extends AggComputer {
@@ -653,10 +653,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
             case n: java.lang.Number =>
               sawAny = true
               val d = n.doubleValue()
-              if (!hasFractional && isWholeLong(d)) {
+              if !hasFractional && isWholeLong(d) then {
                 sumL += n.longValue()
               } else {
-                if (!hasFractional) {
+                if !hasFractional then {
                   hasFractional = true
                   sumD = sumL.toDouble
                 }
@@ -667,9 +667,9 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         }
 
         override def value(): Any = {
-          if (!sawAny) 0
-          else if (hasFractional) sumD
-          else if (sumL.isValidInt) sumL.toInt
+          if !sawAny then 0
+          else if hasFractional then sumD
+          else if sumL.isValidInt then sumL.toInt
           else sumL
         }
       }
@@ -678,7 +678,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         private var count: Int = 0
         override def update(docId: String, doc: Doc): Unit = {
           val v = field.get(doc, field, state)
-          if (v != null) count += 1
+          if v != null then count += 1
         }
         override def value(): Any = count
       }
@@ -687,19 +687,19 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         private val set = scala.collection.mutable.HashSet.empty[Any]
         override def update(docId: String, doc: Doc): Unit = {
           val v = field.get(doc, field, state)
-          if (v != null) set += v
+          if v != null then set += v
         }
         override def value(): Any = set.size
       }
 
       final case class ConcatAgg(name: String, rw: RW[Any], field: Field[Doc, Any], distinct: Boolean) extends AggComputer {
         private val buf = scala.collection.mutable.ArrayBuffer.empty[(String, Any)]
-        private val seen = if (distinct) Some(scala.collection.mutable.HashSet.empty[Any]) else None
+        private val seen = if distinct then Some(scala.collection.mutable.HashSet.empty[Any]) else None
 
         override def update(docId: String, doc: Doc): Unit = {
           val v = field.get(doc, field, state)
-          if (v != null) {
-            if (seen.forall(s => s.add(v))) {
+          if v != null then {
+            if seen.forall(s => s.add(v)) then {
               buf += (docId -> v)
             }
           }

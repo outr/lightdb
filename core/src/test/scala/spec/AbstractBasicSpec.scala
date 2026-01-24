@@ -81,7 +81,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
    * initialization before the first DB is constructed.
    */
   protected def db: DB = {
-    if (_db == null) {
+    if _db == null then {
       _db = new DB
     }
     _db
@@ -106,12 +106,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       val temp = Person(name = "Temp", age = 21, city = Some(City("Austin")), _id = tempId)
 
       val test =
-        if (readYourWritesWithinTransactionSupported) {
+        if readYourWritesWithinTransactionSupported then {
           db.people.transaction { tx =>
-            for {
+            for
               _ <- tx.insert(temp).map(_ => ())
               ids <- tx.query.filter(_.city !== None).id.toList
-            } yield {
+            yield {
               ids.toSet should contain(tempId)
             }
           }
@@ -196,7 +196,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.ageLinks.t.get(AgeLinks.id(30)).map(_.map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori")))))
     }
     "query with aggregate functions" in {
-      if (aggregationSupported) {
+      if aggregationSupported then {
         db.people.transaction { transaction =>
           transaction.query
             .aggregate(p => List(
@@ -295,7 +295,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.startTime.get().map(_ should be > 0L)
     }
     "dispose the database and prepare new instance" in {
-      if (memoryOnly) {
+      if memoryOnly then {
         // Don't dispose
         Task.unit.succeed
       } else {
@@ -340,7 +340,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "search using Filter.Builder and scoring" in {
-      if (filterBuilderSupported) {
+      if filterBuilderSupported then {
         db.people.transaction { transaction =>
           transaction.query.scored.filter(_
             .builder
@@ -348,10 +348,10 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
             .should(_.search.words("nica 13", matchEndsWith = true), boost = Some(2.0))
             .should(_.age <=> (10, 15))
           ).docs.search.flatMap { results =>
-            for {
+            for
               people <- results.list
               scores <- results.scores
-            } yield {
+            yield {
               people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
               scores should be(List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
             }
@@ -391,14 +391,14 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "modify a record within a transaction and see it post-commit" in {
       db.people.transaction { transaction =>
-        for {
+        for
           original <- transaction.query.filter(_.name === "Ruth").first
           _ <- transaction.upsert(original.copy(
             name = "Not Ruth"
           ))
           _ <- transaction.commit
           people <- transaction.query.filter(_.name === "Not Ruth").toList
-        } yield people.map(_.name) should be(List("Not Ruth"))
+        yield people.map(_.name) should be(List("Not Ruth"))
       }
     }
     "query with single-value nicknames" in {
@@ -489,11 +489,11 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     "sort by name and page through results" in {
       db.people.transaction { transaction =>
         val q = transaction.query.sort(Sort.ByField(Person.name)).limit(10)
-        for {
+        for
           l1 <- q.offset(0).docs.search.flatMap(_.list).map(_.map(_.name))
           l2 <- q.offset(10).docs.search.flatMap(_.list).map(_.map(_.name))
           l3 <- q.offset(20).docs.search.flatMap(_.list).map(_.map(_.name))
-        } yield {
+        yield {
           l1 should be(List("Allan", "Brenda", "Charlie", "Diana", "Evan", "Fiona", "Greg", "Hanna", "Ian", "Jenna"))
           l2 should be(List("Kevin", "Mike", "Nancy", "Not Ruth", "Oscar", "Penny", "Quintin", "Sam", "Tori", "Uba"))
           l3 should be(List("Veronica", "Wyatt", "Xena", "Zoey"))
@@ -533,11 +533,11 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "verify the correct number of records in the database" in {
-      for {
+      for
         people <- db.people.t.count
         ageLinks <- db.ageLinks.t.count
         backingStore <- db.backingStore.t.count
-      } yield {
+      yield {
         people should be(24)
         ageLinks should be(22)
         backingStore should be(3)
@@ -551,7 +551,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
         val p = (1 to CreateRecords).toList.map { index =>
           Person(
             name = s"Unique Snowflake $index",
-            age = if (index > 100) 0 else index,
+            age = if index > 100 then 0 else index,
             city = Some(City("Robotland")),
             nicknames = Set("robot", s"sf$index")
           )
@@ -805,7 +805,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
               val modified = current.copy(
                 people = (current.people ::: add).filterNot(remove.contains)
               )
-              if (modified.people.isEmpty) {
+              if modified.people.isEmpty then {
                 Task.pure(None)
               } else {
                 Task.pure(Some(modified))
@@ -827,7 +827,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   }
 
   private def deleteDirectoryIfExists(path: Path): Unit = {
-    if (Files.exists(path)) {
+    if Files.exists(path) then {
       Files.walk(path)
         .sorted(Comparator.reverseOrder())
         .forEach(Files.delete(_))

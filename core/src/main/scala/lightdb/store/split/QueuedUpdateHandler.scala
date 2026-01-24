@@ -41,7 +41,7 @@ case class QueuedUpdateHandler[
   }
 
   override def delete[V](index: UniqueIndex[Doc, V], value: V): Task[Unit] = Task.defer {
-    if (index != txn.store.model._id) throw new UnsupportedOperationException("Only id deletes are supported in QueuedUpdateHandler")
+    if index != txn.store.model._id then throw new UnsupportedOperationException("Only id deletes are supported in QueuedUpdateHandler")
     val id = value.asInstanceOf[Id[Doc]]
     val delta = Option(deltas.get(id)) match {
       case Some(QueuedDelta.Insert(_)) => None
