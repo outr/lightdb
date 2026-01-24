@@ -1,7 +1,7 @@
 // Scala versions
-val scala213 = "2.13.18"
+val scala213 = "3.8.1"
 
-val scala3 = "3.7.4"
+val scala3 = "3.8.1"
 
 val scala2 = List(scala213)
 val allScalaVersions = scala3 :: scala2
@@ -92,7 +92,7 @@ val mapdbVersion: String = "3.1.0"
 
 val lmdbVersion: String = "0.9.1"
 
-val jedisVersion: String = "7.2.0"
+val jedisVersion: String = "7.2.1"
 
 val fabricVersion: String = "1.19.0"
 
@@ -110,7 +110,7 @@ val duckdbVersion: String = "1.4.3.0"
 
 val h2Version: String = "2.4.240"
 
-val postgresqlVersion: String = "42.7.8"
+val postgresqlVersion: String = "42.7.9"
 
 val chronicleMapVersion: String = "3.27ea2"
 
