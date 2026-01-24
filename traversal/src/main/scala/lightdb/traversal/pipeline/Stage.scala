@@ -89,7 +89,7 @@ object Stage {
       }
 
       val keep = off + lim
-      val pq = mutable.PriorityQueue.empty[Item](worstFirst)
+      val pq = mutable.PriorityQueue.empty[Item]
       var i = 0L
 
       in.evalMap { a =>
@@ -238,7 +238,7 @@ object Stage {
             }
           }
 
-          val pq = mutable.PriorityQueue.empty[(K, Long)](worstFirst)
+          val pq = mutable.PriorityQueue.empty[(K, Long)]
           counts.foreach { case kv @ (_, _) =>
             pq.enqueue(kv)
             if (pq.size > lim) pq.dequeue()

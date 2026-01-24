@@ -706,7 +706,9 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           }
         }.start()
       }
-      Task.condition(Task(counter.get() == 19 * 10 && db.people.transaction.active == 0), timeout = 1.minute).succeed
+      Task.condition(Task {
+        counter.get() == 19 * 10 && db.people.transaction.active == 0
+      }, timeout = 1.minute).succeed
     }
     "truncate the database" in {
       db.truncate().succeed

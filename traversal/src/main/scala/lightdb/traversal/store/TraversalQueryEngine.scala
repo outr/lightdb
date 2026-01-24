@@ -2590,10 +2590,10 @@ object TraversalQueryEngine {
           val pageBuffer = mutable.ArrayBuffer.empty[Hit]
           val pqOpt: Option[mutable.PriorityQueue[Hit]] =
             if (sorts.nonEmpty && kForSortOpt.nonEmpty) {
-              val worstFirst = new Ordering[Hit] {
+              implicit val worstFirst: Ordering[Hit] = new Ordering[Hit] {
                 override def compare(x: Hit, y: Hit): Int = compareHits(x, y) // larger = worse
               }
-              Some(mutable.PriorityQueue.empty[Hit](worstFirst))
+              Some(mutable.PriorityQueue.empty[Hit])
             } else None
 
           var matchedCount: Int = 0

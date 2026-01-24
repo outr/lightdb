@@ -18,7 +18,6 @@ import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
-import java.util.concurrent.Semaphore
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
@@ -115,12 +114,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         val tx = create(parent).sync()
         Shared(name, tx, timeout)
       })
-      s.active.incrementAndGet()
-      s.lastUsed.set(System.currentTimeMillis())
-      s.withLock(f(s.tx)).guarantee(Task {
-        s.active.decrementAndGet()
-        s.lastUsed.set(System.currentTimeMillis())
-      })
+      s.withLock(f(s.tx))
     }
 
     def create(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
@@ -136,11 +130,11 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     } yield transaction
 
     def release(transaction: TX): Task[Unit] = for {
-      _ <- logger.info(s"Releasing Transaction for $name").when(Store.LogTransactions)
       _ <- trigger.transactionEnd(transaction)
       _ <- releaseTransaction(transaction)
       _ <- transaction.close
       _ = set.remove(transaction)
+      _ <- logger.info(s"Released Transaction for $name").when(Store.LogTransactions)
     } yield ()
 
     def releaseAll(): Task[Int] = Task {
@@ -151,15 +145,30 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       list.size
     }
 
-    private case class Shared(name: String, tx: TX, timeout: FiniteDuration) {
-      val active = new AtomicInteger(0)
-      val lastUsed = new AtomicLong(0L)
-      private val lock = new Semaphore(1)
+    private case class Shared(name: String, tx: TX, timeout: FiniteDuration) { shared =>
+      private val active = new AtomicInteger(0)
+      private val lastUsed = new AtomicLong(0L)
+      @volatile private var started = false
 
       private val timeoutMillis = timeout.toMillis
 
-      def withLock[A](task: Task[A]): Task[A] =
-        Task(lock.acquire()).flatMap(_ => task.guarantee(Task(lock.release())))
+      def withLock[A](task: => Task[A]): Task[A] = Task.defer {
+        active.incrementAndGet()
+        if (!started) {
+          shared.synchronized {
+            if (!started) {
+              started = true
+              recurse().start()
+            }
+          }
+        }
+        Task.defer {
+          task.guarantee(Task {
+            active.decrementAndGet()
+            lastUsed.set(System.currentTimeMillis())
+          })
+        }
+      }
 
       private def recurse(): Task[Unit] = Task.defer {
         val nextPossibleTimeout: Long = if (active.get() > 0) {
@@ -177,8 +186,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
           }
         }
       }
-
-      recurse().start()
     }
   }
 
