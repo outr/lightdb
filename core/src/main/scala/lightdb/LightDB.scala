@@ -308,7 +308,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       override def transactionStart(transaction: Transaction[E, M]): Task[Unit] = super
         .transactionStart(transaction)
         .flatMap { _ =>
-          reverse.transaction.create(None).map { tx =>
+          reverse.transaction.create().map { tx =>
             map.put(transaction, tx)
           }
         }
