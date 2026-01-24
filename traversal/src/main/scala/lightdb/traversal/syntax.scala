@@ -91,17 +91,17 @@ final class TransactionTraverse[Doc <: Document[Doc], Model <: DocumentModel[Doc
     var buffer: List[TraversalPath[E, From, From]] = Nil
 
     val pullTask: Task[Step[TraversalPath[E, From, From]]] = Task {
-      if (buffer.nonEmpty) {
+      if buffer.nonEmpty then {
         val next = buffer.head
         buffer = buffer.tail
         Step.Emit(next)
       } else {
         var collected = List.empty[TraversalPath[E, From, From]]
 
-        while (queue.nonEmpty && collected.size < bufferSize) {
+        while queue.nonEmpty && collected.size < bufferSize do {
           val (currentId, path) = queue.dequeue()
 
-          if (path.length < maxDepth) {
+          if path.length < maxDepth then {
             val edges: List[E] = edgesForFunc(currentId).toList.sync()
             val filteredEdges = edges.filter(edgeFilter)
             val nextSteps = filteredEdges.filterNot(e => path.exists(_._to == e._to))
@@ -111,7 +111,7 @@ final class TransactionTraverse[Doc <: Document[Doc], Model <: DocumentModel[Doc
             pending.foreach {
               case (id, newPath) =>
                 val signature = from +: newPath.map(_._to)
-                if (!seen.contains(signature)) {
+                if !seen.contains(signature) then {
                   seen += signature
                   queue.enqueue((id, newPath))
                 }
@@ -121,7 +121,7 @@ final class TransactionTraverse[Doc <: Document[Doc], Model <: DocumentModel[Doc
           }
         }
 
-        if (collected.nonEmpty) {
+        if collected.nonEmpty then {
           buffer = collected.tail
           Step.Emit(collected.head)
         } else {

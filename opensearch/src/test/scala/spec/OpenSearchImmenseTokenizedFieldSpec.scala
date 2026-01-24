@@ -35,7 +35,7 @@ class OpenSearchImmenseTokenizedFieldSpec extends AsyncWordSpec with AsyncTaskSp
       val huge = "x" * 200_000
       val doc = HugeTextDoc(fullText = huge, _id = Id("huge"))
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.insert(doc)).next(tx.commit)
@@ -44,7 +44,7 @@ class OpenSearchImmenseTokenizedFieldSpec extends AsyncWordSpec with AsyncTaskSp
           tx.get(Id[HugeTextDoc]("huge"))
         }
         _ <- db.dispose
-      } yield {
+      yield {
         found.nonEmpty shouldBe true
       }
 

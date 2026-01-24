@@ -194,7 +194,7 @@ case class OpenSearchConfig(baseUrl: String,
                             joinParentField: Option[String] = None,
                             joinScoreMode: String = "none",
                             joinFieldName: String = "__lightdb_join") {
-  lazy val normalizedBaseUrl: String = if (baseUrl.endsWith("/")) baseUrl.dropRight(1) else baseUrl
+  lazy val normalizedBaseUrl: String = if baseUrl.endsWith("/") then baseUrl.dropRight(1) else baseUrl
 }
 
 object OpenSearchConfig {
@@ -415,12 +415,12 @@ object OpenSearchConfig {
       // Format: "ChildStoreA:parentIdField,ChildStoreB:parentIdField"
       parseCsv(s).flatMap { pair =>
         val i = pair.indexOf(':')
-        if (i <= 0 || i >= pair.length - 1) {
+        if i <= 0 || i >= pair.length - 1 then {
           None
         } else {
           val child = pair.substring(0, i).trim
           val field = pair.substring(i + 1).trim
-          if (child.isEmpty || field.isEmpty) None else Some(child -> field)
+          if child.isEmpty || field.isEmpty then None else Some(child -> field)
         }
       }.toMap
     }
@@ -436,7 +436,7 @@ object OpenSearchConfig {
     val registryEntry = OpenSearchJoinDomainRegistry.get(db.name, collectionName)
     val joinDomainRaw2 = joinDomainRaw.orElse(registryEntry.map(_.joinDomain))
     val joinRoleRaw2 = joinRoleRaw.orElse(registryEntry.map(_.joinRole))
-    val joinChildrenRaw2 = if (joinChildrenRaw.nonEmpty) joinChildrenRaw else registryEntry.map(_.joinChildren).getOrElse(Nil)
+    val joinChildrenRaw2 = if joinChildrenRaw.nonEmpty then joinChildrenRaw else registryEntry.map(_.joinChildren).getOrElse(Nil)
     val joinParentFieldRaw2 = joinParentFieldRaw.orElse(registryEntry.flatMap(_.joinParentField))
     // Join-domain inference:
     //
@@ -450,7 +450,7 @@ object OpenSearchConfig {
 
     def extractStoreName(key: String, suffix: String): Option[String] = {
       val prefix = "lightdb.opensearch."
-      if (key.startsWith(prefix) && key.endsWith(suffix)) {
+      if key.startsWith(prefix) && key.endsWith(suffix) then {
         Some(key.substring(prefix.length, key.length - suffix.length))
       } else {
         None
@@ -460,7 +460,7 @@ object OpenSearchConfig {
     def allProfigKeys(json: fabric.Json, prefix: String = ""): List[String] = json match {
       case o: fabric.Obj =>
         o.value.toList.flatMap { case (k, v) =>
-          val full = if (prefix.isEmpty) k else s"$prefix.$k"
+          val full = if prefix.isEmpty then k else s"$prefix.$k"
           full :: allProfigKeys(v, full)
         }
       case _ =>
@@ -472,7 +472,7 @@ object OpenSearchConfig {
         extractStoreName(k, ".joinChildren").orElse(extractStoreName(k, ".joinChildParentFields"))
       }.toSet
 
-    val inferredChild: Option[InferredChild] = if (joinDomainRaw2.nonEmpty || joinRoleRaw2.nonEmpty || joinParentFieldRaw2.nonEmpty) {
+    val inferredChild: Option[InferredChild] = if joinDomainRaw2.nonEmpty || joinRoleRaw2.nonEmpty || joinParentFieldRaw2.nonEmpty then {
       None
     } else {
       val candidates = candidateParentStores.toList.flatMap { parentStoreName =>
@@ -481,7 +481,7 @@ object OpenSearchConfig {
           optString(s"lightdb.opensearch.$parentStoreName.joinChildParentFields").map(parseChildParentFields).getOrElse(Map.empty)
         val mentionedAsChild: Boolean =
           parentJoinChildren.contains(collectionName) || parentChildParentFields.contains(collectionName)
-        if (!mentionedAsChild) {
+        if !mentionedAsChild then {
           Nil
         } else {
           val joinDomain = optString(s"lightdb.opensearch.$parentStoreName.joinDomain").getOrElse(parentStoreName)
@@ -512,15 +512,15 @@ object OpenSearchConfig {
 
     // If this store declares join children or child-parent field mappings and a joinDomain, infer it is a join-parent.
     val inferredJoinRoleParent: Option[String] =
-      if (joinRoleRaw2.isEmpty && joinDomain.nonEmpty && (joinChildrenRaw2.nonEmpty || joinChildParentFieldsRaw.nonEmpty)) Some("parent") else None
+      if joinRoleRaw2.isEmpty && joinDomain.nonEmpty && (joinChildrenRaw2.nonEmpty || joinChildParentFieldsRaw.nonEmpty) then Some("parent") else None
 
     val joinRole = joinRoleRaw2
       .orElse(inferredChild.map(_ => "child"))
       .orElse(inferredJoinRoleParent)
 
     val joinChildren: List[String] =
-      if (joinChildrenRaw2.nonEmpty) joinChildrenRaw2
-      else if (joinChildParentFieldsRaw.nonEmpty) joinChildParentFieldsRaw.keys.toList.sorted
+      if joinChildrenRaw2.nonEmpty then joinChildrenRaw2
+      else if joinChildParentFieldsRaw.nonEmpty then joinChildParentFieldsRaw.keys.toList.sorted
       else Nil
 
     val joinParentField = joinParentFieldRaw2.orElse(inferredChild.map(_.joinParentField))
@@ -582,7 +582,7 @@ object OpenSearchConfig {
       joinScoreMode = joinScoreMode,
       joinFieldName = joinFieldName
     )
-    if (cfg.logRequests) {
+    if cfg.logRequests then {
       scribe.info(s"OpenSearchConfig(baseUrl=${cfg.baseUrl}, indexPrefix=${cfg.indexPrefix.getOrElse("")}, timeout=${cfg.requestTimeout}, refresh=${cfg.refreshPolicy.getOrElse("")})")
     }
     cfg

@@ -19,7 +19,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
                                                                               fromSuffix: List[SQLPart] = Nil) {
   private lazy val fromParts: List[SQLPart] = fromOverride.getOrElse(List(SQLPart.Fragment(store.fqn))) ::: fromSuffix
 
-  lazy val whereClause: List[SQLPart] = if (filters.nonEmpty) {
+  lazy val whereClause: List[SQLPart] = if filters.nonEmpty then {
     SQLPart.Fragment("WHERE\n") :: filters.intersperse(SQLPart.Fragment("\nAND\n"))
   } else {
     Nil
@@ -27,20 +27,20 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
 
   lazy val parts: List[SQLPart] = List(
     List(SQLPart.Fragment("SELECT\n\t")),
-    if (fields.nonEmpty) fields.intersperse(SQLPart.Fragment(", ")) else List(SQLPart.Fragment("*")),
+    if fields.nonEmpty then fields.intersperse(SQLPart.Fragment(", ")) else List(SQLPart.Fragment("*")),
     List(SQLPart.Fragment("\nFROM\n\t")) ::: fromParts ::: List(SQLPart.Fragment("\n")),
     whereClause,
-    if (group.nonEmpty) {
+    if group.nonEmpty then {
       SQLPart.Fragment("\nGROUP BY\n") :: group.intersperse(SQLPart.Fragment(", "))
     } else {
       Nil
     },
-    if (having.nonEmpty) {
+    if having.nonEmpty then {
       SQLPart.Fragment("\nHAVING\n") :: having.intersperse(SQLPart.Fragment("\nAND\n"))
     } else {
       Nil
     },
-    if (sort.nonEmpty) {
+    if sort.nonEmpty then {
       SQLPart.Fragment("\nORDER BY\n\t") :: sort.intersperse(SQLPart.Fragment(", "))
     } else {
       Nil
@@ -49,7 +49,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
       case Some(l) => List(SQLPart.Fragment("\nLIMIT "), SQLPart.Arg(l.json))
       case None => Nil
     },
-    if (offset != 0) List(SQLPart.Fragment(s"\nOFFSET $offset")) else Nil
+    if offset != 0 then List(SQLPart.Fragment(s"\nOFFSET $offset")) else Nil
   ).flatten
 
   lazy val query: SQLQuery = SQLQuery(parts)
@@ -75,7 +75,7 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
       fields = List(SQLPart.Fragment("_id"))
     )
     
-    val assignments: List[SQLPart] = if (fields.length == 1) {
+    val assignments: List[SQLPart] = if fields.length == 1 then {
       // Single field - no need for comma separators
       val fv = fields.head
       List(SQLPart.Fragment(s"${fv.field.name} = "), SQLPart.Arg(fv.json))

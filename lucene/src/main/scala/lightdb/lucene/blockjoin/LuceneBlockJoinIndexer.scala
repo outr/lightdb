@@ -76,17 +76,17 @@ object LuceneBlockJoinIndexer {
       val storeField: LuceneField.Store = {
         val shouldStore =
           storeAll || (field.stored && field.indexed) || field.name == "_id"
-        if (shouldStore) LuceneField.Store.YES else LuceneField.Store.NO
+        if shouldStore then LuceneField.Store.YES else LuceneField.Store.NO
       }
 
       field match {
         case t: Tokenized[D @unchecked] =>
           // Tokenized fields follow storeField when StoreMode.All or explicitly stored+indexed.
-          add(new LuceneField(fieldName, t.get(doc, t, state), if (storeField == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
+          add(new LuceneField(fieldName, t.get(doc, t, state), if storeField == LuceneField.Store.YES then TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
         case _ =>
           def addJson(j: Json, d: DefType): Unit = {
-            if (field.isSpatial) {
-              if (j != fabric.Null) createGeoFields(fieldName, j, add)
+            if field.isSpatial then {
+              if j != fabric.Null then createGeoFields(fieldName, j, add)
             } else {
               d match {
                 case DefType.Str =>
@@ -103,10 +103,10 @@ object LuceneBlockJoinIndexer {
                 case _ if j == fabric.Null =>
                 case DefType.Arr(d2) =>
                   val v = j.asVector
-                  if (v.isEmpty) add(new StringField(fieldName, "[]", storeField))
+                  if v.isEmpty then add(new StringField(fieldName, "[]", storeField))
                   else v.foreach(x => addJson(x, d2))
                 case DefType.Bool =>
-                  add(new IntField(fieldName, if (j.asBoolean) 1 else 0, storeField))
+                  add(new IntField(fieldName, if j.asBoolean then 1 else 0, storeField))
                 case DefType.Int =>
                   add(new LongField(fieldName, j.asLong, storeField))
                 case DefType.Dec =>

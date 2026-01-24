@@ -40,7 +40,7 @@ case class SharedHaloDBInstance(direct: DirectHaloDBInstance, prefix: String) ex
     delete(Id(id))
   }.count
 
-  override def dispose(): Task[Unit] = if (direct.counter.decrementAndGet() <= 0) {
+  override def dispose(): Task[Unit] = if direct.counter.decrementAndGet() <= 0 then {
     direct.dispose()
   } else {
     Task.unit

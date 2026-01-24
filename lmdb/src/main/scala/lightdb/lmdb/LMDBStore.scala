@@ -60,7 +60,7 @@ object LMDBStore extends PrefixScanningStoreManager {
   }
 
   private def createInstance(path: Path): LMDBInstance = {
-    if (!Files.exists(path)) {
+    if !Files.exists(path) then {
       Files.createDirectories(path)
     }
     val env = Env

@@ -29,7 +29,7 @@ class DirectHaloDBInstance(directory: Path,
   private implicit def json2Bytes(json: Json): Array[Byte] = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
 
   private implicit def bytes2Json(bytes: Array[Byte]): Json = {
-    if (bytes == null) {
+    if bytes == null then {
       Null
     } else {
       val jsonString = new String(bytes, StandardCharsets.UTF_8)
@@ -41,7 +41,7 @@ class DirectHaloDBInstance(directory: Path,
 
   override def get[Doc](id: Id[Doc]): Task[Option[Json]] = Task {
     val result = db.get(id.bytes)
-    if (result != null) {
+    if result != null then {
       Option(result)
     } else {
       None
@@ -59,7 +59,7 @@ class DirectHaloDBInstance(directory: Path,
 
   override def truncate(): Task[Int] = Task {
     val size = db.size().toInt
-    if (size == 0) {
+    if size == 0 then {
       0
     } else {
       db.newIterator().asScala.foreach(r => db.delete(r.getKey))

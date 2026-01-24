@@ -36,30 +36,30 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
 
   private def validateFilters(q: Query[Doc, Model, V]): Task[Unit] = Task {
     val storeMode = q.collection.storeMode
-    if (Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll)) {
+    if Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll) then {
       val notIndexed = q.filter.toList.flatMap(_.fields(q.model)).filter(!_.indexed)
-      if (storeMode.isIndexes) {
-        if (notIndexed.nonEmpty) {
+      if storeMode.isIndexes then {
+        if notIndexed.nonEmpty then {
           throw NonIndexedFieldException(q, notIndexed)
         }
       } else {
-        if (Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty) {
+        if Query.WarnFilteringWithoutIndex && notIndexed.nonEmpty then {
           scribe.warn(s"Inefficient query filtering on non-indexed field(s): ${notIndexed.map(_.name).mkString(", ")}")
         }
       }
     }
   }
 
-  private def prepared: Task[Q] = for {
+  private def prepared: Task[Q] = for
     resolved <- FilterPlanner.resolve(filter, model, resolveExistsChild = !collection.supportsNativeExistsChild)
-    optimizedFilter = if (optimize) {
+    optimizedFilter = if optimize then {
       resolved.map(QueryOptimizer.optimize)
     } else {
       resolved
     }
     q = copy(filter = optimizedFilter)
     _ <- validateFilters(q)
-  } yield q
+  yield q
 
   def scored: Q = copy(scoreDocs = true)
 
@@ -123,7 +123,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
     var q: Query[Doc, Model, T] = copy[Doc, Model, T](conversion = conversion)
     conversion match {
       case Conversion.Distance(field, from, sort, radius) =>
-        if (sort) {
+        if sort then {
           q = q.clearSort.sort(Sort.ByDistance(field, from))
         }
         radius.foreach { r =>
@@ -195,7 +195,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
               safeModify: Boolean = true)
              (f: Forge[Doc, Option[Doc]]): Unit = docs.stream
     .evalMap { doc =>
-      if (safeModify) {
+      if safeModify then {
         transaction.modify(doc._id, establishLock, deleteOnNone) {
           case Some(doc) => f(doc)
           case None => Task.pure(None)

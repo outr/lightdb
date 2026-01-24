@@ -63,9 +63,9 @@ class RocksDBTraversalFastTotalFromInPostingsSpec
     "compute total from equality postings count sum for IN on single-valued non-string field when seed materialization is disabled" in {
       val docs =
         (1 to 60).toList.map { i =>
-          Person(age = if (i <= 40) 1 else if (i <= 55) 2 else 3, _id = Id(s"p$i"))
+          Person(age = if i <= 40 then 1 else if i <= 55 then 2 else 3, _id = Id(s"p$i"))
         }
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -80,7 +80,7 @@ class RocksDBTraversalFastTotalFromInPostingsSpec
             .filter(_.age.in(Seq(1, 2)))
             .search
         }
-      } yield {
+      yield {
         results.total shouldBe Some(55)
       }
     }

@@ -30,7 +30,7 @@ case class AsynchronousCachedUpdateHandler[
   private val queue = new ConcurrentLinkedQueue[Task[Unit]]
 
   Task {
-    while (keepAlive || !queue.isEmpty) {
+    while keepAlive || !queue.isEmpty do {
       Option(queue.poll()) match {
         case Some(task) =>
           try {
@@ -44,7 +44,7 @@ case class AsynchronousCachedUpdateHandler[
   }.start()
 
   private def add(task: Task[Unit]): Task[Unit] = Task.defer {
-    if (cached.get() >= maxCache) {
+    if cached.get() >= maxCache then {
       Task.sleep(250.millis).next(add(task))
     } else {
       cached.incrementAndGet()

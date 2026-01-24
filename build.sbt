@@ -1,11 +1,3 @@
-// Scala versions
-val scala213 = "2.13.18"
-
-val scala3 = "3.8.1"
-
-val scala2 = List(scala213)
-val allScalaVersions = scala3 :: scala2
-
 // Variables
 val org: String = "com.outr"
 val projectName: String = "lightdb"
@@ -18,15 +10,8 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 ThisBuild / version := "4.15.0-SNAPSHOT"
-ThisBuild / scalaVersion := scala3
-ThisBuild / crossScalaVersions := allScalaVersions
-ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
-ThisBuild / scalacOptions ++= {
-	if (scalaVersion.value.startsWith("3")) Seq(
-		"-Wconf:any:silent"
-	)
-	else Nil
-}
+ThisBuild / scalaVersion := "3.8.1"
+ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 
 publishMavenStyle := true
 
@@ -90,7 +75,7 @@ val rocksDBVersion: String = "10.4.2"
 
 val mapdbVersion: String = "3.1.0"
 
-val lmdbVersion: String = "0.9.1"
+val lmdbVersion: String = "0.9.2"
 
 val jedisVersion: String = "7.2.1"
 
@@ -144,23 +129,7 @@ lazy val core = crossProject(JVMPlatform)
 			"com.outr" %%% "rapid-scribe" % rapidVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
 			"com.outr" %%% "rapid-test" % rapidVersion % Test
-		),
-		libraryDependencies ++= (
-			if (scalaVersion.value.startsWith("2.")) {
-				Seq(
-					"org.scala-lang.modules" %% "scala-collection-compat" % collectionCompatVersion,
-					"org.scala-lang" % "scala-reflect" % scalaVersion.value
-				)
-			} else {
-				Nil
-			}
-		),
-		Compile / unmanagedSourceDirectories ++= {
-			val major = if (scalaVersion.value.startsWith("2.")) "-2" else "-3"
-			List(CrossType.Pure, CrossType.Full).flatMap(
-				_.sharedSrcDir(baseDirectory.value, "main").toList.map(f => file(f.getPath + major))
-			)
-		}
+		)
 	)
 	.jvmSettings(
 		fork := true,
@@ -365,17 +334,17 @@ lazy val benchmark = project.in(file("benchmark"))
 		fork := true,
 		Test / fork := true,
 		libraryDependencies ++= Seq(
-			"org.mongodb" % "mongodb-driver-sync" % "5.0.1",
-			"org.postgresql" % "postgresql" % "42.7.4",
-			"org.mariadb.jdbc" % "mariadb-java-client" % "3.3.3",
+			"org.mongodb" % "mongodb-driver-sync" % "5.6.2",
+			"org.postgresql" % "postgresql" % "42.7.9",
+			"org.mariadb.jdbc" % "mariadb-java-client" % "3.5.7",
 			"org.xerial" % "sqlite-jdbc" % sqliteVersion,
 			"com.h2database" % "h2" % h2Version,
 			"org.apache.derby" % "derby" % "10.17.1.0",
-			"commons-io" % "commons-io" % "2.16.1",
-			"co.fs2" %% "fs2-io" % "3.9.4",
+			"commons-io" % "commons-io" % "2.21.0",
+			"co.fs2" %% "fs2-io" % "3.12.2",
 //			"com.outr" %% "lightdb-all" % "0.11.0",
-			"org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
-			"org.jooq" % "jooq" % "3.19.10",
+			"org.scala-lang.modules" %% "scala-parallel-collections" % "1.2.0",
+			"org.jooq" % "jooq" % "3.20.10",
 			"io.quickchart" % "QuickChart" % "1.2.0",
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"com.outr" %%% "rapid-test" % rapidVersion % Test

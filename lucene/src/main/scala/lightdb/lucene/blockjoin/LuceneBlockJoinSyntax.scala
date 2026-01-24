@@ -96,7 +96,7 @@ object LuceneBlockJoinSyntax {
       // Sanity check: ensure the declared ParentChildSupport wiring matches the explicit join field.
       val expected = parent.model.parentField(child.model)
       val provided = parentId(child.model)
-      if (expected.name != provided.name) {
+      if expected.name != provided.name then {
         throw new IllegalArgumentException(
           s"joinedCollection mismatch: parentModel.parentField(childModel) was '${expected.name}' " +
             s"but parentId(childModel) was '${provided.name}'. Ensure these refer to the same field."

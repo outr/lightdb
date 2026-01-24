@@ -59,7 +59,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   protected def tokenizedEqualsPart(fieldName: String, value: String): SQLPart = {
     val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
     val parts = tokens.map(t => likePart(fieldName, s"%$t%"))
-    if (parts.isEmpty) SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
+    if parts.isEmpty then SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
   }
 
   /**
@@ -68,7 +68,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
    */
   protected def tokenizedNotEqualsPart(fieldName: String, value: String): SQLPart = {
     val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
-    val inner = if (tokens.isEmpty) SQLPart.Fragment("1=1") else {
+    val inner = if tokens.isEmpty then SQLPart.Fragment("1=1") else {
       val parts = tokens.map(t => likePart(fieldName, s"%$t%"))
       SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
     }
@@ -114,7 +114,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))
     case a: Arr => ps.setString(index + 1, JsonFormatter.Compact(a))
     case Str(s, _) => ps.setString(index + 1, s)
-    case Bool(b, _) => ps.setInt(index + 1, if (b) 1 else 0)
+    case Bool(b, _) => ps.setInt(index + 1, if b then 1 else 0)
     case NumInt(l, _) => ps.setLong(index + 1, l)
     case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
   }
@@ -134,7 +134,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val results = resultsFor(b.query)
     val rs = results.rs
     try {
-      if (rs.next()) {
+      if rs.next() then {
         Some(getDoc(rs))
       } else {
         None
@@ -153,7 +153,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
-      if (state.batchInsert.get() >= Store.MaxInsertBatch) {
+      if state.batchInsert.get() >= Store.MaxInsertBatch then {
         ps.executeBatch()
         state.batchInsert.set(0)
       }
@@ -208,7 +208,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   override protected def _close: Task[Unit] = state.close
 
   def resultsFor(sql: SQLQuery): SQLResults = {
-    if (SQLStoreTransaction.LogQueries) scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
+    if SQLStoreTransaction.LogQueries then scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
     try {
       state.closePendingResults()
       state.withPreparedStatement(sql.query) { ps =>
@@ -411,7 +411,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case Conversion.Doc() => store.fields
       case Conversion.Converted(_) => store.fields
       case Conversion.Materialized(fields) => fields
-      case Conversion.DocAndIndexes() => if (store.storeMode.isIndexes) {
+      case Conversion.DocAndIndexes() => if store.storeMode.isIndexes then {
         store.fields.filter(_.indexed)
       } else {
         store.fields
@@ -427,7 +427,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
     bestMatch = bestMatchDirectionOpt.flatMap(dir => bestMatchPlan(query.filter, dir))
 
-    val baseFieldParts: List[SQLPart] = if (bestMatch.nonEmpty) {
+    val baseFieldParts: List[SQLPart] = if bestMatch.nonEmpty then {
       // When joining auxiliary tables (e.g., FTS), disambiguate base-table columns and keep stable column labels.
       fields.map(f => SQLPart.Fragment(s"${store.fqn}.${f.name} AS ${f.name}"))
     } else {
@@ -444,7 +444,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       sort = query.sort.flatMap {
         case Sort.BestMatch(_) => bestMatch.toList.map(_.sortPart)
         case Sort.ByField(index, direction) =>
-          val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+          val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
           List(SQLPart.Fragment(s"${index.name} $dir"))
         case Sort.ByDistance(field, _, direction) => List(sortByDistance(field, direction))
         case _ => Nil
@@ -457,25 +457,25 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
     val b = toSQL[V](query)
-    val facetResults = if (query.facets.nonEmpty) {
+    val facetResults = if query.facets.nonEmpty then {
       computeFacets(b, query.facets)
     } else {
       Task.pure(Map.empty[FacetField[Doc], FacetResult])
     }
     facetResults.flatMap { fr =>
-      val scoreCol = if (query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch])) {
+      val scoreCol = if query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch]) then {
         Some("__score")
       } else {
         None
       }
-      execute[V](b.query, b.offset, b.limit, query.conversion, scoreCol, if (query.countTotal) Some(b.totalQuery) else None, fr)
+      execute[V](b.query, b.offset, b.limit, query.conversion, scoreCol, if query.countTotal then Some(b.totalQuery) else None, fr)
     }
   }
 
   override def distinct[F](query: Query[Doc, Model, _],
                            field: Field[Doc, F],
                            pageSize: Int): rapid.Stream[F] = {
-    if (pageSize <= 0) {
+    if pageSize <= 0 then {
       rapid.Stream.empty
     } else {
       // Streaming DISTINCT with paging.
@@ -487,7 +487,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       rapid.Stream.force {
         val resolveExistsChild = !store.supportsNativeExistsChild
         FilterPlanner.resolve(query.filter, store.model, resolveExistsChild = resolveExistsChild).map { resolved =>
-          val optimizedFilter = if (query.optimize) resolved.map(QueryOptimizer.optimize) else resolved
+          val optimizedFilter = if query.optimize then resolved.map(QueryOptimizer.optimize) else resolved
 
           // Build a base query so we can reuse existing SQL filter translation.
           val baseQ: Query[Doc, Model, F] = Query(this, Conversion.Value(field))
@@ -559,10 +559,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
                 lock.synchronized {
                   @annotation.tailrec
                   def loop(): rapid.Step[F] = {
-                    if (done) {
+                    if done then {
                       rapid.Step.Stop
                     } else {
-                      if (!currentPullInitialized) {
+                      if !currentPullInitialized then {
                         fetchNextPull()
                       }
 
@@ -578,7 +578,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
                         case rapid.Step.Stop =>
                           // Page drained.
                           closeCurrentPull()
-                          if (emittedThisPage < pageSize) {
+                          if emittedThisPage < pageSize then {
                             done = true
                             rapid.Step.Stop
                           } else {
@@ -619,7 +619,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   private def computeFacets(base: SQLQueryBuilder[Doc, Model],
                             facetQueries: List[FacetQuery[Doc]]): Task[Map[FacetField[Doc], FacetResult]] = Task {
     val facetFields: List[FacetField[Doc]] = facetQueries.map(_.field).distinct
-    if (facetFields.isEmpty) {
+    if facetFields.isEmpty then {
       Map.empty[FacetField[Doc], FacetResult]
     } else {
       // Build a "no paging" query that only selects the facet columns.
@@ -658,7 +658,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
             case (m, fq) => m.updated(fq.field, fq)
           }
 
-        while (rs.next()) {
+        while rs.next() do {
           facetFields.foreach { ff =>
             val fq = queryByField(ff)
             val jsonStr = rs.getString(ff.name)
@@ -671,14 +671,14 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
             }
 
             // A missing facet list is treated as "$ROOT$" for hierarchical facets at the requested path.
-            if (values.isEmpty) {
-              if (ff.hierarchical && fq.path.isEmpty) bump(ff, "$ROOT$")
+            if values.isEmpty then {
+              if ff.hierarchical && fq.path.isEmpty then bump(ff, "$ROOT$")
             } else {
               values.foreach { fv =>
                 val path = fv.path
-                if (ff.hierarchical) {
-                  if (path.startsWith(fq.path)) {
-                    val child = if (path.length == fq.path.length) "$ROOT$" else path(fq.path.length)
+                if ff.hierarchical then {
+                  if path.startsWith(fq.path) then {
+                    val child = if path.length == fq.path.length then "$ROOT$" else path(fq.path.length)
                     bump(ff, child)
                   }
                 } else {
@@ -741,7 +741,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         private var nextValue = false
 
         override def hasNext: Boolean = {
-          if (!checkedNext) {
+          if !checkedNext then {
             nextValue = rs.next()
             checkedNext = true
           }
@@ -749,7 +749,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         }
 
         override def next(): R = {
-          if (!checkedNext) {
+          if !checkedNext then {
             rs.next()
           }
           checkedNext = false
@@ -762,9 +762,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     createStream[MaterializedAggregate[Doc, Model]] { rs =>
       val json = obj(query.functions.map { f =>
         val o = rs.getObject(f.name)
-        val json = if (f.`type` == AggregateType.Concat) {
+        val json = if f.`type` == AggregateType.Concat then {
           arr(o.toString.split(";;").toList.map(s => toJson(s, f.rw)): _*)
-        } else if (f.`type` == AggregateType.ConcatDistinct) {
+        } else if f.`type` == AggregateType.ConcatDistinct then {
           arr(o.toString.split(",").toList.map(s => toJson(s, f.rw)): _*)
         } else {
           toJson(o, f.tRW)
@@ -806,10 +806,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     val having = query.filter.map(af2Part).toList
     val sort = (query.sort ::: query.query.sort).map {
       case Sort.ByField(field, direction) =>
-        val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+        val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
         SQLPart.Fragment(s"${field.name} $dir")
       case (AggregateFunction(name, _, _), direction: SortDirection) =>
-        val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+        val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
         SQLPart.Fragment(s"$name $dir")
       case t => throw new UnsupportedOperationException(s"Unsupported sort: $t")
     }
@@ -1012,9 +1012,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
         // - showOnlyThisLevel: require exact path array match (no deeper segments)
         // - otherwise: prefix match
         val pathJson = JsonFormatter.Compact(f.path.json)
-        if (f.showOnlyThisLevel) {
+        if f.showOnlyThisLevel then {
           likePart(f.fieldName, s"%\"path\":$pathJson%")
-        } else if (f.path.isEmpty) {
+        } else if f.path.isEmpty then {
           // Drill down to "any value in this dimension" - best effort
           likePart(f.fieldName, s"%\"path\":%")
         } else {
@@ -1081,14 +1081,14 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
       case Filter.Exact(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%\"$query\"%")
       case Filter.Exact(fieldName, query) => likePart(fieldName, s"$query")
       case f: Filter.Distance[C] =>
-        if (targetStore eq store) {
+        if targetStore eq store then {
           distanceFilter(f.asInstanceOf[Filter.Distance[Doc]])
         } else {
           throw new UnsupportedOperationException("Distance filtering not supported on related child store")
         }
       case f: Filter.Multi[C] =>
         val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
-        if (f.minShould != 1 && shoulds.nonEmpty) {
+        if f.minShould != 1 && shoulds.nonEmpty then {
           throw new UnsupportedOperationException("Should filtering only works in SQL for exactly one condition")
         }
         val shouldParts = shoulds.map(fc => filter2PartOn(fc.filter, targetStore)) match {
@@ -1096,7 +1096,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
           case list => List(SQLQuery(SQLPart.Fragment("(") :: list.intersperse(SQLPart.Fragment(" OR ")) ::: List(SQLPart.Fragment(")"))))
         }
         val parts: List[SQLPart] = others.flatMap { fc =>
-          if (fc.boost.nonEmpty) throw new UnsupportedOperationException("Boost not supported in SQL")
+          if fc.boost.nonEmpty then throw new UnsupportedOperationException("Boost not supported in SQL")
           fc.condition match {
             case Condition.Must => List(filter2PartOn(fc.filter, targetStore))
             case Condition.MustNot =>
@@ -1111,7 +1111,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
           case SQLPart.Fragment("") => false
           case _ => true
         }
-        if (validParts.isEmpty) {
+        if validParts.isEmpty then {
           SQLPart.Fragment("1=1") // Always true condition as fallback
         } else {
           SQLQuery(validParts.intersperse(SQLPart.Fragment(" AND ")))
@@ -1127,7 +1127,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   }
 
   protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
-    val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+    val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
     SQLPart.Fragment(s"${field.name}Distance $dir")
   }
 

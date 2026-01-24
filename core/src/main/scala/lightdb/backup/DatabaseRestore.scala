@@ -31,7 +31,7 @@ object DatabaseRestore {
             truncate: Boolean = true): Task[Int] = {
     process(db, truncate) { store =>
       val file = new File(directory, s"${store.name}.jsonl")
-      if (file.exists()) {
+      if file.exists() then {
         Some(Source.fromFile(file))
       } else {
         None
@@ -42,8 +42,8 @@ object DatabaseRestore {
   def restore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: Store[Doc, Model],
                                                                  file: File,
                                                                  truncate: Boolean = true): Task[Int] = {
-    if (file.exists()) {
-      if (truncate) store.t.truncate()
+    if file.exists() then {
+      if truncate then store.t.truncate()
       val source = Source.fromFile(file)
       val stream = rapid.Stream.fromIterator(Task(source
         .getLines()
@@ -58,24 +58,24 @@ object DatabaseRestore {
     db.stores.map { store =>
       f(store) match {
         case Some(source) =>
-          val task = for {
+          val task = for
             _ <- logger.info(s"Restoring ${store.name}...")
             _ <- store.t.truncate.when(truncate)
             stream = rapid.Stream.fromIterator(Task(source.getLines().map(JsonParser.apply)))
             count <- store.t.json.insert(stream, disableSearchUpdates = true)
             _ <- logger.info(s"Restored $count documents to ${store.name}")
-          } yield Some((store, count))
+          yield Some((store, count))
           task.guarantee(Task(source.close()))
         case None => Task.pure(None)
       }
     }.tasks.map(_.flatten).flatMap { list =>
-      for {
+      for
         _ <- logger.info("Finished Restoring. Re-Indexing...")
         counts <- list.map {
           case (store, count) => store.reIndex().map(_ => count)
         }.tasksPar
         _ <- logger.info(s"Finished Re-Sync")
-      } yield counts.sum
+      yield counts.sum
     }
   }
 }

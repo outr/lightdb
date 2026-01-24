@@ -156,7 +156,7 @@ object TraversalKeys {
   // Encoding for index values. This is deliberately stable and human-readable.
   def encodeJson(json: Json): String = json match {
     case Null => "null"
-    case Bool(b, _) => if (b) "1" else "0"
+    case Bool(b, _) => if b then "1" else "0"
     case NumInt(l, _) => l.toString
     case NumDec(bd, _) => bd.toString
     case Str(s, _) => s

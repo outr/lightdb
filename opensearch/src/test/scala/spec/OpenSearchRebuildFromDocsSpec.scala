@@ -49,7 +49,7 @@ class OpenSearchRebuildFromDocsSpec extends AsyncWordSpec with AsyncTaskSpec wit
       def matchAllCount(idx: String): Task[Int] =
         client.count(idx, fabric.obj("query" -> fabric.obj("match_all" -> fabric.obj())))
 
-      val test = for {
+      val test = for
         // cleanup from any prior run
         existingR <- client.aliasTargets(readAlias)
         _ <- existingR.foldLeft(Task.unit)((acc, idx) => acc.next(client.deleteIndex(idx)))
@@ -71,7 +71,7 @@ class OpenSearchRebuildFromDocsSpec extends AsyncWordSpec with AsyncTaskSpec wit
 
         count <- matchAllCount(readAlias)
         _ <- client.deleteIndex(newPhysical)
-      } yield {
+      yield {
         count shouldBe 3
       }
 

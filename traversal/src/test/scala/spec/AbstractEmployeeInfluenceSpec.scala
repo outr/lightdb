@@ -55,7 +55,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
       db.collaboratesWith.transaction { collaboratesWith =>
         db.subordinates.transaction { subordinates =>
           def reportsAndCollaboratesStep: Id[Employee] => Task[Set[Id[Employee]]] = { id =>
-            for {
+            for
               reports <- subordinates.traverse
                 .edgesFor[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee](id)
                 .map(_._to)
@@ -66,7 +66,7 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
                 .map(_._to)
                 .toList
                 .map(_.toSet)
-            } yield reports ++ collabs
+            yield reports ++ collabs
           }
 
           val start = Set(Id[Employee]("alice"))

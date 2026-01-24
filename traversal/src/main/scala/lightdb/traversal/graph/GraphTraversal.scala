@@ -71,14 +71,14 @@ trait GraphTraversal {
     def collectAllReachable: Task[Set[Id[N]]] = {
       // This replicates the loop function from the original BFSEngine
       def loop(frontier: Set[Id[N]], visited: Set[Id[N]], depth: Int): Task[Set[Id[N]]] = {
-        if (frontier.isEmpty || depth > maxDepth) {
+        if frontier.isEmpty || depth > maxDepth then {
           Task.pure(visited)
         } else {
-          for {
+          for
             lists <- Task.sequence(frontier.toList.map(step))
             next = lists.flatten.toSet -- visited
             out <- loop(next, visited ++ next, depth + 1)
-          } yield out
+          yield out
         }
       }
 
@@ -96,7 +96,7 @@ trait GraphTraversal {
 
       // Function to process nodes using BFS
       def bfs(frontier: List[Id[N]], depth: Int): Stream[Id[N]] = {
-        if (frontier.isEmpty || depth > maxDepth) {
+        if frontier.isEmpty || depth > maxDepth then {
           Stream.empty
         } else {
           // Process current frontier

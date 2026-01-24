@@ -40,7 +40,7 @@ class OpenSearchIdFieldSortSpec extends AsyncWordSpec with AsyncTaskSpec with Ma
       val c1 = IdFieldSortChild(parentId = Id[IdFieldSortParent]("p2"), _id = Id[IdFieldSortChild]("c1"))
       val c2 = IdFieldSortChild(parentId = Id[IdFieldSortParent]("p1"), _id = Id[IdFieldSortChild]("c2"))
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.children.transaction { tx =>
           tx.truncate.next(tx.insert(List(c1, c2))).next(tx.commit)
@@ -54,7 +54,7 @@ class OpenSearchIdFieldSortSpec extends AsyncWordSpec with AsyncTaskSpec with Ma
             .toList
         }
         _ <- db.dispose
-      } yield {
+      yield {
         ids shouldBe List("c2", "c1")
       }
 

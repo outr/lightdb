@@ -15,7 +15,7 @@ object OpenSearchMetrics {
                       latencyMaxMs: Long,
                       bulkDocs: Long,
                       bulkBytes: Long) {
-    def avgLatencyMs: Double = if (requests <= 0) 0.0 else latencyTotalMs.toDouble / requests.toDouble
+    def avgLatencyMs: Double = if requests <= 0 then 0.0 else latencyTotalMs.toDouble / requests.toDouble
   }
 
   private case class State(requests: AtomicLong,
@@ -42,9 +42,9 @@ object OpenSearchMetrics {
 
   private def updateMax(max: AtomicLong, value: Long): Unit = {
     var done = false
-    while (!done) {
+    while !done do {
       val current = max.get()
-      if (value > current) done = max.compareAndSet(current, value)
+      if value > current then done = max.compareAndSet(current, value)
       else done = true
     }
   }
@@ -84,7 +84,7 @@ object OpenSearchMetrics {
 
   def startPeriodicLogging(key: String, every: FiniteDuration): Unit = {
     val s = state(key)
-    if (s.logStarted.compareAndSet(false, true)) {
+    if s.logStarted.compareAndSet(false, true) then {
       def loop(): Task[Unit] =
         Task.sleep(every).next {
           val snap = snapshot(key)

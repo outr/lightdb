@@ -24,7 +24,7 @@ class OpenSearchRebuildSubsetSpec extends AsyncWordSpec with AsyncTaskSpec with 
       val index = "rebuild_subset_spec_idx"
       val indexBody = obj("mappings" -> obj("dynamic" -> bool(true)))
 
-      val test = for {
+      val test = for
         _ <- client.deleteIndex(index)
         _ <- client.createIndex(index, indexBody)
 
@@ -56,7 +56,7 @@ class OpenSearchRebuildSubsetSpec extends AsyncWordSpec with AsyncTaskSpec with 
         count <- client.count(index, obj("query" -> obj("match_all" -> obj())))
 
         _ <- client.deleteIndex(index)
-      } yield {
+      yield {
         beforeD3.isDefined shouldBe true
         deleted shouldBe 2
         count shouldBe 3

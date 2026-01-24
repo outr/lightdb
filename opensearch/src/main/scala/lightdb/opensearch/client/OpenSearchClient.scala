@@ -22,7 +22,7 @@ import lightdb.opensearch.OpenSearchMetrics
 case class OpenSearchClient(config: OpenSearchConfig) {
   private def url(path: String): URL = URL.parse(s"${config.normalizedBaseUrl}$path")
 
-  if (config.metricsEnabled) {
+  if config.metricsEnabled then {
     config.metricsLogEvery.foreach(every => OpenSearchMetrics.startPeriodicLogging(config.normalizedBaseUrl, every))
   }
 
@@ -42,10 +42,10 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   }
 
   private def log(method: HttpMethod, u: URL, status: HttpStatus, tookMs: Long): Unit = {
-    if (config.logRequests) {
+    if config.logRequests then {
       val path = u.path.decoded
       val excluded = config.logRequestsExcludePaths.exists(p => p.nonEmpty && path.contains(p))
-      if (!excluded) {
+      if !excluded then {
         scribe.info(s"OpenSearch ${method.value} $path -> ${status.code} (${tookMs}ms)")
       }
     }
@@ -97,15 +97,15 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       def elapsedMs: Long = (System.nanoTime() - started) / 1000000L
 
       def slowLogLoop(afterMs: Long): Task[Unit] = {
-        if (afterMs <= 0L) {
+        if afterMs <= 0L then {
           Task.unit
         } else {
           Task.sleep(afterMs.millis).next {
             Task.defer {
-              if (!completed.get()) {
+              if !completed.get() then {
                 // Check if OpenSearch is reachable right now (short timeout) to disambiguate "slow" vs "down".
                 ping(timeout = 2.seconds).map { ok =>
-                  val health = if (ok) "reachable" else "unreachable"
+                  val health = if ok then "reachable" else "unreachable"
                   scribe.warn(
                     s"OpenSearch request still running after ${elapsedMs}ms: $name attempt=$n/$maxAttempts timeoutMs=${config.requestTimeout.toMillis} opensearch=$health"
                   )
@@ -114,7 +114,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
                 Task.unit
               }
             }.next {
-              if (!completed.get()) {
+              if !completed.get() then {
                 config.slowRequestLogEvery match {
                   case Some(every) => slowLogLoop(every.toMillis)
                   case None => Task.unit
@@ -138,22 +138,22 @@ case class OpenSearchClient(config: OpenSearchConfig) {
         .map { resp =>
         val tookMs = (System.nanoTime() - started) / 1000000L
         log(req.method, req.url, resp.status, tookMs)
-        if (config.metricsEnabled) {
+        if config.metricsEnabled then {
           OpenSearchMetrics.recordRequest(config.normalizedBaseUrl, tookMs)
         }
         resp
       }.attempt.flatMap {
         case Success(resp) =>
           val retryable = shouldRetry(resp.status.code)
-          if (config.metricsEnabled && !resp.status.isSuccess && (!retryable || n >= maxAttempts)) {
+          if config.metricsEnabled && !resp.status.isSuccess && (!retryable || n >= maxAttempts) then {
             OpenSearchMetrics.recordFailure(config.normalizedBaseUrl)
           }
-          if (retryable && n < maxAttempts) {
+          if retryable && n < maxAttempts then {
             val sleepMs = jitterDelay(delayMs)
-            if (config.logRequests) {
+            if config.logRequests then {
               scribe.warn(s"OpenSearch retrying $name after status=${resp.status.code} attempt=$n/$maxAttempts sleepMs=$sleepMs")
             }
-            if (config.metricsEnabled) {
+            if config.metricsEnabled then {
               OpenSearchMetrics.recordRetry(config.normalizedBaseUrl)
             }
             Task.sleep(sleepMs.millis).next(attempt(n + 1, nextDelayMs(delayMs)))
@@ -161,17 +161,17 @@ case class OpenSearchClient(config: OpenSearchConfig) {
             Task.pure(resp)
           }
         case Failure(t) =>
-          if (n < maxAttempts) {
+          if n < maxAttempts then {
             val sleepMs = jitterDelay(delayMs)
-            if (config.logRequests) {
+            if config.logRequests then {
               scribe.warn(s"OpenSearch retrying $name after exception attempt=$n/$maxAttempts sleepMs=$sleepMs (${t.getClass.getSimpleName}: ${t.getMessage})")
             }
-            if (config.metricsEnabled) {
+            if config.metricsEnabled then {
               OpenSearchMetrics.recordRetry(config.normalizedBaseUrl)
             }
             Task.sleep(sleepMs.millis).next(attempt(n + 1, nextDelayMs(delayMs)))
           } else {
-            if (config.metricsEnabled) {
+            if config.metricsEnabled then {
               OpenSearchMetrics.recordFailure(config.normalizedBaseUrl)
             }
             Task.error(t)
@@ -183,7 +183,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   }
 
   private def require2xx(name: String, resp: HttpResponse): Task[Unit] =
-    if (resp.status.isSuccess) Task.unit
+    if resp.status.isSuccess then Task.unit
     else readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch $name failed (${resp.status.code}): ${b.getOrElse("")}")))
 
   def indexExists(index: String): Task[Boolean] =
@@ -222,7 +222,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   def mappingHash(index: String): Task[Option[String]] = {
     val req = client.get.url(url(s"/$index/_mapping"))
     send(req).flatMap { resp =>
-      if (!resp.status.isSuccess) {
+      if !resp.status.isSuccess then {
         readBody(resp).flatMap { b =>
           Task.error(new RuntimeException(s"OpenSearch mappingHash failed (${resp.status.code}) for $index: ${b.getOrElse("")}"))
         }
@@ -250,7 +250,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   def deleteIndex(index: String): Task[Unit] = {
     val req = client.method(HttpMethod.Delete).url(url(s"/$index"))
     send(req).flatMap { resp =>
-      if (resp.status.code == 404) Task.unit else require2xx(s"deleteIndex($index)", resp)
+      if resp.status.code == 404 then Task.unit else require2xx(s"deleteIndex($index)", resp)
     }
   }
 
@@ -277,18 +277,18 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       val failed = shards.get("failed").map(_.asInt).getOrElse(0)
 
       // If OpenSearch omits shard info, assume success (best effort) but keep a warning for visibility.
-      if (total == 0 && successful == 0 && failed == 0) {
+      if total == 0 && successful == 0 && failed == 0 then {
         scribe.warn(s"OpenSearch refreshIndex($index) returned body without _shards stats; assuming success. body=${body.take(512)}")
-      } else if (failed > 0) {
+      } else if failed > 0 then {
         throw new RuntimeException(
           s"OpenSearch refreshIndex($index) incomplete: total=$total successful=$successful failed=$failed body=${body.take(512)}"
         )
-      } else if (total > 0 && successful <= 0) {
+      } else if total > 0 && successful <= 0 then {
         // Extremely unlikely, but treat as failure because refresh had no acknowledged shards.
         throw new RuntimeException(
           s"OpenSearch refreshIndex($index) reported successful=0 (total=$total failed=$failed) body=${body.take(512)}"
         )
-      } else if (total > 0 && successful != total) {
+      } else if total > 0 && successful != total then {
         // Replica shards may be unassigned in single-node clusters (common in tests), resulting in successful < total.
         // This does not break read-after-write on primary shards, so warn but do not fail.
         scribe.debug(
@@ -311,7 +311,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
                 case Failure(t) if n < maxAttempts =>
                   // If refresh was partial, backoff + retry. This usually indicates shard not ready immediately after truncate/reindex.
                   val sleepMs = jitterDelay(delayMs)
-                  if (config.logRequests) {
+                  if config.logRequests then {
                     scribe.warn(s"OpenSearch refreshIndex retrying index=$index attempt=$n/$maxAttempts sleepMs=$sleepMs (${t.getClass.getSimpleName}: ${t.getMessage})")
                   }
                   Task.sleep(sleepMs.millis).next(attempt(n + 1, nextDelayMs(delayMs)))
@@ -336,11 +336,11 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       .get
       .modifyUrl { u =>
         u.withPath(s"/$index/_settings")
-          .withParam("flat_settings", if (flatSettings) "true" else "false")
-          .withParam("include_defaults", if (includeDefaults) "true" else "false")
+          .withParam("flat_settings", if flatSettings then "true" else "false")
+          .withParam("include_defaults", if includeDefaults then "true" else "false")
       }
     send(req).flatMap { resp =>
-      if (!resp.status.isSuccess) {
+      if !resp.status.isSuccess then {
         readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch indexSettings failed (${resp.status.code}) for $index: ${b.getOrElse("")}")))
       } else {
         readBody(resp).map(_.getOrElse("{}")).map(JsonParser(_))
@@ -377,7 +377,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   def bulk(bodyNdjson: String, refresh: Option[String]): Task[Unit] = {
     bulkResponse(bodyNdjson, refresh).flatMap { json =>
       val errors = json.asObj.get("errors").exists(_.asBoolean)
-      if (!errors) Task.unit
+      if !errors then Task.unit
       else {
         val items = json.asObj.get("items").map(_.asArr.value.toList).getOrElse(Nil)
         val firstError = items.iterator.flatMap { j =>
@@ -401,9 +401,9 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       .content(Content.string(bodyNdjson, ContentType.`application/json`))
 
     send(req).flatMap { resp =>
-      if (!resp.status.isSuccess) {
+      if !resp.status.isSuccess then {
         readBody(resp).flatMap { b =>
-          if (config.logRequests) {
+          if config.logRequests then {
             scribe.error(s"OpenSearch bulk failed (${resp.status.code}): ${b.getOrElse("")}")
           }
           Task.error(new RuntimeException(s"OpenSearch bulk failed (${resp.status.code}): ${b.getOrElse("")}"))
@@ -424,7 +424,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       }
       .json(body)
     send(req).flatMap { resp =>
-      if (!resp.status.isSuccess) {
+      if !resp.status.isSuccess then {
         readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch search failed (${resp.status.code}) for $index: ${b.getOrElse("")}")))
       } else {
         readBody(resp).map(_.getOrElse("{}")).map(JsonParser(_))
@@ -467,7 +467,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       .url(url(s"/$index/_count"))
       .json(query)
     send(req).flatMap { resp =>
-      if (!resp.status.isSuccess) {
+      if !resp.status.isSuccess then {
         readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch count failed (${resp.status.code}) for $index: ${b.getOrElse("")}")))
       } else {
         readBody(resp).map(_.getOrElse("{}")).map(JsonParser(_)).map(_.get("count").map(_.asInt).getOrElse(0))
@@ -484,7 +484,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       }
       .json(query)
     send(req).flatMap { resp =>
-      if (!resp.status.isSuccess) {
+      if !resp.status.isSuccess then {
         readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch deleteByQuery failed (${resp.status.code}) for $index: ${b.getOrElse("")}")))
       } else {
         readBody(resp).map(_.getOrElse("{}")).map(JsonParser(_)).map(_.get("deleted").map(_.asInt).getOrElse(0))
@@ -520,12 +520,12 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       .header(Headers.`Content-Type`(ContentType.`application/json`))
       .modifyUrl { u =>
         u.withPath("/_reindex")
-          .withParam("refresh", if (refresh) "true" else "false")
-          .withParam("wait_for_completion", if (waitForCompletion) "true" else "false")
+          .withParam("refresh", if refresh then "true" else "false")
+          .withParam("wait_for_completion", if waitForCompletion then "true" else "false")
       }
       .json(body)
     send(req).flatMap { resp =>
-      if (!resp.status.isSuccess) {
+      if !resp.status.isSuccess then {
         readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch reindex failed (${resp.status.code}) $source -> $dest: ${b.getOrElse("")}")))
       } else {
         // Response contains summary; we only validate that we didn't get an error.

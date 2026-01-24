@@ -70,12 +70,12 @@ class LuceneBlockJoinDerivedStore[
       tx.count
     }
 
-  override def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = for {
+  override def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = for
     src <- countSourceParents(progressManager)
     idx <- countIndexedParents
     outOfSync = src != idx
     _ <- reIndex(progressManager).when(outOfSync)
-  } yield outOfSync
+  yield outOfSync
 
   /**
    * Rebuilds this joined index from the upstream collections.

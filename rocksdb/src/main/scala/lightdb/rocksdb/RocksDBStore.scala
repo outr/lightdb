@@ -78,8 +78,8 @@ object RocksDBStore extends PrefixScanningStoreManager {
     // (This is the dominant cost in your dedupe logs: `keys=...`.)
     val heap = Runtime.getRuntime.maxMemory()
     val bytes: Long =
-      if (heap >= 48L * 1024L * 1024L * 1024L) 2L * 1024L * 1024L * 1024L // 2 GiB
-      else if (heap >= 24L * 1024L * 1024L * 1024L) 1L * 1024L * 1024L * 1024L // 1 GiB
+      if heap >= 48L * 1024L * 1024L * 1024L then 2L * 1024L * 1024L * 1024L // 2 GiB
+      else if heap >= 24L * 1024L * 1024L * 1024L then 1L * 1024L * 1024L * 1024L // 1 GiB
       else 512L * 1024L * 1024L // 512 MiB
     new LRUCache(bytes)
   }
@@ -122,7 +122,7 @@ object RocksDBStore extends PrefixScanningStoreManager {
     columnFamilies.add(new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, sharedColumnFamilyOptions))
 
     // Only list existing CFs if the DB already exists. For brand-new DBs, listColumnFamilies can throw.
-    if (Files.exists(directory)) {
+    if Files.exists(directory) then {
       val listOpts = new Options()
       try {
         RocksDB.listColumnFamilies(listOpts, path)

@@ -13,7 +13,7 @@ object Nowish {
 
   def apply(): Long = lastTime.updateAndGet { last =>
     val now = System.currentTimeMillis()
-    if (now > last) {
+    if now > last then {
       now
     } else {
       last + 1

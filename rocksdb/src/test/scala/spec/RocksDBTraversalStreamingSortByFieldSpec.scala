@@ -74,7 +74,7 @@ class RocksDBTraversalStreamingSortByFieldSpec
         Person("d", 40, _id = Id("d"))
       )
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         _ <- DB.people
@@ -83,7 +83,7 @@ class RocksDBTraversalStreamingSortByFieldSpec
         names <- DB.people.transaction { tx =>
           tx.query.sort(Sort.ByField(Person.age).desc).limit(3).toList.map(_.map(_.name))
         }
-      } yield {
+      yield {
         names shouldBe List("d", "b", "c")
       }
     }

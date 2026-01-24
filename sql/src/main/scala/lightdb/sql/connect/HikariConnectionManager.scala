@@ -22,7 +22,7 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     hc.setIdleTimeout(60.seconds.toMillis)
     hc.setConnectionTimeout(5.minutes.toMillis)
     hc.setConnectionInitSql("SET statement_timeout = 0; SET idle_in_transaction_session_timeout = 0;")
-    hc.setLeakDetectionThreshold(if (HikariConnectionManager.EnableLeakDetection) 5.minutes.toMillis else 1.hour.toMillis)
+    hc.setLeakDetectionThreshold(if HikariConnectionManager.EnableLeakDetection then 5.minutes.toMillis else 1.hour.toMillis)
     new HikariDataSource(hc)
   }
 

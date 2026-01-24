@@ -14,7 +14,7 @@ class TransactionManager {
   ](list: List[S])(f: List[Tx] => Task[Return]): Task[Return] = {
     final case class Acquired(tx: Tx, release: Task[Unit])
 
-    for {
+    for
       acquired <- list.map { s =>
         s.transaction.create().map { tx0 =>
           Acquired(tx = tx0, release = s.transaction.release(tx0))
@@ -23,7 +23,7 @@ class TransactionManager {
       r <- f(acquired.map(_.tx))
         // always release (reverse order is safer for nested locks)
         .guarantee(acquired.reverse.map(_.release).tasks.unit)
-    } yield r
+    yield r
   }
 
   def apply[
@@ -31,12 +31,12 @@ class TransactionManager {
     D2 <: Document[D2], M2 <: DocumentModel[D2], S2 <: Store[D2, M2],
     Return
   ](s1: S1, s2: S2)
-   (f: (s1.TX, s2.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     r <- f(t1, t2).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2)).unit)
-  } yield r
+  yield r
 
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
@@ -44,14 +44,14 @@ class TransactionManager {
     D3 <: Document[D3], M3 <: DocumentModel[D3], S3 <: Store[D3, M3],
     Return
   ](s1: S1, s2: S2, s3: S3)
-   (f: (s1.TX, s2.TX, s3.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
     r <- f(t1, t2, t3).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3)).unit)
-  } yield r
+  yield r
 
   // This is the original third method, keeping it as is
   def apply[
@@ -61,7 +61,7 @@ class TransactionManager {
     D4 <: Document[D4], M4 <: DocumentModel[D4], S4 <: Store[D4, M4],
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4)
-   (f: (s1.TX, s2.TX, s3.TX, s4.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX, s4.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
@@ -70,7 +70,7 @@ class TransactionManager {
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))
       .and(s4.transaction.release(t4)).unit)
-  } yield r
+  yield r
 
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
@@ -80,7 +80,7 @@ class TransactionManager {
     D5 <: Document[D5], M5 <: DocumentModel[D5], S5 <: Store[D5, M5],
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5)
-   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
@@ -91,7 +91,7 @@ class TransactionManager {
       .and(s3.transaction.release(t3))
       .and(s4.transaction.release(t4))
       .and(s5.transaction.release(t5)).unit)
-  } yield r
+  yield r
 
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
@@ -102,7 +102,7 @@ class TransactionManager {
     D6 <: Document[D6], M6 <: DocumentModel[D6], S6 <: Store[D6, M6],
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6)
-   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
@@ -115,7 +115,7 @@ class TransactionManager {
       .and(s4.transaction.release(t4))
       .and(s5.transaction.release(t5))
       .and(s6.transaction.release(t6)).unit)
-  } yield r
+  yield r
 
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
@@ -127,7 +127,7 @@ class TransactionManager {
     D7 <: Document[D7], M7 <: DocumentModel[D7], S7 <: Store[D7, M7],
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7)
-   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
@@ -142,7 +142,7 @@ class TransactionManager {
       .and(s5.transaction.release(t5))
       .and(s6.transaction.release(t6))
       .and(s7.transaction.release(t7)).unit)
-  } yield r
+  yield r
 
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
@@ -155,7 +155,7 @@ class TransactionManager {
     D8 <: Document[D8], M8 <: DocumentModel[D8], S8 <: Store[D8, M8],
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7, s8: S8)
-   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
@@ -172,7 +172,7 @@ class TransactionManager {
       .and(s6.transaction.release(t6))
       .and(s7.transaction.release(t7))
       .and(s8.transaction.release(t8)).unit)
-  } yield r
+  yield r
 
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
@@ -186,7 +186,7 @@ class TransactionManager {
     D9 <: Document[D9], M9 <: DocumentModel[D9], S9 <: Store[D9, M9],
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7, s8: S8, s9: S9)
-   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX, s9.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX, s9.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
@@ -205,7 +205,7 @@ class TransactionManager {
       .and(s7.transaction.release(t7))
       .and(s8.transaction.release(t8))
       .and(s9.transaction.release(t9)).unit)
-  } yield r
+  yield r
 
   def apply[
     D1 <: Document[D1], M1 <: DocumentModel[D1], S1 <: Store[D1, M1],
@@ -220,7 +220,7 @@ class TransactionManager {
     D10 <: Document[D10], M10 <: DocumentModel[D10], S10 <: Store[D10, M10],
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7, s8: S8, s9: S9, s10: S10)
-   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX, s9.TX, s10.TX) => Task[Return]): Task[Return] = for {
+   (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX, s9.TX, s10.TX) => Task[Return]): Task[Return] = for
     t1 <- s1.transaction.create()
     t2 <- s2.transaction.create()
     t3 <- s3.transaction.create()
@@ -241,5 +241,5 @@ class TransactionManager {
       .and(s8.transaction.release(t8))
       .and(s9.transaction.release(t9))
       .and(s10.transaction.release(t10)).unit)
-  } yield r
+  yield r
 }

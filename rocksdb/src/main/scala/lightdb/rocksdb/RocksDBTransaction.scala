@@ -39,7 +39,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     .fromIterator(Task(iterator())).map(bytes2Json)
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
-    if (index == store.idField) {
+    if index == store.idField then {
       val bytes = value.asInstanceOf[Id[Doc]].bytes
       Option(store.handle match {
         case Some(h) => store.rocksDB.get(h, bytes)
@@ -180,7 +180,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
 
     iter.seekToFirst()
-    while (iter.isValid) {
+    while iter.isValid do {
       delete(iter.key())
       count += 1
       iter.next()
@@ -198,8 +198,8 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         // Compute the shortest byte array that is lexicographically greater than any key starting with p.
         // Example: "abc" => "abd" (as bytes). If p is all 0xFF, there is no upper bound.
         var i = p.length - 1
-        while (i >= 0 && (p(i) & 0xff) == 0xff) i -= 1
-        if (i < 0) None
+        while i >= 0 && (p(i) & 0xff) == 0xff do i -= 1
+        if i < 0 then None
         else {
           val out = java.util.Arrays.copyOf(p, i + 1)
           out(i) = (out(i) + 1).toByte
@@ -208,10 +208,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       }
 
       private def startsWithBytes(key: Array[Byte], p: Array[Byte]): Boolean = {
-        if (key.length < p.length) return false
+        if key.length < p.length then return false
         var i = 0
-        while (i < p.length) {
-          if (key(i) != p(i)) return false
+        while i < p.length do {
+          if key(i) != p(i) then return false
           i += 1
         }
         true
@@ -221,7 +221,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val ro = new ReadOptions()
         // For prefix scans, tell RocksDB we only care about keys sharing the seek prefix.
         // This can reduce internal work during iteration.
-        if (prefix.nonEmpty) ro.setPrefixSameAsStart(true)
+        if prefix.nonEmpty then ro.setPrefixSameAsStart(true)
         ro
       }
       private lazy val prefixBytes: Option[Array[Byte]] = prefix.map(_.getBytes(StandardCharsets.UTF_8))
@@ -257,9 +257,9 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       override def hasNext: Boolean = isValid()
 
       override def next(): Array[Byte] = {
-        if (!hasNext) throw new NoSuchElementException("No more elements in the RocksDB iterator")
+        if !hasNext then throw new NoSuchElementException("No more elements in the RocksDB iterator")
 
-        val result = if (value) {
+        val result = if value then {
           rocksIterator.value()
         } else {
           rocksIterator.key()
@@ -312,5 +312,5 @@ object RocksDBTransaction {
   @volatile var disableWALForBulkWrites: Boolean = false
 
   def bulkWriteOptions: WriteOptions =
-    if (disableWALForBulkWrites) bulkWriteOptionsNoWAL else bulkWriteOptionsWAL
+    if disableWALForBulkWrites then bulkWriteOptionsNoWAL else bulkWriteOptionsWAL
 }

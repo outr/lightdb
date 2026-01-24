@@ -11,13 +11,13 @@ object H2SpatialFunctions {
    * Mirrors the SQLite behavior used by Conversion.Distance.
    */
   def distanceJson(geosJson: String, otherJson: String): String = {
-    if (geosJson == null || otherJson == null) return null
+    if geosJson == null || otherJson == null then return null
     val geos = parseGeos(geosJson)
     val others = parseGeos(otherJson)
-    val distances: List[Double] = for {
+    val distances: List[Double] = for
       g <- geos
       o <- others
-    } yield Spatial.distance(g, o).valueInMeters
+    yield Spatial.distance(g, o).valueInMeters
     JsonFormatter.Compact(distances.json)
   }
 
@@ -25,18 +25,18 @@ object H2SpatialFunctions {
    * Returns the minimum distance (in meters) between the supplied geometries.
    */
   def distanceMin(geosJson: String, otherJson: String): java.lang.Double = {
-    if (geosJson == null || otherJson == null) return null
+    if geosJson == null || otherJson == null then return null
     val geos = parseGeos(geosJson)
     val others = parseGeos(otherJson)
-    val mins = for {
+    val mins = for
       g <- geos
       o <- others
-    } yield Spatial.distance(g, o).valueInMeters
+    yield Spatial.distance(g, o).valueInMeters
     mins.minOption.map(double2Double).orNull
   }
 
   private def parseGeos(jsonStr: String): List[Geo] = {
-    if (jsonStr == null) return Nil
+    if jsonStr == null then return Nil
     val json = JsonParser(jsonStr)
     json match {
       case arr: fabric.Arr => arr.as[List[Geo]]

@@ -9,7 +9,7 @@ import java.sql.{Connection, DriverManager}
 case class SingleConnectionManager(connectionCreator: () => java.sql.Connection) extends ConnectionManager {
   private var _connection: java.sql.Connection = _
   private def connection: java.sql.Connection = {
-    if (_connection == null || _connection.isClosed) {
+    if _connection == null || _connection.isClosed then {
       _connection = connectionCreator()
     }
     _connection
@@ -22,7 +22,7 @@ case class SingleConnectionManager(connectionCreator: () => java.sql.Connection)
   override def releaseConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Unit = ()
 
   override protected def doDispose(): Task[Unit] = Task {
-    if (!connection.getAutoCommit) connection.commit()
+    if !connection.getAutoCommit then connection.commit()
     connection.close()
   }.when(!connection.isClosed).unit
 }

@@ -37,11 +37,11 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
 
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): AggregateFilter[Doc] = {
     val words = s.split("\\s+").map { w =>
-      if (matchStartsWith && matchEndsWith) {
+      if matchStartsWith && matchEndsWith then {
         contains(w)
-      } else if (matchStartsWith) {
+      } else if matchStartsWith then {
         startsWith(w)
-      } else if (matchEndsWith) {
+      } else if matchEndsWith then {
         endsWith(w)
       } else {
         exactly(w)

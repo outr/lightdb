@@ -39,10 +39,10 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     }
     "verify filtering by created works" in {
       DB.specialOne.transaction { transaction =>
-        for {
+        for
           _ <- transaction.query.filter(_.created < Timestamp()).toList.map(_.map(_.name).toSet should be(Set("First", "Second")))
           _ <- transaction.query.filter(_.created > Timestamp()).toList.map(_.map(_.name).toSet should be(Set.empty))
-        } yield succeed
+        yield succeed
       }
     }
     "verify the storage of data is correct" in {

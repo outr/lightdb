@@ -86,7 +86,7 @@ class RocksDBTraversalExistsChildEarlyTerminateSpec
       val alpha = Parent("Alpha", _id = Id("alpha"))
       val bravo = Parent("Bravo", _id = Id("bravo"))
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.truncate()
         _ <- DB.parents.transaction(_.insert(List(alpha, bravo)))
@@ -102,7 +102,7 @@ class RocksDBTraversalExistsChildEarlyTerminateSpec
             .id
             .toList
         }
-      } yield {
+      yield {
         ids shouldBe List(alpha._id)
       }
     }
@@ -117,7 +117,7 @@ class RocksDBTraversalExistsChildEarlyTerminateSpec
         Child(bravo._id, state = Some("WY"))
       )
 
-      for {
+      for
         _ <- DB.truncate()
         _ <- DB.parents.transaction(_.insert(List(alpha, bravo)))
         _ <- DB.children.transaction(_.insert(kids))
@@ -130,7 +130,7 @@ class RocksDBTraversalExistsChildEarlyTerminateSpec
             .id
             .toList
         }
-      } yield {
+      yield {
         ids.toSet shouldBe Set(alpha._id)
       }
     }

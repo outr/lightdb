@@ -51,7 +51,7 @@ object Stage {
     (in: Stream[A]) => Stream.force(
       in.toList.map { list =>
         val sorted = list.sortBy(key)
-        Stream.emits(if (descending) sorted.reverse else sorted)
+        Stream.emits(if descending then sorted.reverse else sorted)
       }
     )
 
@@ -73,14 +73,14 @@ object Stage {
                       )(implicit ord: Ordering[K]): Stage[A, A] = (in: Stream[A]) => {
     val off = math.max(0, offset)
     val lim = math.max(0, limit)
-    if (lim == 0) Stream.empty
+    if lim == 0 then Stream.empty
     else Stream.force {
       final case class Item(value: A, k: K, idx: Long)
 
       def cmp(a: Item, b: Item): Int = {
         val base = ord.compare(a.k, b.k)
-        val c = if (descending) -base else base
-        if (c != 0) c else java.lang.Long.compare(a.idx, b.idx)
+        val c = if descending then -base else base
+        if c != 0 then c else java.lang.Long.compare(a.idx, b.idx)
       }
 
       // Worst-first ordering so the head is the item to evict when the heap grows beyond k.
@@ -97,7 +97,7 @@ object Stage {
           val it = Item(a, key(a), i)
           i += 1L
           pq.enqueue(it)
-          if (pq.size > keep) pq.dequeue()
+          if pq.size > keep then pq.dequeue()
         }
       }.count.map { _ =>
         val kept = pq.clone().dequeueAll.toVector
@@ -193,10 +193,10 @@ object Stage {
         val base = Stream.emits(list)
         val leftT = left.run(base).toList
         val rightT = right.run(base).toList
-        for {
+        for
           l <- leftT
           r <- rightT
-        } yield Stream.emit(Facet2Result(l, r))
+        yield Stream.emit(Facet2Result(l, r))
       }
     )
 
@@ -211,7 +211,7 @@ object Stage {
   def facetTop[A, K](key: A => K, limit: Int)(implicit ord: Ordering[K]): Stage[A, (K, Long)] =
     (in: Stream[A]) => {
       val lim = math.max(0, limit)
-      if (lim == 0) Stream.empty
+      if lim == 0 then Stream.empty
       else Stream.force {
         val counts = mutable.HashMap.empty[K, Long]
         in.evalMap { a =>
@@ -226,14 +226,14 @@ object Stage {
           // Maintain a worst-first heap of size lim while iterating the counts map.
           def better(a: (K, Long), b: (K, Long)): Boolean = {
             val c = java.lang.Long.compare(a._2, b._2)
-            if (c != 0) c > 0
+            if c != 0 then c > 0
             else ord.compare(a._1, b._1) < 0
           }
 
           implicit val worstFirst: Ordering[(K, Long)] = new Ordering[(K, Long)] {
             override def compare(x: (K, Long), y: (K, Long)): Int = {
-              if (better(x, y)) -1
-              else if (better(y, x)) 1
+              if better(x, y) then -1
+              else if better(y, x) then 1
               else 0
             }
           }
@@ -241,7 +241,7 @@ object Stage {
           val pq = mutable.PriorityQueue.empty[(K, Long)]
           counts.foreach { case kv @ (_, _) =>
             pq.enqueue(kv)
-            if (pq.size > lim) pq.dequeue()
+            if pq.size > lim then pq.dequeue()
           }
 
           val top = pq.clone().dequeueAll.toList.sortWith((a, b) => better(a, b))

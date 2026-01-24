@@ -97,7 +97,7 @@ class OpenSearchJoinDomainLegacyObjectJoinFieldFilterSpec
           case (k, None) => Profig(k).remove()
         }
 
-      val test = for {
+      val test = for
         // Ensure the index exists with a "legacy" mapping (dynamic object join field).
         _ <- client.deleteIndex(indexName)
         _ <- client.createIndex(indexName, obj("mappings" -> obj("dynamic" -> bool(true))))
@@ -115,7 +115,7 @@ class OpenSearchJoinDomainLegacyObjectJoinFieldFilterSpec
 
         _ <- DB.dispose
         _ <- client.deleteIndex(indexName)
-      } yield {
+      yield {
         try {
           rawCount shouldBe 1
           // This is the regression assertion. It FAILS today (LightDB returns 0) until the join scoping filter is fixed.

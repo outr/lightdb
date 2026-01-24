@@ -148,7 +148,7 @@ object OpenSearchJoinDomainCoordinator {
     val cfg = config.copy(joinDomain = Some(joinDomain))
     val readAlias = OpenSearchIndexName.default(dbName, collectionName = joinDomain, config = cfg)
     val writeAlias =
-      if (cfg.useIndexAlias && cfg.useWriteAlias) Some(s"$readAlias${cfg.writeAliasSuffix}")
+      if cfg.useIndexAlias && cfg.useWriteAlias then Some(s"$readAlias${cfg.writeAliasSuffix}")
       else None
     (readAlias, writeAlias)
   }

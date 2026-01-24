@@ -56,7 +56,7 @@ class OpenSearchCursorPaginationSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
       val expected = records.sortBy(r => (r.weight, r._id.value)).map(_.name)
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.insert(records)).next(tx.commit)
@@ -68,7 +68,7 @@ class OpenSearchCursorPaginationSpec extends AsyncWordSpec with AsyncTaskSpec wi
           loop(q, None, Nil)
         }
         _ <- db.dispose
-      } yield {
+      yield {
         names should be(expected)
       }
 

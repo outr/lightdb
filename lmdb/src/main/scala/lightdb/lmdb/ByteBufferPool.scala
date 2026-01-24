@@ -13,7 +13,7 @@ class ByteBufferPool(startingSize: Int) {
 
   private def create(neededSize: Int): ByteBuffer = {
     var actual = startingSize
-    while (actual < neededSize) {
+    while actual < neededSize do {
       actual *= 2
     }
     ByteBuffer.allocateDirect(actual)

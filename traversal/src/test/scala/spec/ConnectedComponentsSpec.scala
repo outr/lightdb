@@ -15,14 +15,14 @@ class ConnectedComponentsSpec extends AsyncWordSpec with AsyncTaskSpec with Matc
         ("d", "e")
       ))
 
-      for {
+      for
         ds <- ConnectedComponents.buildInMemory(edges)
         ra <- ds.find("a")
         rb <- ds.find("b")
         rc <- ds.find("c")
         rd <- ds.find("d")
         re <- ds.find("e")
-      } yield {
+      yield {
         ra shouldBe rb
         rb shouldBe rc
         rd shouldBe re
@@ -34,11 +34,11 @@ class ConnectedComponentsSpec extends AsyncWordSpec with AsyncTaskSpec with Matc
       val ds0: DisjointSet = DisjointSet.inMemory()
       val edges = Stream.emits(List(("x", "y"), ("y", "z")))
 
-      for {
+      for
         ds <- ConnectedComponents.build(edges, ds0)
         rx <- ds.find("x")
         rz <- ds.find("z")
-      } yield {
+      yield {
         ds shouldBe ds0
         rx shouldBe rz
       }

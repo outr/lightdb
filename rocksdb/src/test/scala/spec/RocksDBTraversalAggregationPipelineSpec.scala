@@ -14,7 +14,7 @@ class RocksDBTraversalAggregationPipelineSpec extends AsyncWordSpec with AsyncTa
     "support typed match -> project -> groupBy" in {
       val p = Pipeline.from(Stream.emits(List(1, 2, 3, 4, 5, 6)))
         .filter(_ % 2 == 0)
-        .map(n => (if (n <= 3) "low" else "high") -> n.toDouble)
+        .map(n => (if n <= 3 then "low" else "high") -> n.toDouble)
         .pipe(Stage.groupBy[(String, Double), String, Double, Double](_._1, Accumulator.sum(_._2)))
 
       p.stream.toList.map { rows =>
@@ -82,10 +82,10 @@ class RocksDBTraversalAggregationPipelineSpec extends AsyncWordSpec with AsyncTa
 
       val faceted = base.pipe(Stage.facet2(Stage.count, Stage.groupBy(identity, Accumulator.count)))
 
-      for {
+      for
         g <- grouped.stream.toList
         f <- faceted.stream.toList
-      } yield {
+      yield {
         g.toMap shouldBe Map("a" -> (2L, 2.0), "b" -> (1L, 1.0), "c" -> (3L, 3.0))
         f.head.left shouldBe List(6L)
         f.head.right.toMap shouldBe Map("a" -> 2L, "b" -> 1L, "c" -> 3L)
@@ -95,7 +95,7 @@ class RocksDBTraversalAggregationPipelineSpec extends AsyncWordSpec with AsyncTa
     "support groupBy3 (three accumulators)" in {
       val base = Pipeline.from(Stream.emits(List(1, 2, 3, 4, 5, 6)))
       val grouped = base.pipe(Stage.groupBy3[Int, String, Long, Long, Double, Double, Option[Int], Option[Int]](
-        key = n => if (n % 2 == 0) "even" else "odd",
+        key = n => if n % 2 == 0 then "even" else "odd",
         a1 = Accumulator.count,
         a2 = Accumulator.sum(_.toDouble),
         a3 = Accumulator.max(identity)

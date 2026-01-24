@@ -124,7 +124,7 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
 
         def fetchNextNode(): Boolean = {
           closeCurrentPull()
-          if (q.isEmpty) {
+          if q.isEmpty then {
             done = true
             currentPull = Pull.fromList(Nil)
             currentPullInitialized = true
@@ -147,19 +147,19 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
           lock.synchronized {
             @annotation.tailrec
             def loop(): Step[E] = {
-              if (done) {
+              if done then {
                 Step.Stop
               } else {
-                if (!currentPullInitialized) {
+                if !currentPullInitialized then {
                   fetchNextNode()
                 }
 
                 currentPull.pull.sync() match {
                   case e @ Step.Emit(edge) =>
                     // Expand frontier if we have remaining depth.
-                    if (currentDepth < maxDepth) {
+                    if currentDepth < maxDepth then {
                       val targetId = edge._to.asInstanceOf[Id[F]]
-                      if (Option(visited.putIfAbsent(targetId, true)).isEmpty) {
+                      if Option(visited.putIfAbsent(targetId, true)).isEmpty then {
                         q.enqueue(targetId -> (currentDepth + 1))
                       }
                     }
@@ -226,7 +226,7 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
 
         def fetchNextNode(): Boolean = {
           closeCurrentPull()
-          if (stack.isEmpty) {
+          if stack.isEmpty then {
             done = true
             currentPull = Pull.fromList(Nil)
             currentPullInitialized = true
@@ -249,18 +249,18 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
           lock.synchronized {
             @annotation.tailrec
             def loop(): Step[E] = {
-              if (done) {
+              if done then {
                 Step.Stop
               } else {
-                if (!currentPullInitialized) {
+                if !currentPullInitialized then {
                   fetchNextNode()
                 }
 
                 currentPull.pull.sync() match {
                   case e @ Step.Emit(edge) =>
-                    if (currentDepth < maxDepth) {
+                    if currentDepth < maxDepth then {
                       val targetId = edge._to.asInstanceOf[Id[F]]
-                      if (Option(visited.putIfAbsent(targetId, true)).isEmpty) {
+                      if Option(visited.putIfAbsent(targetId, true)).isEmpty then {
                         stack.prepend(targetId -> (currentDepth + 1))
                       }
                     }
@@ -320,14 +320,14 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
 
       // Create a stream that produces paths as they're found
       def processQueue(): Stream[TraversalPath[E, F, T]] = {
-        if (queue.isEmpty) {
+        if queue.isEmpty then {
           Stream.empty
         } else {
           // Dequeue the next path to explore
           val PathData(currentId, pathEdges) = queue.dequeue()
 
           // If we're only finding shortest paths and already have a shorter one, skip
-          if (shortestLength.exists(pathEdges.length >= _)) {
+          if shortestLength.exists(pathEdges.length >= _) then {
             // Continue with next item in queue
             processQueue()
           } else {
@@ -344,13 +344,13 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
               .map(edge => new TraversalPath[E, F, T](pathEdges :+ edge))
 
             // If we found paths to target and only want shortest, update shortestLength
-            if (!findAll && completedPaths.nonEmpty) {
+            if !findAll && completedPaths.nonEmpty then {
               val newLength = completedPaths.head.edges.length
               shortestLength = Some(shortestLength.fold(newLength)(len => math.min(len, newLength)))
             }
 
             // If not at max depth, enqueue next level paths
-            if (pathEdges.length < maxDepth) {
+            if pathEdges.length < maxDepth then {
               // Add paths to unexplored nodes
               outgoingEdges.foreach { edge =>
                 val targetId = edge._to.asInstanceOf[Id[F]] // Safe cast for reflexive graphs
@@ -358,14 +358,14 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
                 // Only follow path if we haven't visited this node in this path
                 // For BFS path finding, we track visited nodes per path
                 val pathVisited = pathEdges.exists(_._to == targetId)
-                if (!pathVisited && targetId != target) { // Don't explore beyond target
+                if !pathVisited && targetId != target then { // Don't explore beyond target
                   queue.enqueue(PathData(targetId, pathEdges :+ edge))
                 }
               }
             }
 
             // Emit completed paths and continue processing queue
-            if (completedPaths.isEmpty) {
+            if completedPaths.isEmpty then {
               processQueue()
             } else {
               Stream.emits(completedPaths).append(

@@ -54,7 +54,7 @@ class OpenSearchGroupingSpec extends AsyncWordSpec with AsyncTaskSpec with Match
         GroupedRecord("g2-high", "g2", 7),
         GroupedRecord("g3", "g3", 3)
       )
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.grouped.transaction(_.insert(records))
         groupedResults <- db.grouped.transaction { tx =>
@@ -63,7 +63,7 @@ class OpenSearchGroupingSpec extends AsyncWordSpec with AsyncTaskSpec with Match
             .groupBy(_.groupId, docsPerGroup = Some(1), includeScores = true, includeTotalGroupCount = true)
         }
         _ <- db.dispose
-      } yield {
+      yield {
         val groups = groupedResults.grouped
         groups.map(_.group).toSet should be(Set("g1", "g2", "g3"))
         val topByGroup = groups.map(g => g.group -> g.results.head.name).toMap

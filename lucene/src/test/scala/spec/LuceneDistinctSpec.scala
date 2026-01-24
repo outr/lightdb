@@ -52,14 +52,14 @@ class LuceneDistinctSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers 
         Doc("g3", 3)
       )
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.docs.transaction(_.insert(records))
         all <- db.docs.transaction(_.query.distinct(_.groupId).toList)
         heavy <- db.docs.transaction(_.query.filter(_.weight >= 5).distinct(_.groupId).toList)
         heavyCount <- db.docs.transaction(_.query.filter(_.weight >= 5).distinct(_.groupId).count)
         _ <- db.dispose
-      } yield {
+      yield {
         all.toSet should be(Set("g1", "g2", "g3"))
         heavy.toSet should be(Set("g1", "g2"))
         heavyCount should be(2)

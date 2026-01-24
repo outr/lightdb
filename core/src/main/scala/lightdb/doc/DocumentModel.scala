@@ -30,14 +30,14 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
   final def initialize[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = Task.defer {
     val b = synchronized {
-      if (_initialized.contains(store)) {
+      if _initialized.contains(store) then {
         false
       } else {
         _initialized += store
         true
       }
     }
-    if (b) {
+    if b then {
       init(store)
     } else {
       Task.unit

@@ -39,7 +39,7 @@ class OpenSearchNativeExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec w
 
   "OpenSearch native ExistsChild" should {
     "match parents using has_child (no planner resolution)" in {
-      val test = for {
+      val test = for
         _ <- DB.init
         _ <- DB.parents.transaction(_.truncate)
         _ <- DB.children.transaction(_.truncate)
@@ -53,14 +53,14 @@ class OpenSearchNativeExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec w
         }
         _ <- DB.truncate()
         _ <- DB.dispose
-      } yield {
+      yield {
         ids.toSet should be(Set(alpha._id, bravo._id))
       }
       test
     }
 
     "apply minDocScore predictably for filter-only has_child queries" in {
-      val test = for {
+      val test = for
         _ <- DB.init
         _ <- DB.parents.transaction(_.truncate)
         _ <- DB.children.transaction(_.truncate)
@@ -82,7 +82,7 @@ class OpenSearchNativeExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec w
         }
         _ <- DB.truncate()
         _ <- DB.dispose
-      } yield {
+      yield {
         ok.toSet should be(Set(alpha._id, bravo._id))
         none shouldBe Nil
       }

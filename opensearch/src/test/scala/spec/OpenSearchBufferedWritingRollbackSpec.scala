@@ -46,7 +46,7 @@ class OpenSearchBufferedWritingRollbackSpec extends AsyncWordSpec with AsyncTask
       val doc = Doc(value = "x", _id = Id[Doc]("d1"))
 
       val test =
-        (for {
+        (for
           _ <- db.init
           _ <- db.docs.transaction { tx =>
             tx.truncate
@@ -55,7 +55,7 @@ class OpenSearchBufferedWritingRollbackSpec extends AsyncWordSpec with AsyncTask
           }
           count <- db.docs.transaction(_.count)
           _ <- db.dispose
-        } yield {
+        yield {
           count shouldBe 0
         }).guarantee(Task {
           BufferedWritingTransaction.MaxTransactionWriteBuffer = originalMax

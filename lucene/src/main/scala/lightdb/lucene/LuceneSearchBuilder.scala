@@ -32,10 +32,10 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
   private lazy val isBlockJoin: Boolean = store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]]
 
   private def parentFieldName(name: String): String =
-    if (isBlockJoin) LuceneBlockJoinFields.mapParentFieldName(name) else name
+    if isBlockJoin then LuceneBlockJoinFields.mapParentFieldName(name) else name
 
   private def childFieldName(name: String): String =
-    if (isBlockJoin) LuceneBlockJoinFields.mapChildFieldName(name) else name
+    if isBlockJoin then LuceneBlockJoinFields.mapChildFieldName(name) else name
 
   private lazy val parentTypeQuery: LuceneQuery =
     new TermQuery(new Term(LuceneBlockJoinFields.TypeField, LuceneBlockJoinFields.ParentTypeValue))
@@ -51,13 +51,13 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
     val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
     val s: LuceneSort = sort(query.sort)
     val limit = query.limit.orElse(query.pageSize).getOrElse(100_000_000)   // TODO: Evaluate a configurable upper limit
-    if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
+    if limit <= 0 then throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     val max = limit + query.offset
 
     val collectors = List(
       Some(new TopFieldCollectorManager(s, max, max)),
-      if (query.countTotal) Some(new TotalHitCountCollectorManager(indexSearcher.getSlices)) else None,
-      if (query.facets.nonEmpty) Some(new FacetsCollectorManager(query.scoreDocs)) else None
+      if query.countTotal then Some(new TotalHitCountCollectorManager(indexSearcher.getSlices)) else None,
+      if query.facets.nonEmpty then Some(new FacetsCollectorManager(query.scoreDocs)) else None
     ).flatten
     val manager = new MultiCollectorManager(collectors: _*)
     val resultCollectors = indexSearcher.search(q, manager)
@@ -78,7 +78,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           case None => facets.getAllChildren(fq.field.name, fq.path: _*)
         }) match {
           case Some(facetResult) =>
-            val values = if (facetResult.childCount > 0) {
+            val values = if facetResult.childCount > 0 then {
               facetResult.labelValues.toList.map { lv =>
                 FacetResultValue(lv.label, lv.value.intValue())
               }
@@ -102,7 +102,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         .toList
         .drop(query.offset)
         .map { scoreDoc =>
-          if (query.scoreDocs) {
+          if query.scoreDocs then {
             val explanation = indexSearcher.explain(q, scoreDoc.doc)
             // TODO: Add explanation info
             new ScoreDoc(scoreDoc.doc, explanation.getValue.floatValue())
@@ -141,10 +141,10 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       val values = storedFields.document(scoreDoc.doc).getValues(storedName)
         .toVector
         .map(s => Field.string2Json(field.name, s, field.rw.definition))
-      if (values.nonEmpty && values.head.isArr) {
+      if values.nonEmpty && values.head.isArr then {
         Arr(values.flatMap(_.asVector))
       } else {
-        if (values.length > 1) {
+        if values.length > 1 then {
           throw new RuntimeException(s"Failure: $values, ${values.head.getClass}")
         }
         values.headOption.getOrElse(Null)
@@ -213,13 +213,13 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
                     withinGroupSortList: List[Sort],
                     includeScores: Boolean,
                     includeTotalGroupCount: Boolean): Task[LuceneGroupedSearchResults[Doc, Model, G, V]] = Task {
-    if (groupLimit <= 0) throw new RuntimeException(s"Group limit must be positive but was $groupLimit")
-    if (docsPerGroup <= 0) throw new RuntimeException(s"Docs per group must be positive but was $docsPerGroup")
+    if groupLimit <= 0 then throw new RuntimeException(s"Group limit must be positive but was $groupLimit")
+    if docsPerGroup <= 0 then throw new RuntimeException(s"Docs per group must be positive but was $docsPerGroup")
 
     val indexSearcher = tx.state.indexSearcher
     val luceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
     val groupSort = sort(groupSortList)
-    val withinGroupSort = sort(if (withinGroupSortList.nonEmpty) withinGroupSortList else groupSortList)
+    val withinGroupSort = sort(if withinGroupSortList.nonEmpty then withinGroupSortList else groupSortList)
     val topNGroups = groupOffset + groupLimit
     val groupFieldName = s"${groupField.name}Sort"
     val groupSelector = new TermGroupSelector(groupFieldName)
@@ -230,12 +230,12 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       .map(_.asScala.toList)
       .getOrElse(Nil)
 
-    if (rawTopGroups.isEmpty) {
+    if rawTopGroups.isEmpty then {
       LuceneGroupedSearchResults(
         model = model,
         offset = groupOffset,
         limit = Some(groupLimit),
-        totalGroups = if (includeTotalGroupCount) Some(0) else None,
+        totalGroups = if includeTotalGroupCount then Some(0) else None,
         groups = Nil,
         transaction = tx
       )
@@ -261,7 +261,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
             results = docs
           )
         }
-      val totalGroups = if (includeTotalGroupCount) {
+      val totalGroups = if includeTotalGroupCount then {
         topGroupsResult.flatMap(tg => Option(tg.totalGroupCount).filter(_ >= 0).map(_.intValue()))
           .orElse(Some(rawTopGroups.size))
       } else {
@@ -279,7 +279,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
   }
 
   private def decodeGroupValue[G](groupValue: BytesRef, field: Field[Doc, G]): G = {
-    if (groupValue == null) {
+    if groupValue == null then {
       field.rw.definition match {
         case DefType.Opt(_) => None.asInstanceOf[G]
         case _ => throw new RuntimeException(s"Missing group value for grouping field '${field.name}'")
@@ -305,19 +305,19 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
     val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
 
     // Enforce a stable sort for searchAfter:
-    val baseSort = if (query.sort.nonEmpty) query.sort else List(Sort.IndexOrder)
-    val stableSortList = if (baseSort.exists(_ == Sort.IndexOrder)) baseSort else baseSort ::: List(Sort.IndexOrder)
+    val baseSort = if query.sort.nonEmpty then query.sort else List(Sort.IndexOrder)
+    val stableSortList = if baseSort.exists(_ == Sort.IndexOrder) then baseSort else baseSort ::: List(Sort.IndexOrder)
     val s: LuceneSort = sort(stableSortList)
 
     val limit = pageSize
-    if (limit <= 0) throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
+    if limit <= 0 then throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
 
     val top: TopFieldDocs =
       indexSearcher.searchAfter(after.orNull, q, limit, s, query.scoreDocs)
 
     val scoreDocs: List[ScoreDoc] = {
       val list = top.scoreDocs.toList.map { scoreDoc =>
-        if (query.scoreDocs) {
+        if query.scoreDocs then {
           val explanation = indexSearcher.explain(q, scoreDoc.doc)
           new ScoreDoc(scoreDoc.doc, explanation.getValue.floatValue())
         } else {
@@ -371,7 +371,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
 
   def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = {
     val compiled = compileFilter(filter, model, parentFieldName, allowDrillDownFacets = true)
-    if (isBlockJoin) {
+    if isBlockJoin then {
       val b = new BooleanQuery.Builder
       b.add(compiled, BooleanClause.Occur.MUST)
       b.add(parentTypeQuery, BooleanClause.Occur.FILTER)
@@ -397,7 +397,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         case _: Filter.MatchNone[D @unchecked] =>
           new MatchNoDocsQuery
         case ec: Filter.ExistsChild[D @unchecked] =>
-          if (!isBlockJoin) throw new RuntimeException("ExistsChild filter must be planned before execution")
+          if !isBlockJoin then throw new RuntimeException("ExistsChild filter must be planned before execution")
           val childModel = ec.relation.childStore.model.asInstanceOf[DocumentModel[ec.Child]]
           val cf = ec.childFilter(childModel.asInstanceOf[ec.ChildModel])
           val childQuery0 = compileFilter(Some(cf.asInstanceOf[Filter[ec.Child]]), childModel, childFieldName, allowDrillDownFacets = false)
@@ -409,12 +409,12 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           }
           LuceneJoinCompat.toParentBlockJoinQuery(childQuery, parentBitSetProducer)
         case cc: Filter.ChildConstraints[D @unchecked] =>
-          if (!isBlockJoin) throw new RuntimeException("ChildConstraints filter must be planned before execution")
+          if !isBlockJoin then throw new RuntimeException("ChildConstraints filter must be planned before execution")
           val childModel = cc.relation.childStore.model.asInstanceOf[DocumentModel[cc.Child]]
           cc.semantics match {
             case Filter.ChildSemantics.SameChildAll =>
               val childMust = cc.builds.map(b => b(childModel.asInstanceOf[cc.ChildModel]))
-              val combined = if (childMust.isEmpty) new MatchAllDocsQuery else {
+              val combined = if childMust.isEmpty then new MatchAllDocsQuery else {
                 val bq = new BooleanQuery.Builder
                 childMust.foreach { f =>
                   bq.add(compileFilter(Some(f.asInstanceOf[Filter[cc.Child]]), childModel, childFieldName, allowDrillDownFacets = false), BooleanClause.Occur.MUST)
@@ -440,7 +440,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
                 }
                 LuceneJoinCompat.toParentBlockJoinQuery(cq, parentBitSetProducer)
               }
-              if (must.isEmpty) new MatchAllDocsQuery else {
+              if must.isEmpty then new MatchAllDocsQuery else {
                 val bq = new BooleanQuery.Builder
                 must.foreach(q => bq.add(q, BooleanClause.Occur.MUST))
                 bq.build()
@@ -455,9 +455,9 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
             case Str(s, _) => new BytesRef(s)
             case NumInt(i, _) => new BytesRef(i.toString)
             case NumDec(d, _) => new BytesRef(d.toString)
-            case Bool(b, _) => new BytesRef(if (b) "1" else "0")
+            case Bool(b, _) => new BytesRef(if b then "1" else "0")
           }
-          if (bytesRefs.size == values.size) {
+          if bytesRefs.size == values.size then {
             new TermInSetQuery(fieldName, bytesRefs.asJava)
           } else {
             val queries = values.map(json => exactQuery(f.field(m), json, mapName))
@@ -486,7 +486,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         case Filter.Multi(minShould, clauses) =>
           val b = new BooleanQuery.Builder
           val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
-          val minShouldMatch = if (hasShould) minShould else 0
+          val minShouldMatch = if hasShould then minShould else 0
           b.setMinimumNumberShouldMatch(minShouldMatch)
           clauses.foreach { c =>
             val q = compileFilter(Some(c.filter.asInstanceOf[Filter[D]]), m, mapName, allowDrillDownFacets)
@@ -502,16 +502,16 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
             }
             b.add(query, occur)
           }
-          if (minShouldMatch == 0 && !clauses.exists(_.condition == Condition.Must)) {
+          if minShouldMatch == 0 && !clauses.exists(_.condition == Condition.Must) then {
             b.add(new MatchAllDocsQuery, BooleanClause.Occur.MUST)
           }
           b.build()
         case Filter.DrillDownFacetFilter(fieldName, path, showOnlyThisLevel) =>
-          if (!allowDrillDownFacets) {
+          if !allowDrillDownFacets then {
             throw new UnsupportedOperationException("DrillDownFacetFilter not supported in child constraints")
           }
           val indexedFieldName = store.facetsConfig.getDimConfig(fieldName).indexFieldName
-          val exactPath = if (showOnlyThisLevel) path ::: List("$ROOT$") else path
+          val exactPath = if showOnlyThisLevel then path ::: List("$ROOT$") else path
           new TermQuery(DrillDownQuery.term(indexedFieldName, fieldName, exactPath: _*))
       }
     case None =>
@@ -527,7 +527,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       }
       b.build()
     case Str(s, _) => new TermQuery(new Term(mapName(field.name), s))
-    case Bool(b, _) => IntPoint.newExactQuery(mapName(field.name), if (b) 1 else 0)
+    case Bool(b, _) => IntPoint.newExactQuery(mapName(field.name), if b then 1 else 0)
     case NumInt(l, _) => LongPoint.newExactQuery(mapName(field.name), l)
     case NumDec(bd, _) => DoublePoint.newExactQuery(mapName(field.name), bd.toDouble)
     case Arr(v, _) =>

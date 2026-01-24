@@ -13,9 +13,9 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
   private var _taxonomyReader: TaxonomyReader = _
 
   def indexSearcher: IndexSearcher = synchronized {
-    if (_indexSearcher == null) {
+    if _indexSearcher == null then {
       _indexSearcher = index.createIndexSearcher()
-      if (hasFacets) {
+      if hasFacets then {
         _taxonomyReader = index.createTaxonomyReader()
       }
     }
@@ -23,11 +23,11 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
   }
 
   private def releaseIndexSearcher(): Unit = synchronized {
-    if (_indexSearcher != null) {
+    if _indexSearcher != null then {
       oldIndexSearchers = _indexSearcher :: oldIndexSearchers
       _indexSearcher = null
     }
-    if (_taxonomyReader != null) {
+    if _taxonomyReader != null then {
       oldTaxonomyReaders = _taxonomyReader :: oldTaxonomyReaders
       _taxonomyReader = null
     }
@@ -49,7 +49,7 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
     commit()
     oldIndexSearchers.foreach(index.releaseIndexSearch)
     oldTaxonomyReaders.foreach(index.releaseTaxonomyReader)
-    if (_indexSearcher != null) index.releaseIndexSearch(_indexSearcher)
-    if (_taxonomyReader != null) index.releaseTaxonomyReader(_taxonomyReader)
+    if _indexSearcher != null then index.releaseIndexSearch(_indexSearcher)
+    if _taxonomyReader != null then index.releaseTaxonomyReader(_taxonomyReader)
   }
 }

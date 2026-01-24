@@ -73,7 +73,7 @@ class OpenSearchMappingHashAutoMigrateSpec extends AsyncWordSpec with AsyncTaskS
         AutoMigrateDoc("b", Id("b"))
       )
 
-      val test = for {
+      val test = for
         _ <- client.deleteIndex(physical1).attempt.unit
         _ <- client.updateAliases(obj("actions" -> arr(
           obj("remove" -> obj("index" -> str(physical1), "alias" -> str(readAlias))),
@@ -96,7 +96,7 @@ class OpenSearchMappingHashAutoMigrateSpec extends AsyncWordSpec with AsyncTaskS
           .asObj.get("mappings").flatMap(_.asObj.get("_meta")).flatMap(_.asObj.get("lightdb")).flatMap(_.asObj.get("mapping_hash")).map(_.asString).getOrElse("")
         count <- client.count(readAlias, obj("query" -> obj("match_all" -> obj())))
         _ <- db.dispose
-      } yield {
+      yield {
         targets.length shouldBe 1
         target should not be physical1
         actualHash shouldBe expectedHash

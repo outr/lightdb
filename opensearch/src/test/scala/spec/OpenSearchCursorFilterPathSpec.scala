@@ -49,7 +49,7 @@ class OpenSearchCursorFilterPathSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
       val expected = records.sortBy(r => (r.weight, r._id.value)).map(_.name)
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.insert(records)).next(tx.commit)
@@ -59,7 +59,7 @@ class OpenSearchCursorFilterPathSpec extends AsyncWordSpec with AsyncTaskSpec wi
             .sort(Sort.ByField(CursorDoc.weight, SortDirection.Ascending))
             .sort(Sort.IndexOrder)
 
-          for {
+          for
             page1 <- q.cursorPage(cursorToken = None, pageSize = 2)
             p1 <- page1.results.list
             next <- Task.pure(page1.nextCursorToken)
@@ -67,10 +67,10 @@ class OpenSearchCursorFilterPathSpec extends AsyncWordSpec with AsyncTaskSpec wi
             p2 <- page2.results.list
             page3 <- q.cursorPage(cursorToken = page2.nextCursorToken, pageSize = 2)
             p3 <- page3.results.list
-          } yield (p1.map(_.name) ::: p2.map(_.name) ::: p3.map(_.name), page1.nextCursorToken)
+          yield (p1.map(_.name) ::: p2.map(_.name) ::: p3.map(_.name), page1.nextCursorToken)
         }
         _ <- db.dispose
-      } yield {
+      yield {
         val (names, firstCursor) = results
         firstCursor should not be empty
         names.distinct should be(names)

@@ -35,7 +35,7 @@ final class ElasticHashMap[K, +V] private (private val levels: Vector[Vector[Opt
             // Slot is empty, inserting new key
             val newLevels = levels.updated(level, levels(level).updated(idx, Some((key, value))))
             val newSize = size + 1
-            if (newSize > sizeThreshold) resize().updated(key, value) // Retry insertion after resize
+            if newSize > sizeThreshold then resize().updated(key, value) // Retry insertion after resize
             else new ElasticHashMap(newLevels, newSize, sizeThreshold)
 
           case _ => // Slot is occupied by a different key, continue probing
@@ -58,10 +58,10 @@ final class ElasticHashMap[K, +V] private (private val levels: Vector[Vector[Opt
 
   private def probeSequence(key: K): Seq[(Int, Int)] = {
     val hash = key.hashCode().abs
-    for {
+    for
       level <- levels.indices
       idx = (hash + level * 31) % levels(level).length
-    } yield (level, idx)
+    yield (level, idx)
   }
 
   private def resize[V1 >: V](): ElasticHashMap[K, V1] = {

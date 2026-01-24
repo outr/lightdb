@@ -75,7 +75,7 @@ class FileStorage[S <: PrefixScanningStore[KeyValue, KeyValue.type]](val store: 
   private def deleteChunks(tx: TX, fileId: String): Task[Int] =
     tx.jsonPrefixStream(chunkPrefix(fileId)).evalMap { json =>
       val kv = json.as[KeyValue]
-      tx.delete(kv._id).map(deleted => if (deleted) 1 else 0)
+      tx.delete(kv._id).map(deleted => if deleted then 1 else 0)
     }.toList.map(_.sum)
 
   private def chunkStream(tx: TX, fileId: String): Stream[Array[Byte]] =
@@ -102,12 +102,12 @@ class FileStorage[S <: PrefixScanningStore[KeyValue, KeyValue.type]](val store: 
   private def decode(value: String): Array[Byte] = Base64.getDecoder.decode(value)
 
   private def split(bytes: Array[Byte], chunkSize: Int): List[Array[Byte]] = {
-    if (bytes.isEmpty) {
+    if bytes.isEmpty then {
       Nil
     } else {
       val parts = scala.collection.mutable.ListBuffer.empty[Array[Byte]]
       var offset = 0
-      while (offset < bytes.length) {
+      while offset < bytes.length do {
         val end = math.min(offset + chunkSize, bytes.length)
         val chunk = new Array[Byte](end - offset)
         System.arraycopy(bytes, offset, chunk, 0, chunk.length)

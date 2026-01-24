@@ -24,7 +24,7 @@ case class MapDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](s
   })
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
-    if (index == store.idField) {
+    if index == store.idField then {
       Option(store.map.get(value.asInstanceOf[Id[Doc]].value)).map(fromString)
     } else {
       throw new UnsupportedOperationException(s"MapDBStore can only get on _id, but ${index.name} was attempted")

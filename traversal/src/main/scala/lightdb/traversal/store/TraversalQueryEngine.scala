@@ -57,9 +57,9 @@ object TraversalQueryEngine {
     }
     val a = unwrap(a0)
     val b = unwrap(b0)
-    if (a == null && b == null) return 0
-    if (a == null) return -1
-    if (b == null) return 1
+    if a == null && b == null then return 0
+    if a == null then return -1
+    if b == null then return 1
 
     (a, b) match {
       case (x: java.lang.Number, y: java.lang.Number) =>
@@ -96,7 +96,7 @@ object TraversalQueryEngine {
     // we do correctness-first fallback resolution here to avoid runtime failures.
     //
     // Special case: for page-only queries with a single ExistsChild, we can avoid materializing all parent ids.
-    if (containsExistsChild(query.filter.map(_.asInstanceOf[Filter[Doc]]))) {
+    if containsExistsChild(query.filter.map(_.asInstanceOf[Filter[Doc]])) then {
       // Only safe to do the semi-join early-termination path when we don't need totals/facets and sort is trivial.
       val sorts0 = query.sort
       val limitOpt = query.limit.orElse(query.pageSize)
@@ -111,7 +111,7 @@ object TraversalQueryEngine {
         case _: Filter.ExistsChild[Doc @unchecked] => None
         case m: Filter.Multi[Doc] =>
           val clauses = m.filters.filterNot(_.filter.isInstanceOf[Filter.ExistsChild[Doc @unchecked]])
-          if (clauses.isEmpty) None else Some(m.copy(filters = clauses))
+          if clauses.isEmpty then None else Some(m.copy(filters = clauses))
         case other =>
           // Unknown composition; keep as-is (but this means evalFilter would throw). We'll rely on planner fallback.
           Some(other)
@@ -172,8 +172,8 @@ object TraversalQueryEngine {
                 driverFilter match {
                   case e: lightdb.filter.Filter.Equals[?, ?] =>
                     val f = childModel.fieldByName[Any](e.fieldName)
-                    if (!f.indexed) None
-                    else if (f.isTokenized) {
+                    if !f.indexed then None
+                    else if f.isTokenized then {
                       val rawStrOpt: Option[String] = e.value match {
                         case s: String => Some(s)
                         case _ => None
@@ -188,13 +188,13 @@ object TraversalQueryEngine {
                     }
                   case s: lightdb.filter.Filter.StartsWith[?, ?] =>
                     val f = childModel.fieldByName[Any](s.fieldName)
-                    if (!f.indexed) None
+                    if !f.indexed then None
                     else Option(s.query).map(_.toLowerCase.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
                       TraversalPersistedIndex.postingsStream(TraversalKeys.swPrefix(storeName, s.fieldName, q), kv)
                     }
                   case e: lightdb.filter.Filter.EndsWith[?, ?] =>
                     val f = childModel.fieldByName[Any](e.fieldName)
-                    if (!f.indexed) None
+                    if !f.indexed then None
                     else Option(e.query).map(_.toLowerCase.reverse.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
                       TraversalPersistedIndex.postingsStream(TraversalKeys.ewPrefix(storeName, e.fieldName, q), kv)
                     }
@@ -202,7 +202,7 @@ object TraversalQueryEngine {
                     val f = childModel.fieldByName[Any](i.fieldName)
                     val values0 = i.values.asInstanceOf[Seq[Any]].take(maxInTerms).toList
                     val encOpt = values0.map(encodedSingleValue)
-                    if (!f.indexed || values0.isEmpty || encOpt.exists(_.isEmpty)) None
+                    if !f.indexed || values0.isEmpty || encOpt.exists(_.isEmpty) then None
                     else {
                       val prefixes = encOpt.flatten.distinct.map(enc => TraversalKeys.eqPrefix(storeName, i.fieldName, enc))
                       val seenIds = mutable.HashSet.empty[String]
@@ -231,7 +231,7 @@ object TraversalQueryEngine {
                         idx.transaction { kv0 =>
                           val kv = kv0.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]]
                           TraversalPersistedIndex.isReady(ttx.store.name, kv).map { ready =>
-                            if (!ready) {
+                            if !ready then {
                               childTx.query.filter(_ => driverFilter).value(_ => parentField).stream
                             } else {
                               seedChildIdsFromPersisted(kv, ttx.store.name) match {
@@ -257,12 +257,12 @@ object TraversalQueryEngine {
                   .chunk(probeChunkSize)
                   .evalMap { idsChunk =>
                     val base: Set[Id[Doc]] = idsChunk.toList.toSet
-                    if (others.isEmpty) Task.pure(base.toList)
+                    if others.isEmpty then Task.pure(base.toList)
                     else {
                       // Intersect each clause's parent-id hits against the current candidate chunk.
                       others.foldLeft(Task.pure(base)) { (accT, ec) =>
                         accT.flatMap { acc =>
-                          if (acc.isEmpty) Task.pure(Set.empty)
+                          if acc.isEmpty then Task.pure(Set.empty)
                           else {
                             ec.relation.childStore.transaction { tx2 =>
                               val m2 = tx2.store.model
@@ -286,11 +286,11 @@ object TraversalQueryEngine {
                   .evalMap { doc =>
                     Task {
                       val passesOther = verifyFilter.forall(f => evalFilter(f, model, doc, state))
-                      if (!passesOther) None
+                      if !passesOther then None
                       else {
-                        val score = if (needScore) bestMatchScore(verifyFilter, model, doc, state) else 0.0
+                        val score = if needScore then bestMatchScore(verifyFilter, model, doc, state) else 0.0
                         val passesScore = query.minDocScore.forall(min => score >= min)
-                        if (passesScore) Some(doc -> score) else None
+                        if passesScore then Some(doc -> score) else None
                       }
                     }
                   }
@@ -323,13 +323,13 @@ object TraversalQueryEngine {
           .flatMap(resolved => search(storeName, model, backing, indexCache, persistedIndex, query.copy(filter = resolved)))
 
       val earlyTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
-        if (!canEarlyTerminate) None
+        if !canEarlyTerminate then None
         else {
           query.filter.flatMap { f0 =>
             f0.asInstanceOf[Filter[Doc]] match {
               case m: Filter.Multi[Doc] =>
                 val ecs = extractExistsChildren(m)
-                if (ecs.isEmpty) None else Some(earlyTerminateSemiJoinMulti(ecs, f0.asInstanceOf[Filter[Doc]]))
+                if ecs.isEmpty then None else Some(earlyTerminateSemiJoinMulti(ecs, f0.asInstanceOf[Filter[Doc]]))
               case ec: Filter.ExistsChild[Doc @unchecked] =>
                 Some(earlyTerminateSemiJoinMulti(List(ec), f0.asInstanceOf[Filter[Doc]]))
               case _ => None
@@ -362,19 +362,19 @@ object TraversalQueryEngine {
         intProfig("lightdb.traversal.existsChild.parentDriven.maxParents", default = 1024) max 1
 
       val parentDrivenTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
-        if (!canEarlyTerminate || !parentDrivenEnabled) None
+        if !canEarlyTerminate || !parentDrivenEnabled then None
         else {
           (persistedIndex, query.filter) match {
             case (Some(parentKv), Some(f0)) =>
               val original = f0.asInstanceOf[Filter[Doc]]
               val existsChildren = extractExistsChildren(original)
-              if (existsChildren.isEmpty) None
+              if existsChildren.isEmpty then None
               else {
                 val verifyFilter = stripExistsChild(original)
 
                 Some(
                   TraversalPersistedIndex.isReady(storeName, parentKv).flatMap { ready =>
-                    if (!ready) plannerFallback
+                    if !ready then plannerFallback
                     else {
                       seedCandidatesPersisted(storeName, model, verifyFilter, parentKv).flatMap {
                         case Some(ids) if ids.nonEmpty && ids.size <= parentDrivenMaxParents =>
@@ -412,7 +412,7 @@ object TraversalQueryEngine {
                               .evalMap { doc =>
                                 val pid = doc._id
                                 val parentOk = verifyFilter.forall(vf => evalFilter(vf, model, doc, state))
-                                if (!parentOk) Task.pure(None)
+                                if !parentOk then Task.pure(None)
                                 else {
                                   existsChildren
                                     .foldLeft(Task.pure(true)) { (accT, ec) =>
@@ -466,7 +466,7 @@ object TraversalQueryEngine {
         intProfig("lightdb.traversal.existsChild.nativeFull.maxParentIds", default = 100_000) max 0
 
       val nativeFullTaskOpt: Option[Task[SearchResults[Doc, Model, V]]] =
-        if (!nativeFullEnabled) None
+        if !nativeFullEnabled then None
         else {
           query.filter.flatMap { f0 =>
             val original = f0.asInstanceOf[Filter[Doc]]
@@ -475,7 +475,7 @@ object TraversalQueryEngine {
               case ec: Filter.ExistsChild[Doc @unchecked] => List(ec)
               case _ => Nil
             }
-            if (existsChildren.isEmpty || nativeFullMaxParents <= 0) None
+            if existsChildren.isEmpty || nativeFullMaxParents <= 0 then None
             else {
               val verifyFilter: Option[Filter[Doc]] = stripExistsChild(original)
 
@@ -494,9 +494,9 @@ object TraversalQueryEngine {
                       .stream
                       .evalMap { (pid: Id[Doc]) =>
                         Task {
-                          if (pid != null) {
+                          if pid != null then {
                             seen.add(pid.value)
-                            if (seen.size > nativeFullMaxParents) throw new TooManyParents
+                            if seen.size > nativeFullMaxParents then throw new TooManyParents
                           }
                         }
                       }
@@ -521,7 +521,7 @@ object TraversalQueryEngine {
                             .transaction { kv0 =>
                             val kv = kv0.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]]
                             TraversalPersistedIndex.isReady(ttx.store.name, kv).flatMap { ready =>
-                              if (!ready) fallbackScan()
+                              if !ready then fallbackScan()
                               else {
                                 val seen = mutable.HashSet.empty[String]
                                 // If the child filter is seedable from persisted postings, stream child ids from postings
@@ -541,8 +541,8 @@ object TraversalQueryEngine {
                                   cf match {
                                     case e: lightdb.filter.Filter.Equals[?, ?] =>
                                       val f = childModel.fieldByName[Any](e.fieldName)
-                                      if (!f.indexed) None
-                                      else if (f.isTokenized) {
+                                      if !f.indexed then None
+                                      else if f.isTokenized then {
                                         val rawStrOpt: Option[String] = e.value match {
                                           case s: String => Some(s)
                                           case _ => None
@@ -561,7 +561,7 @@ object TraversalQueryEngine {
                                       }
                                     case s: lightdb.filter.Filter.StartsWith[?, ?] =>
                                       val f = childModel.fieldByName[Any](s.fieldName)
-                                      if (!f.indexed) None
+                                      if !f.indexed then None
                                       else {
                                         Option(s.query).map(_.toLowerCase.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
                                           TraversalPersistedIndex.postingsStream(TraversalKeys.swPrefix(ttx.store.name, s.fieldName, q), kv)
@@ -569,7 +569,7 @@ object TraversalQueryEngine {
                                       }
                                     case e: lightdb.filter.Filter.EndsWith[?, ?] =>
                                       val f = childModel.fieldByName[Any](e.fieldName)
-                                      if (!f.indexed) None
+                                      if !f.indexed then None
                                       else {
                                         Option(e.query).map(_.toLowerCase.reverse.take(prefixMaxLen)).filter(_.nonEmpty).map { q =>
                                           TraversalPersistedIndex.postingsStream(TraversalKeys.ewPrefix(ttx.store.name, e.fieldName, q), kv)
@@ -579,7 +579,7 @@ object TraversalQueryEngine {
                                       val f = childModel.fieldByName[Any](i.fieldName)
                                       val values0 = i.values.asInstanceOf[Seq[Any]].take(maxInTerms).toList
                                       val encOpt = values0.map(encodedSingleValue)
-                                      if (!f.indexed || values0.isEmpty || encOpt.exists(_.isEmpty)) None
+                                      if !f.indexed || values0.isEmpty || encOpt.exists(_.isEmpty) then None
                                       else {
                                         val prefixes = encOpt.flatten.distinct.map(enc => TraversalKeys.eqPrefix(ttx.store.name, i.fieldName, enc))
                                         val seenIds = mutable.HashSet.empty[String]
@@ -607,7 +607,7 @@ object TraversalQueryEngine {
                                     TraversalPersistedIndex.refGet(ttx.store.name, parentField.name, cidStr, kv).map {
                                       case Some(pid) =>
                                         seen.add(pid)
-                                        if (seen.size > nativeFullMaxParents) throw new TooManyParents
+                                        if seen.size > nativeFullMaxParents then throw new TooManyParents
                                         true
                                       case None =>
                                         throw new RuntimeException("missing child->parent ref mapping")
@@ -636,14 +636,14 @@ object TraversalQueryEngine {
 
               Some(
                 existsChildren.map(parentIdsFor).tasks.flatMap { setsOpt =>
-                  if (setsOpt.exists(_.isEmpty)) plannerFallback
+                  if setsOpt.exists(_.isEmpty) then plannerFallback
                   else {
                     val sets = setsOpt.flatten
-                    if (sets.isEmpty) plannerFallback
+                    if sets.isEmpty then plannerFallback
                     else {
                       val base = sets.reduceLeft(_ intersect _)
                       val inFilter =
-                        if (base.isEmpty) Filter.MatchNone[Doc]()
+                        if base.isEmpty then Filter.MatchNone[Doc]()
                         else Filter.In[Doc, Id[Doc]](model._id.name, base.toSeq.map(id => Id[Doc](id)))
                       val rewritten: Option[Filter[Doc]] = verifyFilter match {
                         case None => Some(inFilter)
@@ -708,10 +708,10 @@ object TraversalQueryEngine {
     def compareHits(a: Hit, b: Hit): Int = {
       val cmp = sorts.iterator.zip(a.keys.iterator.zip(b.keys.iterator)).map { case (sort, (k1, k2)) =>
         val base = compareAny(k1, k2)
-        if (dirFor(sort) == SortDirection.Descending) -base else base
+        if dirFor(sort) == SortDirection.Descending then -base else base
       }.find(_ != 0).getOrElse(0)
 
-      if (cmp != 0) cmp
+      if cmp != 0 then cmp
       else a.doc._id.value.compareTo(b.doc._id.value)
     }
 
@@ -723,7 +723,7 @@ object TraversalQueryEngine {
     // Candidate seeding (in-memory cache OR persisted postings).
     val seedIds: Option[Set[Id[Doc]]] = {
       val seededByCache =
-        if (indexCache.enabled)
+        if indexCache.enabled then
           seedCandidates(storeName, model, query.filter, indexCache).map(_.map(id => Id[Doc](id)).toSet)
         else None
 
@@ -739,7 +739,7 @@ object TraversalQueryEngine {
         persistedIndex match {
           case Some(kv) =>
             TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
-              if (!ready) Task.pure(None)
+              if !ready then Task.pure(None)
               else seedCandidatesPersisted(storeName, model, query.filter, kv).map(_.map(_.map(id => Id[Doc](id)).toSet))
             }
           case None =>
@@ -782,7 +782,7 @@ object TraversalQueryEngine {
         case m: Filter.Multi[Doc] =>
           // Conservative: only MUST/FILTER/MUST_NOT with no SHOULD thresholding.
           val hasShould = m.filters.exists(_.condition == Condition.Should)
-          if (hasShould && m.minShould > 0) false
+          if hasShould && m.minShould > 0 then false
           else m.filters.forall(fc => isExactSeedable(fc.filter))
         case _ => false
       }
@@ -790,7 +790,7 @@ object TraversalQueryEngine {
       // Fast total when query has no filter: avoid scanning just to count.
       // This is a big win for Query.streamScored which needs totals to page through results.
       val fastTotalTask: Task[Option[Int]] =
-        if (!query.countTotal) Task.pure(None)
+        if !query.countTotal then Task.pure(None)
         else {
           val prefixMaxLenForTotal: Int =
             Profig("lightdb.traversal.persistedIndex.prefixMaxLen").opt[Int].getOrElse(8) max 1
@@ -807,9 +807,9 @@ object TraversalQueryEngine {
               (persistedIndex, f0.asInstanceOf[Filter[Doc]]) match {
                 case (Some(kv), e: Filter.Equals[Doc, _]) if e.field(model).indexed =>
                   TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
-                    if (!ready) Task.pure(None)
+                    if !ready then Task.pure(None)
                     else {
-                      if (e.field(model).isTokenized) {
+                      if e.field(model).isTokenized then {
                         e.getJson(model) match {
                           case fabric.Str(s, _) =>
                             TraversalPersistedIndex
@@ -840,7 +840,7 @@ object TraversalQueryEngine {
                         q.nonEmpty &&
                         q.length <= prefixMaxLenForTotal &&
                         q == q.toLowerCase
-                    if (!ready || !exact) Task.pure(None)
+                    if !ready || !exact then Task.pure(None)
                     else {
                       val pfx = TraversalKeys.swPrefix(storeName, s.fieldName, q)
                       TraversalPersistedIndex.postingsCount(pfx, kv).map(Some(_))
@@ -854,7 +854,7 @@ object TraversalQueryEngine {
                         q.nonEmpty &&
                         q.length <= prefixMaxLenForTotal &&
                         q == q.toLowerCase
-                    if (!ready || !exact) Task.pure(None)
+                    if !ready || !exact then Task.pure(None)
                     else {
                       val pfx = TraversalKeys.ewPrefix(storeName, e.fieldName, q.reverse)
                       TraversalPersistedIndex.postingsCount(pfx, kv).map(Some(_))
@@ -874,7 +874,7 @@ object TraversalQueryEngine {
                         values0.forall(v => !TraversalIndex.valuesForIndexValue(v).exists(_.isInstanceOf[String])) &&
                         values0.forall(v => TraversalIndex.valuesForIndexValue(v).size == 1)
 
-                    if (!safe) Task.pure(None)
+                    if !safe then Task.pure(None)
                     else {
                       val encoded: List[String] = values0.map { v =>
                         TraversalIndex.valuesForIndexValue(v).headOption match {
@@ -910,10 +910,10 @@ object TraversalQueryEngine {
           (!canEarlyTerminateForGuardrail || !RequireScopeAllowEarlyTermination)
 
       val guardrailTask: Task[Unit] =
-        if (!guardrailNeeded) Task.unit
+        if !guardrailNeeded then Task.unit
         else {
           backing.count.flatMap { c =>
-            if (c >= RequireScopeMinCollectionSize) {
+            if c >= RequireScopeMinCollectionSize then {
               Task {
                 throw new IllegalArgumentException(
                   s"Traversal guardrail: query contains unscoped verify-only regex/contains over large collection ($c docs). " +
@@ -976,7 +976,7 @@ object TraversalQueryEngine {
           e: Filter.Equals[Doc, _]
         ): Option[rapid.Stream[Doc]] = {
           val field = e.field(model)
-          if (!field.isTokenized) None
+          if !field.isTokenized then None
           else {
             // Tokenized Equals means "all tokens present" (AND). Persisted postings are per token, so we seed by a single
             // token postings stream and verify the full filter later.
@@ -989,16 +989,16 @@ object TraversalQueryEngine {
               raw.toList
                 .flatMap(_.toLowerCase.split("\\s+").toList.map(_.trim).filter(_.nonEmpty))
                 .distinct
-            if (tokens.isEmpty) None
+            if tokens.isEmpty then None
             else {
               // Choose the smallest token postings as the seed driver (bounded), to reduce verify work.
               // For IndexOrder + page-only paths, avoid double-scanning by doing take+count in one pass per token prefix.
               val isIndexOrder = query.sort == List(Sort.IndexOrder)
               val takeN0 =
-                if (limitIntOpt.isEmpty) Int.MaxValue
+                if limitIntOpt.isEmpty then Int.MaxValue
                 else (offset + limitIntOpt.get * streamingIndexOrderPrefixOversample) max 0
 
-              if (!isIndexOrder || takeN0 == Int.MaxValue) {
+              if !isIndexOrder || takeN0 == Int.MaxValue then {
                 // Non-IndexOrder paths can stream an entire postings list, but we still avoid double scans by taking a small
                 // sample + count hint in one pass per token prefix, then streaming that prefix fully.
                 val prefixes = tokens.map(tok => TraversalKeys.tokPrefix(storeName, e.fieldName, tok))
@@ -1048,15 +1048,15 @@ object TraversalQueryEngine {
           s: Filter.StartsWith[Doc, _]
         ): rapid.Stream[Doc] = {
           val q = Option(s.query).getOrElse("")
-          if (q.isEmpty) rapid.Stream.empty
+          if q.isEmpty then rapid.Stream.empty
           else {
             val p = q.toLowerCase.take(streamingPrefixMaxLen)
             val prefix =
-              if (query.sort == List(Sort.IndexOrder)) TraversalKeys.swoPrefix(storeName, s.fieldName, p)
+              if query.sort == List(Sort.IndexOrder) then TraversalKeys.swoPrefix(storeName, s.fieldName, p)
               else TraversalKeys.swPrefix(storeName, s.fieldName, p)
             // If query prefix is longer than prefixMaxLen, ordered-prefix postings are a superset and must be verified;
             // oversample to reduce risk of underfilling the page under IndexOrder.
-            val oversample = if (query.sort == List(Sort.IndexOrder) && q.length > streamingPrefixMaxLen) streamingIndexOrderPrefixOversample else 1
+            val oversample = if query.sort == List(Sort.IndexOrder) && q.length > streamingPrefixMaxLen then streamingIndexOrderPrefixOversample else 1
             TraversalPersistedIndex.postingsStream(prefix, kv)
               .take(limitIntOpt.map(l => l * oversample + offset).getOrElse(Int.MaxValue))
               .map(docId => Id[Doc](docId))
@@ -1070,13 +1070,13 @@ object TraversalQueryEngine {
           e: Filter.EndsWith[Doc, _]
         ): rapid.Stream[Doc] = {
           val q = Option(e.query).getOrElse("")
-          if (q.isEmpty) rapid.Stream.empty
+          if q.isEmpty then rapid.Stream.empty
           else {
             val rev = q.toLowerCase.reverse.take(streamingPrefixMaxLen)
             val prefix =
-              if (query.sort == List(Sort.IndexOrder)) TraversalKeys.ewoPrefix(storeName, e.fieldName, rev)
+              if query.sort == List(Sort.IndexOrder) then TraversalKeys.ewoPrefix(storeName, e.fieldName, rev)
               else TraversalKeys.ewPrefix(storeName, e.fieldName, rev)
-            val oversample = if (query.sort == List(Sort.IndexOrder) && q.length > streamingPrefixMaxLen) streamingIndexOrderPrefixOversample else 1
+            val oversample = if query.sort == List(Sort.IndexOrder) && q.length > streamingPrefixMaxLen then streamingIndexOrderPrefixOversample else 1
             TraversalPersistedIndex.postingsStream(prefix, kv)
               .take(limitIntOpt.map(l => l * oversample + offset).getOrElse(Int.MaxValue))
               .map(docId => Id[Doc](docId))
@@ -1102,7 +1102,7 @@ object TraversalQueryEngine {
                 case _ => None
               }
             }
-            if (encoded.forall(_.nonEmpty)) Some(encoded.flatten.toList) else None
+            if encoded.forall(_.nonEmpty) then Some(encoded.flatten.toList) else None
           }
 
           encodedValues match {
@@ -1136,8 +1136,8 @@ object TraversalQueryEngine {
           in: Filter.In[Doc, _],
           required: Int
         ): Task[Option[rapid.Stream[Doc]]] = {
-          if (required <= 0) Task.pure(None)
-          else if (required > streamingMaxInPageDocs) Task.pure(None)
+          if required <= 0 then Task.pure(None)
+          else if required > streamingMaxInPageDocs then Task.pure(None)
           else {
             val values0 = in.values.asInstanceOf[Seq[Any]]
             val values = values0.take(streamingMaxInTerms)
@@ -1151,7 +1151,7 @@ object TraversalQueryEngine {
                   case _ => None
                 }
               }
-              if (encoded.forall(_.nonEmpty)) Some(encoded.flatten.toList) else None
+              if encoded.forall(_.nonEmpty) then Some(encoded.flatten.toList) else None
             }
 
             encodedValuesOpt match {
@@ -1159,7 +1159,7 @@ object TraversalQueryEngine {
                 Task.pure(None)
               case Some(enc0) =>
                 val enc = enc0.distinct
-                if (enc.isEmpty) Task.pure(None)
+                if enc.isEmpty then Task.pure(None)
                 else {
                   val takeN = required
                   val tasks: List[Task[List[String]]] = enc.map { v =>
@@ -1203,7 +1203,7 @@ object TraversalQueryEngine {
             case None => None
             case Some(prefixes0) =>
               val prefixes = prefixes0.distinct.take(streamingMaxRangePrefixes).map(p => TraversalKeys.rlPrefix(storeName, r.fieldName, p))
-              if (prefixes.isEmpty || prefixes0.size > streamingMaxRangePrefixes) None
+              if prefixes.isEmpty || prefixes0.size > streamingMaxRangePrefixes then None
               else {
                 val seen = mutable.HashSet.empty[String]
                 Some(
@@ -1226,7 +1226,7 @@ object TraversalQueryEngine {
             case None => None
             case Some(prefixes0) =>
               val prefixes = prefixes0.distinct.take(streamingMaxRangePrefixes).map(p => TraversalKeys.rdPrefix(storeName, r.fieldName, p))
-              if (prefixes.isEmpty || prefixes0.size > streamingMaxRangePrefixes) None
+              if prefixes.isEmpty || prefixes0.size > streamingMaxRangePrefixes then None
               else {
                 val seen = mutable.HashSet.empty[String]
                 Some(
@@ -1245,8 +1245,8 @@ object TraversalQueryEngine {
           r: Filter.RangeLong[Doc],
           required: Int
         ): Task[Option[rapid.Stream[Doc]]] = {
-          if (required <= 0) Task.pure(None)
-          else if (required > streamingMaxRangePageDocs) Task.pure(None)
+          if required <= 0 then Task.pure(None)
+          else if required > streamingMaxRangePageDocs then Task.pure(None)
           else {
             // Use ordered numeric postings with fixed prefix length (low write amp).
             TraversalPersistedIndex.rangeLongOrderedPrefixesFor(r.from, r.to) match {
@@ -1261,7 +1261,7 @@ object TraversalQueryEngine {
                 }
                 tasks.tasks.map { lists =>
                   val ids = TraversalPersistedIndex.mergeSortedDistinctTake(lists, takeN)
-                  if (ids.isEmpty) None
+                  if ids.isEmpty then None
                   else {
                     Some(
                       rapid.Stream
@@ -1281,8 +1281,8 @@ object TraversalQueryEngine {
           r: Filter.RangeDouble[Doc],
           required: Int
         ): Task[Option[rapid.Stream[Doc]]] = {
-          if (required <= 0) Task.pure(None)
-          else if (required > streamingMaxRangePageDocs) Task.pure(None)
+          if required <= 0 then Task.pure(None)
+          else if required > streamingMaxRangePageDocs then Task.pure(None)
           else {
             TraversalPersistedIndex.rangeDoubleOrderedPrefixesFor(r.from, r.to) match {
               case None => Task.pure(None)
@@ -1296,7 +1296,7 @@ object TraversalQueryEngine {
                 }
                 tasks.tasks.map { lists =>
                   val ids = TraversalPersistedIndex.mergeSortedDistinctTake(lists, takeN)
-                  if (ids.isEmpty) None
+                  if ids.isEmpty then None
                   else {
                     Some(
                       rapid.Stream
@@ -1316,7 +1316,7 @@ object TraversalQueryEngine {
           sort: Sort.ByField[Doc, _]
         ): Option[rapid.Stream[Doc]] = {
           val fAny = sort.field.asInstanceOf[Field[Doc, Any]]
-          if (!fAny.indexed) None
+          if !fAny.indexed then None
           else {
             // Safety: Optional fields can be null and should sort before non-null in ascending (compareAny),
             // but our persisted order-by postings omit nulls. Only apply this path for non-optional numeric defs.
@@ -1336,16 +1336,16 @@ object TraversalQueryEngine {
               case _ => false
             }
             val prefix =
-              if (!orderByFieldPostingsEnabled || isOpt(fAny.rw.definition)) ""
-              else if (isIntDef(fAny.rw.definition)) {
-                if (sort.direction == SortDirection.Ascending) TraversalKeys.olaPrefix(storeName, fAny.name)
+              if !orderByFieldPostingsEnabled || isOpt(fAny.rw.definition) then ""
+              else if isIntDef(fAny.rw.definition) then {
+                if sort.direction == SortDirection.Ascending then TraversalKeys.olaPrefix(storeName, fAny.name)
                 else TraversalKeys.oldPrefix(storeName, fAny.name)
-              } else if (isDecDef(fAny.rw.definition)) {
-                if (sort.direction == SortDirection.Ascending) TraversalKeys.odaPrefix(storeName, fAny.name)
+              } else if isDecDef(fAny.rw.definition) then {
+                if sort.direction == SortDirection.Ascending then TraversalKeys.odaPrefix(storeName, fAny.name)
                 else TraversalKeys.oddPrefix(storeName, fAny.name)
               } else ""
 
-            if (prefix.isEmpty) None
+            if prefix.isEmpty then None
             else {
               Some(
                 TraversalPersistedIndex.postingsStream(prefix, kv)
@@ -1377,7 +1377,7 @@ object TraversalQueryEngine {
             // Special-case: for page-only queries sorted by a numeric field, stream docs in field order using persisted
             // order-by postings and early-terminate once we have offset+limit matches.
             val byFieldSortOpt: Option[Sort.ByField[Doc, _]] =
-              if (query.sort.size == 1 && query.sort.head.isInstanceOf[Sort.ByField[_, _]])
+              if query.sort.size == 1 && query.sort.head.isInstanceOf[Sort.ByField[_, _]] then
                 Some(query.sort.head.asInstanceOf[Sort.ByField[Doc, _]])
               else None
 
@@ -1414,7 +1414,7 @@ object TraversalQueryEngine {
                 val sf = byFieldSortOpt.get
                 (rapid.Stream.force(
                   TraversalPersistedIndex.isReady(storeName, kv).map { ready =>
-                    if (!ready) backing.stream
+                    if !ready then backing.stream
                     else streamedSortByFieldNumericDocs(kv, sf).getOrElse(backing.stream)
                   }
                 ), false, true)
@@ -1427,7 +1427,7 @@ object TraversalQueryEngine {
                 (
                   rapid.Stream.force(
                     TraversalPersistedIndex.isReady(storeName, kv).map { ready =>
-                      if (!ready) backing.stream
+                      if !ready then backing.stream
                       else {
                         // Tokenized Equals has AND-of-tokens semantics; seed by token postings when applicable.
                         streamedTokenizedEqualsDocs(kv, e).getOrElse(streamedEqualsDocs(kv, e))
@@ -1446,7 +1446,7 @@ object TraversalQueryEngine {
                 (
                   rapid.Stream.force(
                   TraversalPersistedIndex.isReady(storeName, kv).map { ready =>
-                    if (ready) streamedStartsWithDocs(kv, s)
+                    if ready then streamedStartsWithDocs(kv, s)
                     else backing.stream
                   }
                 ),
@@ -1462,7 +1462,7 @@ object TraversalQueryEngine {
                 (
                   rapid.Stream.force(
                   TraversalPersistedIndex.isReady(storeName, kv).map { ready =>
-                    if (ready) streamedEndsWithDocs(kv, e)
+                    if ready then streamedEndsWithDocs(kv, e)
                     else backing.stream
                   }
                 ),
@@ -1475,17 +1475,17 @@ object TraversalQueryEngine {
                     i.values.asInstanceOf[Seq[Any]].nonEmpty &&
                     i.values.asInstanceOf[Seq[Any]].size <= streamingMaxInTerms =>
                 val required = offset + limitIntOpt.getOrElse(0)
-                if (query.sort == List(Sort.IndexOrder)) {
+                if query.sort == List(Sort.IndexOrder) then {
                   (rapid.Stream.force(
                     TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
-                      if (!ready) Task.pure(backing.stream)
+                      if !ready then Task.pure(backing.stream)
                       else streamedInDocsIndexOrder(kv, i, required).map(_.getOrElse(backing.stream))
                     }
                   ), false, false)
-                } else if (query.sort.isEmpty) {
+                } else if query.sort.isEmpty then {
                   (rapid.Stream.force(
                     TraversalPersistedIndex.isReady(storeName, kv).map { ready =>
-                      if (ready) streamedInDocsNoSort(kv, i).getOrElse(backing.stream)
+                      if ready then streamedInDocsNoSort(kv, i).getOrElse(backing.stream)
                       else backing.stream
                     }
                   ), false, false)
@@ -1495,17 +1495,17 @@ object TraversalQueryEngine {
                     limitIntOpt.nonEmpty &&
                     r.field(model).indexed =>
                 val required = offset + limitIntOpt.getOrElse(0)
-                if (query.sort == List(Sort.IndexOrder)) {
+                if query.sort == List(Sort.IndexOrder) then {
                   (rapid.Stream.force(
                     TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
-                      if (!ready) Task.pure(backing.stream)
+                      if !ready then Task.pure(backing.stream)
                       else streamedRangeLongDocsIndexOrder(kv, r, required).map(_.getOrElse(backing.stream))
                     }
                   ), true, false) // approximate due to coarse numeric buckets + bounded take
-                } else if (query.sort.isEmpty) {
+                } else if query.sort.isEmpty then {
                   (rapid.Stream.force(
                     TraversalPersistedIndex.isReady(storeName, kv).map { ready =>
-                      if (!ready) backing.stream
+                      if !ready then backing.stream
                       else streamedRangeLongDocsNoSort(kv, r).getOrElse(backing.stream)
                     }
                   ), false, false)
@@ -1515,17 +1515,17 @@ object TraversalQueryEngine {
                     limitIntOpt.nonEmpty &&
                     r.field(model).indexed =>
                 val required = offset + limitIntOpt.getOrElse(0)
-                if (query.sort == List(Sort.IndexOrder)) {
+                if query.sort == List(Sort.IndexOrder) then {
                   (rapid.Stream.force(
                     TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
-                      if (!ready) Task.pure(backing.stream)
+                      if !ready then Task.pure(backing.stream)
                       else streamedRangeDoubleDocsIndexOrder(kv, r, required).map(_.getOrElse(backing.stream))
                     }
                   ), true, false)
-                } else if (query.sort.isEmpty) {
+                } else if query.sort.isEmpty then {
                   (rapid.Stream.force(
                     TraversalPersistedIndex.isReady(storeName, kv).map { ready =>
-                      if (!ready) backing.stream
+                      if !ready then backing.stream
                       else streamedRangeDoubleDocsNoSort(kv, r).getOrElse(backing.stream)
                     }
                   ), false, false)
@@ -1558,7 +1558,7 @@ object TraversalQueryEngine {
                 }
 
                 def tokenizedTokensForEquals(e: Filter.Equals[Doc, _]): List[String] = {
-                  if (!e.field(model).isTokenized) Nil
+                  if !e.field(model).isTokenized then Nil
                   else {
                     e.getJson(model) match {
                       case fabric.Str(s, _) =>
@@ -1614,14 +1614,14 @@ object TraversalQueryEngine {
 
                 def driverCountHint(f: Filter[Doc]): Task[Option[Int]] = f match {
                   case e: Filter.Equals[Doc, _] =>
-                    if (e.field(model).isTokenized) {
+                    if e.field(model).isTokenized then {
                       val tokens = tokenizedTokensForEquals(e)
                       tokens.headOption match {
                         case None => Task.pure(None)
                         case Some(token0) =>
                           // Hint using the smallest token postings count (bounded), since we'd seed by a single token.
                           val prefixes = tokens.map { tok =>
-                            if (query.sort == List(Sort.IndexOrder)) TraversalKeys.tokoPrefix(storeName, e.fieldName, tok)
+                            if query.sort == List(Sort.IndexOrder) then TraversalKeys.tokoPrefix(storeName, e.fieldName, tok)
                             else TraversalKeys.tokPrefix(storeName, e.fieldName, tok)
                           }
                           prefixes
@@ -1630,7 +1630,7 @@ object TraversalQueryEngine {
                             .map { pcs =>
                               val best = pcs.minByOption(_._2)
                               best.flatMap { case (_, c) =>
-                                if (c > streamingMultiDriverMaxCount) None else Some(c)
+                                if c > streamingMultiDriverMaxCount then None else Some(c)
                               }
                             }
                       }
@@ -1642,10 +1642,10 @@ object TraversalQueryEngine {
                         case v => v.toString
                       }.getOrElse("")
                       val prefix =
-                        if (query.sort == List(Sort.IndexOrder)) TraversalKeys.eqoPrefix(storeName, e.fieldName, enc)
+                        if query.sort == List(Sort.IndexOrder) then TraversalKeys.eqoPrefix(storeName, e.fieldName, enc)
                         else TraversalKeys.eqPrefix(storeName, e.fieldName, enc)
                       TraversalPersistedIndex.postingsTakeAndCountUpTo(prefix, kv, 1, streamingMultiDriverMaxCount).map { case (_, c) =>
-                        if (c > streamingMultiDriverMaxCount) None else Some(c)
+                        if c > streamingMultiDriverMaxCount then None else Some(c)
                       }
                     }
 
@@ -1655,10 +1655,10 @@ object TraversalQueryEngine {
                       case None => Task.pure(None)
                       case Some(p) =>
                         val prefix =
-                          if (query.sort == List(Sort.IndexOrder)) TraversalKeys.swoPrefix(storeName, s.fieldName, p)
+                          if query.sort == List(Sort.IndexOrder) then TraversalKeys.swoPrefix(storeName, s.fieldName, p)
                           else TraversalKeys.swPrefix(storeName, s.fieldName, p)
                         TraversalPersistedIndex.postingsTakeAndCountUpTo(prefix, kv, 1, streamingMultiDriverMaxCount).map { case (_, c) =>
-                          if (c > streamingMultiDriverMaxCount) None else Some(c)
+                          if c > streamingMultiDriverMaxCount then None else Some(c)
                         }
                     }
 
@@ -1668,10 +1668,10 @@ object TraversalQueryEngine {
                       case None => Task.pure(None)
                       case Some(p) =>
                         val prefix =
-                          if (query.sort == List(Sort.IndexOrder)) TraversalKeys.ewoPrefix(storeName, e.fieldName, p)
+                          if query.sort == List(Sort.IndexOrder) then TraversalKeys.ewoPrefix(storeName, e.fieldName, p)
                           else TraversalKeys.ewPrefix(storeName, e.fieldName, p)
                         TraversalPersistedIndex.postingsTakeAndCountUpTo(prefix, kv, 1, streamingMultiDriverMaxCount).map { case (_, c) =>
-                          if (c > streamingMultiDriverMaxCount) None else Some(c)
+                          if c > streamingMultiDriverMaxCount then None else Some(c)
                         }
                     }
 
@@ -1687,21 +1687,21 @@ object TraversalQueryEngine {
                           case _ => None
                         }
                       }
-                      if (encoded.forall(_.nonEmpty)) Some(encoded.flatten.toList.distinct) else None
+                      if encoded.forall(_.nonEmpty) then Some(encoded.flatten.toList.distinct) else None
                     }
                     encodedValuesOpt match {
                       case None => Task.pure(None)
                       case Some(enc) if enc.isEmpty => Task.pure(None)
                       case Some(enc) =>
                         val prefixes = enc.map { v =>
-                          if (query.sort == List(Sort.IndexOrder)) TraversalKeys.eqoPrefix(storeName, i.fieldName, v)
+                          if query.sort == List(Sort.IndexOrder) then TraversalKeys.eqoPrefix(storeName, i.fieldName, v)
                           else TraversalKeys.eqPrefix(storeName, i.fieldName, v)
                         }
                         // Sum counts up to max; bail if it exceeds max.
                         prefixes
                           .foldLeft(Task.pure(0)) { (accT, pfx) =>
                             accT.flatMap { acc =>
-                              if (acc > streamingMultiDriverMaxCount) Task.pure(acc)
+                              if acc > streamingMultiDriverMaxCount then Task.pure(acc)
                               else {
                                 val remaining = (streamingMultiDriverMaxCount - acc) max 0
                                 TraversalPersistedIndex.postingsTakeAndCountUpTo(pfx, kv, 1, remaining).map { case (_, c) => c + acc }
@@ -1709,27 +1709,27 @@ object TraversalQueryEngine {
                             }
                           }
                           .map { sum =>
-                            if (sum > streamingMultiDriverMaxCount) None else Some(sum)
+                            if sum > streamingMultiDriverMaxCount then None else Some(sum)
                           }
                     }
 
                   case r: Filter.RangeLong[Doc] =>
                     val prefixesOpt =
-                      if (query.sort == List(Sort.IndexOrder)) TraversalPersistedIndex.rangeLongOrderedPrefixesFor(r.from, r.to)
+                      if query.sort == List(Sort.IndexOrder) then TraversalPersistedIndex.rangeLongOrderedPrefixesFor(r.from, r.to)
                       else TraversalPersistedIndex.rangeLongPrefixesFor(r.from, r.to)
                     prefixesOpt match {
                       case None => Task.pure(None)
                       case Some(ps0) =>
                         val ps = ps0.distinct.take(streamingMultiDriverMaxCountPrefixes)
-                        if (ps.isEmpty || ps0.size > streamingMultiDriverMaxCountPrefixes) Task.pure(None)
+                        if ps.isEmpty || ps0.size > streamingMultiDriverMaxCountPrefixes then Task.pure(None)
                         else {
                           val prefixes =
-                            if (query.sort == List(Sort.IndexOrder)) ps.map(p => TraversalKeys.rloPrefix(storeName, r.fieldName, p))
+                            if query.sort == List(Sort.IndexOrder) then ps.map(p => TraversalKeys.rloPrefix(storeName, r.fieldName, p))
                             else ps.map(p => TraversalKeys.rlPrefix(storeName, r.fieldName, p))
                           prefixes
                             .foldLeft(Task.pure(0)) { (accT, pfx) =>
                               accT.flatMap { acc =>
-                                if (acc > streamingMultiDriverMaxCount) Task.pure(acc)
+                                if acc > streamingMultiDriverMaxCount then Task.pure(acc)
                                 else {
                                   val remaining = (streamingMultiDriverMaxCount - acc) max 0
                                   TraversalPersistedIndex.postingsTakeAndCountUpTo(pfx, kv, 1, remaining).map { case (_, c) => c + acc }
@@ -1737,28 +1737,28 @@ object TraversalQueryEngine {
                               }
                             }
                             .map { sum =>
-                              if (sum > streamingMultiDriverMaxCount) None else Some(sum)
+                              if sum > streamingMultiDriverMaxCount then None else Some(sum)
                             }
                         }
                     }
 
                   case r: Filter.RangeDouble[Doc] =>
                     val prefixesOpt =
-                      if (query.sort == List(Sort.IndexOrder)) TraversalPersistedIndex.rangeDoubleOrderedPrefixesFor(r.from, r.to)
+                      if query.sort == List(Sort.IndexOrder) then TraversalPersistedIndex.rangeDoubleOrderedPrefixesFor(r.from, r.to)
                       else TraversalPersistedIndex.rangeDoublePrefixesFor(r.from, r.to)
                     prefixesOpt match {
                       case None => Task.pure(None)
                       case Some(ps0) =>
                         val ps = ps0.distinct.take(streamingMultiDriverMaxCountPrefixes)
-                        if (ps.isEmpty || ps0.size > streamingMultiDriverMaxCountPrefixes) Task.pure(None)
+                        if ps.isEmpty || ps0.size > streamingMultiDriverMaxCountPrefixes then Task.pure(None)
                         else {
                           val prefixes =
-                            if (query.sort == List(Sort.IndexOrder)) ps.map(p => TraversalKeys.rdoPrefix(storeName, r.fieldName, p))
+                            if query.sort == List(Sort.IndexOrder) then ps.map(p => TraversalKeys.rdoPrefix(storeName, r.fieldName, p))
                             else ps.map(p => TraversalKeys.rdPrefix(storeName, r.fieldName, p))
                           prefixes
                             .foldLeft(Task.pure(0)) { (accT, pfx) =>
                               accT.flatMap { acc =>
-                                if (acc > streamingMultiDriverMaxCount) Task.pure(acc)
+                                if acc > streamingMultiDriverMaxCount then Task.pure(acc)
                                 else {
                                   val remaining = (streamingMultiDriverMaxCount - acc) max 0
                                   TraversalPersistedIndex.postingsTakeAndCountUpTo(pfx, kv, 1, remaining).map { case (_, c) => c + acc }
@@ -1766,7 +1766,7 @@ object TraversalQueryEngine {
                               }
                             }
                             .map { sum =>
-                              if (sum > streamingMultiDriverMaxCount) None else Some(sum)
+                              if sum > streamingMultiDriverMaxCount then None else Some(sum)
                             }
                         }
                     }
@@ -1777,14 +1777,14 @@ object TraversalQueryEngine {
 
                 // Use a bounded postings-count heuristic when we can compute it cheaply; otherwise fallback to priority only.
                 def pickDriverReady(): Task[Option[Filter[Doc]]] = {
-                  if (seedable.isEmpty) Task.pure(None)
+                  if seedable.isEmpty then Task.pure(None)
                   else {
                     val withCounts: List[Task[(Filter[Doc], Option[Int])]] =
                       seedable.map(f => driverCountHint(f).map(c => f -> c))
                     withCounts.tasks.map { pairs =>
                       // Prefer known smallest count; if unknown, use priority ordering.
                       val known = pairs.collect { case (f, Some(c)) => f -> c }
-                      if (known.nonEmpty) Some(known.minBy { case (f, c) => (c, priority(f)) }._1)
+                      if known.nonEmpty then Some(known.minBy { case (f, c) => (c, priority(f)) }._1)
                       else seedable.sortBy(priority).headOption
                     }
                   }
@@ -1795,16 +1795,16 @@ object TraversalQueryEngine {
                 val required = offset + limitIntOpt.getOrElse(0)
                 val streamTask: Task[rapid.Stream[Doc]] =
                   TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
-                    if (!ready) Task.pure(backing.stream)
+                    if !ready then Task.pure(backing.stream)
                     else {
                       def orderedPrefixesForClauseIndexOrder(f: Filter[Doc]): List[String] = f match {
                         case e: Filter.Equals[Doc, _] if e.field(model).indexed =>
-                          if (e.field(model).isTokenized) {
+                          if e.field(model).isTokenized then {
                             val tokens = tokenizedTokensForEquals(e)
                             tokens.map(tok => TraversalKeys.tokoPrefix(storeName, e.fieldName, tok))
                           } else {
                             val raw = TraversalIndex.valuesForIndexValue(e.value)
-                            if (raw.size != 1) Nil
+                            if raw.size != 1 then Nil
                             else {
                               val enc = raw.headOption.map {
                                 case null => "null"
@@ -1829,17 +1829,17 @@ object TraversalQueryEngine {
                       // IndexOrder optimization: if we have multiple MUST/FILTER clauses that can produce docId-ordered postings,
                       // intersect their postings streams first (streaming) to drastically reduce doc fetch/verify work.
                       val intersectStreamT: Task[Option[rapid.Stream[Doc]]] = {
-                        if (!streamingMultiIntersectIndexOrderEnabled || query.sort != List(Sort.IndexOrder)) Task.pure(None)
+                        if !streamingMultiIntersectIndexOrderEnabled || query.sort != List(Sort.IndexOrder) then Task.pure(None)
                         else {
                           val takeN = (required * streamingIndexOrderPrefixOversample) max 0
-                          if (takeN <= 0) Task.pure(None)
-                          else if (takeN > streamingMultiDriverMaxCount) Task.pure(None) // avoid overly large scans per clause
+                          if takeN <= 0 then Task.pure(None)
+                          else if takeN > streamingMultiDriverMaxCount then Task.pure(None) // avoid overly large scans per clause
                           else {
                             def idsForClauseIndexOrder(f: Filter[Doc]): Task[Option[(List[String], Int)]] = f match {
                               case e: Filter.Equals[Doc, _] if e.field(model).indexed =>
-                                if (e.field(model).isTokenized) {
+                                if e.field(model).isTokenized then {
                                   val tokens = tokenizedTokensForEquals(e)
-                                  if (tokens.isEmpty) Task.pure(None)
+                                  if tokens.isEmpty then Task.pure(None)
                                   else {
                                     val prefixes = tokens.map(tok => TraversalKeys.tokoPrefix(storeName, e.fieldName, tok))
                                     prefixes
@@ -1852,7 +1852,7 @@ object TraversalQueryEngine {
                                   }
                                 } else {
                                   val raw = TraversalIndex.valuesForIndexValue(e.value)
-                                  if (raw.size != 1) Task.pure(None)
+                                  if raw.size != 1 then Task.pure(None)
                                   else {
                                     val enc = raw.headOption.map {
                                       case null => "null"
@@ -1894,7 +1894,7 @@ object TraversalQueryEngine {
                                       case _ => None
                                     }
                                   }
-                                  if (values0.nonEmpty && encoded.forall(_.nonEmpty)) Some(encoded.flatten.distinct) else None
+                                  if values0.nonEmpty && encoded.forall(_.nonEmpty) then Some(encoded.flatten.distinct) else None
                                 }
                                 encodedOpt match {
                                   case None => Task.pure(None)
@@ -1905,7 +1905,7 @@ object TraversalQueryEngine {
                                       .tasks
                                       .map { lists =>
                                         val ids = TraversalPersistedIndex.mergeSortedDistinctTake(lists, takeN)
-                                        if (ids.isEmpty) None else Some(ids -> ids.size)
+                                        if ids.isEmpty then None else Some(ids -> ids.size)
                                       }
                                 }
 
@@ -1921,7 +1921,7 @@ object TraversalQueryEngine {
                                       .tasks
                                       .map { lists =>
                                         val ids = TraversalPersistedIndex.mergeSortedDistinctTake(lists, takeN)
-                                        if (ids.isEmpty) None else Some(ids -> ids.size)
+                                        if ids.isEmpty then None else Some(ids -> ids.size)
                                       }
                                 }
 
@@ -1937,7 +1937,7 @@ object TraversalQueryEngine {
                                       .tasks
                                       .map { lists =>
                                         val ids = TraversalPersistedIndex.mergeSortedDistinctTake(lists, takeN)
-                                        if (ids.isEmpty) None else Some(ids -> ids.size)
+                                        if ids.isEmpty then None else Some(ids -> ids.size)
                                       }
                                 }
 
@@ -1951,14 +1951,14 @@ object TraversalQueryEngine {
                               .map(_.flatten)
                               .flatMap { clauseLists =>
                                 val nonEmpty = clauseLists.filter(_._1.nonEmpty)
-                                if (nonEmpty.size < 2) Task.pure(None)
+                                if nonEmpty.size < 2 then Task.pure(None)
                                 else {
                                   val selected = nonEmpty.sortBy { case (ids, hint) => (hint, ids.size) }.take(streamingMultiIntersectIndexOrderMaxStreams)
-                                  if (selected.size < 2) Task.pure(None)
+                                  if selected.size < 2 then Task.pure(None)
                                   else {
                                     val baseIds = TraversalPersistedIndex.intersectSortedDistinctTake(selected.map(_._1), takeN)
-                                    if (baseIds.isEmpty) Task.pure(None)
-                                    else if (!streamingMultiRefineExcludeEnabled || mustNotClauses.isEmpty) {
+                                    if baseIds.isEmpty then Task.pure(None)
+                                    else if !streamingMultiRefineExcludeEnabled || mustNotClauses.isEmpty then {
                                       Task.pure(
                                         Some(
                                           rapid.Stream
@@ -2018,7 +2018,7 @@ object TraversalQueryEngine {
 
                                       val excludePrefixes =
                                         mustNotClauses.flatMap(excludePrefixOpt).distinct.take(streamingMultiRefineMaxClauses)
-                                      if (excludePrefixes.isEmpty) Task.pure(
+                                      if excludePrefixes.isEmpty then Task.pure(
                                         Some(
                                           rapid.Stream
                                             .emits(baseIds)
@@ -2030,13 +2030,13 @@ object TraversalQueryEngine {
                                       else {
                                         def smallSet(pfx: String): Task[Option[Set[String]]] =
                                           TraversalPersistedIndex.postingsTakeAndCountUpTo(pfx, kv, streamingMultiRefineMaxIds + 1, streamingMultiRefineMaxIds + 1).map {
-                                            case (ids, c) => if (c <= streamingMultiRefineMaxIds) Some(ids.toSet) else None
+                                            case (ids, c) => if c <= streamingMultiRefineMaxIds then Some(ids.toSet) else None
                                           }
 
                                         excludePrefixes.map(smallSet).tasks.map { sets =>
                                           val exclude = sets.flatten.foldLeft(Set.empty[String])(_ union _)
                                           val filtered =
-                                            if (exclude.isEmpty) baseIds
+                                            if exclude.isEmpty then baseIds
                                             else baseIds.filterNot(exclude.contains)
                                           Some(
                                             rapid.Stream
@@ -2057,12 +2057,12 @@ object TraversalQueryEngine {
 
                       def streamForClause(f: Filter[Doc]): Task[rapid.Stream[Doc]] = f match {
                         case e: Filter.Equals[Doc, _] =>
-                          if (e.field(model).isTokenized) {
+                          if e.field(model).isTokenized then {
                             val tokens = tokenizedTokensForEquals(e)
-                            if (tokens.isEmpty) Task.pure(backing.stream)
+                            if tokens.isEmpty then Task.pure(backing.stream)
                             else {
                               val prefixes = tokens.map { tok =>
-                                if (query.sort == List(Sort.IndexOrder)) TraversalKeys.tokoPrefix(storeName, e.fieldName, tok)
+                                if query.sort == List(Sort.IndexOrder) then TraversalKeys.tokoPrefix(storeName, e.fieldName, tok)
                                 else TraversalKeys.tokPrefix(storeName, e.fieldName, tok)
                               }
                               // Seed by the smallest token postings stream (best-effort).
@@ -2073,9 +2073,9 @@ object TraversalQueryEngine {
                                   val bestPrefix = pcs.minBy(_._2)._1
                                   // Page-only bound: avoid scanning huge token postings when verification is selective.
                                   val takeN =
-                                    if (query.sort == List(Sort.IndexOrder)) (required * streamingIndexOrderPrefixOversample + offset) max 0
+                                    if query.sort == List(Sort.IndexOrder) then (required * streamingIndexOrderPrefixOversample + offset) max 0
                                     else Int.MaxValue
-                                  if (takeN == Int.MaxValue) {
+                                  if takeN == Int.MaxValue then {
                                     TraversalPersistedIndex
                                       .postingsStream(bestPrefix, kv)
                                       .map(docId => Id[Doc](docId))
@@ -2124,7 +2124,7 @@ object TraversalQueryEngine {
                             pickDriverReady().flatMap {
                               case Some(driver) =>
                                 streamForClause(driver).flatMap { baseStream0 =>
-                                  if (!streamingMultiRefineEnabled || streamingMultiRefineMaxClauses == 0) Task.pure(baseStream0)
+                                  if !streamingMultiRefineEnabled || streamingMultiRefineMaxClauses == 0 then Task.pure(baseStream0)
                                   else {
                                     // Best-effort refinement: intersect the driver stream with additional small MUST/FILTER postings sets
                                     // before fetching/verifying docs. This is bounded and correctness-safe (it only narrows candidates).
@@ -2137,23 +2137,23 @@ object TraversalQueryEngine {
                                           case v => v.toString
                                         }.getOrElse("")
                                         Some(
-                                          if (query.sort == List(Sort.IndexOrder)) TraversalKeys.eqoPrefix(storeName, e.fieldName, enc)
+                                          if query.sort == List(Sort.IndexOrder) then TraversalKeys.eqoPrefix(storeName, e.fieldName, enc)
                                           else TraversalKeys.eqPrefix(storeName, e.fieldName, enc)
                                         )
                                       case s: Filter.StartsWith[Doc, _] =>
                                         Option(s.query).map(_.toLowerCase.take(streamingPrefixMaxLen)).filter(_.nonEmpty).map { p =>
-                                          if (query.sort == List(Sort.IndexOrder)) TraversalKeys.swoPrefix(storeName, s.fieldName, p)
+                                          if query.sort == List(Sort.IndexOrder) then TraversalKeys.swoPrefix(storeName, s.fieldName, p)
                                           else TraversalKeys.swPrefix(storeName, s.fieldName, p)
                                         }
                                       case e: Filter.EndsWith[Doc, _] =>
                                         Option(e.query).map(_.toLowerCase.reverse.take(streamingPrefixMaxLen)).filter(_.nonEmpty).map { p =>
-                                          if (query.sort == List(Sort.IndexOrder)) TraversalKeys.ewoPrefix(storeName, e.fieldName, p)
+                                          if query.sort == List(Sort.IndexOrder) then TraversalKeys.ewoPrefix(storeName, e.fieldName, p)
                                           else TraversalKeys.ewPrefix(storeName, e.fieldName, p)
                                         }
                                       case ne: Filter.NotEquals[Doc, _] =>
                                         // Exclusion refinement only: same prefix as Equals, but used to subtract.
                                         val raw = TraversalIndex.valuesForIndexValue(ne.value)
-                                        if (raw.size != 1) None
+                                        if raw.size != 1 then None
                                         else {
                                           val enc = raw.headOption.map {
                                             case null => "null"
@@ -2161,7 +2161,7 @@ object TraversalQueryEngine {
                                             case v => v.toString
                                           }.getOrElse("")
                                           Some(
-                                            if (query.sort == List(Sort.IndexOrder)) TraversalKeys.eqoPrefix(storeName, ne.fieldName, enc)
+                                            if query.sort == List(Sort.IndexOrder) then TraversalKeys.eqoPrefix(storeName, ne.fieldName, enc)
                                             else TraversalKeys.eqPrefix(storeName, ne.fieldName, enc)
                                           )
                                         }
@@ -2200,17 +2200,17 @@ object TraversalQueryEngine {
                                     }
 
                                     val excludeCandidates0 =
-                                      if (!streamingMultiRefineExcludeEnabled) Nil
+                                      if !streamingMultiRefineExcludeEnabled then Nil
                                       else mustNotClauses.flatMap(f => refineExcludePrefixOpt(f).map(p => f -> p))
 
-                                    if (includeCandidates0.isEmpty && excludeCandidates0.isEmpty) Task.pure(baseStream0)
+                                    if includeCandidates0.isEmpty && excludeCandidates0.isEmpty then Task.pure(baseStream0)
                                     else {
                                       val includeLimited = includeCandidates0.take(streamingMultiRefineMaxClauses)
                                       val excludeLimited = excludeCandidates0.take(streamingMultiRefineMaxClauses)
 
                                       def smallSet(pfx: String): Task[Option[Set[String]]] =
                                         TraversalPersistedIndex.postingsTake(pfx, kv, streamingMultiRefineMaxIds + 1).map { ids =>
-                                          if (ids.size <= streamingMultiRefineMaxIds) Some(ids.toSet) else None
+                                          if ids.size <= streamingMultiRefineMaxIds then Some(ids.toSet) else None
                                         }
 
                                       val includeSetsT: Task[List[Set[String]]] =
@@ -2218,19 +2218,19 @@ object TraversalQueryEngine {
                                       val excludeSetsT: Task[List[Set[String]]] =
                                         excludeLimited.map { case (_, pfx) => smallSet(pfx) }.tasks.map(_.flatten)
 
-                                      (for {
+                                      (for
                                         includeSets <- includeSetsT
                                         excludeSets <- excludeSetsT
-                                      } yield (includeSets, excludeSets)).map { case (includeSets, excludeSets) =>
+                                      yield (includeSets, excludeSets)).map { case (includeSets, excludeSets) =>
                                         val afterInclude =
-                                          if (includeSets.isEmpty) baseStream0
+                                          if includeSets.isEmpty then baseStream0
                                           else includeSets.foldLeft(baseStream0) { (s, idSet) =>
                                             s.filter(doc => idSet.contains(doc._id.value))
                                           }
                                         val exclude =
-                                          if (excludeSets.isEmpty) Set.empty[String]
+                                          if excludeSets.isEmpty then Set.empty[String]
                                           else excludeSets.foldLeft(Set.empty[String])(_ union _)
-                                        if (exclude.isEmpty) afterInclude
+                                        if exclude.isEmpty then afterInclude
                                         else afterInclude.filter(doc => !exclude.contains(doc._id.value))
                                       }
                                     }
@@ -2239,7 +2239,7 @@ object TraversalQueryEngine {
                               case None =>
                               // No MUST/FILTER driver. If we have SHOULD clauses, merge seedable SHOULD streams as a best-effort.
                               val seedableShould0 = shouldClauses.filter(isStreamingSeedable)
-                              if (seedableShould0.isEmpty) Task.pure(backing.stream)
+                              if seedableShould0.isEmpty then Task.pure(backing.stream)
                               else {
                                 val shouldLimited = seedableShould0.take(streamingMultiMaxShouldDrivers)
                                 // Order SHOULD drivers by estimated postings size (bounded), then by the same priority heuristic.
@@ -2255,16 +2255,16 @@ object TraversalQueryEngine {
                                     }
 
                                 orderedShouldT.flatMap { ordered =>
-                                  if (ordered.isEmpty) Task.pure(backing.stream)
+                                  if ordered.isEmpty then Task.pure(backing.stream)
                                   else {
                                     // If IndexOrder is requested, concatenating streams can break global ordering.
                                     // For page-only queries, use a bounded "take per clause + merge/sort" strategy.
-                                    if (query.sort == List(Sort.IndexOrder) && required > 0 && required <= streamingMaxInPageDocs) {
+                                    if query.sort == List(Sort.IndexOrder) && required > 0 && required <= streamingMaxInPageDocs then {
                                       def idsForClauseIndexOrder(f: Filter[Doc]): Task[Option[List[String]]] = f match {
                                         case e: Filter.Equals[Doc, _] =>
-                                          if (e.field(model).isTokenized) {
+                                          if e.field(model).isTokenized then {
                                             val tokens = tokenizedTokensForEquals(e)
-                                            if (tokens.isEmpty) Task.pure(None)
+                                            if tokens.isEmpty then Task.pure(None)
                                             else {
                                               val prefixes = tokens.map(t => TraversalKeys.tokoPrefix(storeName, e.fieldName, t))
                                               prefixes
@@ -2311,11 +2311,11 @@ object TraversalQueryEngine {
                                         .tasks
                                         .flatMap { idOpts =>
                                           val lists = idOpts.flatten
-                                          if (lists.isEmpty) Task.pure(backing.stream)
+                                          if lists.isEmpty then Task.pure(backing.stream)
                                           else {
                                             val ids0 = TraversalPersistedIndex.mergeSortedDistinctTake(lists, required)
-                                            if (ids0.isEmpty) Task.pure(rapid.Stream.empty)
-                                            else if (!streamingMultiRefineExcludeEnabled || mustNotClauses.isEmpty) {
+                                            if ids0.isEmpty then Task.pure(rapid.Stream.empty)
+                                            else if !streamingMultiRefineExcludeEnabled || mustNotClauses.isEmpty then {
                                               Task.pure(
                                                 rapid.Stream
                                                   .emits(ids0)
@@ -2372,7 +2372,7 @@ object TraversalQueryEngine {
 
                                               val excludePrefixes =
                                                 mustNotClauses.flatMap(excludePrefixOpt).distinct.take(streamingMultiRefineMaxClauses)
-                                              if (excludePrefixes.isEmpty) Task.pure(
+                                              if excludePrefixes.isEmpty then Task.pure(
                                                 rapid.Stream
                                                   .emits(ids0)
                                                   .map(id => Id[Doc](id))
@@ -2383,12 +2383,12 @@ object TraversalQueryEngine {
                                                 def smallSet(pfx: String): Task[Option[Set[String]]] =
                                                   TraversalPersistedIndex
                                                     .postingsTakeAndCountUpTo(pfx, kv, streamingMultiRefineMaxIds + 1, streamingMultiRefineMaxIds + 1)
-                                                    .map { case (ids, c) => if (c <= streamingMultiRefineMaxIds) Some(ids.toSet) else None }
+                                                    .map { case (ids, c) => if c <= streamingMultiRefineMaxIds then Some(ids.toSet) else None }
 
                                                 excludePrefixes.map(smallSet).tasks.map { sets =>
                                                   val exclude = sets.flatten.foldLeft(Set.empty[String])(_ union _)
                                                   val ids =
-                                                    if (exclude.isEmpty) ids0
+                                                    if exclude.isEmpty then ids0
                                                     else ids0.filterNot(exclude.contains)
                                                   rapid.Stream
                                                     .emits(ids)
@@ -2426,13 +2426,13 @@ object TraversalQueryEngine {
         }
 
         // Fast-path: if the planner/seed resolved to an empty id set, we can return immediately without scanning.
-        if (seedIdsResolved.exists(_.isEmpty)) {
+        if seedIdsResolved.exists(_.isEmpty) then {
           Task.pure(
             SearchResults(
               model = model,
               offset = offset,
               limit = limit,
-              total = if (query.countTotal) Some(0) else None,
+              total = if query.countTotal then Some(0) else None,
               streamWithScore = rapid.Stream.empty,
               facetResults = Map.empty,
               transaction = query.transaction
@@ -2445,18 +2445,18 @@ object TraversalQueryEngine {
             (sorts.isEmpty || sorts == List(Sort.IndexOrder) || alreadySorted) &&
             limitIntOpt.nonEmpty
 
-        if (canEarlyTerminate) {
+        if canEarlyTerminate then {
           // Fast path: since we don't need totals/facets/sorting, we can stop once we have the requested page.
           val pageSizeInt = limitIntOpt.get
 
           val hitStream: rapid.Stream[(Doc, Double)] =
             docsStream.evalMap { doc =>
               Task {
-                if (!matches(doc)) None
+                if !matches(doc) then None
                 else {
-                  val score = if (needScore) bestMatchScore(query.filter, model, doc, state) else 0.0
+                  val score = if needScore then bestMatchScore(query.filter, model, doc, state) else 0.0
                   val passesScore = query.minDocScore.forall(min => score >= min)
-                  if (passesScore) Some(doc -> score) else None
+                  if passesScore then Some(doc -> score) else None
                 }
               }
             }.collect { case Some(v) => v }
@@ -2468,13 +2468,13 @@ object TraversalQueryEngine {
 
           // If the seed stream is approximate + bounded (e.g. coarse range buckets, truncated prefix),
           // we might underfill the page. If that happens, fall back to a full scan early-termination.
-          if (!approxSeeded) {
+          if !approxSeeded then {
             Task.pure(
               SearchResults(
                 model = model,
                 offset = offset,
                 limit = limit,
-                total = if (query.countTotal) fastTotal else None,
+                total = if query.countTotal then fastTotal else None,
                 streamWithScore = streamWithScore,
                 facetResults = Map.empty,
                 transaction = query.transaction
@@ -2483,17 +2483,17 @@ object TraversalQueryEngine {
           } else {
             val need = offset + pageSizeInt
             hitStream.take(need).toList.flatMap { seededHits =>
-              if (seededHits.size >= need) Task.pure(seededHits)
+              if seededHits.size >= need then Task.pure(seededHits)
               else {
                 // fallback to full scan for correctness
                 val fullHitStream: rapid.Stream[(Doc, Double)] =
                   backing.stream.evalMap { doc =>
                     Task {
-                      if (!matches(doc)) None
+                      if !matches(doc) then None
                       else {
-                        val score = if (needScore) bestMatchScore(query.filter, model, doc, state) else 0.0
+                        val score = if needScore then bestMatchScore(query.filter, model, doc, state) else 0.0
                         val passesScore = query.minDocScore.forall(min => score >= min)
-                        if (passesScore) Some(doc -> score) else None
+                        if passesScore then Some(doc -> score) else None
                       }
                     }
                   }.collect { case Some(v) => v }
@@ -2506,7 +2506,7 @@ object TraversalQueryEngine {
                 model = model,
                 offset = offset,
                 limit = limit,
-                total = if (query.countTotal) fastTotal else None,
+                total = if query.countTotal then fastTotal else None,
                 streamWithScore =
                   rapid.Stream.emits(pageHits).map { case (doc, score) =>
                     convert(doc, query.conversion, model, state, Map.empty) -> score
@@ -2526,14 +2526,14 @@ object TraversalQueryEngine {
               queryByField.foreach { case (ff, fq) =>
                 val values: List[FacetValue] = ff.get(doc, ff, state)
 
-                if (values.isEmpty) {
-                  if (ff.hierarchical && fq.path.isEmpty) bump(ff, "$ROOT$")
+                if values.isEmpty then {
+                  if ff.hierarchical && fq.path.isEmpty then bump(ff, "$ROOT$")
                 } else {
                   values.foreach { fv =>
                     val path = fv.path
-                    if (ff.hierarchical) {
-                      if (path.startsWith(fq.path)) {
-                        val child = if (path.length == fq.path.length) "$ROOT$" else path(fq.path.length)
+                    if ff.hierarchical then {
+                      if path.startsWith(fq.path) then {
+                        val child = if path.length == fq.path.length then "$ROOT$" else path(fq.path.length)
                         bump(ff, child)
                       }
                     } else {
@@ -2570,7 +2570,7 @@ object TraversalQueryEngine {
 
           val facetFields: List[FacetField[Doc]] = query.facets.map(_.field).distinct
           val facetAccOpt: Option[FacetAccumulator] =
-            if (facetFields.isEmpty) None
+            if facetFields.isEmpty then None
             else {
               val queryByField = query.facets.foldLeft(Map.empty[FacetField[Doc], FacetQuery[Doc]]) { case (m, fq) =>
                 m.updated(fq.field, fq)
@@ -2585,11 +2585,11 @@ object TraversalQueryEngine {
               m.updated(fq.field, fq.childrenLimit.getOrElse(Int.MaxValue))
             }
 
-          val kForSortOpt: Option[Int] = if (sorts.nonEmpty) limitIntOpt.map(l => offset + l) else None
+          val kForSortOpt: Option[Int] = if sorts.nonEmpty then limitIntOpt.map(l => offset + l) else None
 
           val pageBuffer = mutable.ArrayBuffer.empty[Hit]
           val pqOpt: Option[mutable.PriorityQueue[Hit]] =
-            if (sorts.nonEmpty && kForSortOpt.nonEmpty) {
+            if sorts.nonEmpty && kForSortOpt.nonEmpty then {
               implicit val worstFirst: Ordering[Hit] = new Ordering[Hit] {
                 override def compare(x: Hit, y: Hit): Int = compareHits(x, y) // larger = worse
               }
@@ -2609,24 +2609,24 @@ object TraversalQueryEngine {
               case Some(pq) =>
                 pq.enqueue(hit)
                 val k = kForSortOpt.get
-                if (pq.size > k) pq.dequeue()
+                if pq.size > k then pq.dequeue()
               case None =>
                 // No sorting (or unbounded sorting): keep only the requested page window when possible.
                 val keep = limitIntOpt match {
                   case Some(l) => matchedCount >= offset && matchedCount < offset + l
                   case None => matchedCount >= offset
                 }
-                if (keep) pageBuffer += hit
+                if keep then pageBuffer += hit
             }
           }
 
           // Stream consumption: single pass, no full materialization.
           val consume: Task[Int] = docsStream.evalMap { doc =>
             Task {
-              if (matches(doc)) {
-                val score = if (needScore) bestMatchScore(query.filter, model, doc, state) else 0.0
+              if matches(doc) then {
+                val score = if needScore then bestMatchScore(query.filter, model, doc, state) else 0.0
                 val passesScore = query.minDocScore.forall(min => score >= min)
-                if (passesScore) {
+                if passesScore then {
                   onMatch(doc, score)
                   matchedCount += 1
                 }
@@ -2650,7 +2650,7 @@ object TraversalQueryEngine {
               }
 
             val total: Option[Int] =
-              if (query.countTotal) {
+              if query.countTotal then {
                 fastTotal.orElse(Some(totalCount))
               } else None
             val facetResults: Map[FacetField[Doc], FacetResult] =
@@ -2728,11 +2728,11 @@ object TraversalQueryEngine {
       case c: Filter.Contains[Doc, _] if c.field(model).indexed =>
         // N-gram seeding is only meaningful for >= 3 chars. Shorter queries must scan+verify.
         val q = Option(c.query).getOrElse("").toLowerCase
-        if (q.length >= 3) Some(index.containsPostings(c.fieldName, q)) else None
+        if q.length >= 3 then Some(index.containsPostings(c.fieldName, q)) else None
       case r: Filter.Regex[Doc, _] if r.field(model).indexed =>
         extractLiteralFromRegex(r.expression).flatMap { lit =>
           val s = lit.toLowerCase
-          if (s.length >= 3) Some(index.containsPostings(r.fieldName, s)) else None
+          if s.length >= 3 then Some(index.containsPostings(r.fieldName, s)) else None
         }
       case m: Filter.Multi[Doc] =>
         val mustLike = m.filters.collect {
@@ -2759,22 +2759,22 @@ object TraversalQueryEngine {
           }
 
           val afterMust = mustRefine.foldLeft(base) { (acc, f0) =>
-            if (acc.isEmpty) acc
+            if acc.isEmpty then acc
             else find(f0).map(s => acc intersect s).getOrElse(acc)
           }
           val afterNotEquals = mustNotEquals.foldLeft(afterMust) { (acc, f0) =>
-            if (acc.isEmpty) acc
+            if acc.isEmpty then acc
             else excludeFor(f0).map(s => acc diff s).getOrElse(acc)
           }
           // Apply MustNot exclusions.
           val afterNot = notRefine.foldLeft(afterNotEquals) { (acc, f0) =>
-            if (acc.isEmpty) acc
+            if acc.isEmpty then acc
             else excludeFor(f0).map(s => acc diff s).getOrElse(acc)
           }
 
           // If minShould > 0 and all SHOULD clauses are seedable (cheap), apply thresholding to shrink candidates.
-          val requiredShould = if (should.nonEmpty) m.minShould else 0
-          if (requiredShould <= 0 || afterNot.isEmpty) afterNot
+          val requiredShould = if should.nonEmpty then m.minShould else 0
+          if requiredShould <= 0 || afterNot.isEmpty then afterNot
           else {
             val shouldRefine = should.filter(f => priority(f) <= 2).toList
             val seedsOpt: Option[List[Set[String]]] =
@@ -2794,15 +2794,15 @@ object TraversalQueryEngine {
                 val counts = mutable.HashMap.empty[String, Int]
                 var overflow = false
                 seeds.foreach { s =>
-                  if (!overflow) {
+                  if !overflow then {
                     (afterNot intersect s).foreach { id =>
                       val next = counts.getOrElse(id, 0) + 1
                       counts.update(id, next)
-                      if (counts.size > MaxSeedSize) overflow = true
+                      if counts.size > MaxSeedSize then overflow = true
                     }
                   }
                 }
-                if (overflow) afterNot
+                if overflow then afterNot
                 else counts.iterator.collect { case (id, c) if c >= requiredShould => id }.toSet
               case None =>
                 afterNot
@@ -2828,7 +2828,7 @@ object TraversalQueryEngine {
                     case _ => Some(s)
                   }
                   // If we found a single-hit (or very small) seed from a cheap predicate, stop early.
-                  if (nextBest.exists(_.size <= 1) && priority(h) <= 1) nextBest
+                  if nextBest.exists(_.size <= 1) && priority(h) <= 1 then nextBest
                   else loop(t, nextBest)
                 case None =>
                   loop(t, best)
@@ -2841,7 +2841,7 @@ object TraversalQueryEngine {
 
         mustSeed.orElse {
           // Pure-SHOULD seeding is only safe when minShould >= 1 AND all SHOULD clauses are seedable.
-          if (mustLike.isEmpty && should.nonEmpty && m.minShould >= 1) {
+          if mustLike.isEmpty && should.nonEmpty && m.minShould >= 1 then {
             val seedsOpt: Option[List[Set[String]]] =
               should.foldLeft(Option(List.empty[Set[String]])) { (acc, f0) =>
                 acc.flatMap(list => find(f0).map(s => list :+ s))
@@ -2849,24 +2849,24 @@ object TraversalQueryEngine {
 
             seedsOpt.flatMap { seeds =>
               val req = m.minShould
-              if (req > seeds.size) Some(Set.empty) // impossible threshold
-              else if (req == seeds.size) Some(seeds.reduce(_ intersect _))
-              else if (req == 1) {
+              if req > seeds.size then Some(Set.empty) // impossible threshold
+              else if req == seeds.size then Some(seeds.reduce(_ intersect _))
+              else if req == 1 then {
                 val union = seeds.foldLeft(Set.empty[String])(_ union _)
-                if (union.size > MaxSeedSize) None else Some(refineSeed(union))
+                if union.size > MaxSeedSize then None else Some(refineSeed(union))
               } else {
                 // Threshold union: ids that appear in at least req SHOULD clauses.
                 val counts = mutable.HashMap.empty[String, Int]
                 val it = seeds.iterator
                 var overflow = false
-                while (it.hasNext && !overflow) {
+                while it.hasNext && !overflow do {
                   it.next().foreach { id =>
                     val next = counts.getOrElse(id, 0) + 1
                     counts.update(id, next)
-                    if (counts.size > MaxSeedSize) overflow = true
+                    if counts.size > MaxSeedSize then overflow = true
                   }
                 }
-                if (overflow) None
+                if overflow then None
                 else Some(refineSeed(counts.iterator.collect { case (id, c) if c >= req => id }.toSet))
               }
             }
@@ -2923,10 +2923,10 @@ object TraversalQueryEngine {
           .map(v => TraversalPersistedIndex.eqSeedPostings(storeName, i.fieldName, v, kv))
           .tasks
           .map { opts =>
-            if (opts.exists(_.isEmpty)) None
+            if opts.exists(_.isEmpty) then None
             else {
               val union = opts.flatten.foldLeft(Set.empty[String])(_ union _)
-              if (union.size > maxSeedSize) None else Some(union)
+              if union.size > maxSeedSize then None else Some(union)
             }
           }
       case s: Filter.StartsWith[Doc, _] if s.field(model).indexed =>
@@ -2943,7 +2943,7 @@ object TraversalQueryEngine {
         extractLiteralFromRegex(r.expression) match {
           case Some(lit) =>
             val s = lit.toLowerCase
-            if (s.length >= 3) TraversalPersistedIndex.ngSeedPostings(storeName, r.fieldName, s, kv)
+            if s.length >= 3 then TraversalPersistedIndex.ngSeedPostings(storeName, r.fieldName, s, kv)
             else Task.pure(None)
           case None => Task.pure(None)
         }
@@ -2968,7 +2968,7 @@ object TraversalQueryEngine {
                     case Some(b) if b.size <= s.size => best
                     case _ => Some(s)
                   }
-                  if (nextBest.exists(_.size <= 1) && priority(h) <= 1) Task.pure(nextBest)
+                  if nextBest.exists(_.size <= 1) && priority(h) <= 1 then Task.pure(nextBest)
                   else loop(t, nextBest)
                 case None =>
                   loop(t, best)
@@ -2994,23 +2994,23 @@ object TraversalQueryEngine {
               find(other)
           }
 
-          for {
+          for
             mustSeeds <- mustRefine.map(find).tasks.map(_.flatten)
             notEqSeeds <- mustNotEquals.map(excludeFor).tasks.map(_.flatten)
             notSeeds <- notRefine.map(excludeFor).tasks.map(_.flatten)
             shouldSeedsOpt <-
-              if (should.nonEmpty && m.minShould > 0) {
+              if should.nonEmpty && m.minShould > 0 then {
                 val shouldRefine = should.filter(f => priority(f) <= 2).toList
                 shouldRefine.map(find).tasks.map { opts =>
-                  if (opts.exists(_.isEmpty)) None else Some(opts.flatten)
+                  if opts.exists(_.isEmpty) then None else Some(opts.flatten)
                 }
               } else Task.pure(None)
-          } yield {
-            val afterMust = mustSeeds.foldLeft(base) { (acc, s) => if (acc.isEmpty) acc else acc intersect s }
-            val afterNotEquals = notEqSeeds.foldLeft(afterMust) { (acc, s) => if (acc.isEmpty) acc else acc diff s }
-            val afterNot = notSeeds.foldLeft(afterNotEquals) { (acc, s) => if (acc.isEmpty) acc else acc diff s }
-            val requiredShould = if (should.nonEmpty) m.minShould else 0
-            if (requiredShould <= 0 || afterNot.isEmpty) afterNot
+          yield {
+            val afterMust = mustSeeds.foldLeft(base) { (acc, s) => if acc.isEmpty then acc else acc intersect s }
+            val afterNotEquals = notEqSeeds.foldLeft(afterMust) { (acc, s) => if acc.isEmpty then acc else acc diff s }
+            val afterNot = notSeeds.foldLeft(afterNotEquals) { (acc, s) => if acc.isEmpty then acc else acc diff s }
+            val requiredShould = if should.nonEmpty then m.minShould else 0
+            if requiredShould <= 0 || afterNot.isEmpty then afterNot
             else {
               shouldSeedsOpt match {
                 case Some(seeds) if requiredShould > seeds.size =>
@@ -3024,15 +3024,15 @@ object TraversalQueryEngine {
                   val counts = mutable.HashMap.empty[String, Int]
                   var overflow = false
                   seeds.foreach { s =>
-                    if (!overflow) {
+                    if !overflow then {
                       (afterNot intersect s).foreach { id =>
                         val next = counts.getOrElse(id, 0) + 1
                         counts.update(id, next)
-                        if (counts.size > MaxSeedSize) overflow = true
+                        if counts.size > MaxSeedSize then overflow = true
                       }
                     }
                   }
-                  if (overflow) afterNot
+                  if overflow then afterNot
                   else counts.iterator.collect { case (id, c) if c >= requiredShould => id }.toSet
                 case None =>
                   afterNot
@@ -3046,34 +3046,34 @@ object TraversalQueryEngine {
             // If we got a base seed, attempt cheap refinement (still correctness-safe because we only intersect/diff
             // using postings that represent true supersets/subsets; otherwise we skip).
             val base = some.get
-            if (base.isEmpty) Task.pure(some)
+            if base.isEmpty then Task.pure(some)
             else refineSeed(base).map(s => Some(s))
           case None =>
-            if (mustLike.isEmpty && should.nonEmpty && m.minShould >= 1) {
+            if mustLike.isEmpty && should.nonEmpty && m.minShould >= 1 then {
               should.toList.map(find).tasks.map { opts =>
                 // Only safe if ALL should clauses are seedable; otherwise seeding would drop matches.
-                if (opts.exists(_.isEmpty)) None
+                if opts.exists(_.isEmpty) then None
                 else {
                   val seeds = opts.flatten
                   val req = m.minShould
-                  if (req > seeds.size) Some(Set.empty)
-                  else if (req == seeds.size) Some(seeds.reduce(_ intersect _))
-                  else if (req == 1) {
+                  if req > seeds.size then Some(Set.empty)
+                  else if req == seeds.size then Some(seeds.reduce(_ intersect _))
+                  else if req == 1 then {
                     val union = seeds.foldLeft(Set.empty[String])(_ union _)
-                    if (union.size > maxSeedSize) None else Some(union)
+                    if union.size > maxSeedSize then None else Some(union)
                   } else {
                     val counts = mutable.HashMap.empty[String, Int]
                     var overflow = false
                     seeds.foreach { s =>
-                      if (!overflow) {
+                      if !overflow then {
                         s.foreach { id =>
                           val next = counts.getOrElse(id, 0) + 1
                           counts.update(id, next)
-                          if (counts.size > maxSeedSize) overflow = true
+                          if counts.size > maxSeedSize then overflow = true
                         }
                       }
                     }
-                    if (overflow) None
+                    if overflow then None
                     else Some(counts.iterator.collect { case (id, c) if c >= req => id }.toSet)
                   }
                 }
@@ -3107,7 +3107,7 @@ object TraversalQueryEngine {
     kv: lightdb.transaction.PrefixScanningTransaction[lightdb.KeyValue, lightdb.KeyValue.type]
   ): Task[Option[Set[String]]] =
     TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
-      if (!ready) Task.pure(None)
+      if !ready then Task.pure(None)
       else seedCandidatesPersisted(storeName, model, filter, kv)
     }
 
@@ -3121,15 +3121,15 @@ object TraversalQueryEngine {
    * Anything more complex returns None (verify-only fallback).
    */
   private def extractLiteralFromRegex(expr: String): Option[String] = {
-    if (expr == null || expr.isEmpty) return None
+    if expr == null || expr.isEmpty then return None
     val s = expr
     val stripped =
-      if (s.startsWith(".*") && s.endsWith(".*") && s.length >= 4) s.substring(2, s.length - 2)
+      if s.startsWith(".*") && s.endsWith(".*") && s.length >= 4 then s.substring(2, s.length - 2)
       else s
 
     // Reject common regex metacharacters to avoid incorrect prefilters.
     val meta = Set('.', '*', '+', '?', '[', ']', '(', ')', '{', '}', '\\', '^', '$', '|')
-    if (stripped.exists(meta.contains)) None
+    if stripped.exists(meta.contains) then None
     else Some(stripped)
   }
 
@@ -3173,7 +3173,7 @@ object TraversalQueryEngine {
     state: IndexingState,
     distanceCacheById: Map[String, List[Distance]]
   ): Vector[(Doc, Double)] = {
-    if (sorts.isEmpty) return docs
+    if sorts.isEmpty then return docs
 
     def dirFor(sort: Sort): SortDirection = sort match {
       case Sort.BestMatch(direction) => direction
@@ -3201,10 +3201,10 @@ object TraversalQueryEngine {
         val k1 = keyFor(sort, d1, s1)
         val k2 = keyFor(sort, d2, s2)
         val base = compareAny(k1, k2)
-        if (dirFor(sort) == SortDirection.Descending) -base else base
+        if dirFor(sort) == SortDirection.Descending then -base else base
       }.find(_ != 0).getOrElse(0)
 
-      if (cmp != 0) cmp < 0
+      if cmp != 0 then cmp < 0
       else d1._id.value < d2._id.value
     }
   }
@@ -3268,7 +3268,7 @@ object TraversalQueryEngine {
       val v = field.get(doc, field, state)
       // Tokenized fields: equality is interpreted as matching all whitespace-separated tokens (AND semantics)
       // (matches default SQL tokenizedEqualsPart behavior).
-      if (field.isTokenized && f.value != null && f.value != None) {
+      if field.isTokenized && f.value != null && f.value != None then {
         val raw: Option[String] = f.value match {
           case s: String => Some(s)
           case _ =>
@@ -3281,7 +3281,7 @@ object TraversalQueryEngine {
           raw.toList
             .flatMap(_.toLowerCase.split("\\s+").toList.map(_.trim).filter(_.nonEmpty))
             .distinct
-        if (queryTokens.isEmpty) true
+        if queryTokens.isEmpty then true
         else {
           val valueTokens =
             Option(v)
@@ -3309,7 +3309,7 @@ object TraversalQueryEngine {
       val field = f.field(model).asInstanceOf[Field[Doc, Any]]
       val v = field.get(doc, field, state)
       // Tokenized fields: not equals is interpreted as NOT(all tokens present) (matches SQL tokenizedNotEqualsPart).
-      if (field.isTokenized && f.value != null && f.value != None) {
+      if field.isTokenized && f.value != null && f.value != None then {
         val raw: Option[String] = f.value match {
           case s: String => Some(s)
           case _ =>
@@ -3322,7 +3322,7 @@ object TraversalQueryEngine {
           raw.toList
             .flatMap(_.toLowerCase.split("\\s+").toList.map(_.trim).filter(_.nonEmpty))
             .distinct
-        if (queryTokens.isEmpty) false
+        if queryTokens.isEmpty then false
         else {
           val valueTokens =
             Option(v)
@@ -3410,7 +3410,7 @@ object TraversalQueryEngine {
       val values = field.get(doc, field, state)
       val path = f.path
       values.exists { fv =>
-        if (f.showOnlyThisLevel) {
+        if f.showOnlyThisLevel then {
           fv.path == path
         } else {
           fv.path.startsWith(path)
@@ -3439,7 +3439,7 @@ object TraversalQueryEngine {
       val mustOk = must.forall(f => evalFilter(f, model, doc, state))
       val mustNotOk = mustNot.forall(f => !evalFilter(f, model, doc, state))
       val shouldCount = should.count(f => evalFilter(f, model, doc, state))
-      val requiredShould = if (should.nonEmpty) m.minShould else 0
+      val requiredShould = if should.nonEmpty then m.minShould else 0
       mustOk && mustNotOk && shouldCount >= requiredShould
   }
 
@@ -3476,7 +3476,7 @@ object TraversalQueryEngine {
     model: Model
   ): Map[FacetField[Doc], FacetResult] = {
     val facetFields: List[FacetField[Doc]] = facetQueries.map(_.field).distinct
-    if (facetFields.isEmpty) {
+    if facetFields.isEmpty then {
       Map.empty
     } else {
       // Last facet query per field wins (matches SearchResults map semantics).
@@ -3502,14 +3502,14 @@ object TraversalQueryEngine {
           val fq = queryByField(ff)
           val values: List[FacetValue] = ff.get(doc, ff, state)
 
-          if (values.isEmpty) {
-            if (ff.hierarchical && fq.path.isEmpty) bump(ff, "$ROOT$")
+          if values.isEmpty then {
+            if ff.hierarchical && fq.path.isEmpty then bump(ff, "$ROOT$")
           } else {
             values.foreach { fv =>
               val path = fv.path
-              if (ff.hierarchical) {
-                if (path.startsWith(fq.path)) {
-                  val child = if (path.length == fq.path.length) "$ROOT$" else path(fq.path.length)
+              if ff.hierarchical then {
+                if path.startsWith(fq.path) then {
+                  val child = if path.length == fq.path.length then "$ROOT$" else path(fq.path.length)
                   bump(ff, child)
                 }
               } else {

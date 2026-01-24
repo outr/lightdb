@@ -41,7 +41,7 @@ object TraversalPersistedIndex {
 
   private def safeId(key: String): Option[Id[KeyValue]] = {
     val bytes = Option(key).getOrElse("").getBytes(java.nio.charset.StandardCharsets.UTF_8)
-    if (bytes.length <= MaxKeyBytes) Some(Id[KeyValue](key)) else None
+    if bytes.length <= MaxKeyBytes then Some(Id[KeyValue](key)) else None
   }
 
   private def invertHex16(hex16: String): String = {
@@ -61,13 +61,13 @@ object TraversalPersistedIndex {
     var i = 0
     var j = 0
     val out = ListBuffer.empty[String]
-    while (i < ab.length && j < bb.length) {
+    while i < ab.length && j < bb.length do {
       val cmp = ab(i).compareTo(bb(j))
-      if (cmp == 0) {
+      if cmp == 0 then {
         out += ab(i)
         i += 1
         j += 1
-      } else if (cmp < 0) {
+      } else if cmp < 0 then {
         i += 1
       } else {
         j += 1
@@ -84,31 +84,31 @@ object TraversalPersistedIndex {
    */
   private[traversal] def mergeSortedDistinctTake(lists: List[List[String]], takeN: Int): List[String] = {
     val n = math.max(0, takeN)
-    if (n == 0) Nil
+    if n == 0 then Nil
     else {
       final case class Node(value: String, listIdx: Int, pos: Int)
       val pq = new PriorityQueue[Node](16, (a: Node, b: Node) => a.value.compareTo(b.value))
 
       val arr = lists.toArray
       var i = 0
-      while (i < arr.length) {
+      while i < arr.length do {
         val l = arr(i)
-        if (l.nonEmpty) pq.add(Node(l.head, i, 0))
+        if l.nonEmpty then pq.add(Node(l.head, i, 0))
         i += 1
       }
 
       val out = ListBuffer.empty[String]
       var last: String = null
-      while (!pq.isEmpty && out.length < n) {
+      while !pq.isEmpty && out.length < n do {
         val node = pq.poll()
         val v = node.value
-        if (last == null || v != last) {
+        if last == null || v != last then {
           out += v
           last = v
         }
         val nextPos = node.pos + 1
         val l = arr(node.listIdx)
-        if (nextPos < l.length) pq.add(Node(l(nextPos), node.listIdx, nextPos))
+        if nextPos < l.length then pq.add(Node(l(nextPos), node.listIdx, nextPos))
       }
       out.result()
     }
@@ -125,7 +125,7 @@ object TraversalPersistedIndex {
                                    takeN: Int): Task[List[String]] = {
     val n = math.max(0, takeN)
     val ps = prefixes.distinct
-    if (n == 0 || ps.isEmpty) Task.pure(Nil)
+    if n == 0 || ps.isEmpty then Task.pure(Nil)
     else ps.map(p => postingsTake(p, kv, n)).tasks.map(lists => intersectSortedDistinctTake(lists, n))
   }
 
@@ -151,7 +151,7 @@ object TraversalPersistedIndex {
                                                   maxCount: Int): Task[(List[String], Int)] = {
     val n = math.max(0, takeN)
     val m = math.max(0, maxCount)
-    if (n == 0 || m == 0) Task.pure((Nil, 0))
+    if n == 0 || m == 0 then Task.pure((Nil, 0))
     else {
       val cap = (math.max(n, m) + 1) max 1
       postingsStream(prefix, kv).take(cap).toList.map { ids =>
@@ -167,10 +167,10 @@ object TraversalPersistedIndex {
    */
   private[traversal] def intersectSortedDistinctTake(lists: List[List[String]], takeN: Int): List[String] = {
     val n = math.max(0, takeN)
-    if (n == 0) Nil
+    if n == 0 then Nil
     else {
       val sortedLists = lists.filter(_.nonEmpty).sortBy(_.size)
-      if (sortedLists.isEmpty) Nil
+      if sortedLists.isEmpty then Nil
       else sortedLists.reduceLeft(intersectSortedLists).take(n)
     }
   }
@@ -190,7 +190,7 @@ object TraversalPersistedIndex {
                                                                    kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
                                                                  ): Task[Unit] = Task.defer {
     val postings = postingsForDoc(storeName, model, doc)
-    if (postings.isEmpty) Task.unit else kv.upsert(postings).unit
+    if postings.isEmpty then Task.unit else kv.upsert(postings).unit
   }
 
   private[traversal] def postingsForDoc[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
@@ -234,13 +234,13 @@ object TraversalPersistedIndex {
         val eq = KeyValue(Id[KeyValue](TraversalKeys.eqKey(storeName, f0.name, encoded, docId)), Str(docId))
         val eqo: List[KeyValue] =
           safeId(TraversalKeys.eqoKey(storeName, f0.name, encoded, docId)).toList.map(id => KeyValue(id, Str(docId)))
-        if (!isStringValue) eqo :+ eq
+        if !isStringValue then eqo :+ eq
         else {
           val s = encoded // already lowercased
-          val grams = if (s.length >= N) gramsOf(s).toList else Nil
+          val grams = if s.length >= N then gramsOf(s).toList else Nil
           val ng = grams.map(g => KeyValue(Id[KeyValue](TraversalKeys.ngKey(storeName, f0.name, g, docId)), Str(docId)))
           val tok: List[KeyValue] =
-            if (!f0.isTokenized) Nil
+            if !f0.isTokenized then Nil
             else {
               val toks = tokensOf(s).distinct
               val unordered = toks.map(t => KeyValue(Id[KeyValue](TraversalKeys.tokKey(storeName, f0.name, t, docId)), Str(docId)))
@@ -270,7 +270,7 @@ object TraversalPersistedIndex {
               .toList
               .map(id => KeyValue(id, Str(docId)))
           val sort =
-            if (!OrderByFieldPostingsEnabled) Nil
+            if !OrderByFieldPostingsEnabled then Nil
             else {
               val sortAsc =
                 safeId(TraversalKeys.olaKey(storeName, f0.name, hex16, docId)).toList.map(id => KeyValue(id, Str(docId)))
@@ -294,7 +294,7 @@ object TraversalPersistedIndex {
               .toList
               .map(id => KeyValue(id, Str(docId)))
           val sort =
-            if (!OrderByFieldPostingsEnabled) Nil
+            if !OrderByFieldPostingsEnabled then Nil
             else {
               val sortAsc =
                 safeId(TraversalKeys.odaKey(storeName, f0.name, hex16, docId)).toList.map(id => KeyValue(id, Str(docId)))
@@ -332,7 +332,7 @@ object TraversalPersistedIndex {
                                                                      kv: PrefixScanningTransaction[KeyValue, KeyValue.type]
                                                                    ): Task[Unit] = Task.defer {
     val ids = idsForDoc(storeName, model, doc)
-    if (ids.isEmpty) Task.unit else ids.map(kv.delete).tasks.unit
+    if ids.isEmpty then Task.unit else ids.map(kv.delete).tasks.unit
   }
 
   private[traversal] def idsForDoc[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
@@ -371,12 +371,12 @@ object TraversalPersistedIndex {
       val other: List[Id[KeyValue]] = encodedInfo.toList.flatMap { case (encoded, isStringValue) =>
         val eq = Id[KeyValue](TraversalKeys.eqKey(storeName, f0.name, encoded, docId))
         val eqo = safeId(TraversalKeys.eqoKey(storeName, f0.name, encoded, docId)).toList
-        if (!isStringValue) (eqo :+ eq)
+        if !isStringValue then (eqo :+ eq)
         else {
           val s = encoded // already lowercased
-          val grams = if (s.length >= N) gramsOf(s).toList else Nil
+          val grams = if s.length >= N then gramsOf(s).toList else Nil
           val tok: List[Id[KeyValue]] =
-            if (!f0.isTokenized) Nil
+            if !f0.isTokenized then Nil
             else {
               val toks = tokensOf(s).distinct
               val unordered = toks.map(t => Id[KeyValue](TraversalKeys.tokKey(storeName, f0.name, t, docId)))
@@ -398,7 +398,7 @@ object TraversalPersistedIndex {
           val rl = numericPrefixesOf(hex16).map(p => Id[KeyValue](TraversalKeys.rlKey(storeName, f0.name, p, docId)))
           val ordered = safeId(TraversalKeys.rloKey(storeName, f0.name, hex16.take(NumericOrderedPrefixLen), docId)).toList
           val sort =
-            if (!OrderByFieldPostingsEnabled) Nil
+            if !OrderByFieldPostingsEnabled then Nil
             else {
               val sortAsc = safeId(TraversalKeys.olaKey(storeName, f0.name, hex16, docId)).toList
               val sortDesc = safeId(TraversalKeys.oldKey(storeName, f0.name, invertHex16(hex16), docId)).toList
@@ -413,7 +413,7 @@ object TraversalPersistedIndex {
           val rd = numericPrefixesOf(hex16).map(p => Id[KeyValue](TraversalKeys.rdKey(storeName, f0.name, p, docId)))
           val ordered = safeId(TraversalKeys.rdoKey(storeName, f0.name, hex16.take(NumericOrderedPrefixLen), docId)).toList
           val sort =
-            if (!OrderByFieldPostingsEnabled) Nil
+            if !OrderByFieldPostingsEnabled then Nil
             else {
               val sortAsc = safeId(TraversalKeys.odaKey(storeName, f0.name, hex16, docId)).toList
               val sortDesc = safeId(TraversalKeys.oddKey(storeName, f0.name, invertHex16(hex16), docId)).toList
@@ -443,7 +443,7 @@ object TraversalPersistedIndex {
                  value: Any,
                  kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Set[String]] = {
     val encoded = normalizeValue(value)
-    if (encoded.isEmpty) Task.pure(Set.empty)
+    if encoded.isEmpty then Task.pure(Set.empty)
     else encoded.toList.map { v =>
       postingsByPrefix(TraversalKeys.eqPrefix(storeName, fieldName, v), kv)
     }.tasks.map { sets =>
@@ -456,13 +456,13 @@ object TraversalPersistedIndex {
                  query: String,
                  kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Set[String]] = {
     val q = Option(query).getOrElse("").toLowerCase
-    if (q.length < N) Task.pure(Set.empty)
+    if q.length < N then Task.pure(Set.empty)
     else {
       val grams = gramsOf(q)
       grams.toList.map { g =>
         postingsByPrefix(TraversalKeys.ngPrefix(storeName, fieldName, g), kv)
       }.tasks.map { sets =>
-        if (sets.isEmpty) Set.empty else sets.reduce(_ intersect _)
+        if sets.isEmpty then Set.empty else sets.reduce(_ intersect _)
       }
     }
   }
@@ -478,13 +478,13 @@ object TraversalPersistedIndex {
   private def postingsByPrefixSeed(prefix: String,
                                    kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Set[String]]] = {
     val max = math.max(0, maxSeedSize)
-    if (max == 0) Task.pure(None)
+    if max == 0 then Task.pure(None)
     else {
       postingsStream(prefix, kv)
         .take(max + 1)
         .toList
         .map { list =>
-          if (list.size > max) None else Some(list.toSet)
+          if list.size > max then None else Some(list.toSet)
         }
     }
   }
@@ -497,7 +497,7 @@ object TraversalPersistedIndex {
     }.toSet
 
   private def gramsOf(s: String): Set[String] = {
-    if (s.length < N) Set.empty
+    if s.length < N then Set.empty
     else (0 to (s.length - N)).iterator.map(i => s.substring(i, i + N)).toSet
   }
 
@@ -506,7 +506,7 @@ object TraversalPersistedIndex {
                  query: String,
                  kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Set[String]] = {
     val q0 = Option(query).getOrElse("").toLowerCase
-    if (q0.isEmpty) Task.pure(Set.empty)
+    if q0.isEmpty then Task.pure(Set.empty)
     else {
       val q = q0.take(PrefixMaxLen)
       postingsByPrefix(TraversalKeys.swPrefix(storeName, fieldName, q), kv)
@@ -515,14 +515,14 @@ object TraversalPersistedIndex {
 
   private def prefixesOf(s: String): List[String] = {
     val n = math.min(PrefixMaxLen, s.length)
-    if (n <= 0) Nil
+    if n <= 0 then Nil
     else (1 to n).iterator.map(i => s.substring(0, i)).toList
   }
 
   private def numericPrefixesOf(hex16: String): List[String] = {
     val h = Option(hex16).getOrElse("")
     val n = math.min(NumericPrefixMaxLen, h.length)
-    if (n <= 0) Nil
+    if n <= 0 then Nil
     else (1 to n).iterator.map(i => h.substring(0, i)).toList
   }
 
@@ -533,7 +533,7 @@ object TraversalPersistedIndex {
 
   private[traversal] def encodeSortableDouble(d: Double): String = {
     val bits = java.lang.Double.doubleToRawLongBits(d)
-    val sortable = if ((bits & (1L << 63)) != 0L) ~bits else (bits ^ (1L << 63))
+    val sortable = if (bits & (1L << 63)) != 0L then ~bits else (bits ^ (1L << 63))
     f"$sortable%016x"
   }
 
@@ -559,7 +559,7 @@ object TraversalPersistedIndex {
   private[traversal] def prefixesCoveringRange(fromHex: String, toHex: String): List[String] = {
     val from = BigInt(fromHex, 16)
     val to = BigInt(toHex, 16)
-    if (from > to) return Nil
+    if from > to then return Nil
     val max = (BigInt(1) << 64) - 1
 
     def hex16(u: BigInt): String = {
@@ -569,19 +569,19 @@ object TraversalPersistedIndex {
 
     def trailingZeroNibbles(u: BigInt): Int = {
       var tz = 0
-      while (tz < 16 && ((u >> (tz * 4)) & 0xf) == 0) tz += 1
+      while tz < 16 && ((u >> (tz * 4)) & 0xf) == 0 do tz += 1
       tz
     }
 
     var cur = from
     val out = scala.collection.mutable.ListBuffer.empty[String]
-    while (cur <= to && cur <= max) {
+    while cur <= to && cur <= max do {
       val remaining = to - cur + 1
       val kAlign = trailingZeroNibbles(cur)
       val kRem = ((remaining.bitLength - 1) / 4) max 0
       var k = math.min(kAlign, kRem)
       var block = BigInt(1) << (k * 4)
-      while (block > remaining && k > 0) {
+      while block > remaining && k > 0 do {
         k -= 1
         block = BigInt(1) << (k * 4)
       }
@@ -641,18 +641,18 @@ object TraversalPersistedIndex {
       case (Some(f), Some(t)) =>
         val fromU = BigInt(encodeSortableLong(f), 16)
         val toU = BigInt(encodeSortableLong(t), 16)
-        if (fromU > toU) Some(Nil)
+        if fromU > toU then Some(Nil)
         else {
           val shift = (16 - NumericOrderedPrefixLen) * 4
           val fromBlock = fromU >> shift
           val toBlock = toU >> shift
           val count = (toBlock - fromBlock + 1)
-          if (count <= 0) Some(Nil)
-          else if (count > Int.MaxValue) None
+          if count <= 0 then Some(Nil)
+          else if count > Int.MaxValue then None
           else {
             val out = scala.collection.mutable.ListBuffer.empty[String]
             var cur = fromBlock
-            while (cur <= toBlock) {
+            while cur <= toBlock do {
               val start = cur << shift
               out += hex16(start).take(NumericOrderedPrefixLen)
               cur += 1
@@ -673,18 +673,18 @@ object TraversalPersistedIndex {
       case (Some(f), Some(t)) =>
         val fromU = BigInt(encodeSortableDouble(f), 16)
         val toU = BigInt(encodeSortableDouble(t), 16)
-        if (fromU > toU) Some(Nil)
+        if fromU > toU then Some(Nil)
         else {
           val shift = (16 - NumericOrderedPrefixLen) * 4
           val fromBlock = fromU >> shift
           val toBlock = toU >> shift
           val count = (toBlock - fromBlock + 1)
-          if (count <= 0) Some(Nil)
-          else if (count > Int.MaxValue) None
+          if count <= 0 then Some(Nil)
+          else if count > Int.MaxValue then None
           else {
             val out = scala.collection.mutable.ListBuffer.empty[String]
             var cur = fromBlock
-            while (cur <= toBlock) {
+            while cur <= toBlock do {
               val start = cur << shift
               out += hex16(start).take(NumericOrderedPrefixLen)
               cur += 1
@@ -705,7 +705,7 @@ object TraversalPersistedIndex {
                  query: String,
                  kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Set[String]] = {
     val q0 = Option(query).getOrElse("").toLowerCase
-    if (q0.isEmpty) Task.pure(Set.empty)
+    if q0.isEmpty then Task.pure(Set.empty)
     else {
       val rev = q0.reverse.take(PrefixMaxLen)
       postingsByPrefix(TraversalKeys.ewPrefix(storeName, fieldName, rev), kv)
@@ -722,21 +722,21 @@ object TraversalPersistedIndex {
         val fromHex = encodeSortableLong(f)
         val toHex = encodeSortableLong(t)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
-        if (prefixes.isEmpty) Task.pure(Set.empty)
+        if prefixes.isEmpty then Task.pure(Set.empty)
         else prefixes.toList.map(p => postingsByPrefix(TraversalKeys.rlPrefix(storeName, fieldName, p), kv)).tasks
           .map(_.foldLeft(Set.empty[String])(_ union _))
       case (Some(f), None) if OneSidedRangeSeeding =>
         val fromHex = encodeSortableLong(f)
         val toHex = encodeSortableLong(Long.MaxValue)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
-        if (prefixes.isEmpty) Task.pure(Set.empty)
+        if prefixes.isEmpty then Task.pure(Set.empty)
         else prefixes.toList.map(p => postingsByPrefix(TraversalKeys.rlPrefix(storeName, fieldName, p), kv)).tasks
           .map(_.foldLeft(Set.empty[String])(_ union _))
       case (None, Some(t)) if OneSidedRangeSeeding =>
         val fromHex = encodeSortableLong(Long.MinValue)
         val toHex = encodeSortableLong(t)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
-        if (prefixes.isEmpty) Task.pure(Set.empty)
+        if prefixes.isEmpty then Task.pure(Set.empty)
         else prefixes.toList.map(p => postingsByPrefix(TraversalKeys.rlPrefix(storeName, fieldName, p), kv)).tasks
           .map(_.foldLeft(Set.empty[String])(_ union _))
       case _ =>
@@ -754,21 +754,21 @@ object TraversalPersistedIndex {
         val fromHex = encodeSortableDouble(f)
         val toHex = encodeSortableDouble(t)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
-        if (prefixes.isEmpty) Task.pure(Set.empty)
+        if prefixes.isEmpty then Task.pure(Set.empty)
         else prefixes.toList.map(p => postingsByPrefix(TraversalKeys.rdPrefix(storeName, fieldName, p), kv)).tasks
           .map(_.foldLeft(Set.empty[String])(_ union _))
       case (Some(f), None) if OneSidedRangeSeeding =>
         val fromHex = encodeSortableDouble(f)
         val toHex = encodeSortableDouble(Double.PositiveInfinity)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
-        if (prefixes.isEmpty) Task.pure(Set.empty)
+        if prefixes.isEmpty then Task.pure(Set.empty)
         else prefixes.toList.map(p => postingsByPrefix(TraversalKeys.rdPrefix(storeName, fieldName, p), kv)).tasks
           .map(_.foldLeft(Set.empty[String])(_ union _))
       case (None, Some(t)) if OneSidedRangeSeeding =>
         val fromHex = encodeSortableDouble(Double.NegativeInfinity)
         val toHex = encodeSortableDouble(t)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
-        if (prefixes.isEmpty) Task.pure(Set.empty)
+        if prefixes.isEmpty then Task.pure(Set.empty)
         else prefixes.toList.map(p => postingsByPrefix(TraversalKeys.rdPrefix(storeName, fieldName, p), kv)).tasks
           .map(_.foldLeft(Set.empty[String])(_ union _))
       case _ =>
@@ -787,10 +787,10 @@ object TraversalPersistedIndex {
     // Additionally: string values are normalized to lowercase for indexing, but Equals semantics are case-sensitive,
     // so a postings-count would be an overcount when case differs. Restrict to non-string values.
     val rawValues = TraversalIndex.valuesForIndexValue(value)
-    if (rawValues.exists(_.isInstanceOf[String])) Task.pure(None)
+    if rawValues.exists(_.isInstanceOf[String]) then Task.pure(None)
     else {
       val encoded = normalizeValue(value)
-      if (encoded.size != 1) Task.pure(None)
+      if encoded.size != 1 then Task.pure(None)
       else {
         val prefix = TraversalKeys.eqPrefix(storeName, fieldName, encoded.head)
         postingsCount(prefix, kv).map(Some(_))
@@ -854,9 +854,9 @@ object TraversalPersistedIndex {
         .distinct
         .take(maxTokens + 1)
 
-    if (tokens.isEmpty) Task.pure(None)
-    else if (tokens.size > maxTokens) Task.pure(None)
-    else if (tokens.size == 1) tokPostingsCountIfSingleToken(storeName, fieldName, tokens.head, kv)
+    if tokens.isEmpty then Task.pure(None)
+    else if tokens.size > maxTokens then Task.pure(None)
+    else if tokens.size == 1 then tokPostingsCountIfSingleToken(storeName, fieldName, tokens.head, kv)
     else {
       val prefixes = tokens.map(t => TraversalKeys.tokPrefix(storeName, fieldName, t))
       // Choose the smallest postings list as the base to minimize memory.
@@ -865,7 +865,7 @@ object TraversalPersistedIndex {
         .tasks
         .flatMap { pcs =>
           val (bestPrefix, bestCount) = pcs.minBy(_._2)
-          if (bestCount > maxTokenPostings) Task.pure(None)
+          if bestCount > maxTokenPostings then Task.pure(None)
           else {
             // Materialize the base set fully (bounded).
             postingsTakeAndCountUpTo(bestPrefix, kv, bestCount, maxTokenPostings + 1).flatMap { case (baseIds, _) =>
@@ -879,7 +879,7 @@ object TraversalPersistedIndex {
                     case Some(current) if current.isEmpty => Task.pure(Some(Set.empty))
                     case Some(current) =>
                       postingsTakeAndCountUpTo(pfx, kv, maxTokenPostings + 1, maxTokenPostings + 1).flatMap { case (ids, c) =>
-                        if (c > maxTokenPostings) Task.pure(None)
+                        if c > maxTokenPostings then Task.pure(None)
                         else Task.pure(Some(current intersect ids.toSet))
                       }
                   }
@@ -897,13 +897,13 @@ object TraversalPersistedIndex {
                      kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Set[String]]] = {
     val encoded = normalizeValue(value)
     // If we can't normalize, treat as unseedable (fallback to scan+verify).
-    if (encoded.isEmpty) Task.pure(None)
+    if encoded.isEmpty then Task.pure(None)
     else {
       // For multi-value equality, we intersect across encoded values.
       encoded.toList.map { v =>
         postingsByPrefixSeed(TraversalKeys.eqPrefix(storeName, fieldName, v), kv)
       }.tasks.map { opts =>
-        if (opts.exists(_.isEmpty)) None
+        if opts.exists(_.isEmpty) then None
         else Some(opts.flatten.reduce(_ intersect _))
       }
     }
@@ -915,12 +915,12 @@ object TraversalPersistedIndex {
                      kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Set[String]]] = {
     val q = Option(query).getOrElse("").toLowerCase
     // Too short to seed reliably with N-grams; treat as unseedable (fallback to scan+verify).
-    if (q.length < N) Task.pure(None)
+    if q.length < N then Task.pure(None)
     else {
       val grams = gramsOf(q).toList
       grams.map(g => postingsByPrefixSeed(TraversalKeys.ngPrefix(storeName, fieldName, g), kv)).tasks.map { opts =>
-        if (opts.exists(_.isEmpty)) None
-        else Some(if (opts.isEmpty) Set.empty else opts.flatten.reduce(_ intersect _))
+        if opts.exists(_.isEmpty) then None
+        else Some(if opts.isEmpty then Set.empty else opts.flatten.reduce(_ intersect _))
       }
     }
   }
@@ -932,11 +932,11 @@ object TraversalPersistedIndex {
     val tokens = Option(query).getOrElse("").toLowerCase.split("\\s+").toList.map(_.trim).filter(_.nonEmpty).distinct
     // Empty token query is treated as a no-op predicate in SQL (1=1). For traversal candidate seeding, we return
     // an empty set to signal "can't seed meaningfully" but still allow tokenized evalFilter to behave correctly.
-    if (tokens.isEmpty) Task.pure(None)
+    if tokens.isEmpty then Task.pure(None)
     else {
       tokens.map(t => postingsByPrefixSeed(TraversalKeys.tokPrefix(storeName, fieldName, t), kv)).tasks.map { opts =>
-        if (opts.exists(_.isEmpty)) None
-        else Some(if (opts.isEmpty) Set.empty else opts.flatten.reduce(_ intersect _))
+        if opts.exists(_.isEmpty) then None
+        else Some(if opts.isEmpty then Set.empty else opts.flatten.reduce(_ intersect _))
       }
     }
   }
@@ -947,7 +947,7 @@ object TraversalPersistedIndex {
                      kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Set[String]]] = {
     val q0 = Option(query).getOrElse("").toLowerCase
     // Empty prefix matches everything; avoid seeding massive candidate sets.
-    if (q0.isEmpty) Task.pure(None)
+    if q0.isEmpty then Task.pure(None)
     else postingsByPrefixSeed(TraversalKeys.swPrefix(storeName, fieldName, q0.take(PrefixMaxLen)), kv)
   }
 
@@ -957,7 +957,7 @@ object TraversalPersistedIndex {
                      kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Option[Set[String]]] = {
     val q0 = Option(query).getOrElse("").toLowerCase
     // Empty suffix matches everything; avoid seeding massive candidate sets.
-    if (q0.isEmpty) Task.pure(None)
+    if q0.isEmpty then Task.pure(None)
     else postingsByPrefixSeed(TraversalKeys.ewPrefix(storeName, fieldName, q0.reverse.take(PrefixMaxLen)), kv)
   }
 
@@ -972,7 +972,7 @@ object TraversalPersistedIndex {
         val toHex = encodeSortableLong(t)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
         prefixes.toList.map(p => postingsByPrefixSeed(TraversalKeys.rlPrefix(storeName, fieldName, p), kv)).tasks.map { opts =>
-          if (opts.exists(_.isEmpty)) None
+          if opts.exists(_.isEmpty) then None
           else Some(opts.flatten.foldLeft(Set.empty[String])(_ union _))
         }
       case (Some(f), None) if OneSidedRangeSeeding =>
@@ -994,7 +994,7 @@ object TraversalPersistedIndex {
         val toHex = encodeSortableDouble(t)
         val prefixes = prefixesCoveringRange(fromHex, toHex).map(_.take(NumericPrefixMaxLen)).distinct
         prefixes.toList.map(p => postingsByPrefixSeed(TraversalKeys.rdPrefix(storeName, fieldName, p), kv)).tasks.map { opts =>
-          if (opts.exists(_.isEmpty)) None
+          if opts.exists(_.isEmpty) then None
           else Some(opts.flatten.foldLeft(Set.empty[String])(_ union _))
         }
       case (Some(f), None) if OneSidedRangeSeeding =>

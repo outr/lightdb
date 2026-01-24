@@ -31,9 +31,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     val c = new FacetsConfig
     fields.foreach {
       case ff: FacetField[_] =>
-        if (ff.hierarchical) c.setHierarchical(ff.name, ff.hierarchical)
-        if (ff.multiValued) c.setMultiValued(ff.name, ff.multiValued)
-        if (ff.requireDimCount) c.setRequireDimCount(ff.name, ff.requireDimCount)
+        if ff.hierarchical then c.setHierarchical(ff.name, ff.hierarchical)
+        if ff.multiValued then c.setMultiValued(ff.name, ff.multiValued)
+        if ff.requireDimCount then c.setRequireDimCount(ff.name, ff.requireDimCount)
       case _ => // Ignore
     }
     c
@@ -42,13 +42,13 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task {
     this.path.foreach { path =>
-      if (Files.exists(path)) {
+      if Files.exists(path) then {
         val directory = FSDirectory.open(path)
         val reader = DirectoryReader.open(directory)
         reader.leaves().forEach { leaf =>
           val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
           val latest = Version.LATEST
-          if (latest != dataVersion) {
+          if latest != dataVersion then {
             // TODO: Support re-indexing
             scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
           }
@@ -86,7 +86,7 @@ object LuceneStore extends CollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = LuceneStore[Doc, Model]
 
   private val regexChars = ".?+*|{}[]()\"\\#".toSet
-  def escapeRegexLiteral(s: String): String = s.flatMap(c => if (regexChars.contains(c)) s"\\$c" else c.toString)
+  def escapeRegexLiteral(s: String): String = s.flatMap(c => if regexChars.contains(c) then s"\\$c" else c.toString)
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,

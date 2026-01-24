@@ -10,7 +10,7 @@ case class ActionIterator[T](underlying: Iterator[T],
   override def hasNext: Boolean = {
     val b = Try(underlying.hasNext).getOrElse(false)
     onNext(b)
-    if (!b && !closed) {
+    if !b && !closed then {
       closed = true
       onClose()
     }

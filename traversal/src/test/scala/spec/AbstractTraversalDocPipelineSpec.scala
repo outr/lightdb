@@ -45,7 +45,7 @@ abstract class AbstractTraversalDocPipelineSpec
     }
     "match using DocPipeline (Filter.Equals) with candidate seeding" in {
       DB.people.transaction { tx =>
-        for {
+        for
           _ <- tx.insert(List(
             P("Alice", 10, _id = Id("a")),
             P("Bob", 20, _id = Id("b")),
@@ -53,7 +53,7 @@ abstract class AbstractTraversalDocPipelineSpec
           ))
           pipeline = DocPipeline.fromTransaction(tx)
           list <- pipeline.`match`(P.name === "Alice").toList
-        } yield {
+        yield {
           list.map(_._id.value).toSet shouldBe Set("a", "c")
         }
       }
@@ -62,7 +62,7 @@ abstract class AbstractTraversalDocPipelineSpec
     "lookupOpt (join by id) using Pipeline stages" in {
       DB.people.transaction { people =>
         DB.pets.transaction { pets =>
-          for {
+          for
             _ <- pets.insert(List(
               Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
               Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
@@ -78,7 +78,7 @@ abstract class AbstractTraversalDocPipelineSpec
               .pipe(LookupStages.lookupOpt(pets, (p: P) => p.bestPetId))
               .stream
               .toList
-          } yield {
+          yield {
             val map = joined.map { case (p, pet) => p._id.value -> pet.map(_._id.value) }.toMap
             map shouldBe Map("a" -> Some("p1"), "b" -> None)
           }
@@ -89,7 +89,7 @@ abstract class AbstractTraversalDocPipelineSpec
     "lookupMany (join by foreign key) using Pipeline stages" in {
       DB.people.transaction { people =>
         DB.pets.transaction { pets =>
-          for {
+          for
             _ <- pets.insert(List(
               Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
               Pet(ownerId = Id[P]("a"), name = "Mittens", _id = Id[Pet]("p3")),
@@ -107,7 +107,7 @@ abstract class AbstractTraversalDocPipelineSpec
               .pipe(LookupStages.lookupManyField(pets, Pet.ownerId, (p: P) => p._id))
               .stream
               .toList
-          } yield {
+          yield {
             val map = joined.map { case (p, pets) => p._id.value -> pets.map(_._id.value).toSet }.toMap
             map shouldBe Map("a" -> Set("p1", "p3"), "b" -> Set("p2"))
           }

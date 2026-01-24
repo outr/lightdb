@@ -26,27 +26,27 @@ class RocksDBKeyValueDisjointSetSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
   "KeyValueDisjointSet" should {
     "union within a transaction" in {
-      val test = for {
+      val test = for
         dir <- Task(Files.createTempDirectory("lightdb-ds-rocksdb-"))
         db = new DB(dir)
         _ <- db.init
         out <- db.kv.transaction { tx =>
           val ds = DisjointSet.keyValue(tx, namespace = "t1")
-          for {
+          for
             _ <- ds.union("a", "b")
             _ <- ds.union("b", "c")
             ra <- ds.find("a")
             rc <- ds.find("c")
-          } yield ra -> rc
+          yield ra -> rc
         }
         _ <- db.dispose
-      } yield out
+      yield out
 
       test.map { case (ra, rc) => ra shouldBe rc }.succeed
     }
 
     "preserve unions across transactions (same backing store)" in {
-      val test = for {
+      val test = for
         dir <- Task(Files.createTempDirectory("lightdb-ds-rocksdb-"))
         db = new DB(dir)
         _ <- db.init
@@ -59,29 +59,29 @@ class RocksDBKeyValueDisjointSetSpec extends AsyncWordSpec with AsyncTaskSpec wi
           ds.find("a").flatMap(ra => ds.find("c").map(rc => ra -> rc))
         }
         _ <- db.dispose
-      } yield roots
+      yield roots
 
       test.map { case (ra, rc) => ra shouldBe rc }.succeed
     }
 
     "isolate namespaces" in {
-      val test = for {
+      val test = for
         dir <- Task(Files.createTempDirectory("lightdb-ds-rocksdb-"))
         db = new DB(dir)
         _ <- db.init
         out <- db.kv.transaction { tx =>
           val ds1 = DisjointSet.keyValue(tx, namespace = "ns1")
           val ds2 = DisjointSet.keyValue(tx, namespace = "ns2")
-          for {
+          for
             _ <- ds1.union("a", "b")
             r1a <- ds1.find("a")
             r1b <- ds1.find("b")
             r2a <- ds2.find("a")
             r2b <- ds2.find("b")
-          } yield (r1a, r1b, r2a, r2b)
+          yield (r1a, r1b, r2a, r2b)
         }
         _ <- db.dispose
-      } yield out
+      yield out
 
       test.map { case (r1a, r1b, r2a, r2b) =>
         r1a shouldBe r1b

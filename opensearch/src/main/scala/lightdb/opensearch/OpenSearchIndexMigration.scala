@@ -24,7 +24,7 @@ object OpenSearchIndexMigration {
       case Gen(prefix, digits) if prefix == readAlias =>
         (digits.length, digits.toLong)
     }
-    if (candidates.nonEmpty) {
+    if candidates.nonEmpty then {
       val (width, maxGen) = candidates.maxBy(_._2)
       val next = maxGen + 1L
       s"${readAlias}_${String.format(s"%0${width}d", Long.box(next))}"

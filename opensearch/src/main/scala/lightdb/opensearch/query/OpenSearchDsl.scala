@@ -69,10 +69,10 @@ object OpenSearchDsl {
                 mustNot: List[Json] = Nil,
                 minimumShouldMatch: Option[Int] = None): Json = {
     val parts = Vector(
-      if (must.nonEmpty) Some("must" -> arr(must: _*)) else None,
-      if (filter.nonEmpty) Some("filter" -> arr(filter: _*)) else None,
-      if (should.nonEmpty) Some("should" -> arr(should: _*)) else None,
-      if (mustNot.nonEmpty) Some("must_not" -> arr(mustNot: _*)) else None,
+      if must.nonEmpty then Some("must" -> arr(must: _*)) else None,
+      if filter.nonEmpty then Some("filter" -> arr(filter: _*)) else None,
+      if should.nonEmpty then Some("should" -> arr(should: _*)) else None,
+      if mustNot.nonEmpty then Some("must_not" -> arr(mustNot: _*)) else None,
       minimumShouldMatch.map(msm => "minimum_should_match" -> num(msm))
     ).flatten
     obj("bool" -> obj(parts: _*))
@@ -90,11 +90,11 @@ object OpenSearchDsl {
       Some("from" -> num(from)),
       size.map(s => "size" -> num(s)),
       Some("track_total_hits" -> fabric.bool(trackTotalHits)),
-      if (trackScores) Some("track_scores" -> fabric.bool(true)) else None,
+      if trackScores then Some("track_scores" -> fabric.bool(true)) else None,
       minScore.map(ms => "min_score" -> num(ms))
     ).flatten
 
-    val withSort = if (sorts.nonEmpty) base :+ ("sort" -> arr(sorts: _*)) else base
+    val withSort = if sorts.nonEmpty then base :+ ("sort" -> arr(sorts: _*)) else base
     obj(withSort: _*)
   }
 }

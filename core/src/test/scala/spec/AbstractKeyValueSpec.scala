@@ -70,7 +70,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
    * initialization before the first DB is constructed.
    */
   protected def db: DB = {
-    if (_db == null) {
+    if _db == null then {
       _db = new DB
     }
     _db
@@ -126,10 +126,10 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
     }
     "delete some records" in {
       db.users.transaction { transaction =>
-        for {
+        for
           d1 <- transaction.delete(_._id -> linda._id)
           d2 <- transaction.delete(_._id -> yuri._id)
-        } yield {
+        yield {
           d1 should be(true)
           d2 should be(true)
         }
@@ -161,7 +161,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
         val p = (1 to CreateRecords).toList.map { index =>
           User(
             name = s"Unique Snowflake $index",
-            age = if (index > 100) 0 else index,
+            age = if index > 100 then 0 else index,
           )
         }
         transaction.insert(p).succeed
@@ -222,7 +222,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
   }
 
   private def deleteDirectoryIfExists(path: Path): Unit = {
-    if (Files.exists(path)) {
+    if Files.exists(path) then {
       Files.walk(path)
         .sorted(Comparator.reverseOrder())
         .forEach(Files.delete(_))

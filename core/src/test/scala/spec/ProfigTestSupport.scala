@@ -12,7 +12,7 @@ import profig.Profig
  */
 trait ProfigTestSupport extends BeforeAndAfterAll { this: org.scalatest.Suite =>
   override protected def beforeAll(): Unit = {
-    if (!Profig.isLoaded) {
+    if !Profig.isLoaded then {
       Profig.init()
       Profig.initConfiguration()
     }

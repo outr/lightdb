@@ -59,7 +59,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected def _rollback: Task[Unit] = state.rollback
 
   override protected def _close: Task[Unit] = {
-    val releaseParent = if (ownedParent) {
+    val releaseParent = if ownedParent then {
       store.storeMode match {
         case lightdb.store.StoreMode.Indexes(storage) =>
           parent match {
@@ -85,7 +85,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                     includeScores: Boolean = query.scoreDocs,
                     includeTotalGroupCount: Boolean = true): Task[LuceneGroupedSearchResults[Doc, Model, G, V]] = {
     val limit = groupLimit.getOrElse(100_000_000)
-    val withinSort = if (withinGroupSort.nonEmpty) withinGroupSort else groupSort
+    val withinSort = if withinGroupSort.nonEmpty then withinGroupSort else groupSort
     searchBuilder.grouped(
       query = query,
       groupField = groupField,
@@ -108,7 +108,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
    * Otherwise we fall back to the default offset-based implementation.
    */
   override def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
-    if (query.pageSize.nonEmpty && query.offset == 0) {
+    if query.pageSize.nonEmpty && query.offset == 0 then {
       val basePageSize = query.pageSize.getOrElse(1000)
 
       def loop(after: Option[ScoreDoc], remaining: Option[Int]): rapid.Stream[(V, Double)] =
@@ -118,7 +118,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
             case Some(r) => math.min(r, basePageSize)
             case None => basePageSize
           }
-          if (reqSize <= 0) {
+          if reqSize <= 0 then {
             Task.pure(rapid.Stream.empty)
           } else {
             searchBuilder.streamPageAfter(query = query, after = after, pageSize = reqSize).map {
@@ -148,7 +148,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override def distinct[F](query: Query[Doc, Model, _],
                            field: Field[Doc, F],
                            pageSize: Int): rapid.Stream[F] = {
-    if (pageSize <= 0) {
+    if pageSize <= 0 then {
       rapid.Stream.empty
     } else {
       // Lucene can do exact "distinct with filters" via grouping (term grouping on docvalues).
@@ -160,13 +160,13 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
         case DefType.Opt(d) => supported(d)
         case _ => false
       }
-      if (!supported(field.rw.definition)) {
+      if !supported(field.rw.definition) then {
         throw new NotImplementedError(s"distinct is not supported for field '${field.name}' (${field.rw.definition}) in Lucene")
       } else {
         rapid.Stream.force {
           val resolveExistsChild = !store.supportsNativeExistsChild
           FilterPlanner.resolve(query.filter, store.model, resolveExistsChild = resolveExistsChild).map { resolved =>
-            val optimizedFilter = if (query.optimize) resolved.map(QueryOptimizer.optimize) else resolved
+            val optimizedFilter = if query.optimize then resolved.map(QueryOptimizer.optimize) else resolved
 
             val baseQ: Query[Doc, Model, Id[Doc]] = Query(this, Conversion.Value(store.model._id))
               .copy(
@@ -226,10 +226,10 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                   lock.synchronized {
                     @annotation.tailrec
                     def loop(): rapid.Step[F] = {
-                      if (done) {
+                      if done then {
                         rapid.Step.Stop
                       } else {
-                        if (!currentPullInitialized) {
+                        if !currentPullInitialized then {
                           fetchNextPull()
                         }
 
@@ -244,7 +244,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                             loop()
                           case rapid.Step.Stop =>
                             closeCurrentPull()
-                            if (emittedThisPage < pageSize) {
+                            if emittedThisPage < pageSize then {
                               done = true
                               rapid.Step.Stop
                             } else {
@@ -275,18 +275,18 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
   }
 
-  override def truncate: Task[Int] = for {
+  override def truncate: Task[Int] = for
     count <- this.count
     _ <- Task(store.index.indexWriter.deleteAll())
-  } yield count
+  yield count
 
   private def addDoc(doc: Doc, upsert: Boolean): Task[Doc] = Task {
-    if (store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]]) {
+    if store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]] then {
       throw new UnsupportedOperationException(
         s"${store.name} is a LuceneBlockJoinStore. Use block indexing (children first, parent last) instead of insert/upsert."
       )
     }
-    if (store.fields.tail.nonEmpty) {
+    if store.fields.tail.nonEmpty then {
       val id = doc._id
       val state = new IndexingState
       val luceneFields = store.fields.flatMap { field =>
@@ -295,7 +295,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val document = new LuceneDocument
       luceneFields.foreach(document.add)
 
-      if (upsert) {
+      if upsert then {
         store.index.indexWriter.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document))
       } else {
         store.index.indexWriter.addDocument(facetsPrepareDoc(document))
@@ -305,8 +305,8 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   private def createLuceneFields(field: Field[Doc, _], doc: Doc, state: IndexingState): List[LuceneField] = {
-    def fs: LuceneField.Store = if (store.storeMode.isAll || (field.stored && field.indexed)) LuceneField.Store.YES else LuceneField.Store.NO
-    if (fs == LuceneField.Store.NO) {
+    def fs: LuceneField.Store = if store.storeMode.isAll || (field.stored && field.indexed) then LuceneField.Store.YES else LuceneField.Store.NO
+    if fs == LuceneField.Store.NO then {
       scribe.info(s"*** ${store.name}.${field.name}")
     }
     val json = field.getJson(doc, state)
@@ -314,19 +314,19 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     def add(field: LuceneField): Unit = fields = field :: fields
     field match {
       case ff: FacetField[Doc] => ff.get(doc, ff, state).flatMap { value =>
-        if (value.path.nonEmpty || ff.hierarchical) {
-          val path = if (ff.hierarchical) value.path ::: List("$ROOT$") else value.path
+        if value.path.nonEmpty || ff.hierarchical then {
+          val path = if ff.hierarchical then value.path ::: List("$ROOT$") else value.path
           Some(new LuceneFacetField(field.name, path: _*))
         } else {
           None
         }
       }
       case t: Tokenized[Doc] =>
-        List(new LuceneField(field.name, t.get(doc, t, state), if (fs == LuceneField.Store.YES) TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
+        List(new LuceneField(field.name, t.get(doc, t, state), if fs == LuceneField.Store.YES then TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
       case _ =>
         def addJson(json: Json, d: DefType): Unit = {
-          if (field.isSpatial) {
-            if (json != Null) try {
+          if field.isSpatial then {
+            if json != Null then try {
               createGeoFields(field, json, add)
             } catch {
               case t: Throwable => throw new RuntimeException(s"Failure to populate geo field '${store.name}.${field.name}' for $doc (json: $json, className: ${field.className})", t)
@@ -343,12 +343,12 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
               case _ if json == Null => // Ignore null values
               case DefType.Arr(d) =>
                 val v = json.asVector
-                if (v.isEmpty) {
+                if v.isEmpty then {
                   add(new StringField(field.name, "[]", fs))
                 } else {
                   v.foreach(json => addJson(json, d))
                 }
-              case DefType.Bool => add(new IntField(field.name, if (json.asBoolean) 1 else 0, fs))
+              case DefType.Bool => add(new IntField(field.name, if json.asBoolean then 1 else 0, fs))
               case DefType.Int => add(new LongField(field.name, json.asLong, fs))
               case DefType.Dec => add(new DoubleField(field.name, json.asDouble, fs))
               case _ => throw new UnsupportedOperationException(s"Unsupported definition (field: ${field.name}, className: ${field.className}): $d for $json")
@@ -418,14 +418,14 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
           indexGeo(geo)
           add(new LatLonPoint(field.name, geo.center.latitude, geo.center.longitude))
         }
-        if (list.isEmpty) {
+        if list.isEmpty then {
           add(new LatLonPoint(field.name, 0.0, 0.0))
         }
     }
     add(new StoredField(field.name, JsonFormatter.Compact(json)))
   }
 
-  private def facetsPrepareDoc(doc: LuceneDocument): LuceneDocument = if (store.hasFacets) {
+  private def facetsPrepareDoc(doc: LuceneDocument): LuceneDocument = if store.hasFacets then {
     store.facetsConfig.build(store.index.taxonomyWriter, doc)
   } else {
     doc

@@ -27,7 +27,7 @@ class OpenSearchAliasSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
       def matchAllCount(idx: String): Task[Int] =
         client.count(idx, obj("query" -> obj("match_all" -> obj())))
 
-      val test = for {
+      val test = for
         _ <- client.deleteIndex(indexA)
         _ <- client.deleteIndex(indexB)
         _ <- client.createIndex(indexA, obj("mappings" -> obj("dynamic" -> bool(true))))
@@ -40,7 +40,7 @@ class OpenSearchAliasSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
         c2 <- matchAllCount(alias)
         _ <- client.deleteIndex(indexA)
         _ <- client.deleteIndex(indexB)
-      } yield {
+      yield {
         c1 should be(1)
         c2 should be(1)
       }
@@ -63,7 +63,7 @@ class OpenSearchAliasSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
 
       val indexBody = obj("mappings" -> obj("dynamic" -> bool(true)))
 
-      val test = for {
+      val test = for
         // Clean up any existing aliases/indices from prior runs
         existing <- client.aliasTargets(readAlias)
         _ <- existing.foldLeft(Task.unit)((acc, idx) => acc.next(client.deleteIndex(idx)))
@@ -82,7 +82,7 @@ class OpenSearchAliasSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
         c <- client.count(readAlias, obj("query" -> obj("match_all" -> obj())))
         // cleanup
         _ <- client.deleteIndex(created)
-      } yield {
+      yield {
         c should be(1)
       }
 

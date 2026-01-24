@@ -29,13 +29,13 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
     case SQLPart.Arg(json) =>
       val literal = json match {
         case Null => "NULL"
-        case Bool(b, _) => if (b) "1" else "0"
+        case Bool(b, _) => if b then "1" else "0"
         case NumInt(l, _) => l.toString
         case NumDec(bd, _) => bd.toString
         case s: Str => JsonFormatter.Compact(s)
         case _ => JsonFormatter.Compact(str(JsonFormatter.Compact(json)))
       }
-      if (literal.startsWith("\"") && literal.endsWith("\"")) {
+      if literal.startsWith("\"") && literal.endsWith("\"") then {
         s"'${literal.substring(1, literal.length - 1)}'"
       } else {
         literal
@@ -88,7 +88,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
         SQLPart.Arg(value)
       case part => part
     }
-    if (remaining.nonEmpty)
+    if remaining.nonEmpty then
       throw new RuntimeException(s"No unnamed placeholder found to fill for remaining values: $remaining")
     copy(updated)
   }
@@ -108,7 +108,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
         values.toList.map[SQLPart](json => SQLPart.Arg(json)).intersperse(SQLPart.Fragment(", "))
       case part => List(part)
     }
-    if (!found)
+    if !found then
       throw new RuntimeException(s"No placeholders found for named bind '$name'")
     copy(updated)
   }
@@ -128,7 +128,7 @@ case class SQLQuery(parts: List[SQLPart]) extends SQLPart {
         part
       case part => part
     }
-    if (!found)
+    if !found then
       throw new RuntimeException(s"No placeholders found for named bind '$name'")
     copy(updated)
   }
@@ -164,14 +164,14 @@ object SQLQuery {
     val parts = mutable.ListBuffer.empty[SQLPart]
     var lastIndex = 0
 
-    for (m <- PlaceholderPattern.findAllMatchIn(sql)) {
-      if (m.start > lastIndex) {
+    for m <- PlaceholderPattern.findAllMatchIn(sql) do {
+      if m.start > lastIndex then {
         val before = sql.substring(lastIndex, m.start)
         parts += SQLPart.Fragment(before)
       }
 
       val matched = m.group(0)
-      val placeholder = if (matched.startsWith(":")) {
+      val placeholder = if matched.startsWith(":") then {
         SQLPart.Placeholder(Some(matched.drop(1)))
       } else {
         SQLPart.Placeholder(None)
@@ -181,7 +181,7 @@ object SQLQuery {
       lastIndex = m.end
     }
 
-    if (lastIndex < sql.length) {
+    if lastIndex < sql.length then {
       parts += SQLPart.Fragment(sql.substring(lastIndex))
     }
 

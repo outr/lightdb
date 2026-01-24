@@ -53,7 +53,7 @@ class OpenSearchRebuildFromStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
         maxResultWindow = cfg.maxResultWindow
       )
 
-      val test = for {
+      val test = for
         _ <- SourceDB.init
         _ <- SourceDB.docs.t.truncate
         _ <- SourceDB.docs.t.insert(List(Doc("x"), Doc("y"), Doc("z")))
@@ -79,7 +79,7 @@ class OpenSearchRebuildFromStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
         count <- client.count(readAlias, fabric.obj("query" -> fabric.obj("match_all" -> fabric.obj())))
         _ <- client.deleteIndex(newPhysical)
-      } yield {
+      yield {
         count shouldBe 3
       }
 

@@ -57,7 +57,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     indexBacking.orElse {
       // Auto-create a dedicated on-disk index store when persisted indexing is enabled and the backing store
       // uses a PrefixScanningStoreManager (e.g. RocksDBStore).
-      if (!persistedIndexEnabled) None
+      if !persistedIndexEnabled then None
       else {
         backing.storeManager match {
           case psm: PrefixScanningStoreManager =>
@@ -128,7 +128,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     }.next {
       // Enforce invariant: if persisted indexing is enabled for a real collection, an index backing store must exist.
       // Otherwise we'd silently fall back to scanning (bad for scale and surprising for users).
-      if (persistedIndexEnabled && name != "_backingStore" && effectiveIndexBacking.isEmpty) {
+      if persistedIndexEnabled && name != "_backingStore" && effectiveIndexBacking.isEmpty then {
         Task {
           throw new IllegalStateException(
             s"TraversalStore('$name') has persisted indexing enabled, but no index backing store is available. " +
@@ -141,7 +141,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
       // Persisted index seeding must only be used when the index is known complete.
       // For a brand-new empty collection, we can safely mark the persisted index "ready" up-front.
       // Existing collections must call a backfill/build to safely enable ready-based candidate seeding.
-      if (persistedIndexEnabled && name != "_backingStore") {
+      if persistedIndexEnabled && name != "_backingStore" then {
         effectiveIndexBacking match {
           case Some(idx) =>
             // Determine whether the persisted index is already ready.
@@ -152,29 +152,29 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
             // Determine whether the primary store is empty.
             val emptyT: Task[Boolean] = backing.transaction(_.count).map(_ == 0)
 
-            (for {
+            (for
               ready <- readyT
               empty <- emptyT
               _ <-
-                if (ready) Task.unit
-                else if (empty) {
+                if ready then Task.unit
+                else if empty then {
                   idx.transaction { kv =>
                     TraversalPersistedIndex.markReady(name, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
                   }.attempt.unit
-                } else if (persistedIndexAutoBuild) {
+                } else if persistedIndexAutoBuild then {
                   buildPersistedIndex()
                 } else Task.unit
-            } yield ()).attempt.unit
+            yield ()).attempt.unit
           case None => Task.unit
         }
       } else Task.unit
     }.next(super.initialize())
 
-  override protected def createTransaction(parent: Option[lightdb.transaction.Transaction[Doc, Model]]): Task[TX] = for {
+  override protected def createTransaction(parent: Option[lightdb.transaction.Transaction[Doc, Model]]): Task[TX] = for
     t <- Task(TraversalTransaction(this, parent))
     bt <- backing.transaction.withParent(t).create()
     _ = t._backing = bt.asInstanceOf[t.store.backing.TX]
-  } yield t
+  yield t
 
   override protected def doDispose(): Task[Unit] =
     effectiveIndexBacking.map(_.dispose).getOrElse(Task.unit).next(backing.dispose).next(super.doDispose())
@@ -187,7 +187,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * - recovering after index corruption / deletion
    */
   def buildPersistedIndex(): Task[Unit] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.unit
+    if !persistedIndexEnabled || name == "_backingStore" then Task.unit
     else {
       (effectiveIndexBacking match {
         case Some(idx) =>
@@ -210,7 +210,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * True if the persisted postings index is safe to use for candidate seeding.
    */
   def persistedIndexReady(): Task[Boolean] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.pure(false)
+    if !persistedIndexEnabled || name == "_backingStore" then Task.pure(false)
     else effectiveIndexBacking match {
       case Some(idx) =>
         idx.transaction { kv =>
@@ -224,7 +224,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * Exposes persisted equality postings for diagnostics/tests.
    */
   def persistedEqPostings(fieldName: String, value: Any): Task[Set[String]] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.pure(Set.empty)
+    if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
         idx.transaction { kv =>
@@ -238,7 +238,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * Exposes persisted n-gram postings for diagnostics/tests.
    */
   def persistedNgPostings(fieldName: String, query: String): Task[Set[String]] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.pure(Set.empty)
+    if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
         idx.transaction { kv =>
@@ -252,7 +252,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * Exposes persisted startsWith postings for diagnostics/tests.
    */
   def persistedSwPostings(fieldName: String, query: String): Task[Set[String]] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.pure(Set.empty)
+    if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
         idx.transaction { kv =>
@@ -266,7 +266,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * Exposes persisted endsWith postings for diagnostics/tests.
    */
   def persistedEwPostings(fieldName: String, query: String): Task[Set[String]] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.pure(Set.empty)
+    if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
         idx.transaction { kv =>
@@ -280,7 +280,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * Exposes persisted range-long postings for diagnostics/tests.
    */
   def persistedRangeLongPostings(fieldName: String, from: Option[Long], to: Option[Long]): Task[Set[String]] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.pure(Set.empty)
+    if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
         idx.transaction { kv =>
@@ -294,7 +294,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * Exposes persisted range-double postings for diagnostics/tests.
    */
   def persistedRangeDoublePostings(fieldName: String, from: Option[Double], to: Option[Double]): Task[Set[String]] =
-    if (!persistedIndexEnabled || name == "_backingStore") Task.pure(Set.empty)
+    if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
         idx.transaction { kv =>

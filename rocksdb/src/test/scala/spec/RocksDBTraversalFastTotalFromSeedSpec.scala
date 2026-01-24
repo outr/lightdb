@@ -61,8 +61,8 @@ class RocksDBTraversalFastTotalFromSeedSpec
 
   specName should {
     "compute total from exact seed and still early-terminate the page" in {
-      val docs = (1 to 50).toList.map(i => Person(if (i <= 40) "A" else "B", _id = Id(s"p$i")))
-      for {
+      val docs = (1 to 50).toList.map(i => Person(if i <= 40 then "A" else "B", _id = Id(s"p$i")))
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.insert(docs))
         results <- DB.people.transaction { tx =>
@@ -75,7 +75,7 @@ class RocksDBTraversalFastTotalFromSeedSpec
             .search
         }
         list <- results.stream.toList
-      } yield {
+      yield {
         results.total shouldBe Some(40)
         list.size shouldBe 1
       }

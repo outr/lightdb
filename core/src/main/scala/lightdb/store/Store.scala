@@ -48,7 +48,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
             }.toList.distinct
           case _ => Nil
         }
-        if (missing.nonEmpty) {
+        if missing.nonEmpty then {
           throw ModelMissingFieldsException(name, missing)
         }
       case _ => // Can't do validation
@@ -63,7 +63,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def storeMode: StoreMode[Doc, Model]
 
-  lazy val fields: List[Field[Doc, _]] = if (storeMode.isIndexes) {
+  lazy val fields: List[Field[Doc, _]] = if storeMode.isIndexes then {
     model.fields.filter(_.isInstanceOf[Indexed[_, _]])
   } else {
     model.fields
@@ -120,9 +120,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       s.withLock(f(s.tx))
     }
 
-    def create(): Task[TX] = for {
+    def create(): Task[TX] = for
       _ <- Task {
-        if (!lightDB.isInitialized && !lightDB.isInitStarted) {
+        if !lightDB.isInitialized && !lightDB.isInitStarted then {
           throw new RuntimeException(s"Attempted to create a transaction for store '$name' before database initialization. Call db.init before using store.transaction(...).")
         }
       }
@@ -130,15 +130,15 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       transaction <- createTransaction(parent)
       _ = set.add(transaction)
       _ <- trigger.transactionStart(transaction)
-    } yield transaction
+    yield transaction
 
-    def release(transaction: TX): Task[Unit] = for {
+    def release(transaction: TX): Task[Unit] = for
       _ <- trigger.transactionEnd(transaction)
       _ <- releaseTransaction(transaction)
       _ <- transaction.close
       _ = set.remove(transaction)
       _ <- logger.info(s"Released Transaction for $name").when(Store.LogTransactions)
-    } yield ()
+    yield ()
 
     def releaseAll(): Task[Int] = Task {
       val list = set.iterator().asScala.toList
@@ -158,9 +158,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
     def withLock[A](task: => Task[A]): Task[A] = Task.defer {
       active.incrementAndGet()
-      if (!started) {
+      if !started then {
         shared.synchronized {
-          if (!started) {
+          if !started then {
             started = true
             recurse().start()
           }
@@ -175,13 +175,13 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     }
 
     private def recurse(): Task[Unit] = Task.defer {
-      val nextPossibleTimeout: Long = if (active.get() > 0) {
+      val nextPossibleTimeout: Long = if active.get() > 0 then {
         timeoutMillis
       } else {
         (lastUsed.get() + timeoutMillis) - System.currentTimeMillis()
       }
       Task.sleep(nextPossibleTimeout.millis).next {
-        if (active.get() == 0 && lastUsed.get() < System.currentTimeMillis() - timeoutMillis) {
+        if active.get() == 0 && lastUsed.get() < System.currentTimeMillis() - timeoutMillis then {
           scribe.info(s"Releasing Shared Transaction: $name")
           sharedMap.remove(name)
           transaction.release(tx)
@@ -202,7 +202,7 @@ object Store {
   var MaxInsertBatch: Int = 5_000
   var LogTransactions: Boolean = false
 
-  def determineSize(file: File): Long = if (file.isDirectory) {
+  def determineSize(file: File): Long = if file.isDirectory then {
     file.listFiles().foldLeft(0L)((sum, file) => sum + determineSize(file))
   } else {
     file.length()

@@ -72,11 +72,11 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   override def words(s: String, matchStartsWith: Boolean, matchEndsWith: Boolean): Filter[Doc] = {
     val words = s.split("\\s+").map { w =>
-      if (matchStartsWith && matchEndsWith) {
+      if matchStartsWith && matchEndsWith then {
         contains(w)
-      } else if (matchStartsWith) {
+      } else if matchStartsWith then {
         startsWith(w)
-      } else if (matchEndsWith) {
+      } else if matchEndsWith then {
         endsWith(w)
       } else {
         exactly(w)

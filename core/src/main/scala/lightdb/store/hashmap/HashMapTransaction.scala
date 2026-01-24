@@ -12,7 +12,7 @@ case class HashMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task(store._map.valuesIterator.map(_.json(store.model.rw))))
 
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
-    if (index == store.idField) {
+    if index == store.idField then {
       store._map.get(value.asInstanceOf[Id[Doc]])
     } else {
       throw new UnsupportedOperationException(s"MapStore can only get on _id, but ${index.name} was attempted")
@@ -34,7 +34,7 @@ case class HashMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     store.synchronized {
-      if (index == store.idField) {
+      if index == store.idField then {
         val id = value.asInstanceOf[Id[Doc]]
         val contains = store.map.contains(id)
         store._map -= id

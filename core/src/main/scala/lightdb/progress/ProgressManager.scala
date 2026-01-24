@@ -8,7 +8,7 @@ import scala.concurrent.duration.{DurationLong, FiniteDuration}
 trait ProgressManager {
   def apply(value: Option[Double] = None, message: Option[String] = None): Unit
 
-  def percentage(current: Int, total: Int, message: Option[String] = None): Unit = if (total <= 0) {
+  def percentage(current: Int, total: Int, message: Option[String] = None): Unit = if total <= 0 then {
     apply(None, message)
   } else {
     apply(
@@ -25,8 +25,8 @@ trait ProgressManager {
     var lastMessage: Option[String] = None
 
     def clamp01(d: Double): Double =
-      if (d < 0.0) 0.0
-      else if (d > 1.0) 1.0
+      if d < 0.0 then 0.0
+      else if d > 1.0 then 1.0
       else d
 
     def recomputeAndEmit(): Unit = {
@@ -46,7 +46,7 @@ trait ProgressManager {
             message.filter(_.nonEmpty).foreach(m => lastMessage = Some(m))
             true
           }
-          if (shouldEmit) recomputeAndEmit()
+          if shouldEmit then recomputeAndEmit()
         }
       }
     }

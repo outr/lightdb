@@ -184,7 +184,7 @@ object Filter {
       semantics match {
         case ChildSemantics.SameChildAll =>
           val childFilter: ChildModel => Filter[Child] = { cm =>
-            if (builds.isEmpty) {
+            if builds.isEmpty then {
               // "exists any child"
               Filter.Multi[Child](minShould = 0)
             } else {
@@ -193,7 +193,7 @@ object Filter {
           }
           Filter.ExistsChild(relation, childFilter)
         case ChildSemantics.CollectiveAll =>
-          if (builds.isEmpty) {
+          if builds.isEmpty then {
             Filter.Multi[Parent](minShould = 0)
           } else {
             Filter.and(builds.map(b => Filter.ExistsChild(relation, b)): _*)

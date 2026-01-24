@@ -149,7 +149,7 @@ object SQLDsl {
       override private[dsl] def render: SQLQuery = {
         val rendered = values.map(_.render)
         val inner: List[SQLPart] =
-          if (rendered.isEmpty) List(SQLPart.Fragment("NULL"))
+          if rendered.isEmpty then List(SQLPart.Fragment("NULL"))
           else rendered.intersperse(SQLPart.Fragment(", "))
 
         SQLQuery(
@@ -261,7 +261,7 @@ object SQLDsl {
 
     def toSQLQuery: SQLQuery = {
       val cols: List[SQLPart] =
-        if (columns.isEmpty) List(SQLPart.Fragment("*"))
+        if columns.isEmpty then List(SQLPart.Fragment("*"))
         else columns.map(c => SQLPart.Fragment(c.value)).intersperse(SQLPart.Fragment(", "))
 
       val fromPart: List[SQLPart] = from match {
@@ -290,7 +290,7 @@ object SQLDsl {
       }
 
       val orderPart: List[SQLPart] =
-        if (orderBy.isEmpty) Nil
+        if orderBy.isEmpty then Nil
         else {
           val parts: List[SQLPart] = orderBy.map { ob =>
             SQLQuery(List(

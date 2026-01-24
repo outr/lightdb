@@ -27,7 +27,7 @@ case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
     val valBuf = valuePool.get(value.length)
     keyBuf.clear(); keyBuf.put(key).flip()
     valBuf.clear(); valBuf.put(value).flip()
-    if (overwrite)
+    if overwrite then
       dbi.put(txn, keyBuf, valBuf)
     else
       dbi.put(txn, keyBuf, valBuf, PutFlags.MDB_NOOVERWRITE)
@@ -49,14 +49,14 @@ case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
     private var hasMore = cursor.first()
 
     override def hasNext: Boolean = {
-      if (!hasNextChecked) {
+      if !hasNextChecked then {
         hasNextChecked = true
         hasMore
       } else hasMore
     }
 
     override def next(): (Array[Byte], Array[Byte]) = {
-      if (!hasNext) throw new NoSuchElementException
+      if !hasNext then throw new NoSuchElementException
       val key = {
         val k = cursor.key()
         val bytes = new Array[Byte](k.remaining())
@@ -81,9 +81,9 @@ case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
     prefixBuf.clear(); prefixBuf.put(prefix).flip()
 
     private var current: Option[(Array[Byte], Array[Byte])] = {
-      if (cursor.get(prefixBuf, GetOp.MDB_SET_RANGE)) {
+      if cursor.get(prefixBuf, GetOp.MDB_SET_RANGE) then {
         val k = cursor.key()
-        if (startsWith(k, prefix)) Some(readKV(cursor))
+        if startsWith(k, prefix) then Some(readKV(cursor))
         else None
       } else None
     }
@@ -92,9 +92,9 @@ case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
 
     override def next(): (Array[Byte], Array[Byte]) = {
       val result = current.getOrElse(throw new NoSuchElementException)
-      if (cursor.next()) {
+      if cursor.next() then {
         val k = cursor.key()
-        if (startsWith(k, prefix)) {
+        if startsWith(k, prefix) then {
           current = Some(readKV(cursor))
         } else {
           current = None
@@ -106,10 +106,10 @@ case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
     }
 
     private def startsWith(buffer: ByteBuffer, prefix: Array[Byte]): Boolean = {
-      if (buffer.remaining() < prefix.length) return false
+      if buffer.remaining() < prefix.length then return false
       val origPos = buffer.position()
-      for (i <- prefix.indices) {
-        if (buffer.get() != prefix(i)) {
+      for i <- prefix.indices do {
+        if buffer.get() != prefix(i) then {
           buffer.position(origPos)
           return false
         }

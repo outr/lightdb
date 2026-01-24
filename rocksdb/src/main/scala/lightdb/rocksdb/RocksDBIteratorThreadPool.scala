@@ -32,9 +32,9 @@ final class RocksDBIteratorThreadPool(namePrefix: String, size: Int) {
    * This avoids deadlocks/hangs if some iterator isn't closed promptly.
    */
   def acquire(waitSeconds: Int = 5): SingleThreadAgent[Unit] = {
-    if (disposed.get()) throw new IllegalStateException(s"$namePrefix iterator thread pool is disposed")
+    if disposed.get() then throw new IllegalStateException(s"$namePrefix iterator thread pool is disposed")
     val a = q.poll(waitSeconds.toLong, TimeUnit.SECONDS)
-    if (a != null) a
+    if a != null then a
     else {
       // Temporary escape hatch: avoid deadlock at the cost of extra threads.
       SingleThreadAgent[Unit](s"$namePrefix-itp-extra-${Unique.withLength(6)()}")(Task.unit)
@@ -44,7 +44,7 @@ final class RocksDBIteratorThreadPool(namePrefix: String, size: Int) {
   def release(agent: SingleThreadAgent[Unit]): Unit = {
     // Return pool agents; dispose temporary agents.
     val isPooled = all.contains(agent)
-    if (isPooled && !disposed.get()) {
+    if isPooled && !disposed.get() then {
       q.put(agent)
     } else {
       agent.dispose().attempt.unit.sync()
@@ -52,7 +52,7 @@ final class RocksDBIteratorThreadPool(namePrefix: String, size: Int) {
   }
 
   def dispose(): Task[Unit] = Task.defer {
-    if (disposed.compareAndSet(false, true)) {
+    if disposed.compareAndSet(false, true) then {
       // Dispose all known pool agents without blocking on leases returning.
       all.toList.map(_.dispose().attempt.unit).tasks.unit
     } else {

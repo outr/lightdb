@@ -83,7 +83,7 @@ object Aggregator {
               case None => List(value).json
             }
           }
-          if (newValue != Null) {
+          if newValue != Null then {
             map += f.name -> newValue
           }
         }
@@ -114,7 +114,7 @@ object Aggregator {
     var list = groups.toList.map(t => MaterializedAggregate[Doc, Model](Obj(t._2), model))
     query.sort.reverse.foreach {
       case (f, direction) =>
-        list = list.sortBy(_.json(f.name))(if (direction == Ascending) Json.JsonOrdering else Json.JsonOrdering.reverse)
+        list = list.sortBy(_.json(f.name))(if direction == Ascending then Json.JsonOrdering else Json.JsonOrdering.reverse)
     }
     rapid.Stream.fromIterator(Task(list.iterator))
   }

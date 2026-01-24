@@ -63,7 +63,7 @@ class OpenSearchJoinDomainPartialRebuildSpec extends AsyncWordSpec with AsyncTas
         obj((base ++ extra): _*)
       }
 
-      val test = for {
+      val test = for
         _ <- DB.init
         _ <- DB.parents.transaction(_.truncate)
         _ <- DB.children.transaction(_.truncate)
@@ -110,7 +110,7 @@ class OpenSearchJoinDomainPartialRebuildSpec extends AsyncWordSpec with AsyncTas
 
         _ <- DB.truncate()
         _ <- DB.dispose
-      } yield {
+      yield {
         before.toSet shouldBe Set(alpha._id)
         deleted should be >= 1
         afterAlpha.toSet shouldBe Set(alpha._id)

@@ -54,7 +54,7 @@ class OpenSearchDeadLetterSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         }
       }
 
-      val test = for {
+      val test = for
         _ <- client.deleteIndex(strictIndex)
         _ <- client.deleteIndex(deadIndex)
         // Create a mapping that will deterministically reject our inserts.
@@ -88,7 +88,7 @@ class OpenSearchDeadLetterSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         _ <- client.refreshIndex(deadIndex).attempt.unit
         c <- client.count(deadIndex, obj("query" -> obj("match_all" -> obj())))
         _ <- db.dispose
-      } yield {
+      yield {
         c shouldBe 3
       }
 

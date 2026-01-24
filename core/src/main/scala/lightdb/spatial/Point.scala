@@ -6,7 +6,7 @@ import fabric.{Json, obj, str}
 case class Point(latitude: Double, longitude: Double) extends Geo {
   override def center: Point = this
 
-  def fixed: Point = if (latitude < -90.0 || latitude > 90.0) {
+  def fixed: Point = if latitude < -90.0 || latitude > 90.0 then {
     Point(longitude, latitude)
   } else {
     this

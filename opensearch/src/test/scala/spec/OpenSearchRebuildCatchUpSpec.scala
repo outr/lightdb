@@ -35,7 +35,7 @@ class OpenSearchRebuildCatchUpSpec extends AsyncWordSpec with AsyncTaskSpec with
         OpenSearchRebuild.RebuildDoc("d2", obj("v" -> str("two")))
       ))
 
-      val test = for {
+      val test = for
         // cleanup from any prior run
         existingR <- client.aliasTargets(readAlias)
         _ <- existingR.foldLeft(Task.unit)((acc, idx) => acc.next(client.deleteIndex(idx)))
@@ -74,7 +74,7 @@ class OpenSearchRebuildCatchUpSpec extends AsyncWordSpec with AsyncTaskSpec with
         // cleanup
         _ <- client.deleteIndex(oldPhysical)
         _ <- client.deleteIndex(newPhysical)
-      } yield {
+      yield {
         before shouldBe 2
         after shouldBe 3
         newPhysical should not be oldPhysical

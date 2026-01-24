@@ -37,17 +37,17 @@ class SplitCollection[
 
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = for
     t <- Task(SplitCollectionTransaction(this, parent))
     t1 <- storage.transaction.withParent(t).create()
     t2 <- searching.transaction.withParent(t).create()
     _ = t._storage = t1.asInstanceOf[t.store.storage.TX]
     _ = t._searching = t2.asInstanceOf[t.store.searching.TX]
-  } yield t
+  yield t
 
-  override def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = if (SplitCollection.ReIndexWhenOutOfSync) {
+  override def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = if SplitCollection.ReIndexWhenOutOfSync then {
     transaction { transaction =>
-      for {
+      for
         storageCount <- transaction.storage.count
         searchCount <- transaction.searching.count
         shouldReIndex = storageCount != searchCount && model.fields.count(_.indexed) > 1
@@ -55,7 +55,7 @@ class SplitCollection[
           .next(reIndexInternal(transaction, progressManager))
           .next(logger.info(s"$name re-indexed successfully!"))
           .when(shouldReIndex)
-      } yield shouldReIndex
+      yield shouldReIndex
     }
   } else {
     Task.pure(false)
@@ -97,7 +97,7 @@ class SplitCollection[
               transaction.storage.stream.evalTap { _ =>
                 Task {
                   val count = counter.incrementAndGet()
-                  if (count == 1 || count % LogEvery == 0 || count == total) {
+                  if count == 1 || count % LogEvery == 0 || count == total then {
                     scribe.warn(s"[reindex-trace] $name streamed=$count/$total (elapsedMs=$elapsedMs)")
                   }
                   progressManager.percentage(

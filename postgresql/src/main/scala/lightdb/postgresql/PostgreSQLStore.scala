@@ -60,7 +60,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       val rs = ps.executeQuery()
       try {
         var set = Set.empty[String]
-        while (rs.next()) {
+        while rs.next() do {
           set += rs.getString("TABLE_NAME").toLowerCase
         }
         set

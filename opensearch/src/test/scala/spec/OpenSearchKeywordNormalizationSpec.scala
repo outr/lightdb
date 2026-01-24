@@ -41,7 +41,7 @@ class OpenSearchKeywordNormalizationSpec extends AsyncWordSpec with AsyncTaskSpe
       val db = new DB
       val inserted = Doc("  Alice  ", Id("1"))
 
-      val test = for {
+      val test = for
         _ <- db.init
         _ <- db.docs.transaction { tx =>
           tx.truncate.next(tx.insert(inserted)).next(tx.commit)
@@ -62,7 +62,7 @@ class OpenSearchKeywordNormalizationSpec extends AsyncWordSpec with AsyncTaskSpe
             .map(_.map(_._id.value))
         }
         _ <- db.dispose
-      } yield {
+      yield {
         equalsIds shouldBe List("1")
         prefixIds shouldBe List("1")
       }

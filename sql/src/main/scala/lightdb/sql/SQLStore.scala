@@ -25,7 +25,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   def supportsSchemas: Boolean = false
 
-  lazy val fqn: String = if (supportsSchemas) {
+  lazy val fqn: String = if supportsSchemas then {
     s"${lightDB.name}.$name"
   } else {
     name
@@ -44,7 +44,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   protected def createTable(tx: TX): Unit = {
     val entries = fields.collect {
       case field if !field.rw.definition.className.contains("lightdb.spatial.GeoPoint") =>
-        if (field == model._id) {
+        if field == model._id then {
           "_id VARCHAR NOT NULL PRIMARY KEY"
         } else {
           val t = def2Type(field.name, field.rw.definition)
@@ -75,11 +75,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     connectionManager.active()
     val connection = tx.state.connectionManager.getConnection(tx.state)
     initConnection(connection)
-    if (supportsSchemas) {
+    if supportsSchemas then {
       createSchema(tx)
     }
     val existingTables = tables(connection)
-    if (!existingTables.contains(name.toLowerCase)) {
+    if !existingTables.contains(name.toLowerCase) then {
       createTable(tx)
     }
 
@@ -95,7 +95,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
         case CN2(n) => n
       }
       val exists = fieldNames.contains(columnName)
-      if (!exists) {
+      if !exists then {
         scribe.info(s"Removing unused index: $name")
         executeUpdate(s"DROP INDEX IF EXISTS $name", tx)
       }
@@ -106,7 +106,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     val existingColumns = columns(connection)
     // Drop columns
     existingColumns.foreach { name =>
-      if (!fieldNames.contains(name.toLowerCase)) {
+      if !fieldNames.contains(name.toLowerCase) then {
         scribe.info(s"Removing column $fqn.$name (existing: ${existingColumns.mkString(", ")}, expected: ${fieldNames.mkString(", ")}).")
         executeUpdate(s"ALTER TABLE $fqn DROP COLUMN $name", tx)
       }
@@ -114,7 +114,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     // Add columns
     fields.foreach { field =>
       val name = field.name
-      if (!existingColumns.contains(name.toLowerCase)) {
+      if !existingColumns.contains(name.toLowerCase) then {
         addColumn(field, tx)
       }
     }
@@ -164,7 +164,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def indexes(connection: Connection): Set[String] = {
     val meta = connection.getMetaData
-    val schema = if (supportsSchemas) {
+    val schema = if supportsSchemas then {
       lightDB.name
     } else {
       null
@@ -172,11 +172,11 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     val rs = meta.getIndexInfo(null, schema, name, false, false)
     try {
       var set = Set.empty[String]
-      while (rs.next()) {
+      while rs.next() do {
         val indexName = rs.getString("INDEX_NAME")
         val indexType = rs.getShort("TYPE")
         val isStatistic = indexType == DatabaseMetaData.tableIndexStatistic
-        if (indexName != null && !isStatistic) {
+        if indexName != null && !isStatistic then {
           set += indexName.toLowerCase
         }
       }

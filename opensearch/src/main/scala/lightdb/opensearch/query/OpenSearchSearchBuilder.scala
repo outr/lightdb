@@ -27,10 +27,10 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   private val InternalIdFieldName: String = lightdb.opensearch.OpenSearchTemplates.InternalIdField
 
   private def rewriteReservedIdFieldName(fieldName: String): String =
-    if (fieldName == "_id") InternalIdFieldName else fieldName
+    if fieldName == "_id" then InternalIdFieldName else fieldName
 
   private def normalizeKeyword(s: String): String =
-    if (keywordNormalize) s.trim.toLowerCase else s
+    if keywordNormalize then s.trim.toLowerCase else s
 
   private def shouldNormalizeKeyword(field: Field[Doc, _], fieldName: String): Boolean = {
     keywordNormalize && fieldName.endsWith(".keyword")
@@ -71,7 +71,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       val includes: Option[List[String]] = query.conversion match {
         case Conversion.Value(field) =>
           // `_id` is not in `_source` (it's a hit metadata field), so don't request it.
-          if (field.name == "_id") Some(Nil) else Some(List(field.name))
+          if field.name == "_id" then Some(Nil) else Some(List(field.name))
         case Conversion.Json(fields) =>
           Some(fields.map(_.name).filterNot(_ == "_id"))
         case Conversion.Materialized(fields) =>
@@ -104,7 +104,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           }
       }
     }
-    if (query.facets.nonEmpty) {
+    if query.facets.nonEmpty then {
       addFacetAggs(sourceFiltered, query.facets)
     } else {
       sourceFiltered
@@ -129,7 +129,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         f.semantics match {
           case Filter.ChildSemantics.SameChildAll =>
             val childMust = f.builds.map(b => childBuilder.filterToDsl(b(childModel)))
-            val childQuery = OpenSearchDsl.boolQuery(must = if (childMust.isEmpty) List(OpenSearchDsl.matchAll()) else childMust)
+            val childQuery = OpenSearchDsl.boolQuery(must = if childMust.isEmpty then List(OpenSearchDsl.matchAll()) else childMust)
             OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode)
           case Filter.ChildSemantics.CollectiveAll =>
             // AND of has_child clauses (each constraint can match a different child)
@@ -137,7 +137,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
               val cq = childBuilder.filterToDsl(b(childModel))
               OpenSearchDsl.hasChild(relation.childStore.name, cq, scoreMode = joinScoreMode)
             }
-            if (must.isEmpty) OpenSearchDsl.matchAll() else OpenSearchDsl.boolQuery(must = must)
+            if must.isEmpty then OpenSearchDsl.matchAll() else OpenSearchDsl.boolQuery(must = must)
         }
       case f: Filter.ExistsChild[Doc] =>
         val relation = f.relation
@@ -157,7 +157,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case f: Filter.Equals[Doc, _] =>
         val field = f.field(model)
         val json = f.getJson(model)
-        if (field.name == "_id") {
+        if field.name == "_id" then {
           OpenSearchDsl.ids(List(jsonToIdString(json)))
         } else {
           exactQuery(field, json, boost = None)
@@ -165,7 +165,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case f: Filter.NotEquals[Doc, _] =>
         val field = f.field(model)
         val json = f.getJson(model)
-        if (field.name == "_id") {
+        if field.name == "_id" then {
           OpenSearchDsl.boolQuery(
             must = List(OpenSearchDsl.matchAll()),
             mustNot = List(OpenSearchDsl.ids(List(jsonToIdString(json))))
@@ -182,12 +182,12 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case f: Filter.In[Doc, _] =>
         // simplest initial mapping; later we can split by type like lucene does
         val field = f.field(model)
-        if (field.name == "_id") {
+        if field.name == "_id" then {
           OpenSearchDsl.ids(f.getJson(model).map(jsonToIdString))
         } else {
           val base = rewriteReservedIdFieldName(field.name)
           val keyword = s"$base.keyword"
-          val values = if (keywordNormalize) {
+          val values = if keywordNormalize then {
             f.getJson(model).map {
               case Str(s, _) => str(normalizeKeyword(s))
               case other => other
@@ -218,20 +218,20 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           case _ =>
             val fn = fieldNameForPattern(fieldName)
             // fn is a keyword field for non-tokenized strings.
-            val v = if (keywordNormalize) normalizeKeyword(q) else q
+            val v = if keywordNormalize then normalizeKeyword(q) else q
             OpenSearchDsl.prefix(fn, v)
         }
       case Filter.EndsWith(fieldName, q) =>
         val fn = fieldNameForPattern(fieldName)
-        val v = if (keywordNormalize) normalizeKeyword(q) else q
+        val v = if keywordNormalize then normalizeKeyword(q) else q
         OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}")
       case Filter.Contains(fieldName, q) =>
         val fn = fieldNameForPattern(fieldName)
-        val v = if (keywordNormalize) normalizeKeyword(q) else q
+        val v = if keywordNormalize then normalizeKeyword(q) else q
         OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}.*")
       case Filter.Exact(fieldName, q) =>
         val fn = fieldNameForPattern(fieldName)
-        val v = if (keywordNormalize) normalizeKeyword(q) else q
+        val v = if keywordNormalize then normalizeKeyword(q) else q
         OpenSearchDsl.term(fn, str(v))
       case Filter.Distance(fieldName, from, radius) =>
         // OpenSearch expects a distance string like "10km"
@@ -243,7 +243,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val excludeZero = OpenSearchDsl.geoBoundingBox(centerField, eps, -eps, -eps, eps)
         OpenSearchDsl.boolQuery(must = List(distance), mustNot = List(excludeZero))
       case Filter.Multi(minShould, clauses) =>
-        if (clauses.isEmpty) {
+        if clauses.isEmpty then {
           return OpenSearchDsl.matchAll()
         }
         val must = List.newBuilder[Json]
@@ -267,13 +267,13 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
         val mustList = must.result()
         val shouldList = should.result()
-        val minimum = if (shouldList.nonEmpty) Some(minShould).filter(_ > 0) else None
+        val minimum = if shouldList.nonEmpty then Some(minShould).filter(_ > 0) else None
         val filterList = filterB.result()
 
         // Lucene adds MatchAll MUST when there are only SHOULDs and minShould==0.
-        val mustWithMatchAll = if (minimum.isEmpty && mustList.isEmpty && shouldList.nonEmpty) {
+        val mustWithMatchAll = if minimum.isEmpty && mustList.isEmpty && shouldList.nonEmpty then {
           OpenSearchDsl.matchAll() :: mustList
-        } else if (mustList.isEmpty && shouldList.isEmpty && filterList.nonEmpty) {
+        } else if mustList.isEmpty && shouldList.isEmpty && filterList.nonEmpty then {
           // Lucene-style constant scoring: filters without any scoring clauses should still produce a constant score.
           OpenSearchDsl.matchAll() :: mustList
         } else {
@@ -297,12 +297,12 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def drillDownFacetFilter(f: Filter.DrillDownFacetFilter[Doc]): Json = {
     val tokenField = s"${f.fieldName}__facet"
-    if (f.path.isEmpty && !f.showOnlyThisLevel) {
+    if f.path.isEmpty && !f.showOnlyThisLevel then {
       // Approximate Lucene "drillDown()" as "has this facet dimension at any level".
       OpenSearchDsl.exists(tokenField)
     } else {
-      val token = if (f.showOnlyThisLevel) {
-        if (f.path.isEmpty) RootMarker else s"${f.path.mkString("/")}/$RootMarker"
+      val token = if f.showOnlyThisLevel then {
+        if f.path.isEmpty then RootMarker else s"${f.path.mkString("/")}/$RootMarker"
       } else {
         f.path.mkString("/")
       }
@@ -352,7 +352,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     // prefixes (year, year/month, year/month/day, ...). LightDB's `childCount` for hierarchical facets
     // must reflect distinct children at the requested path, which requires composite token enumeration.
     val useComposite = mode == "composite" || fq.path.nonEmpty || fq.field.hierarchical
-    if (useComposite) {
+    if useComposite then {
       obj(
         "composite" -> obj(
           "size" -> num(facetChildCountPageSize),
@@ -382,10 +382,10 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         // `__lightdb_id` is a keyword field (doc_values) and is safe for stable sorting/pagination.
         obj(InternalIdFieldName -> obj("order" -> str("asc")))
       case Sort.BestMatch(direction) =>
-        val order = if (direction == lightdb.SortDirection.Descending) "desc" else "asc"
+        val order = if direction == lightdb.SortDirection.Descending then "desc" else "asc"
         obj("_score" -> obj("order" -> str(order)))
       case s: Sort.ByField[_, _] =>
-        val order = if (s.direction == lightdb.SortDirection.Descending) "desc" else "asc"
+        val order = if s.direction == lightdb.SortDirection.Descending then "desc" else "asc"
         val field = s.field.asInstanceOf[Field[Doc, _]]
         val isIdLikeString =
           (field.rw.definition == DefType.Str || field.rw.definition.isInstanceOf[DefType.Enum]) &&
@@ -393,12 +393,12 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             field.name != "_id" &&
             field.name.endsWith("Id")
 
-        if (isIdLikeString) {
+        if isIdLikeString then {
           // Prefer doc-values keyword sorting. This is fast and predictable.
           //
           // Legacy compatibility (optional): allow script sorts for indices missing `.keyword` mappings.
           // WARNING: script sorts can be extremely slow on large result sets.
-          if (allowScriptSorts) {
+          if allowScriptSorts then {
             val base = rewriteReservedIdFieldName(field.name)
             val keyword = s"$base.keyword"
             obj("_script" -> obj(
@@ -427,7 +427,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           obj(fieldName -> obj("order" -> str(order)))
         }
       case s: Sort.ByDistance[_, _] =>
-        val order = if (s.direction == lightdb.SortDirection.Descending) "desc" else "asc"
+        val order = if s.direction == lightdb.SortDirection.Descending then "desc" else "asc"
         obj("_geo_distance" -> obj(
           s"${s.field.name}${lightdb.opensearch.OpenSearchTemplates.SpatialCenterSuffix}" ->
             obj("lat" -> num(s.from.latitude), "lon" -> num(s.from.longitude)),
@@ -440,12 +440,12 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   private def exactQuery(field: Field[Doc, _], json: Json, boost: Option[Double]): Json = json match {
     case Str(s, _) if field.isInstanceOf[Tokenized[_]] =>
       val tokens = s.split("\\s+").toList.filter(_.nonEmpty).map(_.toLowerCase)
-      val must = if (tokens.nonEmpty) tokens.map(t => OpenSearchDsl.term(field.name, str(t))) else List(OpenSearchDsl.matchAll())
+      val must = if tokens.nonEmpty then tokens.map(t => OpenSearchDsl.term(field.name, str(t))) else List(OpenSearchDsl.matchAll())
       addBoost(OpenSearchDsl.boolQuery(must = must), boost.getOrElse(1.0))
     case Str(s, _) =>
       val base = rewriteReservedIdFieldName(field.name)
       val keyword = s"$base.keyword"
-      val v = if (keywordNormalize) normalizeKeyword(s) else s
+      val v = if keywordNormalize then normalizeKeyword(s) else s
 
       // Compatibility: match either keyword multifield (text+keyword mapping) or direct keyword field mapping.
       addBoost(
@@ -531,7 +531,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private val regexChars = ".?+*|{}[]()\"\\#".toSet
   private def escapeRegexLiteral(s: String): String =
-    s.flatMap(c => if (regexChars.contains(c)) s"\\$c" else c.toString)
+    s.flatMap(c => if regexChars.contains(c) then s"\\$c" else c.toString)
 
   private def fieldNameForExact(field: Field[Doc, _]): String = field.rw.definition match {
     case _ if field.name == "_id" =>
@@ -555,7 +555,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   private def fieldNameForPattern(fieldName: String): String =
-    if (fieldName == "_id") {
+    if fieldName == "_id" then {
       InternalIdFieldName
     } else
     model.fields.find(_.name == fieldName) match {

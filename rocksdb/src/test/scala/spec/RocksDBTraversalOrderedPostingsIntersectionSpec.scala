@@ -72,7 +72,7 @@ class RocksDBTraversalOrderedPostingsIntersectionSpec
         Person(age = 1, rank = 5L, _id = Id("d"))
       )
 
-      for {
+      for
         _ <- DB.init
         _ <- DB.people.transaction(_.truncate)
         _ <- DB.people.transaction(_.insert(docs))
@@ -94,7 +94,7 @@ class RocksDBTraversalOrderedPostingsIntersectionSpec
               }
           }
         }
-      } yield {
+      yield {
         ids shouldBe List("a", "d")
       }
     }

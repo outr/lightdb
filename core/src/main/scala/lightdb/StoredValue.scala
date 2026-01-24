@@ -24,7 +24,7 @@ case class StoredValue[T](key: String,
         case Some(kv) => kv.json.as[T]
         case None => default()
       }.map { t =>
-        if (persistence != Persistence.Stored) {
+        if persistence != Persistence.Stored then {
           cached = Some(t)
         }
         t
@@ -36,13 +36,13 @@ case class StoredValue[T](key: String,
     transaction.get(id).map(_.nonEmpty)
   }
 
-  def set(value: T): Task[T] = if (persistence == Persistence.Memory) {
+  def set(value: T): Task[T] = if persistence == Persistence.Memory then {
     cached = Some(value)
     Task.pure(value)
   } else {
     store.transaction { transaction =>
       transaction.upsert(KeyValue(id, value.asJson)).map { _ =>
-        if (persistence != Persistence.Stored) {
+        if persistence != Persistence.Stored then {
           cached = Some(value)
         }
         value

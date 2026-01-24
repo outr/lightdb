@@ -31,7 +31,7 @@ class H2FTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
   "H2 FullText" should {
     "support tokenized search (no throw)" in withDB { db =>
-      for {
+      for
         _ <- db.docs.transaction(_.insert(List(
           Doc(name = "Adam", _id = Doc.id("adam")),
           Doc(name = "Brenda", _id = Doc.id("brenda"))
@@ -44,11 +44,11 @@ class H2FTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
             .search
             .map(_.total.getOrElse(0))
         }
-      } yield total should be >= 1
+      yield total should be >= 1
     }
 
     "support BestMatch ranking and scored queries (no throw)" in withDB { db =>
-      for {
+      for
         _ <- db.docs.transaction { txn =>
           txn.truncate.unit.next {
             txn.insert(List(
@@ -67,7 +67,7 @@ class H2FTSSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
             .streamScoredPage
             .toList
         }
-      } yield scored.map(_._1.name).toSet should be(Set("adam", "adam adam adam"))
+      yield scored.map(_._1.name).toSet should be(Set("adam", "adam adam adam"))
     }
   }
 

@@ -42,7 +42,7 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   override protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: lightdb.SortDirection): Option[BestMatchPlan] = {
-    if (!SQLiteStore.EnableFTS) return None
+    if !SQLiteStore.EnableFTS then return None
     val raw = findFirstTokenizedEquals(filter).getOrElse(return None)
     val q = tokenizeQuery(raw)
     // Use USING(_id) to avoid ambiguous column name errors when selecting "_id" from the base table + fts table.
@@ -59,14 +59,14 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def tokenizedEqualsPart(fieldName: String, value: String): SQLPart = {
     // Prefer FTS5 if enabled; fall back to LIKE if FTS isn't available.
-    if (!SQLiteStore.EnableFTS) return super.tokenizedEqualsPart(fieldName, value)
+    if !SQLiteStore.EnableFTS then return super.tokenizedEqualsPart(fieldName, value)
     val query = tokenizeQuery(value)
     // contentless fts table stores _id and tokenized columns
     SQLPart(s"_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?)", query.json)
   }
 
   override protected def tokenizedNotEqualsPart(fieldName: String, value: String): SQLPart = {
-    if (!SQLiteStore.EnableFTS) return super.tokenizedNotEqualsPart(fieldName, value)
+    if !SQLiteStore.EnableFTS then return super.tokenizedNotEqualsPart(fieldName, value)
     val query = tokenizeQuery(value)
     SQLPart(s"NOT(_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?))", query.json)
   }
@@ -77,15 +77,15 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     case Str(s, _) => Some(s)
     case NumInt(l, _) => Some(l.toString)
     case NumDec(bd, _) => Some(bd.toString)
-    case Bool(b, _) => Some(if (b) "1" else "0")
+    case Bool(b, _) => Some(if b then "1" else "0")
     case fabric.Null => None
     case other => Some(JsonFormatter.Compact(other))
   }
 
   override protected def arrayContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = {
-    if (!SQLiteStore.EnableMultiValueIndexes) return None
+    if !SQLiteStore.EnableMultiValueIndexes then return None
     val extracted = values.flatMap(jsonToMVValue)
-    if (extracted.isEmpty) return Some(SQLPart.Fragment("1=1"))
+    if extracted.isEmpty then return Some(SQLPart.Fragment("1=1"))
     val parts = extracted.map { v =>
       SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
     }
@@ -93,9 +93,9 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   override protected def arrayNotContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = {
-    if (!SQLiteStore.EnableMultiValueIndexes) return None
+    if !SQLiteStore.EnableMultiValueIndexes then return None
     val extracted = values.flatMap(jsonToMVValue)
-    if (extracted.isEmpty) return Some(SQLPart.Fragment("1=1"))
+    if extracted.isEmpty then return Some(SQLPart.Fragment("1=1"))
     val inner = extracted.map { v =>
       SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
     }

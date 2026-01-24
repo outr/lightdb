@@ -35,7 +35,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     val previousAutoCommit = try connection.getAutoCommit catch {
       case _: Throwable => true
     }
-    if (!previousAutoCommit) {
+    if !previousAutoCommit then {
       try {
         // End any implicit transaction context before setting journal_mode.
         connection.setAutoCommit(true)
@@ -58,7 +58,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         scribe.warn(s"Unable to enable SQLite WAL (journal_mode=WAL) for store '$name'. Continuing without WAL.", t)
     } finally {
       try s.close() catch { case _: Throwable => () }
-      if (!previousAutoCommit) {
+      if !previousAutoCommit then {
         try connection.setAutoCommit(false) catch { case _: Throwable => () }
       }
     }
@@ -66,7 +66,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   private def createFTS(tx: TX): Unit = {
     val tokenized = fields.collect { case t: lightdb.field.Field.Tokenized[Doc] => t }
-    if (tokenized.isEmpty) return
+    if tokenized.isEmpty then return
 
     val ftsTable = s"${this.name}__fts"
     val cols = tokenized.map(_.name)
@@ -137,15 +137,15 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   override protected def initTransaction(tx: TX): Task[Unit] = super.initTransaction(tx).map { _ =>
     // Schema is now ensured; build optional auxiliary structures.
-    if (SQLiteStore.EnableFTS) {
+    if SQLiteStore.EnableFTS then {
       createFTS(tx)
     }
-    if (SQLiteStore.EnableMultiValueIndexes) {
+    if SQLiteStore.EnableMultiValueIndexes then {
       createMultiValueIndexes(tx)
     }
 
     val c = tx.state.connectionManager.getConnection(tx.state)
-    if (hasSpatial.sync()) {
+    if hasSpatial.sync() then {
       scribe.info(s"$name has spatial features. Enabling...")
       org.sqlite.Function.create(c, "DISTANCE", new org.sqlite.Function() {
         override def xFunc(): Unit = {
@@ -173,7 +173,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
             .getOrElse(Nil)
           val value = value_text(1).toDouble
           val b = distances.exists(d => d.valueInMeters <= value)
-          result(if (b) 1 else 0)
+          result(if b then 1 else 0)
         }
       })
       org.sqlite.Collation.create(c, "DISTANCE_SORT_ASCENDING", new Collation() {
@@ -196,7 +196,7 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         val expression = value_text(0)
         val value = Option(value_text(1)).getOrElse("")
         val pattern = Pattern.compile(expression)
-        result(if (pattern.matcher(value).find()) 1 else 0)
+        result(if pattern.matcher(value).find() then 1 else 0)
       }
     })
   }
@@ -292,7 +292,7 @@ object SQLiteStore extends SQLCollectionManager {
       val rs = ps.executeQuery()
       try {
         var set = Set.empty[String]
-        while (rs.next()) {
+        while rs.next() do {
           set += rs.getString("name").toLowerCase
         }
         set
