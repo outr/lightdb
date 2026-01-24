@@ -291,7 +291,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       } else if (total > 0 && successful != total) {
         // Replica shards may be unassigned in single-node clusters (common in tests), resulting in successful < total.
         // This does not break read-after-write on primary shards, so warn but do not fail.
-        scribe.warn(
+        scribe.debug(
           s"OpenSearch refreshIndex($index) partial success (likely unassigned replicas): total=$total successful=$successful failed=$failed"
         )
       }
