@@ -4,7 +4,7 @@ import fabric.io.JsonParser
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.Store
-import rapid._
+import rapid.*
 
 import java.io.File
 import java.nio.charset.StandardCharsets

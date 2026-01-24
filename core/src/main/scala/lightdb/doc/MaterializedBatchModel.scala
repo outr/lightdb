@@ -2,11 +2,11 @@ package lightdb.doc
 
 import lightdb.id.Id
 import lightdb.transaction.Transaction
-import rapid._
+import rapid.*
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 trait MaterializedBatchModel[Doc <: Document[Doc], MaterialDoc <: Document[MaterialDoc], MaterialModel <: DocumentModel[MaterialDoc]] extends MaterializedModel[Doc, MaterialDoc, MaterialModel] {
   protected def maxBatchSize: Int = 10000

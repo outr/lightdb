@@ -1,7 +1,7 @@
 package lightdb.opensearch.query
 
 import fabric.Json
-import fabric._
+import fabric.*
 import fabric.define.DefType
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field

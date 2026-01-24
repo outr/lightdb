@@ -38,7 +38,7 @@ trait FilterSupport[F, Doc, Filter] {
             includeFrom: Boolean = true,
             includeTo: Boolean = true)
            (implicit num: Numeric[F]): Filter = {
-    import num._
+    import num.*
 
     from
       .orElse(to)

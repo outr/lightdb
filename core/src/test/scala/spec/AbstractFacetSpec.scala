@@ -1,10 +1,10 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetConfig, FacetValue}
-import lightdb.filter._
+import lightdb.filter.*
 import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade

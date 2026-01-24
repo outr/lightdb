@@ -1,14 +1,14 @@
 package lightdb.transaction
 
-import fabric._
+import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.DocNotFoundException
 import lightdb.field.Field.UniqueIndex
 import lightdb.id.Id
 import lightdb.store.Store
-import rapid._
+import rapid.*
 
 trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def store: Store[Doc, Model]

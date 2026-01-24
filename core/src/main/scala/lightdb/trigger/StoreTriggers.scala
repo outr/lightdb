@@ -3,7 +3,7 @@ package lightdb.trigger
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
 import lightdb.transaction.Transaction
-import rapid._
+import rapid.*
 
 import scala.annotation.unchecked.uncheckedVariance
 

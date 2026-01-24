@@ -3,8 +3,8 @@ package spec
 import lightdb.time.{Timestamp, TimestampParser}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 
 import java.util.{Locale, TimeZone}
 

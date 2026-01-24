@@ -1,14 +1,14 @@
 package lightdb.traversal.store
 
 import fabric.{Null, Str}
-import fabric.rw._
+import fabric.rw.*
 import lightdb.KeyValue
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.{Field, IndexingState}
 import lightdb.id.Id
 import lightdb.transaction.PrefixScanningTransaction
 import profig.Profig
-import rapid._
+import rapid.*
 
 import scala.collection.mutable.ListBuffer
 import java.util.PriorityQueue

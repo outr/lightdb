@@ -1,6 +1,6 @@
 package lightdb.mapdb
 
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.{Store, StoreMode}

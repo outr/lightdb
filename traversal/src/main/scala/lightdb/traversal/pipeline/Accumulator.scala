@@ -83,12 +83,10 @@ object Accumulator {
             else ord.compare(a._1, b._1) < 0
           }
 
-          implicit val worstFirst: Ordering[(K, Long)] = new Ordering[(K, Long)] {
-            override def compare(x: (K, Long), y: (K, Long)): Int = {
-              if better(x, y) then -1
-              else if better(y, x) then 1
-              else 0
-            }
+          implicit val worstFirst: Ordering[(K, Long)] = (x: (K, Long), y: (K, Long)) => {
+            if better(x, y) then -1
+            else if better(y, x) then 1
+            else 0
           }
 
           val pq = mutable.PriorityQueue.empty[(K, Long)]

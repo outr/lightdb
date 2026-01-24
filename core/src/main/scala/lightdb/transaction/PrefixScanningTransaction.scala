@@ -1,7 +1,7 @@
 package lightdb.transaction
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.prefix.PrefixScanningStore
 

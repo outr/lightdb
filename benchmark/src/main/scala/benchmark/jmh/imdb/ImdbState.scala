@@ -1,6 +1,6 @@
 package benchmark.jmh.imdb
 
-import lightdb._
+import lightdb.*
 import lightdb.doc.DocumentModel
 import lightdb.id.Id
 import lightdb.lucene.LuceneStore
@@ -14,14 +14,14 @@ import lightdb.store.hashmap.HashMapStore
 import lightdb.store.split.SplitStoreManager
 import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import rapid.Task
 
 import java.io.{BufferedReader, File, FileReader}
 import java.nio.file.{Files, Path}
 import java.util.concurrent.ThreadLocalRandom
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 @State(Scope.Benchmark)
 class ImdbState {
@@ -57,7 +57,7 @@ class ImdbState {
     val basicsFile = dataPath.resolve("title.basics.tsv").toFile
 
     val (akas, basics) =
-      if (akasFile.exists() && basicsFile.exists()) {
+      if akasFile.exists() && basicsFile.exists() then {
         (loadAkas(akasFile, recordLimit), loadBasics(basicsFile, recordLimit))
       } else {
         synthetic(recordLimit)
@@ -70,9 +70,9 @@ class ImdbState {
 
   @TearDown(Level.Trial)
   def tearDown(): Unit = {
-    if (db != null) db.dispose.sync()
+    if db != null then db.dispose.sync()
     tempDir.foreach { p =>
-      if (Files.exists(p)) {
+      if Files.exists(p) then {
         Files.walk(p).iterator().asScala.toSeq.reverse.foreach(Files.deleteIfExists)
       }
     }
@@ -95,7 +95,7 @@ class ImdbState {
       val header = reader.readLine().split('\t').toList
       val buf = ArrayBuffer.empty[(String, String, TitleAka)]
       var line = reader.readLine()
-      while (line != null && buf.length < limit) {
+      while line != null && buf.length < limit do {
         val cols = line.split('\t').toList
         val map = header.zip(cols).filter(_._2.nonEmpty).toMap
         val titleId = map.getOrElse("titleId", "")
@@ -133,7 +133,7 @@ class ImdbState {
       val header = reader.readLine().split('\t').toList
       val buf = ArrayBuffer.empty[TitleBasics]
       var line = reader.readLine()
-      while (line != null && buf.length < limit) {
+      while line != null && buf.length < limit do {
         val cols = line.split('\t').toList
         val map = header.zip(cols).filter(_._2.nonEmpty).toMap
         val basics = TitleBasics(

@@ -1,6 +1,6 @@
 package lightdb.id
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.Document
 import lightdb.graph.EdgeDocument
 

@@ -7,7 +7,7 @@ import lightdb.id.Id
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import rapid.Task
 
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 case class MapDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: MapDBStore[Doc, Model],
                                                                                parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] {

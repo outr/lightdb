@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.Filter

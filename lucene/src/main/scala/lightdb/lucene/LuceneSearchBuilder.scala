@@ -14,7 +14,7 @@ import lightdb.spatial.{DistanceAndDoc, Spatial}
 import lightdb.store.{Conversion, StoreMode}
 import lightdb.{Query, SearchResults, Sort, SortDirection}
 import lightdb.lucene.blockjoin.{LuceneBlockJoinFields, LuceneBlockJoinStore}
-import org.apache.lucene.document._
+import org.apache.lucene.document.*
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
@@ -24,7 +24,7 @@ import org.apache.lucene.util.BytesRef
 import org.apache.lucene.util.automaton.RegExp
 import rapid.Task
 
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
                                                                              model: Model,

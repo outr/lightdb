@@ -2,7 +2,7 @@ package lightdb.opensearch
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import fabric._
+import fabric.*
 import lightdb.doc.ParentChildSupport
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}

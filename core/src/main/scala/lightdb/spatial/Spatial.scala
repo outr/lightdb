@@ -1,7 +1,7 @@
 package lightdb.spatial
 
 import lightdb.spatial.Polygon
-import lightdb.distance._
+import lightdb.distance.*
 import org.locationtech.jts.geom.{Coordinate, Geometry, GeometryFactory, LineString, Polygon => JTSPolygon}
 import org.locationtech.spatial4j.context.jts.JtsSpatialContext
 import org.locationtech.spatial4j.distance.DistanceUtils

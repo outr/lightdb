@@ -1,10 +1,10 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetConfig, FacetValue}
-import lightdb.filter._
+import lightdb.filter.*
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager}
@@ -13,14 +13,14 @@ import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.wordspec.AsyncWordSpec
 import org.scalatest.matchers.should.Matchers
 import profig.Profig
-import fabric.rw._
+import fabric.rw.*
 import rapid.{AsyncTaskSpec, Task}
 
 import java.io.{BufferedReader, File, FileReader}
 import java.nio.file.{Files, Path}
 import java.util.concurrent.ThreadLocalRandom
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 /**
  * Abstract, opt-in performance spec for large IMDB-like datasets.
@@ -50,7 +50,7 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
   protected var db: DB = _
 
   private def requireEnabled(): Unit =
-    if (!enabled) cancel("IMDB performance spec is disabled. Run with -Dimdb.perf=true")
+    if !enabled then cancel("IMDB performance spec is disabled. Run with -Dimdb.perf=true")
 
   specName should {
     "setup (load IMDB dataset)" in {
@@ -65,7 +65,7 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
           val basicsFile = dataPath.resolve("title.basics.tsv").toFile
 
           val (akas, basics) =
-            if (akasFile.exists() && basicsFile.exists()) {
+            if akasFile.exists() && basicsFile.exists() then {
               (loadAkas(akasFile, recordLimit), loadBasics(basicsFile, recordLimit))
             } else {
               synthetic(recordLimit)
@@ -198,7 +198,7 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
             var frontier: Set[Id[PerfTitleBasics]] = seedSet
             var visited: Set[Id[PerfTitleBasics]] = seedSet
             var depth = 0
-            while (depth < hopDepth && frontier.nonEmpty && visited.size < hopLimit * 5) {
+            while depth < hopDepth && frontier.nonEmpty && visited.size < hopLimit * 5 do {
               val next = db.links.transaction { tx =>
                 tx.query
                   .filter(_.fromId.in(frontier.toList))
@@ -347,7 +347,7 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
       val header = reader.readLine().split('\t').toList
       val buf = ArrayBuffer.empty[PerfTitleAka]
       var line = reader.readLine()
-      while (line != null && buf.length < limit) {
+      while line != null && buf.length < limit do {
         val cols = line.split('\t').toList
         val map = header.zip(cols).filter(_._2.nonEmpty).toMap
         val titleId = map.getOrElse("titleId", "")
@@ -384,7 +384,7 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
       val header = reader.readLine().split('\t').toList
       val buf = ArrayBuffer.empty[PerfTitleBasics]
       var line = reader.readLine()
-      while (line != null && buf.length < limit) {
+      while line != null && buf.length < limit do {
         val cols = line.split('\t').toList
         val map = header.zip(cols).filter(_._2.nonEmpty).toMap
         val tconst = map.getOrElse("tconst", "")
@@ -417,9 +417,9 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
         basicsId = Id[PerfTitleBasics](id),
         ordering = i,
         title = s"title-$i",
-        region = if (i % 3 == 0) Some("US") else None,
-        language = if (i % 4 == 0) Some("en") else None,
-        types = if (i % 5 == 0) List("imdbDisplay") else Nil,
+        region = if i % 3 == 0 then Some("US") else None,
+        language = if i % 4 == 0 then Some("en") else None,
+        types = if i % 5 == 0 then List("imdbDisplay") else Nil,
         attributes = Nil,
         isOriginalTitle = Some(true),
         _id = Id[PerfTitleAka](s"$id-$i")
@@ -429,14 +429,14 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
       val id = f"tt$i%08d"
       PerfTitleBasics(
         tconst = id,
-        titleType = if (i % 2 == 0) "movie" else "tvSeries",
+        titleType = if i % 2 == 0 then "movie" else "tvSeries",
         primaryTitle = s"primary-$i",
         originalTitle = s"original-$i",
         isAdult = false,
         startYear = 1980 + (i % 45),
         endYear = 0,
         runtimeMinutes = 60 + (i % 120),
-        genres = if (i % 3 == 0) List("Drama") else List("Comedy"),
+        genres = if i % 3 == 0 then List("Drama") else List("Comedy"),
         _id = Id[PerfTitleBasics](id)
       )
     }

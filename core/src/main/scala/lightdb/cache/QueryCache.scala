@@ -7,7 +7,7 @@ import lightdb.{Query, SearchResults}
 import rapid.{Fiber, Task}
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 /**

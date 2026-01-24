@@ -1,6 +1,6 @@
 package lightdb.opensearch
 
-import fabric._
+import fabric.*
 import fabric.io.JsonFormatter
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.opensearch.query.OpenSearchDsl

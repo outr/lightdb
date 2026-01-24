@@ -1,8 +1,8 @@
 package lightdb.graph
 
-import fabric._
+import fabric.*
 import fabric.define.DefType
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.Document
 import lightdb.id.{EdgeId, Id}
 

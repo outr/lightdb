@@ -1,8 +1,8 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.id.Id
 import lightdb.opensearch.OpenSearchStore
 import lightdb.upgrade.DatabaseUpgrade

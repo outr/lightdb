@@ -1,8 +1,8 @@
 package lightdb.sql
 
-import fabric._
+import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
@@ -11,7 +11,7 @@ import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManage
 import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import org.sqlite.Collation
-import rapid._
+import rapid.*
 
 import java.nio.file.{Files, Path}
 import java.sql.Connection

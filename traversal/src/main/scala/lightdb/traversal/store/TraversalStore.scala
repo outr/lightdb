@@ -6,8 +6,8 @@ import lightdb.store.{StoreManager, StoreMode}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.Collection
 import profig.Profig
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import rapid.Task
 
 import java.nio.file.Path

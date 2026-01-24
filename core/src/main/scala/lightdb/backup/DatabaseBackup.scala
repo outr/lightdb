@@ -3,7 +3,7 @@ package lightdb.backup
 import fabric.Json
 import fabric.io.JsonFormatter
 import lightdb.store.Store
-import rapid._
+import rapid.*
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.nio.charset.StandardCharsets

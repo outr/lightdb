@@ -2,7 +2,7 @@ package lightdb.field
 
 import fabric.define.DefType
 import fabric.io.JsonParser
-import fabric.rw._
+import fabric.rw.*
 import fabric.{Json, Null, arr, bool, num, str}
 import lightdb.aggregate.AggregateSupport
 import lightdb.distance.Distance

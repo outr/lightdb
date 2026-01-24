@@ -1,7 +1,7 @@
 package lightdb.file
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import lightdb.{KeyValue, LightDB}
 import lightdb.id.Id
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}

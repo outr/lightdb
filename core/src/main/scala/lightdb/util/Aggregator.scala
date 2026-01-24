@@ -1,6 +1,6 @@
 package lightdb.util
 
-import fabric.rw._
+import fabric.rw.*
 import fabric.{Json, Null, NumDec, NumInt, Obj, num}
 import lightdb.SortDirection.Ascending
 import lightdb.aggregate.{AggregateQuery, AggregateType}

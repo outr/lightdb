@@ -1,13 +1,13 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{JsonConversion, ParentChildSupport, RecordDocument, RecordDocumentModel}
 import lightdb.field.Field
 import lightdb.filter.FilterExtras
 import lightdb.id.Id
 import lightdb.lucene.blockjoin.LuceneBlockJoinStore
-import lightdb.lucene.blockjoin.LuceneBlockJoinSyntax._
+import lightdb.lucene.blockjoin.LuceneBlockJoinSyntax.*
 import lightdb.lucene.LuceneStore
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.time.Timestamp

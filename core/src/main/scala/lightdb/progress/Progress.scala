@@ -1,6 +1,6 @@
 package lightdb.progress
 
-import fabric.rw._
+import fabric.rw.*
 
 case class Progress(value: Option[Double] = None, message: Option[String] = None)
 

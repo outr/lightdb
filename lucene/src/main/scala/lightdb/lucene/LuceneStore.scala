@@ -1,17 +1,17 @@
 package lightdb.lucene
 
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.lucene.index.Index
-import lightdb.store._
+import lightdb.store.*
 import lightdb.transaction.Transaction
 import org.apache.lucene.facet.FacetsConfig
 import org.apache.lucene.index.{DirectoryReader, SegmentReader}
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.store.FSDirectory
 import org.apache.lucene.util.Version
-import rapid._
+import rapid.*
 
 import java.nio.file.{Files, Path}
 import scala.language.implicitConversions

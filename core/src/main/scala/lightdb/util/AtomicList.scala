@@ -2,7 +2,7 @@ package lightdb.util
 
 import java.util.Comparator
 import java.util.concurrent.ConcurrentSkipListSet
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 class AtomicList[T](comparator: Option[Comparator[T]]) {
   private val set = new ConcurrentSkipListSet[T](comparator.orNull)

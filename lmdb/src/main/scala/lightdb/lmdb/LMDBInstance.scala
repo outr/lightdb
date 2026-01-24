@@ -1,6 +1,6 @@
 package lightdb.lmdb
 
-import org.lmdbjava._
+import org.lmdbjava.*
 import rapid.Task
 
 import java.nio.ByteBuffer

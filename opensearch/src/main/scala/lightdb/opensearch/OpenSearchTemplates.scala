@@ -1,6 +1,6 @@
 package lightdb.opensearch
 
-import fabric._
+import fabric.*
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import lightdb.doc.{Document, DocumentModel, ParentChildSupport}

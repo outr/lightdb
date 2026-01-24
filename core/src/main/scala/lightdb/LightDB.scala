@@ -1,6 +1,6 @@
 package lightdb
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.field.Field
@@ -13,7 +13,7 @@ import lightdb.trigger.StoreTrigger
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.util.{Disposable, Initializable}
 import profig.Profig
-import rapid._
+import rapid.*
 
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap

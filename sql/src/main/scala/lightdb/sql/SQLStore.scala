@@ -1,12 +1,12 @@
 package lightdb.sql
 
 import fabric.define.DefType
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.sql.connect.ConnectionManager
-import lightdb.store._
+import lightdb.store.*
 import lightdb.store.prefix.PrefixScanningStore
 import rapid.Task
 

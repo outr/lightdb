@@ -1,7 +1,7 @@
 package lightdb.materialized
 
 import fabric.Json
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 
 trait Materialized[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {

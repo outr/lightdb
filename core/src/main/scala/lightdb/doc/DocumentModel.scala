@@ -1,9 +1,9 @@
 package lightdb.doc
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.CompositeIndex
 import lightdb.facet.{FacetConfig, FacetValue}
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.field.{Field, FieldGetter}
 import lightdb.filter.{Filter, FilterBuilder, ParentChildRelation}
 import lightdb.id.{Id, StringId}

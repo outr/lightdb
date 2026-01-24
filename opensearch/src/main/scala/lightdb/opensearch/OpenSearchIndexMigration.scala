@@ -1,6 +1,6 @@
 package lightdb.opensearch
 
-import fabric._
+import fabric.*
 import lightdb.opensearch.client.OpenSearchClient
 import rapid.Task
 

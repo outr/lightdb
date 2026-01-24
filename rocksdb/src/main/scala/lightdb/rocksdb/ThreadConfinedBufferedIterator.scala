@@ -1,6 +1,6 @@
 package lightdb.rocksdb
 
-import rapid._
+import rapid.*
 
 import scala.collection.mutable.ArrayBuffer
 

@@ -1,7 +1,7 @@
 package lightdb.filter
 
 import lightdb.doc.{Document, DocumentModel}
-import rapid._
+import rapid.*
 
 object FilterPlanner {
   /**
@@ -49,8 +49,8 @@ object FilterPlanner {
         // -Dlightdb.existsChild.maxParentIds=<N>
         // (cap is on DISTINCT parent ids, not raw child rows).
         val maxDistinct: Int = {
-          import fabric._
-          import fabric.rw._
+          import fabric.*
+          import fabric.rw.*
           import profig.Profig
           Profig("lightdb.existsChild.maxParentIds")
             .get()

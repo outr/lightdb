@@ -9,7 +9,7 @@ import lightdb.id.Id
 import lightdb.store.{BufferedWritingTransaction, WriteOp}
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.lmdbjava.Txn
-import rapid._
+import rapid.*
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets

@@ -1,10 +1,10 @@
 package lightdb.halodb
 
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
-import rapid._
+import rapid.*
 import scribe.{Level, Logger}
 
 import java.nio.file.Path

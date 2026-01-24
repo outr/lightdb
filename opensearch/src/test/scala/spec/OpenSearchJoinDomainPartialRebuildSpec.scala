@@ -1,7 +1,7 @@
 package spec
 
-import fabric._
-import fabric.rw._
+import fabric.*
+import fabric.rw.*
 import lightdb.doc.{JsonConversion, ParentChildSupport, RecordDocument, RecordDocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id

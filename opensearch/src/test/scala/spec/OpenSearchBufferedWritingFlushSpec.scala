@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.opensearch.{OpenSearchMetrics}

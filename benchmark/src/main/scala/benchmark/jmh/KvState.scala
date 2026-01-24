@@ -1,9 +1,9 @@
 package benchmark.jmh
 
-import fabric.rw._
+import fabric.rw.*
 import fabric.{Json, obj, str}
-import lightdb._
-import lightdb.doc._
+import lightdb.*
+import lightdb.doc.*
 import lightdb.id.Id
 import lightdb.rocksdb.RocksDBStore
 import lightdb.lmdb.LMDBStore
@@ -14,14 +14,14 @@ import lightdb.duckdb.DuckDBStore
 import lightdb.store.hashmap.HashMapStore
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 import rapid.Task
 
 import java.nio.file.{Files, Path}
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicInteger
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 @State(Scope.Benchmark)
 class KvState {
@@ -70,9 +70,9 @@ class KvState {
 
   @TearDown(Level.Trial)
   def tearDown(): Unit = {
-    if (db != null) db.dispose.sync()
+    if db != null then db.dispose.sync()
     tempDir.foreach { p =>
-      if (Files.exists(p)) {
+      if Files.exists(p) then {
         Files.walk(p).iterator().asScala.toSeq.reverse.foreach(Files.deleteIfExists)
       }
     }

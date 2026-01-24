@@ -1,6 +1,6 @@
 package lightdb.field
 
-import fabric._
+import fabric.*
 import lightdb.doc.Document
 
 case class FieldAndValue[Doc <: Document[Doc], V](field: Field[Doc, V], value: V) {

@@ -1,10 +1,10 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.backup.{DatabaseBackup, DatabaseRestore}
-import lightdb.doc._
+import lightdb.doc.*
 import lightdb.feature.DBFeatureKey
-import lightdb.filter._
+import lightdb.filter.*
 import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager, Store}
 import lightdb.upgrade.DatabaseUpgrade

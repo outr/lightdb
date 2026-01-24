@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.opensearch.{OpenSearchQuerySyntax, OpenSearchStore}
@@ -13,7 +13,7 @@ import rapid.{AsyncTaskSpec, Task}
 
 @EmbeddedTest
 class OpenSearchCursorFilterPathSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with OpenSearchTestSupport {
-  import OpenSearchQuerySyntax._
+  import OpenSearchQuerySyntax.*
 
   // Intentionally omit `hits.hits.sort` so cursor paging must force-include it.
   // IMPORTANT: use store-specific key so we don't affect the rest of the OpenSearch test suite (facets, grouping, etc.).

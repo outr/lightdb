@@ -6,9 +6,9 @@ import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.FacetQuery
-import lightdb.field.Field._
+import lightdb.field.Field.*
 import lightdb.field.{Field, FieldAndValue, IndexingState}
-import lightdb.filter._
+import lightdb.filter.*
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Geo, Point}

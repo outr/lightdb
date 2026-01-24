@@ -1,6 +1,6 @@
 package lightdb.store.split
 
-import lightdb._
+import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.progress.ProgressManager
 import lightdb.store.{Collection, Store, StoreManager, StoreMode}

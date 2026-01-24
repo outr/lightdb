@@ -1,9 +1,9 @@
 package lightdb.opensearch
 
-import fabric._
+import fabric.*
 import fabric.io.JsonFormatter
 import fabric.io.JsonParser
-import fabric.rw._
+import fabric.rw.*
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
@@ -29,7 +29,7 @@ import rapid.{Task, logger}
 import rapid.taskSeq2Ops
 
 import java.util.concurrent.Semaphore
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 import scala.util.{Failure, Success, Try}
 
 import lightdb.opensearch.OpenSearchMetrics

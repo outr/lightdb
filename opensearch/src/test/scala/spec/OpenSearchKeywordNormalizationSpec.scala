@@ -1,6 +1,6 @@
 package spec
 
-import fabric.rw._
+import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.filter.Filter
 import lightdb.id.Id
@@ -14,7 +14,7 @@ import rapid.{AsyncTaskSpec, Task}
 
 @EmbeddedTest
 class OpenSearchKeywordNormalizationSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with OpenSearchTestSupport {
-  import OpenSearchQuerySyntax._
+  import OpenSearchQuerySyntax.*
 
   case class Doc(name: String, _id: Id[Doc] = Doc.id()) extends Document[Doc]
   object Doc extends DocumentModel[Doc] with JsonConversion[Doc] {

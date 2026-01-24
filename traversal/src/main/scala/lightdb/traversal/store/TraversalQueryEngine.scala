@@ -18,8 +18,8 @@ import lightdb.spatial.{DistanceAndDoc, Geo, Point, Spatial}
 import lightdb.{SearchResults, Sort, SortDirection}
 import lightdb.KeyValue
 import profig.Profig
-import fabric.rw._
-import rapid._
+import fabric.rw.*
+import rapid.*
 
 import scala.collection.mutable
 import scala.util.Try
