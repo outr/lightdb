@@ -16,7 +16,7 @@ class TransactionManager {
 
     for {
       acquired <- list.map { s =>
-        s.transaction.create(None).map { tx0 =>
+        s.transaction.create().map { tx0 =>
           Acquired(tx = tx0, release = s.transaction.release(tx0))
         }
       }.tasks
@@ -32,8 +32,8 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2)
    (f: (s1.TX, s2.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
     r <- f(t1, t2).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2)).unit)
   } yield r
@@ -45,9 +45,9 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3)
    (f: (s1.TX, s2.TX, s3.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
     r <- f(t1, t2, t3).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3)).unit)
@@ -62,10 +62,10 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4)
    (f: (s1.TX, s2.TX, s3.TX, s4.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
-    t4 <- s4.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
+    t4 <- s4.transaction.create()
     r <- f(t1, t2, t3, t4).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))
@@ -81,11 +81,11 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5)
    (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
-    t4 <- s4.transaction.create(None)
-    t5 <- s5.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
+    t4 <- s4.transaction.create()
+    t5 <- s5.transaction.create()
     r <- f(t1, t2, t3, t4, t5).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))
@@ -103,12 +103,12 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6)
    (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
-    t4 <- s4.transaction.create(None)
-    t5 <- s5.transaction.create(None)
-    t6 <- s6.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
+    t4 <- s4.transaction.create()
+    t5 <- s5.transaction.create()
+    t6 <- s6.transaction.create()
     r <- f(t1, t2, t3, t4, t5, t6).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))
@@ -128,13 +128,13 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7)
    (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
-    t4 <- s4.transaction.create(None)
-    t5 <- s5.transaction.create(None)
-    t6 <- s6.transaction.create(None)
-    t7 <- s7.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
+    t4 <- s4.transaction.create()
+    t5 <- s5.transaction.create()
+    t6 <- s6.transaction.create()
+    t7 <- s7.transaction.create()
     r <- f(t1, t2, t3, t4, t5, t6, t7).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))
@@ -156,14 +156,14 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7, s8: S8)
    (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
-    t4 <- s4.transaction.create(None)
-    t5 <- s5.transaction.create(None)
-    t6 <- s6.transaction.create(None)
-    t7 <- s7.transaction.create(None)
-    t8 <- s8.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
+    t4 <- s4.transaction.create()
+    t5 <- s5.transaction.create()
+    t6 <- s6.transaction.create()
+    t7 <- s7.transaction.create()
+    t8 <- s8.transaction.create()
     r <- f(t1, t2, t3, t4, t5, t6, t7, t8).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))
@@ -187,15 +187,15 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7, s8: S8, s9: S9)
    (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX, s9.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
-    t4 <- s4.transaction.create(None)
-    t5 <- s5.transaction.create(None)
-    t6 <- s6.transaction.create(None)
-    t7 <- s7.transaction.create(None)
-    t8 <- s8.transaction.create(None)
-    t9 <- s9.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
+    t4 <- s4.transaction.create()
+    t5 <- s5.transaction.create()
+    t6 <- s6.transaction.create()
+    t7 <- s7.transaction.create()
+    t8 <- s8.transaction.create()
+    t9 <- s9.transaction.create()
     r <- f(t1, t2, t3, t4, t5, t6, t7, t8, t9).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))
@@ -221,16 +221,16 @@ class TransactionManager {
     Return
   ](s1: S1, s2: S2, s3: S3, s4: S4, s5: S5, s6: S6, s7: S7, s8: S8, s9: S9, s10: S10)
    (f: (s1.TX, s2.TX, s3.TX, s4.TX, s5.TX, s6.TX, s7.TX, s8.TX, s9.TX, s10.TX) => Task[Return]): Task[Return] = for {
-    t1 <- s1.transaction.create(None)
-    t2 <- s2.transaction.create(None)
-    t3 <- s3.transaction.create(None)
-    t4 <- s4.transaction.create(None)
-    t5 <- s5.transaction.create(None)
-    t6 <- s6.transaction.create(None)
-    t7 <- s7.transaction.create(None)
-    t8 <- s8.transaction.create(None)
-    t9 <- s9.transaction.create(None)
-    t10 <- s10.transaction.create(None)
+    t1 <- s1.transaction.create()
+    t2 <- s2.transaction.create()
+    t3 <- s3.transaction.create()
+    t4 <- s4.transaction.create()
+    t5 <- s5.transaction.create()
+    t6 <- s6.transaction.create()
+    t7 <- s7.transaction.create()
+    t8 <- s8.transaction.create()
+    t9 <- s9.transaction.create()
+    t10 <- s10.transaction.create()
     r <- f(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10).guarantee(s1.transaction.release(t1)
       .and(s2.transaction.release(t2))
       .and(s3.transaction.release(t3))

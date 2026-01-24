@@ -95,29 +95,32 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
    */
   def supportsNativeExistsChild: Boolean = false
 
-  object transaction {
-    private val set = ConcurrentHashMap.newKeySet[TX]
-    private val sharedMap = new ConcurrentHashMap[String, Shared]()
+  private val set = ConcurrentHashMap.newKeySet[TX]
+  private val sharedMap = new ConcurrentHashMap[String, Shared]()
+
+  lazy val transaction = TransactionBuilder(None)
+
+  case class TransactionBuilder(parent: Option[Transaction[Doc, Model]]) {
+    def withParent(parent: Transaction[Doc, Model]): TransactionBuilder = copy(parent = Some(parent))
 
     def active: Int = set.size()
 
-    def apply[Return](f: TX => Task[Return]): Task[Return] = create(None).flatMap { transaction =>
+    def apply[Return](f: TX => Task[Return]): Task[Return] = create().flatMap { transaction =>
       f(transaction).guarantee(release(transaction))
     }
 
     def shared[Return](name: String,
-                       timeout: FiniteDuration,
-                       parent: Option[Transaction[Doc, Model]] = None)
+                       timeout: FiniteDuration)
                       (f: TX => Task[Return]): Task[Return] = Task.defer {
       val s = sharedMap.computeIfAbsent(name, _ => {
         scribe.info(s"Creating Shared Transaction: $name")
-        val tx = create(parent).sync()
+        val tx = create().sync()
         Shared(name, tx, timeout)
       })
       s.withLock(f(s.tx))
     }
 
-    def create(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
+    def create(): Task[TX] = for {
       _ <- Task {
         if (!lightDB.isInitialized && !lightDB.isInitStarted) {
           throw new RuntimeException(s"Attempted to create a transaction for store '$name' before database initialization. Call db.init before using store.transaction(...).")
@@ -144,46 +147,46 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       }
       list.size
     }
+  }
 
-    private case class Shared(name: String, tx: TX, timeout: FiniteDuration) { shared =>
-      private val active = new AtomicInteger(0)
-      private val lastUsed = new AtomicLong(0L)
-      @volatile private var started = false
+  private case class Shared(name: String, tx: TX, timeout: FiniteDuration) { shared =>
+    private val active = new AtomicInteger(0)
+    private val lastUsed = new AtomicLong(0L)
+    @volatile private var started = false
 
-      private val timeoutMillis = timeout.toMillis
+    private val timeoutMillis = timeout.toMillis
 
-      def withLock[A](task: => Task[A]): Task[A] = Task.defer {
-        active.incrementAndGet()
-        if (!started) {
-          shared.synchronized {
-            if (!started) {
-              started = true
-              recurse().start()
-            }
+    def withLock[A](task: => Task[A]): Task[A] = Task.defer {
+      active.incrementAndGet()
+      if (!started) {
+        shared.synchronized {
+          if (!started) {
+            started = true
+            recurse().start()
           }
-        }
-        Task.defer {
-          task.guarantee(Task {
-            active.decrementAndGet()
-            lastUsed.set(System.currentTimeMillis())
-          })
         }
       }
+      Task.defer {
+        task.guarantee(Task {
+          active.decrementAndGet()
+          lastUsed.set(System.currentTimeMillis())
+        })
+      }
+    }
 
-      private def recurse(): Task[Unit] = Task.defer {
-        val nextPossibleTimeout: Long = if (active.get() > 0) {
-          timeoutMillis
+    private def recurse(): Task[Unit] = Task.defer {
+      val nextPossibleTimeout: Long = if (active.get() > 0) {
+        timeoutMillis
+      } else {
+        (lastUsed.get() + timeoutMillis) - System.currentTimeMillis()
+      }
+      Task.sleep(nextPossibleTimeout.millis).next {
+        if (active.get() == 0 && lastUsed.get() < System.currentTimeMillis() - timeoutMillis) {
+          scribe.info(s"Releasing Shared Transaction: $name")
+          sharedMap.remove(name)
+          transaction.release(tx)
         } else {
-          (lastUsed.get() + timeoutMillis) - System.currentTimeMillis()
-        }
-        Task.sleep(nextPossibleTimeout.millis).next {
-          if (active.get() == 0 && lastUsed.get() < System.currentTimeMillis() - timeoutMillis) {
-            scribe.info(s"Releasing Shared Transaction: $name")
-            sharedMap.remove(name)
-            release(tx)
-          } else {
-            recurse()
-          }
+          recurse()
         }
       }
     }

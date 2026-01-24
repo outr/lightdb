@@ -40,7 +40,7 @@ class MultiStore[
 
     def apply(key: Key): Txn = transactions.computeIfAbsent(key, _ => {
       val s = ms(key)
-      s.transaction.create(None).sync()
+      s.transaction.create().sync()
     })
 
     def release: Task[Unit] = transactions

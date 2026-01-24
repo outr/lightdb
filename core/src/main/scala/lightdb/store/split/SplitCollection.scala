@@ -39,8 +39,8 @@ class SplitCollection[
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = for {
     t <- Task(SplitCollectionTransaction(this, parent))
-    t1 <- storage.transaction.create(Some(t))
-    t2 <- searching.transaction.create(Some(t))
+    t1 <- storage.transaction.withParent(t).create()
+    t2 <- searching.transaction.withParent(t).create()
     _ = t._storage = t1.asInstanceOf[t.store.storage.TX]
     _ = t._searching = t2.asInstanceOf[t.store.searching.TX]
   } yield t

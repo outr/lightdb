@@ -172,7 +172,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
 
   override protected def createTransaction(parent: Option[lightdb.transaction.Transaction[Doc, Model]]): Task[TX] = for {
     t <- Task(TraversalTransaction(this, parent))
-    bt <- backing.transaction.create(Some(t))
+    bt <- backing.transaction.withParent(t).create()
     _ = t._backing = bt.asInstanceOf[t.store.backing.TX]
   } yield t
 

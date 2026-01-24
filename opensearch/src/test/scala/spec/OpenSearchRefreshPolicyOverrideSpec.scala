@@ -72,7 +72,7 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
         // IMPORTANT:
         // Store.transaction(...) always commits in `guarantee(...)` even if the user task fails.
         // To test "early flush without commit refresh", we must explicitly rollback (no commit).
-        _ <- db.docs.transaction.create(None).flatMap { tx =>
+        _ <- db.docs.transaction.create().flatMap { tx =>
           tx.truncate
             .next(tx.insert(Doc("no-refresh-a", _id = Id("a"))))
             .next(tx.insert(Doc("no-refresh-b", _id = Id("b")))) // triggers early flush (buffer > 1)
