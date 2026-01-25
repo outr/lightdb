@@ -47,7 +47,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   yield c
 
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] =
-    backing.get(_ => index -> value)
+    backing.get(value.asInstanceOf[Id[Doc]])
 
   override protected def _insert(doc: Doc): Task[Doc] = backing.insert(doc).flatTap { d =>
     Task(store.indexCache.onInsert(d)).next {
@@ -177,9 +177,9 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
 
   override protected def _count: Task[Int] = backing.count
 
-  override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = for
-    existing <- backing.get(_ => index -> value)
-    deleted <- backing.delete(_ => index -> value)
+  override protected def _delete(id: Id[Doc]): Task[Boolean] = for
+    existing <- backing.get(id)
+    deleted <- backing.delete(id)
     _ <- Task(existing.foreach(store.indexCache.onDelete))
     _ <- (
       if store.persistedIndexEnabled && store.name != "_backingStore" then {
@@ -192,7 +192,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
           case _ => Task.unit
         }
       } else Task.unit
-    )
+      )
   yield deleted
 
   override protected def _commit: Task[Unit] = backing.commit
@@ -270,7 +270,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                       deleteIds = existingList.flatMap(d => TraversalPersistedIndex.idsForDoc(store.name, store.model, d))
                       _ <- if deleteIds.isEmpty then Task.unit else deleteIds.map(kv.delete).tasks.unit
                       bools <- idChunk.map { id =>
-                        store.trigger.delete(store.idField, id, this).flatMap(_ => backing.delete(_ => backing.store.idField -> id))
+                        store.trigger.delete(id, this).flatMap(_ => backing.delete(id))
                       }.tasks
                       _ <- Task(existingList.foreach(store.indexCache.onDelete))
                     yield bools.count(_ == true)

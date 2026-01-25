@@ -97,7 +97,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
     }
     "retrieve the first record by _id -> id" in {
       db.users.transaction { transaction =>
-        transaction(_._id -> adam._id).map(_ should be(adam))
+        transaction(adam._id).map(_ should be(adam))
       }
     }
     "retrieve the first record by id" in {
@@ -127,8 +127,8 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
     "delete some records" in {
       db.users.transaction { transaction =>
         for
-          d1 <- transaction.delete(_._id -> linda._id)
-          d2 <- transaction.delete(_._id -> yuri._id)
+          d1 <- transaction.delete(linda._id)
+          d2 <- transaction.delete(yuri._id)
         yield {
           d1 should be(true)
           d2 should be(true)
@@ -153,7 +153,7 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
     }
     "verify the record has been renamed" in {
       db.users.transaction { transaction =>
-        transaction(_._id -> adam._id).map(_.name should be("Allan"))
+        transaction(adam._id).map(_.name should be("Allan"))
       }
     }
     "insert a lot more names" in {

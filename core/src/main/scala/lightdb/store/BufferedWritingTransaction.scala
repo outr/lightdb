@@ -65,16 +65,11 @@ trait BufferedWritingTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = _get(store.idField, id).map(_.nonEmpty)
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = if index == store.idField then {
-    writeMod { map =>
-      Task {
-        val id = value.asInstanceOf[Id[Doc]]
-        map + (id -> WriteOp.Delete(id))
-      }
-    }.map(_.delta > 0)
-  } else {
-    throw new UnsupportedOperationException(s"BufferedWritingStore can only get on _id, but ${index.name} was attempted")
-  }
+  override def _delete(id: Id[Doc]): Task[Boolean] = writeMod { map =>
+    Task {
+      map + (id -> WriteOp.Delete(id))
+    }
+  }.map(_.delta > 0)
 
   override protected def _commit: Task[Unit] = writeMod { map =>
     flushMap(map).map(_.map)

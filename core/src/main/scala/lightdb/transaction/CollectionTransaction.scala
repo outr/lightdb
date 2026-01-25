@@ -2,8 +2,11 @@ package lightdb.transaction
 
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.error.DocNotFoundException
 import lightdb.field.Field
+import lightdb.field.Field.UniqueIndex
 import lightdb.field.FieldAndValue
+import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Collection, Conversion}
 import lightdb.{Query, SearchResults}
@@ -15,6 +18,20 @@ trait CollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] e
   lazy val query: Query[Doc, Model, Doc] = Query(this, Conversion.Doc())
 
   def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]]
+
+  def get[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Option[Doc]] = {
+    val (field, value) = f(store.model)
+    _get(field, value)
+  }
+
+  def apply[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Doc] = get[V](f).map {
+    case Some(doc) => doc
+    case None =>
+      val (field, value) = f(store.model)
+      throw DocNotFoundException(store.name, field.name, value)
+  }
+
+  override protected def _delete(id: Id[Doc]): Task[Boolean]
 
   /**
    * Backend-specific streaming implementation for a prepared query.

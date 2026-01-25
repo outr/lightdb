@@ -25,12 +25,6 @@ trait BasicStoreTrigger[Doc <: Document[Doc], Model <: DocumentModel[Doc]] exten
       case None => adding(doc, transaction)
     }
 
-  override final def delete[V](index: Field.UniqueIndex[Doc, V], value: V, transaction: Transaction[Doc, Model]): Task[Unit] = {
-    transaction(_ => index -> value).flatMap { doc =>
-      removing(doc, transaction)
-    }
-  }
-
   override final def truncate: Task[Unit] = store.transaction { transaction =>
     transaction.stream.map(doc => removing(doc, transaction)).drain
   }

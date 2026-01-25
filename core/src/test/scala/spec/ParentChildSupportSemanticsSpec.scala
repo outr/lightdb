@@ -47,7 +47,7 @@ class ParentChildSupportSemanticsSpec extends AnyWordSpec with Matchers {
     override protected def _upsert(doc: Doc) = ???
     override protected def _exists(id: Id[Doc]) = ???
     override protected def _count = ???
-    override protected def _delete[V](index: lightdb.field.Field.UniqueIndex[Doc, V], value: V) = ???
+    override protected def _delete(id: Id[Doc]): Task[Boolean] = ???
     override protected def _commit = ???
     override protected def _rollback = ???
     override protected def _close = ???

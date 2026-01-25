@@ -2,6 +2,7 @@ package lightdb.store.split
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
+import lightdb.id.Id
 import lightdb.store.{Collection, Store}
 import rapid.Task
 
@@ -19,7 +20,7 @@ case class DisabledUpdateHandler[
 ](txn: SplitCollectionTransaction[Doc, Model, Storage, Searching]) extends SearchUpdateHandler[Doc, Model, Storage, Searching] {
   override def insert(doc: Doc): Task[Unit] = Task.unit
   override def upsert(doc: Doc): Task[Unit] = Task.unit
-  override def delete[V](index: UniqueIndex[Doc, V], value: V): Task[Unit] = Task.unit
+  override def delete(id: Id[Doc]): Task[Unit] = Task.unit
   override def commit: Task[Unit] = Task.unit
   override def rollback: Task[Unit] = Task.unit
   override def truncate: Task[Unit] = Task.unit

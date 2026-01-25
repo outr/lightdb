@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.field.Field
 import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
+import lightdb.id.Id
 import lightdb.progress.ProgressManager
 import lightdb.store.multi.MultiStore
 import lightdb.store.{Store, StoreManager, StoreMode}
@@ -334,13 +335,10 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
           tx(transaction).upsert(ReverseEdgeDocument[E, F, T](doc))
         }
 
-      override def delete[V](index: Field.UniqueIndex[E, V], value: V, transaction: Transaction[E, M]): Task[Unit] = transaction
-        .get(_ => index -> value)
-        .flatTap {
-          case Some(doc) => tx(transaction).delete(ReverseEdgeDocument[E, F, T](doc)._id)
-          case None => Task.unit
-        }
-        .next(super.delete(index, value, transaction))
+      override def delete(id: Id[E], transaction: Transaction[E, M]): Task[Unit] = {
+        tx(transaction).delete(id.asInstanceOf[Id[ReverseEdgeDocument[E, F, T]]])
+          .next(super.delete(id, transaction))
+      }
 
       override def truncate: Task[Unit] = super.truncate.next {
         reverse.t.truncate.unit

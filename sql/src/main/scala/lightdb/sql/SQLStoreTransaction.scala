@@ -189,7 +189,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
     }
   }
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
+  override def _delete(id: Id[Doc]): Task[Boolean] = _deleteInternal(store.model._id, id)
+
+  protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val connection = state.connectionManager.getConnection(state)
     val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${index.name} = ?")
     val ps = connection.prepareStatement(sql.query)

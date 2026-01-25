@@ -34,6 +34,9 @@ case class SplitCollectionTransaction[
 
   override def jsonStream: rapid.Stream[Json] = storage.jsonStream
 
+  override def _delete(id: Id[Doc]): Task[Boolean] =
+    searchUpdateHandler.delete(id).next(storage.delete(id))
+
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if index == store.idField then {
     storage.get(value.asInstanceOf[Id[Doc]])
   } else {
@@ -53,11 +56,6 @@ case class SplitCollectionTransaction[
   override protected def _count: Task[Int] = storage.count
 
   override def estimatedCount: Task[Int] = storage.estimatedCount
-
-  override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] =
-    storage.delete(_ => index -> value).flatTap { _ =>
-      searchUpdateHandler.delete(index, value)
-    }
 
   override protected def _commit: Task[Unit] = for
     _ <- storage.commit

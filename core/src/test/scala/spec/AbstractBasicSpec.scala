@@ -13,7 +13,7 @@ import lightdb.time.Timestamp
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import perfolation.double2Implicits
-import rapid.{AsyncTaskSpec, Task}
+import rapid.{AsyncTaskSpec, Task, logger}
 
 import java.io.File
 import java.nio.file.{Files, Path}
@@ -119,7 +119,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
           Task.pure(succeed)
         }
 
-      test.guarantee(db.people.transaction(_.delete(_._id -> tempId)).unit)
+      test.guarantee(db.people.transaction(_.delete(tempId)).unit)
     }
     "retrieve the first record by _id -> id" in {
       db.people.transaction { transaction =>
@@ -253,7 +253,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "delete some records" in {
       db.people.transaction { transaction =>
-        transaction.delete(_._id -> linda._id).and(transaction.delete(_._id -> yuri._id)).map { t =>
+        transaction.delete(linda._id).and(transaction.delete(yuri._id)).map { t =>
           t should be(true -> true)
         }
       }

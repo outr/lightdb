@@ -54,7 +54,7 @@ class OpenSearchSmokeSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
       db.docs.t.upsert(TestDoc(1, _id = Id("one"))).succeed
     }
     "lookup the inserted record" in {
-      db.docs.t.get(_._id -> Id[TestDoc]("one")).map { found =>
+      db.docs.t.get(Id[TestDoc]("one")).map { found =>
         found.map(_.value) should be(Some(1))
       }
     }

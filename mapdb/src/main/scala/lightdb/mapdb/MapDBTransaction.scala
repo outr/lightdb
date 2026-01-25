@@ -44,8 +44,9 @@ case class MapDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](s
 
   override protected def _count: Task[Int] = Task(store.map.size())
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] =
-    Task(store.map.remove(value.asInstanceOf[Id[Doc]].value) != null)
+  override protected def _delete(id: Id[Doc]): Task[Boolean] = Task {
+    store.map.remove(id.value) != null
+  }
 
   override protected def _commit: Task[Unit] = Task.unit
 
