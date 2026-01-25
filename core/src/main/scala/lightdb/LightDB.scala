@@ -341,7 +341,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       }
 
       override def truncate: Task[Unit] = super.truncate.next {
-        reverse.t.truncate.unit
+        reverse.transaction(_.truncate.unit)
       }
     }
     reverse

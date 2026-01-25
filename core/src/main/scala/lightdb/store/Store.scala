@@ -69,8 +69,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     model.fields
   }
 
-  lazy val t: Transactionless[Doc, Model] = Transactionless(this)
-
   lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial)).singleton
 
   protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX]

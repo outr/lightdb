@@ -87,17 +87,17 @@ class OpenSearchJoinDomainRebuildFromStoresSpec extends AsyncWordSpec with Async
 
         val test = for
           _ <- SourceDB.init
-          _ <- SourceDB.parents.t.truncate
-          _ <- SourceDB.children.t.truncate
+          _ <- SourceDB.parents.transaction(_.truncate)
+          _ <- SourceDB.children.transaction(_.truncate)
 
           p1 = Parent("p1")
           p2 = Parent("p2")
-          _ <- SourceDB.parents.t.insert(List(p1, p2))
-          _ <- SourceDB.children.t.insert(List(
+          _ <- SourceDB.parents.transaction(_.insert(List(p1, p2)))
+          _ <- SourceDB.children.transaction(_.insert(List(
             Child(parentId = p1._id, tag = "a"),
             Child(parentId = p1._id, tag = "b"),
             Child(parentId = p2._id, tag = "b")
-          ))
+          )))
 
           // cleanup any prior physical indices behind the read alias (best effort)
           existing <- client.aliasTargets(readAlias)

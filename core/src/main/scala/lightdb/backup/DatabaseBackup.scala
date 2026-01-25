@@ -64,8 +64,8 @@ object DatabaseBackup {
 
   private def process(stores: List[Store[_, _]])(f: (Store[_, _], rapid.Stream[Json]) => Task[Int]): Task[Int] = {
     stores.map { store =>
-      store.t.json.stream { stream =>
-        f(store, stream)
+      store.transaction { txn =>
+        f(store, txn.jsonStream)
       }
     }.tasks.map(_.sum)
   }

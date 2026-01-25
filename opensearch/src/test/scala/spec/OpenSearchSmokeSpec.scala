@@ -48,25 +48,25 @@ class OpenSearchSmokeSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
       db.init.succeed
     }
     "truncate" in {
-      db.docs.t.truncate.succeed
+      db.docs.transaction(_.truncate).succeed
     }
     "insert a record" in {
-      db.docs.t.upsert(TestDoc(1, _id = Id("one"))).succeed
+      db.docs.transaction(_.upsert(TestDoc(1, _id = Id("one")))).succeed
     }
     "lookup the inserted record" in {
-      db.docs.t.get(Id[TestDoc]("one")).map { found =>
+      db.docs.transaction(_.get(Id[TestDoc]("one"))).map { found =>
         found.map(_.value) should be(Some(1))
       }
     }
     "count the records" in {
-      Task.condition(db.docs.t.count.map(_ == 1), timeout = 10.seconds).next {
-        db.docs.t.count.map { count =>
+      Task.condition(db.docs.transaction(_.count).map(_ == 1), timeout = 10.seconds).next {
+        db.docs.transaction(_.count).map { count =>
           count should be(1)
         }
       }
     }
     "truncate again" in {
-      db.docs.t.truncate.map { truncated =>
+      db.docs.transaction(_.truncate).map { truncated =>
         truncated should be(1)
       }
     }

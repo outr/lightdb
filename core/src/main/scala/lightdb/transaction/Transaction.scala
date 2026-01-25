@@ -17,6 +17,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this).next(_insert(doc))
   def insert(stream: rapid.Stream[Doc]): Task[Int] = stream.evalMap(insert).count
   final def insert(docs: Seq[Doc]): Task[Seq[Doc]] = insert(rapid.Stream.emits(docs)).map(_ => docs)
+  def insertJson(stream: rapid.Stream[Json]): Task[Int] = insert(stream.map(_.as[Doc](store.model.rw)))
 
   final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this).next(_upsert(doc))
   def upsert(stream: rapid.Stream[Doc]): Task[Int] = stream.evalMap(upsert).count

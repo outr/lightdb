@@ -55,8 +55,8 @@ class OpenSearchRebuildFromStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
       val test = for
         _ <- SourceDB.init
-        _ <- SourceDB.docs.t.truncate
-        _ <- SourceDB.docs.t.insert(List(Doc("x"), Doc("y"), Doc("z")))
+        _ <- SourceDB.docs.transaction(_.truncate)
+        _ <- SourceDB.docs.transaction(_.insert(List(Doc("x"), Doc("y"), Doc("z"))))
 
         // cleanup from any prior run
         existingR <- client.aliasTargets(readAlias)
