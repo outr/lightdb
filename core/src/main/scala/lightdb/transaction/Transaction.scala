@@ -8,6 +8,7 @@ import lightdb.error.DocNotFoundException
 import lightdb.field.Field.UniqueIndex
 import lightdb.id.Id
 import lightdb.store.Store
+import lightdb.transaction.batch.{Batch, DirectBatch}
 import rapid.*
 
 trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
@@ -32,7 +33,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def estimatedCount: Task[Int] = count
   final def commit: Task[Unit] = _commit
   final def rollback: Task[Unit] = _rollback
-  final def close: Task[Unit] = _close
+  final def close: Task[Unit] = batch.closeAll.next(_close)
 
   def get(id: Id[Doc]): Task[Option[Doc]] = _get(store.idField, id)
   def getAll(ids: Seq[Id[Doc]]): rapid.Stream[Doc] = rapid.Stream
@@ -63,6 +64,33 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def jsonStream: rapid.Stream[Json]
   def truncate: Task[Int]
 
+  private var batches = Set.empty[Batch[Doc, Model]]
+
+  protected def createBatch(): Task[Batch[Doc, Model]] = Task.pure(DirectBatch(this))
+  protected def releaseBatch(batch: Batch[Doc, Model]): Task[Unit] = Task {
+    batch.synchronized {
+      batches -= batch
+    }
+  }
+
+  object batch { b =>
+    def active: Task[Int] = Task.function(batches.size)
+
+    def create: Task[Batch[Doc, Model]] = createBatch().flatTap { batch =>
+      Task {
+        b.synchronized {
+          batches += batch
+        }
+      }
+    }
+
+    def closeAll: Task[Unit] = if (batches.nonEmpty) {
+      batches.toSeq.map(_.close).tasks.unit
+    } else {
+      Task.unit
+    }
+  }
+
   protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
   protected def _insert(doc: Doc): Task[Doc]
   protected def _upsert(doc: Doc): Task[Doc]
@@ -76,4 +104,10 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(store.model.rw))
   protected def fromString(string: String): Doc = toJson(string).as[Doc](store.model.rw)
   protected def toJson(string: String): Json = JsonParser(string)
+}
+
+object Transaction {
+  def releaseBatch[Doc <: Document[Doc], Model <: DocumentModel[Doc]](transaction: Transaction[Doc, Model],
+                                                                      batch: Batch[Doc, Model]): Task[Unit] =
+    transaction.releaseBatch(batch)
 }
