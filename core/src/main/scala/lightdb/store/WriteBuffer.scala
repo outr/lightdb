@@ -2,6 +2,8 @@ package lightdb.store
 
 import lightdb.doc.Document
 import lightdb.id.Id
+import lightdb.store.write.WriteOp
+
 import scala.collection.immutable.VectorMap
 
 /**

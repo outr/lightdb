@@ -3,6 +3,7 @@ package lightdb.store
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
+import lightdb.store.write.WriteOp
 import lightdb.transaction.Transaction
 import rapid.*
 
