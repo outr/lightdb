@@ -59,7 +59,7 @@ case class StoredValue[T](key: String,
   }
 
   def clear(): Task[Unit] = store.transaction { transaction =>
-    transaction.delete(_._id -> id).map {
+    transaction.delete(id).map {
       case true => cached = None
       case false => // Nothing
     }

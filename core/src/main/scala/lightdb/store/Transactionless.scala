@@ -20,10 +20,6 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
 
   def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = store.transaction(_.upsert(docs))
 
-  def get[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Option[Doc]] = store.transaction(_.get(f))
-
-  def apply[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Doc] = store.transaction(_(f))
-
   def get(id: Id[Doc]): Task[Option[Doc]] = store.transaction(_.get(id))
 
   def getAll(ids: Seq[Id[Doc]]): Task[List[Doc]] = store.transaction(_.getAll(ids).toList)
@@ -50,8 +46,6 @@ case class Transactionless[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
   def modify(id: Id[Doc], lock: Boolean = true, deleteOnNone: Boolean = false)
             (f: Forge[Option[Doc], Option[Doc]]): Task[Option[Doc]] =
     store.transaction(_.modify(id, lock, deleteOnNone)(f))
-
-  def delete[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Boolean] = store.transaction(_.delete(f))
 
   def delete(id: Id[Doc]): Task[Boolean] = store.transaction(_.delete(id))
 

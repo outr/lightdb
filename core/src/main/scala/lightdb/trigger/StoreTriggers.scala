@@ -2,6 +2,7 @@ package lightdb.trigger
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
+import lightdb.id.Id
 import lightdb.transaction.Transaction
 import rapid.*
 
@@ -30,8 +31,8 @@ class StoreTriggers[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends S
   override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] =
     list.map(_.upsert(doc, transaction)).tasks.unit
 
-  override def delete[V](index: UniqueIndex[Doc, V], value: V, transaction: Transaction[Doc, Model]): Task[Unit] =
-    list.map(_.delete(index, value, transaction)).tasks.unit
+  override def delete(id: Id[Doc], transaction: Transaction[Doc, Model]): Task[Unit] =
+    list.map(_.delete(id, transaction)).tasks.unit
 
   override def truncate: Task[Unit] =
     list.map(_.truncate).tasks.unit

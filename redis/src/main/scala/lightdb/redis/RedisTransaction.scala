@@ -36,8 +36,7 @@ case class RedisTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](s
 
   override protected def _count: Task[Int] = Task(jedis.hlen(store.name).toInt)
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] =
-    Task(jedis.hdel(value.asInstanceOf[Id[Doc]].value) > 0L)
+  override protected def _delete(id: Id[Doc]): Task[Boolean] = Task(jedis.hdel(id.value) > 0L)
 
   override protected def _commit: Task[Unit] = Task.unit
 

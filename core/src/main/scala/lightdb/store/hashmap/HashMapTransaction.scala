@@ -32,16 +32,11 @@ case class HashMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override protected def _count: Task[Int] = Task(store._map.size)
 
-  override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
+  override def _delete(id: Id[Doc]): Task[Boolean] = Task {
     store.synchronized {
-      if index == store.idField then {
-        val id = value.asInstanceOf[Id[Doc]]
-        val contains = store.map.contains(id)
-        store._map -= id
-        contains
-      } else {
-        throw new UnsupportedOperationException(s"MapStore can only get on _id, but ${index.name} was attempted")
-      }
+      val contains = store.map.contains(id)
+      store._map -= id
+      contains
     }
   }
 

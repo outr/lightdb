@@ -172,7 +172,12 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
         // `refreshPolicy` controls per-bulk behavior (OpenSearch `refresh` query param) and defaults to false for
         // throughput. LightDB's contract is "searchable after commit", so we still force a refresh at commit
         // boundaries when we've written to the index.
-        if wroteToIndex then client.refreshIndex(store.writeIndexName).next(awaitSearchableBarrier) else Task.unit
+        if wroteToIndex then {
+          wroteToIndex = false
+          client.refreshIndex(store.writeIndexName).next(awaitSearchableBarrier)
+        } else {
+          Task.unit
+        }
       }
 
       super._commit.next(refreshAndBarrierIfWrote).attempt.flatMap {
@@ -722,19 +727,6 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       client.count(store.readIndexName, obj("query" -> joinTypeFilterDsl))
     } else {
       client.count(store.readIndexName, obj("query" -> obj("match_all" -> obj())))
-    }
-  }
-
-  override protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean] = {
-    if index == store.idField then {
-      // Use BufferedWritingTransaction buffering semantics for deletes.
-      super._delete(index, value)
-    } else {
-      // Resolve by querying the doc then delete by _id (buffered).
-      _get(index, value).flatMap {
-        case Some(doc) => super._delete(store.idField, doc._id)
-        case None => Task.pure(false)
-      }
     }
   }
 

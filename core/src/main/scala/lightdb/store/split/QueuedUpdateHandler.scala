@@ -40,9 +40,7 @@ case class QueuedUpdateHandler[
     Task.unit
   }
 
-  override def delete[V](index: UniqueIndex[Doc, V], value: V): Task[Unit] = Task.defer {
-    if index != txn.store.model._id then throw new UnsupportedOperationException("Only id deletes are supported in QueuedUpdateHandler")
-    val id = value.asInstanceOf[Id[Doc]]
+  override def delete(id: Id[Doc]): Task[Unit] = Task {
     val delta = Option(deltas.get(id)) match {
       case Some(QueuedDelta.Insert(_)) => None
       case _ => Some(QueuedDelta.Delete(id))
@@ -50,7 +48,6 @@ case class QueuedUpdateHandler[
     delta.foreach { d =>
       deltas.put(id, d)
     }
-    Task.unit
   }
 
   override def commit: Task[Unit] = rapid.Stream.fromIterator(Task(deltas.values().asScala.iterator))

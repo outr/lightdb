@@ -138,8 +138,8 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     store.rocksDB.getLongProperty(store.handle.orNull, "rocksdb.estimate-num-keys").toInt
   }
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
-    val bytes = value.asInstanceOf[Id[Doc]].bytes
+  override protected def _delete(id: Id[Doc]): Task[Boolean] = Task {
+    val bytes = id.bytes
     store.handle match {
       case Some(h) => store.rocksDB.delete(h, writeOptions, bytes)
       case None => store.rocksDB.delete(writeOptions, bytes)

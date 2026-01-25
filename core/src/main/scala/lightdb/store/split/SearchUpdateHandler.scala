@@ -2,6 +2,7 @@ package lightdb.store.split
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
+import lightdb.id.Id
 import lightdb.store.{Collection, Store}
 import rapid.Task
 
@@ -15,7 +16,7 @@ trait SearchUpdateHandler[
 
   def insert(doc: Doc): Task[Unit]
   def upsert(doc: Doc): Task[Unit]
-  def delete[V](index: UniqueIndex[Doc, V], value: V): Task[Unit]
+  def delete(id: Id[Doc]): Task[Unit]
   def commit: Task[Unit]
   def rollback: Task[Unit]
   def truncate: Task[Unit]

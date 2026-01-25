@@ -29,18 +29,10 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
    * Gets an estimated count if supported by database. Falls back to using count.
    */
   def estimatedCount: Task[Int] = count
-  final def delete[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Boolean] = {
-    val (field, value) = f(store.model)
-    store.trigger.delete(field, value, this).flatMap(_ => _delete(field, value))
-  }
   final def commit: Task[Unit] = _commit
   final def rollback: Task[Unit] = _rollback
   final def close: Task[Unit] = _close
 
-  def get[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Option[Doc]] = {
-    val (field, value) = f(store.model)
-    _get(field, value)
-  }
   def get(id: Id[Doc]): Task[Option[Doc]] = _get(store.idField, id)
   def getAll(ids: Seq[Id[Doc]]): rapid.Stream[Doc] = rapid.Stream
     .emits(ids)
@@ -48,12 +40,6 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def apply(id: Id[Doc]): Task[Doc] = get(id).map(_.getOrElse {
     throw DocNotFoundException(store.name, "_id", id)
   })
-  def apply[V](f: Model => (UniqueIndex[Doc, V], V)): Task[Doc] = get[V](f).map {
-    case Some(doc) => doc
-    case None =>
-      val (field, value) = f(store.model)
-      throw DocNotFoundException(store.name, field.name, value)
-  }
   def getOrCreate(id: Id[Doc], create: => Doc, establishLock: Boolean = true): Task[Doc] =
     modify(id, establishLock = establishLock) {
       case Some(doc) => Task.pure(Some(doc))
@@ -69,7 +55,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
       case None => Task.pure(None)
     }
   }
-  def delete(id: Id[Doc]): Task[Boolean] = delete(_._id -> id)
+  final def delete(id: Id[Doc]): Task[Boolean] = store.trigger.delete(id, this).next(_delete(id))
 
   def list: Task[List[Doc]] = stream.toList
   def stream: rapid.Stream[Doc] = jsonStream.map(_.as[Doc](store.model.rw))
@@ -79,9 +65,9 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
   protected def _insert(doc: Doc): Task[Doc]
   protected def _upsert(doc: Doc): Task[Doc]
+  protected def _delete(id: Id[Doc]): Task[Boolean]
   protected def _exists(id: Id[Doc]): Task[Boolean]
   protected def _count: Task[Int]
-  protected def _delete[V](index: UniqueIndex[Doc, V], value: V): Task[Boolean]
   protected def _commit: Task[Unit]
   protected def _rollback: Task[Unit]
   protected def _close: Task[Unit]

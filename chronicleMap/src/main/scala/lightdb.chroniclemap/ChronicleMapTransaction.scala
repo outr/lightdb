@@ -46,12 +46,8 @@ case class ChronicleMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[
 
   override protected def _count: Task[Int] = Task(db.size())
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
-    if index == store.idField then {
-      db.remove(value.asInstanceOf[Id[Doc]].value) != null
-    } else {
-      throw new UnsupportedOperationException(s"ChronicleMapStore can only get on _id, but ${index.name} was attempted")
-    }
+  override protected def _delete(id: Id[Doc]): Task[Boolean] = Task {
+    db.remove(id.value) != null
   }
 
   override protected def _commit: Task[Unit] = Task.unit

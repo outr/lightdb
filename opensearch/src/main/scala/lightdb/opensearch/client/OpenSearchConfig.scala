@@ -85,7 +85,7 @@ case class OpenSearchConfig(baseUrl: String,
                              * Example: `hits.hits._id,hits.hits._source,hits.hits._score,hits.hits.sort,hits.total.value,aggregations`
                              */
                             searchFilterPath: Option[String] = None,
-                            bulkMaxDocs: Int = 5_000,
+                            bulkMaxDocs: Int = 50_000,
                             bulkMaxBytes: Int = 5 * 1024 * 1024,
                             /**
                              * Maximum number of concurrent bulk requests issued during a commit when the buffered

@@ -48,7 +48,9 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def _count: Task[Int] = Task(state.indexSearcher.count(new MatchAllDocsQuery))
 
-  override protected def _delete[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
+  override protected def _delete(id: Id[Doc]): Task[Boolean] = _deleteInternal(store.idField, id)
+
+  protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val query = searchBuilder.filter2Lucene(Some(index === value))
     store.index.indexWriter.deleteDocuments(query)
     true

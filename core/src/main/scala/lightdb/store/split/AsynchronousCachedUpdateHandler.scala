@@ -2,6 +2,7 @@ package lightdb.store.split
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.UniqueIndex
+import lightdb.id.Id
 import lightdb.store.{Collection, Store}
 import rapid.{Task, logger}
 
@@ -55,8 +56,7 @@ case class AsynchronousCachedUpdateHandler[
 
   override def insert(doc: Doc): Task[Unit] = add(txn.searching.insert(doc).unit)
   override def upsert(doc: Doc): Task[Unit] = add(txn.searching.upsert(doc).unit)
-  override def delete[V](index: UniqueIndex[Doc, V], value: V): Task[Unit] =
-    add(txn.searching.delete(_ => index -> value).unit)
+  override def delete(id: Id[Doc]): Task[Unit] = add(txn.searching.delete(id).unit)
   override def commit: Task[Unit] = add(txn.searching.commit)
     .condition(Task(cached.get() <= 0))
   override def rollback: Task[Unit] = add(txn.searching.rollback)
