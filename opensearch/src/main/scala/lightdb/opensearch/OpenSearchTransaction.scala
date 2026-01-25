@@ -20,7 +20,7 @@ import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.opensearch.query.{OpenSearchDsl, OpenSearchSearchBuilder}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, Transaction}
-import lightdb.store.{BufferedWritingTransaction, Conversion, StoreMode, WriteOp}
+import lightdb.store.{BufferedWritingTransaction, Conversion, StoreMode}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.{Query, SearchResults, Sort}
 import lightdb.util.Aggregator
@@ -33,6 +33,7 @@ import scala.concurrent.duration.*
 import scala.util.{Failure, Success, Try}
 
 import lightdb.opensearch.OpenSearchMetrics
+import lightdb.store.write.WriteOp
 import rapid.Unique
 
 case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: OpenSearchStore[Doc, Model],
