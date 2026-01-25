@@ -22,10 +22,10 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
       DB.init.succeed
     }
     "insert a couple SpecialOne instances" in {
-      DB.specialOne.t.insert(List(
+      DB.specialOne.transaction(_.insert(List(
         SpecialOne("First", WrappedString("Apple"), Person("Andrew", 1), _id = Id("first")),
         SpecialOne("Second", WrappedString("Banana"), Person("Bianca", 2), _id = Id("second"))
-      )).succeed
+      ))).succeed
     }
     "verify the SpecialOne instances were stored properly" in {
       DB.specialOne.transaction { transaction =>

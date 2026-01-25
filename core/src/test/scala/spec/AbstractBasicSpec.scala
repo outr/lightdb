@@ -193,7 +193,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "verify the AgeLinks is properly updated" in {
-      db.ageLinks.t.get(AgeLinks.id(30)).map(_.map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori")))))
+      db.ageLinks.transaction(_.get(AgeLinks.id(30))).map(_.map(_.people).map(_.toSet) should be(Some(Set(Id("yuri"), Id("wyatt"), Id("tori")))))
     }
     "query with aggregate functions" in {
       if aggregationSupported then {
@@ -534,9 +534,9 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "verify the correct number of records in the database" in {
       for
-        people <- db.people.t.count
-        ageLinks <- db.ageLinks.t.count
-        backingStore <- db.backingStore.t.count
+        people <- db.people.transaction(_.count)
+        ageLinks <- db.ageLinks.transaction(_.count)
+        backingStore <- db.backingStore.transaction(_.count)
       yield {
         people should be(24)
         ageLinks should be(22)
@@ -693,7 +693,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       }
     }
     "count the remaining records to make sure they were deleted" in {
-      db.people.t.count.map { remaining =>
+      db.people.transaction(_.count).map { remaining =>
         remaining should be(19)
       }
     }

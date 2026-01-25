@@ -30,7 +30,7 @@ class TypeSafetySpec extends AnyWordSpec with Matchers {
 
       TestDB.people shouldBe a[HashMapStore[_, _]]
 
-      TestDB.people.t.insert(Person("Test 1", 1)).sync()
+      TestDB.people.transaction(_.insert(Person("Test 1", 1))).sync()
 
       val mapStore: HashMapStore[Person, Person.type] = TestDB.people
       mapStore.map.size should be(1)

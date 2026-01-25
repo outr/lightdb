@@ -42,7 +42,7 @@ class OpenSearchBackingStoreSpec extends AsyncWordSpec with AsyncTaskSpec with M
     "persist multiple StoredValues as distinct KeyValue docs" in {
       val test = for
         _ <- DB.init
-        c <- DB.backingStore.t.count
+        c <- DB.backingStore.transaction(_.count)
         ids <- DB.backingStore.transaction { tx =>
           tx.query.id.stream.toList
         }

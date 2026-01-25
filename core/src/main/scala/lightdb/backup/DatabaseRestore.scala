@@ -1,5 +1,6 @@
 package lightdb.backup
 
+import fabric.rw.*
 import fabric.io.JsonParser
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
@@ -43,12 +44,15 @@ object DatabaseRestore {
                                                                  file: File,
                                                                  truncate: Boolean = true): Task[Int] = {
     if file.exists() then {
-      if truncate then store.t.truncate()
+      if truncate then store.transaction(_.truncate).sync()
       val source = Source.fromFile(file)
       val stream = rapid.Stream.fromIterator(Task(source
         .getLines()
         .map(s => JsonParser(s))))
-      store.t.json.insert(stream, disableSearchUpdates = false).guarantee(Task(source.close()))
+        .map(_.as[Doc](store.model.rw))
+      store.transaction { txn =>
+        txn.insert(stream)
+      }.guarantee(Task(source.close()))
     } else {
       throw new RuntimeException(s"${file.getAbsolutePath} doesn't exist")
     }
@@ -60,9 +64,11 @@ object DatabaseRestore {
         case Some(source) =>
           val task = for
             _ <- logger.info(s"Restoring ${store.name}...")
-            _ <- store.t.truncate.when(truncate)
+            _ <- store.transaction(_.truncate).when(truncate)
             stream = rapid.Stream.fromIterator(Task(source.getLines().map(JsonParser.apply)))
-            count <- store.t.json.insert(stream, disableSearchUpdates = true)
+            count <- store.transaction { txn =>
+              txn.insertJson(stream)
+            }
             _ <- logger.info(s"Restored $count documents to ${store.name}")
           yield Some((store, count))
           task.guarantee(Task(source.close()))

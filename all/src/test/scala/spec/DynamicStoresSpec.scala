@@ -20,18 +20,18 @@ class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       DB.init.succeed
     }
     "store a user in users1" in {
-      DB.users1.t.insert(User("A", 1)).succeed
+      DB.users1.transaction(_.insert(User("A", 1))).succeed
     }
     "store a user in users2" in {
-      DB.users2.t.insert(User("B", 2)).succeed
+      DB.users2.transaction(_.insert(User("B", 2))).succeed
     }
     "verify only one user in users1" in {
-      DB.users1.t.list.map { users =>
+      DB.users1.transaction(_.list).map { users =>
         users.map(_.name) should be(List("A"))
       }
     }
     "verify only one user in users2" in {
-      DB.users2.t.list.map { users =>
+      DB.users2.transaction(_.list).map { users =>
         users.map(_.name) should be(List("B"))
       }
     }

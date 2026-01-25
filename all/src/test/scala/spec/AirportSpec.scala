@@ -39,7 +39,7 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     //    }
     "query JFK airport" in {
       val jfk = Airport.id("JFK")
-      DB.airports.t(jfk).map { airport =>
+      DB.airports.transaction(_(jfk)).map { airport =>
         airport.name should be("John F Kennedy Intl")
       }
     }
@@ -65,10 +65,10 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
       }
     }
     "count all the airports" in {
-      DB.airports.t.count.map(_ should be(3375))
+      DB.airports.transaction(_.count).map(_ should be(3375))
     }
     "count all connections" in {
-      DB.flights.t.count.map(_ should be(286463))
+      DB.flights.transaction(_.count).map(_ should be(286463))
     }
     "count all connections to JFK" in {
       DB.flights.transaction { tx =>
