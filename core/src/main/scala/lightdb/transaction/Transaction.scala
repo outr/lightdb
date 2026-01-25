@@ -16,12 +16,17 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def parent: Option[Transaction[Doc, Model]]
 
   final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this).next(_insert(doc))
-  def insert(stream: rapid.Stream[Doc]): Task[Int] = stream.evalMap(insert).count
+  def insert(stream: rapid.Stream[Doc]): Task[Int] = batch { b =>
+    stream.evalMap(b.insert).count
+  }
+
   final def insert(docs: Seq[Doc]): Task[Seq[Doc]] = insert(rapid.Stream.emits(docs)).map(_ => docs)
   def insertJson(stream: rapid.Stream[Json]): Task[Int] = insert(stream.map(_.as[Doc](store.model.rw)))
 
   final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this).next(_upsert(doc))
-  def upsert(stream: rapid.Stream[Doc]): Task[Int] = stream.evalMap(upsert).count
+  def upsert(stream: rapid.Stream[Doc]): Task[Int] = batch { b =>
+    stream.evalMap(b.upsert).count
+  }
   final def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = upsert(rapid.Stream.emits(docs)).map(_ => docs)
 
   final def exists(id: Id[Doc]): Task[Boolean] = _exists(id)
@@ -83,6 +88,11 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
         }
       }
     }
+
+    def apply[Return](f: Batch[Doc, Model] => Task[Return]): Task[Return] = create
+      .flatMap { batch =>
+        f(batch).guarantee(batch.close)
+      }
 
     def closeAll: Task[Unit] = if (batches.nonEmpty) {
       batches.toSeq.map(_.close).tasks.unit
