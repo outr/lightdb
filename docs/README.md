@@ -526,7 +526,9 @@ object shardDb extends LightDB {
   val storeManager = HashMapStore
   val directory = None
   def upgrades = Nil
-  val shards = multiStore[String, TenantDoc, TenantDoc.type](TenantDoc, key => s"tenant_$key")
+  val shards = multiStore[TenantDoc, TenantDoc.type, S[TenantDoc, TenantDoc.type]#TX, S[TenantDoc, TenantDoc.type], String](TenantDoc)
+    .withKeys("tenantA", "tenantB")
+    .create()
 }
 
 shardDb.init.sync()
