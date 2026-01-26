@@ -76,20 +76,20 @@ class SplitCollection[
     def elapsedMs: Long = (System.nanoTime() - startNanos) / 1_000_000L
 
     Task {
-      scribe.warn(s"[reindex-trace] $name reIndexInternal starting (elapsedMs=$elapsedMs) ...")
+      scribe.debug(s"[reindex-trace] $name reIndexInternal starting (elapsedMs=$elapsedMs) ...")
     }.next {
       Task {
-        scribe.warn(s"[reindex-trace] $name starting searching.truncate (elapsedMs=$elapsedMs) ...")
+        scribe.debug(s"[reindex-trace] $name starting searching.truncate (elapsedMs=$elapsedMs) ...")
       }.next {
         transaction.searching.truncate
       }.flatMap { deleted =>
         Task {
-          scribe.warn(s"[reindex-trace] $name searching.truncate completed deleted=$deleted (elapsedMs=$elapsedMs). Starting storage.count ...")
+          scribe.debug(s"[reindex-trace] $name searching.truncate completed deleted=$deleted (elapsedMs=$elapsedMs). Starting storage.count ...")
         }.next {
           transaction.storage.count
         }.flatMap { total =>
           Task {
-            scribe.warn(s"[reindex-trace] $name storage.count=$total (elapsedMs=$elapsedMs). Starting searching.insert(stream) ...")
+            scribe.debug(s"[reindex-trace] $name storage.count=$total (elapsedMs=$elapsedMs). Starting searching.insert(stream) ...")
           }.next {
             val counter = new AtomicInteger(0)
             val LogEvery = 100_000
@@ -98,7 +98,7 @@ class SplitCollection[
                 Task {
                   val count = counter.incrementAndGet()
                   if count == 1 || count % LogEvery == 0 || count == total then {
-                    scribe.warn(s"[reindex-trace] $name streamed=$count/$total (elapsedMs=$elapsedMs)")
+                    scribe.debug(s"[reindex-trace] $name streamed=$count/$total (elapsedMs=$elapsedMs)")
                   }
                   progressManager.percentage(
                     current = count,
@@ -109,11 +109,11 @@ class SplitCollection[
               }
             ).unit
           }.next(Task {
-            scribe.warn(s"[reindex-trace] $name searching.insert(stream) completed (elapsedMs=$elapsedMs).")
+            scribe.debug(s"[reindex-trace] $name searching.insert(stream) completed (elapsedMs=$elapsedMs).")
           })
         }
       }.next(Task {
-        scribe.warn(s"[reindex-trace] $name reIndexInternal finished (elapsedMs=$elapsedMs).")
+        scribe.debug(s"[reindex-trace] $name reIndexInternal finished (elapsedMs=$elapsedMs).")
       })
     }
   }

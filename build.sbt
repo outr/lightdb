@@ -9,7 +9,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.15.0-SNAPSHOT"
+ThisBuild / version := "4.15.0"
 ThisBuild / scalaVersion := "3.8.1"
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 
@@ -121,7 +121,7 @@ lazy val core = crossProject(JVMPlatform)
 			"com.outr" %%% "scribe" % scribeVersion,
 			"com.outr" %%% "reactify" % reactifyVersion,
 			"org.typelevel" %%% "fabric-io" % fabricVersion,
-			"com.outr" %% "scribe-slf4j" % scribeVersion,
+			"com.outr" %% "scribe-slf4j2" % scribeVersion,
 			"com.outr" %%% "profig" % profigVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,

@@ -816,7 +816,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
           else {
             wroteToIndex = true
             // TEMP DEBUG: record when we start pushing bulks for a store during a long reindex.
-            scribe.warn(s"[reindex-trace] OpenSearch flushBuffer store=${store.name} index=${store.writeIndexName} ops=${ops.size} indexOps=${indexOps.size} deleteOps=${deleteOps.size} refresh=${effectiveRefreshPolicy.getOrElse("<default>")}")
+            scribe.debug(s"[reindex-trace] OpenSearch flushBuffer store=${store.name} index=${store.writeIndexName} ops=${ops.size} indexOps=${indexOps.size} deleteOps=${deleteOps.size} refresh=${effectiveRefreshPolicy.getOrElse("<default>")}")
             // Track a recent indexed document id so commit can validate searchability post-refresh.
             // (Only meaningful for index/upsert, not pure deletes.)
             indexOps.lastOption match {
@@ -830,11 +830,11 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
               // TEMP DEBUG: only log the first chunk of each flushBuffer invocation to avoid flooding logs.
               // If it hangs here, we'll see it.
               if chunk eq chunks.head then {
-                scribe.warn(s"[reindex-trace] OpenSearch bulk start store=${store.name} docs=${chunk.size} bytes~=${chunk.size} (building request)")
+                scribe.debug(s"[reindex-trace] OpenSearch bulk start store=${store.name} docs=${chunk.size} bytes~=${chunk.size} (building request)")
               }
               val body = OpenSearchBulkRequest(chunk).toBulkNdjson
               if chunk eq chunks.head then {
-                scribe.warn(s"[reindex-trace] OpenSearch bulk send store=${store.name} bytes=${body.length} docs=${chunk.size}")
+                scribe.debug(s"[reindex-trace] OpenSearch bulk send store=${store.name} bytes=${body.length} docs=${chunk.size}")
               }
               if config.metricsEnabled then {
                 OpenSearchMetrics.recordBulkAttempt(config.normalizedBaseUrl, docs = chunk.size, bytes = body.length)
@@ -844,7 +844,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
               }.flatMap { json =>
                 if chunk eq chunks.head then {
                   val hasErrors = json.asObj.get("errors").exists(_.asBoolean)
-                  scribe.warn(s"[reindex-trace] OpenSearch bulk response store=${store.name} received (errors=$hasErrors)")
+                  scribe.debug(s"[reindex-trace] OpenSearch bulk response store=${store.name} received (errors=$hasErrors)")
                 }
                 val errors = json.asObj.get("errors").exists(_.asBoolean)
                 if !errors then {
@@ -1068,18 +1068,18 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       def elapsedMs: Long = (System.nanoTime() - startNanos) / 1_000_000L
 
       logger
-        .warn(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} starting count (elapsedMs=$elapsedMs) ...")
+        .debug(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} starting count (elapsedMs=$elapsedMs) ...")
         .next {
           client.count(store.readIndexName, q)
         }
         .flatMap { deleted =>
           logger
-            .warn(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} count=$deleted; starting deleteByQuery refresh=$refreshForDeleteByQuery (elapsedMs=$elapsedMs) ...")
+            .debug(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} count=$deleted; starting deleteByQuery refresh=$refreshForDeleteByQuery (elapsedMs=$elapsedMs) ...")
             .next {
               client.deleteByQuery(store.readIndexName, q, refresh = refreshForDeleteByQuery)
             }
             .map { _ =>
-              scribe.warn(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} deleteByQuery done (elapsedMs=$elapsedMs).")
+              scribe.debug(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} deleteByQuery done (elapsedMs=$elapsedMs).")
               deleted
             }
         }
