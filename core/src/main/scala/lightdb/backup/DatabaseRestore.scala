@@ -75,13 +75,9 @@ object DatabaseRestore {
         case None => Task.pure(None)
       }
     }.tasks.map(_.flatten).flatMap { list =>
-      for
-        _ <- logger.info("Finished Restoring. Re-Indexing...")
-        counts <- list.map {
-          case (store, count) => store.reIndex().map(_ => count)
-        }.tasksPar
-        _ <- logger.info(s"Finished Re-Sync")
-      yield counts.sum
+      logger.info(s"Finished Restoring ${list.length} stores!").function {
+        list.map(_._2).sum
+      }
     }
   }
 }

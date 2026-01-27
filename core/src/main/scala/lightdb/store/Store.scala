@@ -35,6 +35,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   object trigger extends StoreTriggers[Doc, Model]
 
   override protected def initialize(): Task[Unit] = Task.defer {
+    scribe.info(s"Initializing $name (${storeManager.name})...")
     model match {
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet
