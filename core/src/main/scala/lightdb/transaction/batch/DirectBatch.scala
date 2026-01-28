@@ -9,5 +9,4 @@ case class DirectBatch[Doc <: Document[Doc], Model <: DocumentModel[Doc]](transa
   override def insert(doc: Doc): Task[Doc] = transaction.insert(doc)
   override def upsert(doc: Doc): Task[Doc] = transaction.upsert(doc)
   override def delete(id: Id[Doc]): Task[Unit] = transaction.delete(id).unit
-  override def flush: Task[Int] = Task.pure(0)
 }
