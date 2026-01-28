@@ -1,12 +1,17 @@
 package lightdb.util
 
+import lightdb.store.write.WriteOp
+
+import java.util
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.annotation.tailrec
+import scala.collection.compat.immutable.ArraySeq
 import scala.collection.immutable.VectorMap
+import scala.collection.mutable.ListBuffer
 import scala.compiletime.uninitialized
 
-class AtomicQueue[T] extends Iterable[T] {
+class AtomicQueue[T <: AnyRef] extends Iterable[T] {
   private val q = new ConcurrentLinkedQueue[T]
   private val _size = new AtomicInteger(0)
 
@@ -19,7 +24,34 @@ class AtomicQueue[T] extends Iterable[T] {
     }
   }
 
-  def add(t: T): Unit = {
+  def poll(max: Int): ArraySeq[T] = {
+    val a = new Array[AnyRef](max)
+
+    @tailrec
+    def recurse(count: Int): Int = if (count >= max) {
+      // Finished
+      count
+    } else {
+      poll() match {
+        case None => count
+        case Some(t) =>
+          a(count) = t.asInstanceOf[AnyRef]
+          recurse(count + 1)
+      }
+    }
+    val n = recurse(0)
+
+    val array = if (n == 0) {
+      Array.empty[AnyRef]
+    } else if (n == max) {
+      a
+    } else {
+      util.Arrays.copyOf(a, n)
+    }
+    ArraySeq.unsafeWrapArray(array).asInstanceOf[ArraySeq[T]]
+  }
+
+  def add(t: T): Int = {
     q.offer(t)
     _size.incrementAndGet()
   }
