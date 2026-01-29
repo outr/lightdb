@@ -51,6 +51,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     transaction(initTransaction)
   })
 
+  override protected def maximumConcurrency: Int = 1
+
   protected def createSchema(tx: TX): Unit = {
     executeUpdate(s"CREATE SCHEMA IF NOT EXISTS ${lightDB.name}", tx)
   }
