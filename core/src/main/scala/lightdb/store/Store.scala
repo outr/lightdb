@@ -19,7 +19,7 @@ import rapid.*
 
 import java.io.File
 import java.nio.file.Path
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, Semaphore}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -211,6 +211,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     private val active = new AtomicInteger(0)
     private val lastUsed = new AtomicLong(0L)
     @volatile private var started = false
+    private val mutex = new Semaphore(1, true)
 
     private val timeoutMillis = timeout.toMillis
 
@@ -225,10 +226,13 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         }
       }
       Task.defer {
-        task.guarantee(Task {
-          active.decrementAndGet()
-          lastUsed.set(System.currentTimeMillis())
-        })
+        Task(mutex.acquire())
+          .next(task)
+          .guarantee(Task {
+            mutex.release()
+            active.decrementAndGet()
+            lastUsed.set(System.currentTimeMillis())
+          })
       }
     }
 
