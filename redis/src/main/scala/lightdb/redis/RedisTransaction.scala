@@ -10,9 +10,14 @@ import redis.clients.jedis.Jedis
 
 import scala.jdk.CollectionConverters.*
 
-case class RedisTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RedisStore[Doc, Model],
-                                                                               jedis: Jedis,
-                                                                               parent: Option[Transaction[Doc, Model]]) extends Transaction[Doc, Model] {
+case class RedisTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: RedisStore[Doc, Model],
+  jedis: Jedis,
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends Transaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     jedis.hgetAll(store.name).values().iterator().asScala.map(toJson)
   })

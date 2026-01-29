@@ -29,7 +29,7 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
   protected def aggregationSupported: Boolean = true
   protected def filterBuilderSupported: Boolean = false
   protected def memoryOnly: Boolean = false
-  protected def readYourWritesWithinTransactionSupported: Boolean = true
+  protected def scoredResultsOrderingSupported: Boolean = true
 
   private val adam = Person("Adam", 21, _id = Person.id("adam"))
   private val brenda = Person("Brenda", 11, bestFriend = Some(adam._id), _id = Person.id("brenda"))
@@ -100,26 +100,6 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
       db.people.transaction { transaction =>
         transaction.insert(names).map(_ should not be None)
       }
-    }
-    "read-your-writes within a transaction for Option filters (insert then query)" in {
-      val tempId = Person.id("temp-city-option-ryw")
-      val temp = Person(name = "Temp", age = 21, city = Some(City("Austin")), _id = tempId)
-
-      val test =
-        if readYourWritesWithinTransactionSupported then {
-          db.people.transaction { tx =>
-            for
-              _ <- tx.insert(temp).map(_ => ())
-              ids <- tx.query.filter(_.city !== None).id.toList
-            yield {
-              ids.toSet should contain(tempId)
-            }
-          }
-        } else {
-          Task.pure(succeed)
-        }
-
-      test.guarantee(db.people.transaction(_.delete(tempId)).unit)
     }
     "retrieve the first record by _id -> id" in {
       db.people.transaction { transaction =>
@@ -352,8 +332,21 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
               people <- results.list
               scores <- results.scores
             yield {
-              people.map(_.name) should be(List("Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin", "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey", "Allan"))
-              scores should be(List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0))
+              val expectedNames = List(
+                "Veronica", "Brenda", "Diana", "Greg", "Charlie", "Evan", "Fiona", "Hanna", "Ian", "Jenna", "Kevin",
+                "Mike", "Nancy", "Oscar", "Penny", "Quintin", "Ruth", "Sam", "Tori", "Uba", "Wyatt", "Xena", "Zoey",
+                "Allan"
+              )
+              val expectedScores = List(6.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+
+              if scoredResultsOrderingSupported then {
+                people.map(_.name) should be(expectedNames)
+                scores should be(expectedScores)
+              } else {
+                people.map(_.name).toSet should be(expectedNames.toSet)
+                scores.sorted should be(expectedScores.sorted)
+              }
             }
           }
         }

@@ -29,14 +29,16 @@ trait OpenSearchTestSupport extends ProfigTestSupport { this: org.scalatest.Suit
       conn.setReadTimeout(500)
       conn.setInstanceFollowRedirects(false)
       val code = conn.getResponseCode
-      if code != 200 then return false
-      val is = conn.getInputStream
-      try {
-        val bytes = is.readNBytes(4096)
-        val body = new String(bytes, java.nio.charset.StandardCharsets.UTF_8).toLowerCase
-        body.contains("opensearch") || body.contains("\"cluster_name\"")
-      } finally {
-        is.close()
+      if code != 200 then false
+      else {
+        val is = conn.getInputStream
+        try {
+          val bytes = is.readNBytes(4096)
+          val body = new String(bytes, java.nio.charset.StandardCharsets.UTF_8).toLowerCase
+          body.contains("opensearch") || body.contains("\"cluster_name\"")
+        } finally {
+          is.close()
+        }
       }
     } catch {
       case _: Throwable => false
@@ -116,107 +118,115 @@ object OpenSearchTestSupport {
   @volatile private var startupCleanupRan: Boolean = false
 
   def cleanupAllTestIndicesOnStartup(resolvedBaseUrl: String): Unit = {
-    if resolvedBaseUrl != "http://localhost:9200" then return
-    if startupCleanupRan then return
-    startupCleanupRan = true
+    if resolvedBaseUrl != "http://localhost:9200" || startupCleanupRan then ()
+    else {
+      startupCleanupRan = true
 
-    try {
-      val baseUrl = profig.Profig("lightdb.opensearch.baseUrl").as[String]
-      if baseUrl != "http://localhost:9200" then return
-
-      def http(method: String, pathAndQuery: String): (Int, String) = {
-        val url = new java.net.URI(baseUrl + pathAndQuery).toURL
-        val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
-        conn.setRequestMethod(method)
-        conn.setConnectTimeout(1000)
-        conn.setReadTimeout(5000)
-        conn.setInstanceFollowRedirects(false)
-        conn.connect()
-        val code = conn.getResponseCode
-        val is = if code >= 200 && code < 400 then conn.getInputStream else conn.getErrorStream
-        val body = if is != null then {
-          try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-          finally is.close()
-        } else {
-          ""
-        }
-        (code, body)
-      }
-
-      val (code, body) = http("GET", "/_cat/indices/lightdb_test_*?h=index&s=index")
-      if code != 200 then return
-      val indices = body
-        .split("\n")
-        .iterator
-        .map(_.trim)
-        .filter(s => s.nonEmpty && s.startsWith("lightdb_test_"))
-        .toVector
-
-      indices.foreach { index =>
-        val (dCode, _) = http("DELETE", s"/$index")
-        if dCode != 200 && dCode != 202 && dCode != 404 then {
-          // Best-effort.
-          scribe.warn(s"Unable to delete OpenSearch stale test index '$index' (status=$dCode)")
-        }
-      }
-    } catch {
-      case t: Throwable =>
-        // Best-effort.
-        scribe.warn(s"OpenSearch startup cleanup failed: ${t.getMessage}")
-    }
-  }
-
-  def registerShutdownCleanupIfNeeded(resolvedBaseUrl: String): Unit = {
-    if resolvedBaseUrl != "http://localhost:9200" then return
-    if shutdownHookRegistered then return
-    shutdownHookRegistered = true
-
-    sys.addShutdownHook {
       try {
         val baseUrl = profig.Profig("lightdb.opensearch.baseUrl").as[String]
-        val prefix = profig.Profig("lightdb.opensearch.indexPrefix").as[String]
-        if baseUrl != "http://localhost:9200" then return
-
-        def http(method: String, pathAndQuery: String): (Int, String) = {
-          val url = new java.net.URI(baseUrl + pathAndQuery).toURL
-          val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
-          conn.setRequestMethod(method)
-          conn.setConnectTimeout(1000)
-          conn.setReadTimeout(5000)
-          conn.setInstanceFollowRedirects(false)
-          conn.connect()
-          val code = conn.getResponseCode
-          val is = if code >= 200 && code < 400 then conn.getInputStream else conn.getErrorStream
-          val body = if is != null then {
-            try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-            finally is.close()
-          } else {
-            ""
+        if baseUrl != "http://localhost:9200" then ()
+        else {
+          def http(method: String, pathAndQuery: String): (Int, String) = {
+            val url = new java.net.URI(baseUrl + pathAndQuery).toURL
+            val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
+            conn.setRequestMethod(method)
+            conn.setConnectTimeout(1000)
+            conn.setReadTimeout(5000)
+            conn.setInstanceFollowRedirects(false)
+            conn.connect()
+            val code = conn.getResponseCode
+            val is = if code >= 200 && code < 400 then conn.getInputStream else conn.getErrorStream
+            val body = if is != null then {
+              try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+              finally is.close()
+            } else {
+              ""
+            }
+            (code, body)
           }
-          (code, body)
-        }
 
-        // Use _cat indices to list indices; then delete each index by exact name (compatible with destructive_requires_name).
-        val (code, body) = http("GET", s"/_cat/indices/${prefix}*?h=index&s=index")
-        if code != 200 then return
-        val indices = body
-          .split("\n")
-          .iterator
-          .map(_.trim)
-          .filter(s => s.nonEmpty && s.startsWith(prefix))
-          .toVector
+          val (code, body) = http("GET", "/_cat/indices/lightdb_test_*?h=index&s=index")
+          if code != 200 then ()
+          else {
+            val indices = body
+              .split("\n")
+              .iterator
+              .map(_.trim)
+              .filter(s => s.nonEmpty && s.startsWith("lightdb_test_"))
+              .toVector
 
-        indices.foreach { index =>
-          val (dCode, _) = http("DELETE", s"/$index")
-          if dCode != 200 && dCode != 202 && dCode != 404 then {
-            // Best-effort; never fail shutdown on cleanup.
-            scribe.warn(s"Unable to delete OpenSearch test index '$index' (status=$dCode)")
+            indices.foreach { index =>
+              val (dCode, _) = http("DELETE", s"/$index")
+              if dCode != 200 && dCode != 202 && dCode != 404 then {
+                // Best-effort.
+                scribe.warn(s"Unable to delete OpenSearch stale test index '$index' (status=$dCode)")
+              }
+            }
           }
         }
       } catch {
         case t: Throwable =>
-          // Best-effort; never fail shutdown on cleanup.
-          scribe.warn(s"OpenSearch shutdown cleanup failed: ${t.getMessage}")
+          // Best-effort.
+          scribe.warn(s"OpenSearch startup cleanup failed: ${t.getMessage}")
+      }
+    }
+  }
+
+  def registerShutdownCleanupIfNeeded(resolvedBaseUrl: String): Unit = {
+    if resolvedBaseUrl != "http://localhost:9200" || shutdownHookRegistered then ()
+    else {
+      shutdownHookRegistered = true
+
+      sys.addShutdownHook {
+        try {
+          val baseUrl = profig.Profig("lightdb.opensearch.baseUrl").as[String]
+          val prefix = profig.Profig("lightdb.opensearch.indexPrefix").as[String]
+          if baseUrl != "http://localhost:9200" then ()
+          else {
+            def http(method: String, pathAndQuery: String): (Int, String) = {
+              val url = new java.net.URI(baseUrl + pathAndQuery).toURL
+              val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
+              conn.setRequestMethod(method)
+              conn.setConnectTimeout(1000)
+              conn.setReadTimeout(5000)
+              conn.setInstanceFollowRedirects(false)
+              conn.connect()
+              val code = conn.getResponseCode
+              val is = if code >= 200 && code < 400 then conn.getInputStream else conn.getErrorStream
+              val body = if is != null then {
+                try new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                finally is.close()
+              } else {
+                ""
+              }
+              (code, body)
+            }
+
+            // Use _cat indices to list indices; then delete each index by exact name (compatible with destructive_requires_name).
+            val (code, body) = http("GET", s"/_cat/indices/${prefix}*?h=index&s=index")
+            if code != 200 then ()
+            else {
+              val indices = body
+                .split("\n")
+                .iterator
+                .map(_.trim)
+                .filter(s => s.nonEmpty && s.startsWith(prefix))
+                .toVector
+
+              indices.foreach { index =>
+                val (dCode, _) = http("DELETE", s"/$index")
+                if dCode != 200 && dCode != 202 && dCode != 404 then {
+                  // Best-effort; never fail shutdown on cleanup.
+                  scribe.warn(s"Unable to delete OpenSearch test index '$index' (status=$dCode)")
+                }
+              }
+            }
+          }
+        } catch {
+          case t: Throwable =>
+            // Best-effort; never fail shutdown on cleanup.
+            scribe.warn(s"OpenSearch shutdown cleanup failed: ${t.getMessage}")
+        }
       }
     }
   }

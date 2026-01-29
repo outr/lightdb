@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.progress.ProgressManager
 import lightdb.store.{Collection, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import rapid.{Task, logger}
 
 import java.nio.file.Path
@@ -26,6 +27,8 @@ class SplitCollection[
   storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, db, storeManager) {
   override type TX = SplitCollectionTransaction[Doc, Model, Storage, Searching]
 
+  override def defaultBatchConfig: BatchConfig = BatchConfig.StoreNative
+
   /**
    * Delegate native join support to the searching collection.
    *
@@ -37,10 +40,12 @@ class SplitCollection[
 
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = for
-    t <- Task(SplitCollectionTransaction(this, parent))
-    t1 <- storage.transaction.withParent(t).create()
-    t2 <- searching.transaction.withParent(t).create()
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = for
+    t <- Task(SplitCollectionTransaction(this, parent, writeHandlerFactory))
+    t1 <- storage.transaction.withParent(t).withBatch(batchConfig).create()
+    t2 <- searching.transaction.withParent(t).withBatch(batchConfig).create()
     _ = t._storage = t1.asInstanceOf[t.store.storage.TX]
     _ = t._searching = t2.asInstanceOf[t.store.searching.TX]
   yield t

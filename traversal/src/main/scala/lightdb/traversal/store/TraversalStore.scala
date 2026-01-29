@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{StoreManager, StoreMode}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.Collection
+import lightdb.transaction.batch.BatchConfig
 import profig.Profig
 import fabric.*
 import fabric.rw.*
@@ -145,7 +146,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
         effectiveIndexBacking match {
           case Some(idx) =>
             // Determine whether the persisted index is already ready.
-            val readyT: Task[Boolean] = idx.transaction { kv =>
+            val readyT: Task[Boolean] = idx.transaction.withStoreNativeBatch { kv =>
               TraversalPersistedIndex.isReady(name, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
             }.attempt.map(_.getOrElse(false))
 
@@ -158,7 +159,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
               _ <-
                 if ready then Task.unit
                 else if empty then {
-                  idx.transaction { kv =>
+                  idx.transaction.withStoreNativeBatch { kv =>
                     TraversalPersistedIndex.markReady(name, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
                   }.attempt.unit
                 } else if persistedIndexAutoBuild then {
@@ -170,9 +171,11 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
       } else Task.unit
     }.next(super.initialize())
 
-  override protected def createTransaction(parent: Option[lightdb.transaction.Transaction[Doc, Model]]): Task[TX] = for
-    t <- Task(TraversalTransaction(this, parent))
-    bt <- backing.transaction.withParent(t).create()
+  override protected def createTransaction(parent: Option[lightdb.transaction.Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: lightdb.transaction.Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = for
+    t <- Task(TraversalTransaction(this, parent, writeHandlerFactory))
+    bt <- backing.transaction.withParent(t).withBatch(batchConfig).create()
     _ = t._backing = bt.asInstanceOf[t.store.backing.TX]
   yield t
 
@@ -192,13 +195,15 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
       (effectiveIndexBacking match {
         case Some(idx) =>
           backing.transaction { bt =>
-            idx.transaction { kv =>
-              TraversalPersistedIndex.buildFromStore(
-                storeName = name,
-                model = model,
-                backing = bt,
-                kv = kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]]
-              )
+            bt.flush.next {
+              idx.transaction.withStoreNativeBatch { kv =>
+                TraversalPersistedIndex.buildFromStore(
+                  storeName = name,
+                  model = model,
+                  backing = bt,
+                  kv = kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]]
+                )
+              }
             }
           }
         case None =>
@@ -213,7 +218,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     if !persistedIndexEnabled || name == "_backingStore" then Task.pure(false)
     else effectiveIndexBacking match {
       case Some(idx) =>
-        idx.transaction { kv =>
+        idx.transaction.withStoreNativeBatch { kv =>
           TraversalPersistedIndex.isReady(name, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
         }.attempt.map(_.getOrElse(false))
       case None =>
@@ -227,7 +232,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
-        idx.transaction { kv =>
+        idx.transaction.withStoreNativeBatch { kv =>
           TraversalPersistedIndex.eqPostings(name, fieldName, value, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
         }.attempt.map(_.getOrElse(Set.empty))
       case None =>
@@ -241,7 +246,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
-        idx.transaction { kv =>
+        idx.transaction.withStoreNativeBatch { kv =>
           TraversalPersistedIndex.ngPostings(name, fieldName, query, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
         }.attempt.map(_.getOrElse(Set.empty))
       case None =>
@@ -255,7 +260,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
-        idx.transaction { kv =>
+        idx.transaction.withStoreNativeBatch { kv =>
           TraversalPersistedIndex.swPostings(name, fieldName, query, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
         }.attempt.map(_.getOrElse(Set.empty))
       case None =>
@@ -269,7 +274,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
-        idx.transaction { kv =>
+        idx.transaction.withStoreNativeBatch { kv =>
           TraversalPersistedIndex.ewPostings(name, fieldName, query, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
         }.attempt.map(_.getOrElse(Set.empty))
       case None =>
@@ -283,7 +288,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
-        idx.transaction { kv =>
+        idx.transaction.withStoreNativeBatch { kv =>
           TraversalPersistedIndex.rangeLongPostings(name, fieldName, from, to, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
         }.attempt.map(_.getOrElse(Set.empty))
       case None =>
@@ -297,7 +302,7 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     if !persistedIndexEnabled || name == "_backingStore" then Task.pure(Set.empty)
     else effectiveIndexBacking match {
       case Some(idx) =>
-        idx.transaction { kv =>
+        idx.transaction.withStoreNativeBatch { kv =>
           TraversalPersistedIndex.rangeDoublePostings(name, fieldName, from, to, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
         }.attempt.map(_.getOrElse(Set.empty))
       case None =>

@@ -6,7 +6,6 @@ import fabric.{Json, Null}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.id.Id
-import lightdb.store.BufferedWritingTransaction
 import lightdb.store.write.WriteOp
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.lmdbjava.Txn
@@ -15,11 +14,14 @@ import rapid.*
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LMDBStore[Doc, Model],
-                                                                              instance: LMDBInstance,
-                                                                              parent: Option[Transaction[Doc, Model]])
-  extends BufferedWritingTransaction[Doc, Model]
-    with PrefixScanningTransaction[Doc, Model] {
+case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: LMDBStore[Doc, Model],
+  instance: LMDBInstance,
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends PrefixScanningTransaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   private var _readTxn: Txn[ByteBuffer] = instance.newRead()
 
   def readTxn: Txn[ByteBuffer] = _readTxn
@@ -35,35 +37,40 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     JsonParser(jsonString)
   }
 
-  override protected def flushBuffer(stream: rapid.Stream[WriteOp[Doc]]): Task[Unit] = Task {
+  def flushOps(ops: Seq[WriteOp[Doc]]): Task[Unit] =
     store.instance.withWrite { txn =>
-      stream
-        .map {
+      Task {
+        ops.foreach {
           case WriteOp.Insert(doc) => instance.put(txn, doc._id.bytes, d2b(doc), overwrite = false)
           case WriteOp.Upsert(doc) => instance.put(txn, doc._id.bytes, d2b(doc), overwrite = true)
           case WriteOp.Delete(id) => instance.delete(txn, id.bytes)
         }
-        .count
-    }
-  }.flatten.unit
+      }
+    }.unit
 
-  override protected def directGet[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if index == store.idField then {
+  override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if index == store.idField then {
     Task(instance.get(readTxn, value.asInstanceOf[Id[Doc]].bytes).map(bytes2Doc))
   } else {
     throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${index.name} was attempted")
   }
+
+  override protected def _insert(doc: Doc): Task[Doc] =
+    flushOps(Seq(WriteOp.Insert(doc))).map(_ => doc)
+
+  override protected def _upsert(doc: Doc): Task[Doc] =
+    flushOps(Seq(WriteOp.Upsert(doc))).map(_ => doc)
+
+  override protected def _delete(id: Id[Doc]): Task[Boolean] =
+    flushOps(Seq(WriteOp.Delete(id))).map(_ => true)
+
+  override protected def _exists(id: Id[Doc]): Task[Boolean] =
+    _get(store.idField, id).map(_.nonEmpty)
 
   override def jsonStream: rapid.Stream[Json] =
     rapid.Stream.fromIterator(Task(new LMDBValueIterator(store.instance.dbi, readTxn))).map(b2j)
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] =
     rapid.Stream.fromIterator(Task(new LMDBValueIterator(store.instance.dbi, readTxn, Some(prefix)))).map(b2j)
-
-  override protected def _truncate: Task[Int] = count.flatTap { _ =>
-    store.instance.withWrite { txn =>
-      Task(store.instance.dbi.drop(txn))
-    }
-  }
 
   override protected def _count: Task[Int] = Task {
     store.instance.dbi.stat(readTxn).entries.toInt
@@ -78,12 +85,20 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     }
   }*/
 
-  override protected def _commit: Task[Unit] = super._commit.next(Task {
+  override def truncate: Task[Int] = count.flatTap { _ =>
+    store.instance.withWrite { txn =>
+      Task(store.instance.dbi.drop(txn))
+    }
+  }
+
+  override protected def _commit: Task[Unit] = Task {
     _readTxn.close()
     _readTxn = instance.newRead()
-  })
+  }
 
-  override protected def _close: Task[Unit] = Task(readTxn.close()).next(super._close)
+  override protected def _rollback: Task[Unit] = Task.unit
+
+  override protected def _close: Task[Unit] = Task(readTxn.close())
 
   private def b2d(bb: ByteBuffer): Option[Doc] = b2j(bb) match {
     case Null => None

@@ -39,19 +39,21 @@ final class ThreadConfinedBufferedIterator[A](mk: => Iterator[A],
   private var i, len = 0
 
   private def refill(): Unit = {
-    if i < len then return
-    // One hop: pull up to batchSize items on the agent thread
-    val v: Vector[A] = onAgent { it =>
-      val out = new ArrayBuffer[A](batchSize)
-      var n = 0
-      while n < batchSize && it.hasNext do {
-        out += it.next(); n += 1
+    if i < len then ()
+    else {
+      // One hop: pull up to batchSize items on the agent thread
+      val v: Vector[A] = onAgent { it =>
+        val out = new ArrayBuffer[A](batchSize)
+        var n = 0
+        while n < batchSize && it.hasNext do {
+          out += it.next(); n += 1
+        }
+        out.toVector
       }
-      out.toVector
+      buf = v
+      i = 0
+      len = buf.length
     }
-    buf = v
-    i = 0
-    len = buf.length
   }
 
   override def hasNext: Boolean = {

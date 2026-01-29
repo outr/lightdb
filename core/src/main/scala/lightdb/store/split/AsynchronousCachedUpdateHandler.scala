@@ -59,7 +59,7 @@ case class AsynchronousCachedUpdateHandler[
   override def delete(id: Id[Doc]): Task[Unit] = add(txn.searching.delete(id).unit)
   override def commit: Task[Unit] = add(txn.searching.commit)
     .condition(Task(cached.get() <= 0))
-  override def rollback: Task[Unit] = add(txn.searching.rollback)
+  override def rollback: Task[Unit] = add(SearchUpdateHandler.rollbackIfSupported(txn.searching))
   override def truncate: Task[Unit] = add(txn.searching.truncate.unit)
   override def close: Task[Unit] = Task.function {
     keepAlive = false

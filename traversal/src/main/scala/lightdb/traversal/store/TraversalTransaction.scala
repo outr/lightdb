@@ -13,7 +13,7 @@ import lightdb.field.FieldAndValue
 import lightdb.field.IndexingState
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
-import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, Transaction}
+import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, RollbackSupport, Transaction}
 import lightdb.{Query, SearchResults}
 import rapid.Task
 import rapid.taskSeq2Ops
@@ -21,14 +21,45 @@ import rapid.taskTaskOps
 
 case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   store: TraversalStore[Doc, Model],
-  parent: Option[Transaction[Doc, Model]]
-) extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] {
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] with RollbackSupport[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   private[store] var _backing: store.backing.TX = _
   def backing: store.backing.TX = _backing
 
-  override def jsonStream: rapid.Stream[Json] = backing.jsonStream
+  private def flushBackingBeforeRead: Task[Unit] = flush.next(backing.flush)
 
-  override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = backing.jsonPrefixStream(prefix)
+  def buildPersistedIndex(): Task[Unit] =
+    flush.next(store.buildPersistedIndex())
+
+  def persistedIndexReady(): Task[Boolean] =
+    flush.next(store.persistedIndexReady())
+
+  def persistedEqPostings(fieldName: String, value: Any): Task[Set[String]] =
+    flush.next(store.persistedEqPostings(fieldName, value))
+
+  def persistedNgPostings(fieldName: String, query: String): Task[Set[String]] =
+    flush.next(store.persistedNgPostings(fieldName, query))
+
+  def persistedSwPostings(fieldName: String, query: String): Task[Set[String]] =
+    flush.next(store.persistedSwPostings(fieldName, query))
+
+  def persistedEwPostings(fieldName: String, query: String): Task[Set[String]] =
+    flush.next(store.persistedEwPostings(fieldName, query))
+
+  def persistedRangeLongPostings(fieldName: String, from: Option[Long], to: Option[Long]): Task[Set[String]] =
+    flush.next(store.persistedRangeLongPostings(fieldName, from, to))
+
+  def persistedRangeDoublePostings(fieldName: String, from: Option[Double], to: Option[Double]): Task[Set[String]] =
+    flush.next(store.persistedRangeDoublePostings(fieldName, from, to))
+
+  override def jsonStream: rapid.Stream[Json] =
+    rapid.Stream.force(flushBackingBeforeRead.next(Task.pure(backing.jsonStream)))
+
+  override def jsonPrefixStream(prefix: String): rapid.Stream[Json] =
+    rapid.Stream.force(flushBackingBeforeRead.next(Task.pure(backing.jsonPrefixStream(prefix))))
 
   override def truncate: Task[Int] = for
     c <- backing.truncate
@@ -47,7 +78,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   yield c
 
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] =
-    backing.get(value.asInstanceOf[Id[Doc]])
+    flushBackingBeforeRead.next(backing.get(value.asInstanceOf[Id[Doc]]))
+
+  override def getAll(ids: Seq[Id[Doc]]): rapid.Stream[Doc] =
+    rapid.Stream.force(flushBackingBeforeRead.next(Task.pure(backing.getAll(ids))))
 
   override protected def _insert(doc: Doc): Task[Doc] = backing.insert(doc).flatTap { d =>
     Task(store.indexCache.onInsert(d)).next {
@@ -55,7 +89,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
       if store.persistedIndexEnabled && store.name != "_backingStore" then {
         store.effectiveIndexBacking match {
           case Some(idx) =>
-            idx.transaction { kv =>
+            idx.transaction.withStoreNativeBatch { kv =>
               val tx = kv.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
               TraversalPersistedIndex
                 .indexDoc(store.name, store.model, d, tx)
@@ -75,7 +109,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         case Some(idx) =>
           // Bulk insert optimization: keep a single indexBacking transaction open and batch index writes per chunk.
           val ChunkSize: Int = 256
-          idx.transaction { kv0 =>
+          idx.transaction.withStoreNativeBatch { kv0 =>
             val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
             stream
               .chunk(ChunkSize)
@@ -109,7 +143,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         case None => super.upsert(stream)
         case Some(idx) =>
           val ChunkSize: Int = 256
-          idx.transaction { kv =>
+          idx.transaction.withStoreNativeBatch { kv =>
 //            val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
             stream
               .chunk(ChunkSize)
@@ -117,8 +151,8 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                 val list = chunk.toList
                 val ids = list.map(_._id)
 
-                // Fetch existing docs (best-effort); used for cache update + deindex.
-                backing.getAll(ids).toList.flatMap { existingList =>
+                // Fetch existing docs; flush first since transactions do not guarantee read-your-writes.
+                flushBackingBeforeRead.next(backing.getAll(ids).toList).flatMap { existingList =>
                   val existingMap: Map[Id[Doc], Doc] = existingList.iterator.map(d => d._id -> d).toMap
 
                   val upsertTasks: List[Task[Doc]] = list.map { doc =>
@@ -151,14 +185,14 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   }
 
   override protected def _upsert(doc: Doc): Task[Doc] = for
-    existing <- backing.get(doc._id)
+    existing <- flushBackingBeforeRead.next(backing.get(doc._id))
     d <- backing.upsert(doc)
     _ <- Task(store.indexCache.onUpsert(existing, d))
     _ <- (
       if store.persistedIndexEnabled && store.name != "_backingStore" then {
         store.effectiveIndexBacking match {
           case Some(idx) =>
-            idx.transaction { kv =>
+            idx.transaction.withStoreNativeBatch { kv =>
               val tx = kv.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
               val de = existing match {
                 case Some(old) => TraversalPersistedIndex.deindexDoc(store.name, store.model, old, tx)
@@ -173,19 +207,21 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     )
   yield d
 
-  override protected def _exists(id: Id[Doc]): Task[Boolean] = backing.exists(id)
+  override protected def _exists(id: Id[Doc]): Task[Boolean] =
+    flushBackingBeforeRead.next(backing.exists(id))
 
-  override protected def _count: Task[Int] = backing.count
+  override protected def _count: Task[Int] =
+    flushBackingBeforeRead.next(backing.count)
 
   override protected def _delete(id: Id[Doc]): Task[Boolean] = for
-    existing <- backing.get(id)
+    existing <- flushBackingBeforeRead.next(backing.get(id))
     deleted <- backing.delete(id)
     _ <- Task(existing.foreach(store.indexCache.onDelete))
     _ <- (
       if store.persistedIndexEnabled && store.name != "_backingStore" then {
         (existing, store.effectiveIndexBacking) match {
           case (Some(old), Some(idx)) =>
-            idx.transaction { kv =>
+            idx.transaction.withStoreNativeBatch { kv =>
               val tx = kv.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
               TraversalPersistedIndex.deindexDoc(store.name, store.model, old, tx)
             }.attempt.unit
@@ -196,22 +232,28 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
   yield deleted
 
   override protected def _commit: Task[Unit] = backing.commit
-  override protected def _rollback: Task[Unit] = backing.rollback
+  override protected def _rollback: Task[Unit] =
+    backing match {
+      case r: lightdb.transaction.RollbackSupport[Doc, Model] => r.rollback
+      case _ => Task.unit
+    }
   override protected def _close: Task[Unit] = store.backing.transaction.release(backing)
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
-    if store.persistedIndexEnabled && store.name != "_backingStore" then {
-      store.effectiveIndexBacking match {
-        case Some(idx) =>
-          idx.transaction { kv =>
-            val tx = kv.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
-            TraversalQueryEngine.search(store.name, store.model, backing, store.indexCache, Some(tx), query)
-          }
-        case None =>
-          TraversalQueryEngine.search(store.name, store.model, backing, store.indexCache, None, query)
+    flushBackingBeforeRead.next {
+      if store.persistedIndexEnabled && store.name != "_backingStore" then {
+        store.effectiveIndexBacking match {
+          case Some(idx) =>
+            idx.transaction.withStoreNativeBatch { kv =>
+              val tx = kv.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
+              TraversalQueryEngine.search(store.name, store.model, backing, store.indexCache, Some(tx), query)
+            }
+          case None =>
+            TraversalQueryEngine.search(store.name, store.model, backing, store.indexCache, None, query)
+        }
+      } else {
+        TraversalQueryEngine.search(store.name, store.model, backing, store.indexCache, None, query)
       }
-    } else {
-      TraversalQueryEngine.search(store.name, store.model, backing, store.indexCache, None, query)
     }
 
   // Query.update/delete are provided by CollectionTransaction defaults; override not required initially.
@@ -229,7 +271,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
             val idChunk = chunk.toList
             if idChunk.isEmpty then Task.pure(0)
             else {
-              backing.getAll(idChunk).toList.flatMap { existingDocs =>
+              flushBackingBeforeRead.next(backing.getAll(idChunk).toList).flatMap { existingDocs =>
                 val updatedDocs: List[Doc] = existingDocs.map { d =>
                   val json = store.model.rw.read(d)
                   val updatedJson = updates.foldLeft(json)((json, fv) => fv.update(json))
@@ -263,10 +305,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                 val idChunk = chunk.toList
                 if idChunk.isEmpty then Task.pure(0)
                 else {
-                  idx.transaction { kv0 =>
+                  idx.transaction.withStoreNativeBatch { kv0 =>
                     val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
                     for
-                      existingList <- backing.getAll(idChunk).toList
+                      existingList <- flushBackingBeforeRead.next(backing.getAll(idChunk).toList)
                       deleteIds = existingList.flatMap(d => TraversalPersistedIndex.idsForDoc(store.name, store.model, d))
                       _ <- if deleteIds.isEmpty then Task.unit else deleteIds.map(kv.delete).tasks.unit
                       bools <- idChunk.map { id =>

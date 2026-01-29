@@ -6,6 +6,7 @@ import lightdb.field.Field.*
 import lightdb.lucene.index.Index
 import lightdb.store.*
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import org.apache.lucene.facet.FacetsConfig
 import org.apache.lucene.index.{DirectoryReader, SegmentReader}
 import org.apache.lucene.search.IndexSearcher
@@ -23,6 +24,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      lightDB: LightDB,
                                                                      storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = LuceneTransaction[Doc, Model]
+
+  override def defaultBatchConfig: BatchConfig = BatchConfig.Direct
 
   IndexSearcher.setMaxClauseCount(10_000_000)
 
@@ -57,13 +60,15 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   })
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = storeMode match {
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = storeMode match {
     case StoreMode.Indexes(storage) if parent.isEmpty =>
       storage.transaction.create().map { p =>
-        LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent = Some(p), ownedParent = true)
+        LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent = Some(p), writeHandlerFactory = writeHandlerFactory, ownedParent = true)
       }
     case _ =>
-      Task(LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent))
+      Task(LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent, writeHandlerFactory))
   }
 
   override def optimize(): Task[Unit] = Task {

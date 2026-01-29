@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.{Store, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import org.mapdb.{DB, DBMaker, BTreeMap, Serializer}
 import rapid.Task
 
@@ -31,8 +32,12 @@ class MapDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
 
   override protected def initialize(): Task[Unit] = super.initialize()
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
-    MapDBTransaction(this, parent)
+  override def defaultBatchConfig: BatchConfig = BatchConfig.Direct
+
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = Task {
+    MapDBTransaction(this, parent, writeHandlerFactory)
   }
 
   override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {

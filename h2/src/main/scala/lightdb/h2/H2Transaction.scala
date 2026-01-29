@@ -15,9 +15,14 @@ import fabric.io.JsonFormatter
 import lightdb.ListExtras
 import lightdb.sql.query.SQLQuery
 
-case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: H2Store[Doc, Model],
-                                                                            state: SQLState[Doc, Model],
-                                                                            parent: Option[Transaction[Doc, Model]]) extends SQLStoreTransaction[Doc, Model] {
+case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: H2Store[Doc, Model],
+  state: SQLState[Doc, Model],
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends SQLStoreTransaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   override protected def concatPrefix: String = "STRING_AGG"
 
   private def mvTable(fieldName: String): String = s"${store.name}__mv__${fieldName}"
@@ -32,23 +37,31 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](stor
   }
 
   override protected def arrayContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = {
-    if !H2Store.EnableMultiValueIndexes then return None
-    val extracted = values.flatMap(jsonToMVValue)
-    if extracted.isEmpty then return Some(SQLPart.Fragment("1=1"))
-    val parts = extracted.map { v =>
-      SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+    if !H2Store.EnableMultiValueIndexes then None
+    else {
+      val extracted = values.flatMap(jsonToMVValue)
+      if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
+      else {
+        val parts = extracted.map { v =>
+          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+        }
+        Some(SQLQuery(parts.intersperse(SQLPart.Fragment(" AND "))))
+      }
     }
-    Some(SQLQuery(parts.intersperse(SQLPart.Fragment(" AND "))))
   }
 
   override protected def arrayNotContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = {
-    if !H2Store.EnableMultiValueIndexes then return None
-    val extracted = values.flatMap(jsonToMVValue)
-    if extracted.isEmpty then return Some(SQLPart.Fragment("1=1"))
-    val inner = extracted.map { v =>
-      SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+    if !H2Store.EnableMultiValueIndexes then None
+    else {
+      val extracted = values.flatMap(jsonToMVValue)
+      if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
+      else {
+        val inner = extracted.map { v =>
+          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+        }
+        Some(SQLQuery(List(SQLPart.Fragment("NOT("), SQLQuery(inner.intersperse(SQLPart.Fragment(" AND "))), SQLPart.Fragment(")"))))
+      }
     }
-    Some(SQLQuery(List(SQLPart.Fragment("NOT("), SQLQuery(inner.intersperse(SQLPart.Fragment(" AND "))), SQLPart.Fragment(")"))))
   }
 
   private def tokenize(value: String): List[String] =
@@ -71,19 +84,22 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](stor
   override protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: lightdb.SortDirection): Option[BestMatchPlan] = {
     // Heuristic best-match ranking for H2. This is intentionally backend-portable and does not require
     // H2 fulltext extensions. It is not indexed like SQLite FTS5, but provides deterministic scoring.
-    val (fieldName, raw) = findFirstTokenizedEquals(filter).getOrElse(return None)
-    val tokens = tokenize(raw)
-    if tokens.isEmpty then return None
-    val scoreColumn = "__score"
-    val qualified = s"LOWER(${store.fqn}.${fieldName})"
-    val cond = tokens.map(_ => s"CASE WHEN $qualified LIKE ? THEN 1 ELSE 0 END").mkString(" + ")
-    val scoreField = SQLPart(s"($cond) AS $scoreColumn", tokens.map(t => s"%$t%".json): _*)
-    val dir = direction match {
-      case SortDirection.Descending => "DESC"
-      case SortDirection.Ascending => "ASC"
+    findFirstTokenizedEquals(filter).flatMap { case (fieldName, raw) =>
+      val tokens = tokenize(raw)
+      if tokens.isEmpty then None
+      else {
+        val scoreColumn = "__score"
+        val qualified = s"LOWER(${store.fqn}.${fieldName})"
+        val cond = tokens.map(_ => s"CASE WHEN $qualified LIKE ? THEN 1 ELSE 0 END").mkString(" + ")
+        val scoreField = SQLPart(s"($cond) AS $scoreColumn", tokens.map(t => s"%$t%".json): _*)
+        val dir = direction match {
+          case SortDirection.Descending => "DESC"
+          case SortDirection.Ascending => "ASC"
+        }
+        val sortPart = SQLPart.Fragment(s"$scoreColumn $dir")
+        Some(BestMatchPlan(scoreColumn, scoreField, Nil, SQLPart.Fragment("1=1"), sortPart))
+      }
     }
-    val sortPart = SQLPart.Fragment(s"$scoreColumn $dir")
-    Some(BestMatchPlan(scoreColumn, scoreField, Nil, SQLPart.Fragment("1=1"), sortPart))
   }
 
   override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = List(

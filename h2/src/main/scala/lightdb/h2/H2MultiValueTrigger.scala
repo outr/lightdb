@@ -67,16 +67,17 @@ class H2MultiValueTrigger extends Trigger {
       if newRow != null then Option(newRow(idIndex)).map(_.toString).orNull
       else Option(oldRow(idIndex)).map(_.toString).orNull
 
-    if ownerId == null then return
+    if ownerId == null then ()
+    else {
+      deleteOwner(conn, ownerId)
 
-    deleteOwner(conn, ownerId)
-
-    // INSERT/UPDATE: re-add from new value
-    if newRow != null then {
-      val jsonStr = Option(newRow(fieldIndex)).map(_.toString).orNull
-      if jsonStr != null && jsonStr.nonEmpty then {
-        valuesFromJson(jsonStr).foreach { v =>
-          insertValue(conn, ownerId, v)
+      // INSERT/UPDATE: re-add from new value
+      if newRow != null then {
+        val jsonStr = Option(newRow(fieldIndex)).map(_.toString).orNull
+        if jsonStr != null && jsonStr.nonEmpty then {
+          valuesFromJson(jsonStr).foreach { v =>
+            insertValue(conn, ownerId, v)
+          }
         }
       }
     }
@@ -105,17 +106,19 @@ class H2MultiValueTrigger extends Trigger {
 
   private def valuesFromJson(jsonStr: String): List[String] = {
     val json = try {
-      JsonParser(jsonStr)
+      Some(JsonParser(jsonStr))
     } catch {
       case _: Throwable =>
         // Not JSON array, treat as one string
-        return List(jsonStr)
+        None
     }
     json match {
-      case Arr(vector, _) =>
+      case Some(Arr(vector, _)) =>
         vector.toList.flatMap(v => scalarValue(v))
-      case other =>
+      case Some(other) =>
         scalarValue(other).toList
+      case None =>
+        List(jsonStr)
     }
   }
 

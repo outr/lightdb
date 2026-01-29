@@ -9,9 +9,11 @@ import spice.http.client.HttpClient
 import spice.http.content.Content
 import spice.net.{ContentType, URL}
 
+import lightdb.opensearch.OpenSearchStore
+
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.concurrent.duration.{DurationLong, FiniteDuration}
+import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 import scala.util.{Failure, Success}
 
 import lightdb.opensearch.OpenSearchMetrics
@@ -82,7 +84,9 @@ case class OpenSearchClient(config: OpenSearchConfig) {
     }
   }
 
-  private def sendWithRetry(req: HttpClient, name: String): Task[HttpResponse] = Task.defer {
+  private def sendWithRetry(req: HttpClient,
+                            name: String,
+                            retryOnFailure: Throwable => Boolean = _ => true): Task[HttpResponse] = Task.defer {
     val maxAttempts = math.max(1, config.retryMaxAttempts)
     val initialDelayMs = math.max(0L, config.retryInitialDelay.toMillis)
     val maxDelayMs = math.max(0L, config.retryMaxDelay.toMillis)
@@ -161,7 +165,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
             Task.pure(resp)
           }
         case Failure(t) =>
-          if n < maxAttempts then {
+          if n < maxAttempts && retryOnFailure(t) then {
             val sleepMs = jitterDelay(delayMs)
             if config.logRequests then {
               scribe.warn(s"OpenSearch retrying $name after exception attempt=$n/$maxAttempts sleepMs=$sleepMs (${t.getClass.getSimpleName}: ${t.getMessage})")
@@ -185,6 +189,85 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   private def require2xx(name: String, resp: HttpResponse): Task[Unit] =
     if resp.status.isSuccess then Task.unit
     else readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch $name failed (${resp.status.code}): ${b.getOrElse("")}")))
+
+  private def asyncTaskPollAfter: Option[FiniteDuration] = {
+    val threshold = OpenSearchStore.asyncTaskPollAfter
+    if threshold.toMillis > 0L then Some(threshold) else None
+  }
+
+  private def isTimeout(t: Throwable): Boolean = t match {
+    case _: java.util.concurrent.TimeoutException => true
+    case _: java.net.SocketTimeoutException => true
+    case other =>
+      Option(other.getMessage).exists(_.toLowerCase.contains("timeout"))
+  }
+
+  private def parseJsonOrError(resp: HttpResponse, errorMsg: String): Task[Json] =
+    if resp.status.isSuccess then {
+      readBody(resp).map(_.getOrElse("{}")).map(JsonParser(_))
+    } else {
+      readBody(resp).flatMap(b => Task.error(new RuntimeException(s"$errorMsg (${resp.status.code}): ${b.getOrElse("")}")))
+    }
+
+  private def normalizeTaskResponse(json: Json): Json =
+    json.get("response").getOrElse(json)
+
+  private def taskIdFrom(json: Json): Option[String] =
+    json.get("task").map(_.asString)
+
+  private def pollTask(taskId: String,
+                       initialDelay: FiniteDuration = 1.second,
+                       maxDelay: FiniteDuration = 10.seconds): Task[Json] = {
+    def nextDelay(current: FiniteDuration): FiniteDuration = {
+      val doubled = (current.toMillis * 2L).millis
+      if doubled > maxDelay then maxDelay else doubled
+    }
+
+    def checkOnce: Task[Json] = {
+      val req = client.get.modifyUrl { u =>
+        u.withPath(s"/_tasks/${escapePath(taskId)}")
+      }
+      send(req).flatMap(resp => parseJsonOrError(resp, s"OpenSearch task status failed for $taskId"))
+    }
+
+    def loop(delay: FiniteDuration, first: Boolean): Task[Json] = {
+      val wait = if first then Task.unit else Task.sleep(delay)
+      wait.next {
+        checkOnce.flatMap { json =>
+          val completed = json.get("completed").exists(_.asBoolean)
+          if completed then Task.pure(json)
+          else loop(nextDelay(delay), first = false)
+        }
+      }
+    }
+
+    loop(initialDelay, first = true)
+  }
+
+  private def runTaskRequestWithPolling(name: String,
+                                        syncReq: HttpClient,
+                                        asyncReq: HttpClient): Task[Json] = {
+    asyncTaskPollAfter match {
+      case None =>
+        send(syncReq).flatMap(resp => parseJsonOrError(resp, s"OpenSearch $name failed"))
+      case Some(threshold) =>
+        sendWithRetry(syncReq.timeout(threshold), name, retryOnFailure = t => !isTimeout(t)).attempt.flatMap {
+          case Success(resp) =>
+            parseJsonOrError(resp, s"OpenSearch $name failed")
+          case Failure(t) if isTimeout(t) =>
+            send(asyncReq).flatMap(resp => parseJsonOrError(resp, s"OpenSearch $name async start failed")).flatMap { json =>
+              taskIdFrom(json) match {
+                case Some(taskId) =>
+                  pollTask(taskId).map(normalizeTaskResponse)
+                case None =>
+                  Task.error(new RuntimeException(s"OpenSearch $name async response missing task id: ${JsonFormatter.Compact(json)}"))
+              }
+            }
+          case Failure(t) =>
+            Task.error(t)
+        }
+    }
+  }
 
   def indexExists(index: String): Task[Boolean] =
     send(client.method(HttpMethod.Head).url(url(s"/$index"))).flatMap { resp =>
@@ -476,20 +559,18 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   }
 
   def deleteByQuery(index: String, query: Json, refresh: Option[String]): Task[Int] = {
-    val req = client
+    val baseReq = client
       .post
       .header(Headers.`Content-Type`(ContentType.`application/json`))
       .modifyUrl { u =>
         u.withPath(s"/$index/_delete_by_query").withParamOpt("refresh", refresh)
       }
       .json(query)
-    send(req).flatMap { resp =>
-      if !resp.status.isSuccess then {
-        readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch deleteByQuery failed (${resp.status.code}) for $index: ${b.getOrElse("")}")))
-      } else {
-        readBody(resp).map(_.getOrElse("{}")).map(JsonParser(_)).map(_.get("deleted").map(_.asInt).getOrElse(0))
-      }
-    }
+    val syncReq = baseReq.modifyUrl(_.withParam("wait_for_completion", "true"))
+    val asyncReq = baseReq.modifyUrl(_.withParam("wait_for_completion", "false"))
+    runTaskRequestWithPolling(s"deleteByQuery($index)", syncReq, asyncReq)
+      .map(normalizeTaskResponse)
+      .map(_.get("deleted").map(_.asInt).getOrElse(0))
   }
 
   def updateAliases(body: Json): Task[Unit] = {
@@ -515,22 +596,27 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       "source" -> obj("index" -> str(source)),
       "dest" -> obj("index" -> str(dest))
     )
-    val req = client
+    val baseReq = client
       .post
       .header(Headers.`Content-Type`(ContentType.`application/json`))
       .modifyUrl { u =>
         u.withPath("/_reindex")
           .withParam("refresh", if refresh then "true" else "false")
-          .withParam("wait_for_completion", if waitForCompletion then "true" else "false")
       }
       .json(body)
-    send(req).flatMap { resp =>
-      if !resp.status.isSuccess then {
-        readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch reindex failed (${resp.status.code}) $source -> $dest: ${b.getOrElse("")}")))
-      } else {
-        // Response contains summary; we only validate that we didn't get an error.
-        Task.unit
+    def req(wait: Boolean): HttpClient =
+      baseReq.modifyUrl(_.withParam("wait_for_completion", if wait then "true" else "false"))
+    if !waitForCompletion then {
+      send(req(false)).flatMap { resp =>
+        if !resp.status.isSuccess then {
+          readBody(resp).flatMap(b => Task.error(new RuntimeException(s"OpenSearch reindex failed (${resp.status.code}) $source -> $dest: ${b.getOrElse("")}")))
+        } else {
+          // Response contains summary; we only validate that we didn't get an error.
+          Task.unit
+        }
       }
+    } else {
+      runTaskRequestWithPolling(s"reindex($source->$dest)", req(true), req(false)).map(_ => ())
     }
   }
 

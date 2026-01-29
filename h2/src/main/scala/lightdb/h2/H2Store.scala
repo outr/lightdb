@@ -6,6 +6,7 @@ import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManage
 import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import rapid.{Task, Unique}
 
 import java.nio.file.Path
@@ -21,9 +22,11 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                  storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = H2Transaction[Doc, Model]
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
-    H2Transaction(this, state, parent)
+    H2Transaction(this, state, parent, writeHandlerFactory)
   }
 
   override protected def upsertPrefix: String = "MERGE"

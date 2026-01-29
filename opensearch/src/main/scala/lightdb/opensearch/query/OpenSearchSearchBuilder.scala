@@ -244,49 +244,50 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         OpenSearchDsl.boolQuery(must = List(distance), mustNot = List(excludeZero))
       case Filter.Multi(minShould, clauses) =>
         if clauses.isEmpty then {
-          return OpenSearchDsl.matchAll()
-        }
-        val must = List.newBuilder[Json]
-        val filterB = List.newBuilder[Json]
-        val should = List.newBuilder[Json]
-        val mustNot = List.newBuilder[Json]
-
-        clauses.foreach { c =>
-          val q = filter2Dsl(c.filter)
-          val boosted = c.boost match {
-            case Some(b) => addBoost(q, b)
-            case None => q
-          }
-          c.condition match {
-            case lightdb.filter.Condition.Must => must += boosted
-            case lightdb.filter.Condition.Filter => filterB += boosted
-            case lightdb.filter.Condition.Should => should += boosted
-            case lightdb.filter.Condition.MustNot => mustNot += boosted
-          }
-        }
-
-        val mustList = must.result()
-        val shouldList = should.result()
-        val minimum = if shouldList.nonEmpty then Some(minShould).filter(_ > 0) else None
-        val filterList = filterB.result()
-
-        // Lucene adds MatchAll MUST when there are only SHOULDs and minShould==0.
-        val mustWithMatchAll = if minimum.isEmpty && mustList.isEmpty && shouldList.nonEmpty then {
-          OpenSearchDsl.matchAll() :: mustList
-        } else if mustList.isEmpty && shouldList.isEmpty && filterList.nonEmpty then {
-          // Lucene-style constant scoring: filters without any scoring clauses should still produce a constant score.
-          OpenSearchDsl.matchAll() :: mustList
+          OpenSearchDsl.matchAll()
         } else {
-          mustList
-        }
+          val must = List.newBuilder[Json]
+          val filterB = List.newBuilder[Json]
+          val should = List.newBuilder[Json]
+          val mustNot = List.newBuilder[Json]
 
-        OpenSearchDsl.boolQuery(
-          must = mustWithMatchAll,
-          filter = filterList,
-          should = shouldList,
-          mustNot = mustNot.result(),
-          minimumShouldMatch = minimum
-        )
+          clauses.foreach { c =>
+            val q = filter2Dsl(c.filter)
+            val boosted = c.boost match {
+              case Some(b) => addBoost(q, b)
+              case None => q
+            }
+            c.condition match {
+              case lightdb.filter.Condition.Must => must += boosted
+              case lightdb.filter.Condition.Filter => filterB += boosted
+              case lightdb.filter.Condition.Should => should += boosted
+              case lightdb.filter.Condition.MustNot => mustNot += boosted
+            }
+          }
+
+          val mustList = must.result()
+          val shouldList = should.result()
+          val minimum = if shouldList.nonEmpty then Some(minShould).filter(_ > 0) else None
+          val filterList = filterB.result()
+
+          // Lucene adds MatchAll MUST when there are only SHOULDs and minShould==0.
+          val mustWithMatchAll = if minimum.isEmpty && mustList.isEmpty && shouldList.nonEmpty then {
+            OpenSearchDsl.matchAll() :: mustList
+          } else if mustList.isEmpty && shouldList.isEmpty && filterList.nonEmpty then {
+            // Lucene-style constant scoring: filters without any scoring clauses should still produce a constant score.
+            OpenSearchDsl.matchAll() :: mustList
+          } else {
+            mustList
+          }
+
+          OpenSearchDsl.boolQuery(
+            must = mustWithMatchAll,
+            filter = filterList,
+            should = shouldList,
+            mustNot = mustNot.result(),
+            minimumShouldMatch = minimum
+          )
+        }
       case Filter.DrillDownFacetFilter(_, _, _) =>
         val f = filter.asInstanceOf[Filter.DrillDownFacetFilter[Doc]]
         drillDownFacetFilter(f)

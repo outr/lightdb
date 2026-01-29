@@ -4,6 +4,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import net.openhft.chronicle.map.ChronicleMap
 import rapid.Task
 import scribe.{Level, Logger}
@@ -35,7 +36,10 @@ class ChronicleMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task(ChronicleMapTransaction(this, db, parent))
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] =
+    Task(ChronicleMapTransaction(this, db, parent, writeHandlerFactory))
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task(db))
 

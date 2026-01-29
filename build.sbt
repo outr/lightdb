@@ -53,7 +53,7 @@ ThisBuild / javaOptions ++= Seq(
 	"--add-opens=java.base/java.util=ALL-UNNAMED"
 )
 
-ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
+ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDFQ")
 ThisBuild / Test / parallelExecution := false
 ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 

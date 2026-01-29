@@ -4,7 +4,6 @@ import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.opensearch.OpenSearchStore
-import lightdb.store.BufferedWritingTransaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -39,16 +38,12 @@ class OpenSearchBufferedWritingRollbackSpec extends AsyncWordSpec with AsyncTask
     "discard buffered writes when rollback happens before any early flush" in {
       val db = new DB
 
-      val originalMax = BufferedWritingTransaction.MaxTransactionWriteBuffer
-      // Make the buffer huge so our small test never triggers an early flush.
-      BufferedWritingTransaction.MaxTransactionWriteBuffer = 1000000
-
       val doc = Doc(value = "x", _id = Id[Doc]("d1"))
 
       val test =
         (for
           _ <- db.init
-          _ <- db.docs.transaction { tx =>
+          _ <- db.docs.transaction.withBufferedBatch(1_000_000) { tx =>
             tx.truncate
               .next(tx.insert(doc))
               .next(tx.rollback)
@@ -57,8 +52,6 @@ class OpenSearchBufferedWritingRollbackSpec extends AsyncWordSpec with AsyncTask
           _ <- db.dispose
         yield {
           count shouldBe 0
-        }).guarantee(Task {
-          BufferedWritingTransaction.MaxTransactionWriteBuffer = originalMax
         })
 
       test

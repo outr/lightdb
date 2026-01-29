@@ -10,9 +10,14 @@ import rapid.Task
 
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
-case class ChronicleMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: ChronicleMapStore[Doc, Model],
-                                                                                      db: ChronicleMap[String, String],
-                                                                                      parent: Option[Transaction[Doc, Model]]) extends Transaction[Doc, Model] {
+case class ChronicleMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: ChronicleMapStore[Doc, Model],
+  db: ChronicleMap[String, String],
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends Transaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     db.values()
       .iterator()

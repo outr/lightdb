@@ -19,8 +19,8 @@ import lightdb.opensearch.util.OpenSearchCursor
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.opensearch.query.{OpenSearchDsl, OpenSearchSearchBuilder}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
-import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, Transaction}
-import lightdb.store.{BufferedWritingTransaction, Conversion, StoreMode}
+import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, RollbackSupport, Transaction}
+import lightdb.store.{Conversion, StoreMode}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.{Query, SearchResults, Sort}
 import lightdb.util.Aggregator
@@ -36,13 +36,18 @@ import lightdb.opensearch.OpenSearchMetrics
 import lightdb.store.write.WriteOp
 import rapid.Unique
 
-case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: OpenSearchStore[Doc, Model],
-                                                                                    config: OpenSearchConfig,
-                                                                                    client: OpenSearchClient,
-                                                                                    parent: Option[Transaction[Doc, Model]])
+case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: OpenSearchStore[Doc, Model],
+  config: OpenSearchConfig,
+  client: OpenSearchClient,
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+)
   extends CollectionTransaction[Doc, Model]
     with PrefixScanningTransaction[Doc, Model]
-    with BufferedWritingTransaction[Doc, Model] {
+    with RollbackSupport[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   @volatile private var commitResult: Option[Try[Unit]] = None
   @volatile private var refreshPolicyOverride: Option[Option[String]] = None
   @volatile private var wroteToIndex: Boolean = false
@@ -125,17 +130,11 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     flat.orElse(nested)
   }
 
-  private def flushPendingWrites: Task[Unit] =
-    withWriteBuffer { wb =>
-      if wb.map.nonEmpty then flushMap(wb.map) else Task.pure(wb)
-    }.unit
-
   override protected def _commit: Task[Unit] = commitResult match {
     case Some(Success(_)) => Task.unit
     case Some(Failure(t)) => Task.error(t)
     case None =>
-      // Commit buffered writes, then (if we wrote) force a refresh so documents are searchable immediately after the
-      // LightDB transaction completes (without per-bulk wait_for overhead).
+      // Ensure that if we wrote, documents become searchable at commit boundaries.
       def awaitSearchableBarrier: Task[Unit] = lastIndexedIdForSearchBarrier match {
         case None => Task.unit
         case Some(id) =>
@@ -164,9 +163,6 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
           loop(attempt = 0, delay = 10.millis)
       }
 
-      // IMPORTANT:
-      // `wroteToIndex` is flipped inside `flushBuffer`, which runs during `super._commit`.
-      // So we must decide whether to refresh AFTER `super._commit` has executed.
       val refreshAndBarrierIfWrote: Task[Unit] = Task.defer {
         // NOTE:
         // `refreshPolicy` controls per-bulk behavior (OpenSearch `refresh` query param) and defaults to false for
@@ -180,7 +176,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
         }
       }
 
-      super._commit.next(refreshAndBarrierIfWrote).attempt.flatMap {
+      refreshAndBarrierIfWrote.attempt.flatMap {
         case Success(_) =>
           commitResult = Some(Success(()))
           Task.unit
@@ -194,11 +190,11 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       }
   }
 
-  override protected def _rollback: Task[Unit] = super._rollback.next(Task {
+  override protected def _rollback: Task[Unit] = Task {
     // Allow new work after a rollback.
     commitResult = None
     wroteToIndex = false
-  })
+  }
 
   private def cursorSafeFilterPath(base: Option[String]): Option[String] = base match {
     case None => None
@@ -704,22 +700,27 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     rapid.Stream.force(doSearch[Json](Query[Doc, Model, Json](this, Conversion.Json(store.fields))).map(_.stream))
 
   /**
-   * BufferedWritingTransaction only supports `_id` reads by default. We preserve OpenSearchTransaction's richer
-   * behavior by delegating non-id unique reads to OpenSearch.
+   * Preserve richer unique-index reads by delegating to OpenSearch.
    */
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = {
-    if index == store.idField then {
-      // Use BufferedWritingTransaction logic for read-your-writes on `_id`.
-      super._get(index, value)
-    } else {
-      // Fallback to query by unique field (assumes field is indexed).
-      beforeRead.next {
-        val filter = lightdb.filter.Filter.Equals[Doc, V](index.name, value)
-        val q = Query[Doc, Model, Doc](this, Conversion.Doc(), filter = Some(filter), limit = Some(1))
-        doSearch[Doc](q).flatMap(_.list).map(_.headOption)
-      }
+    beforeRead.next {
+      val filter = lightdb.filter.Filter.Equals[Doc, V](index.name, value)
+      val q = Query[Doc, Model, Doc](this, Conversion.Doc(), filter = Some(filter), limit = Some(1))
+      doSearch[Doc](q).flatMap(_.list).map(_.headOption)
     }
   }
+
+  override protected def _insert(doc: Doc): Task[Doc] =
+    flushOps(Seq(WriteOp.Insert(doc))).map(_ => doc)
+
+  override protected def _upsert(doc: Doc): Task[Doc] =
+    flushOps(Seq(WriteOp.Upsert(doc))).map(_ => doc)
+
+  override protected def _delete(id: Id[Doc]): Task[Boolean] =
+    flushOps(Seq(WriteOp.Delete(id))).map(_ => true)
+
+  override protected def _exists(id: Id[Doc]): Task[Boolean] =
+    _get(store.idField, id).map(_.nonEmpty)
 
   override protected def _count: Task[Int] = beforeRead.next {
     if config.joinDomain.nonEmpty && config.joinRole.nonEmpty then {
@@ -730,24 +731,10 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     }
   }
 
-  override protected def directGet[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = {
-    if index == store.idField then {
-      val id = value.asInstanceOf[Id[Doc]]
-      client.getDoc(store.readIndexName, id.value).map(_.map { json =>
-        stripInternalFields(sourceWithId(json, id)).as[Doc](store.model.rw)
-      })
-    } else {
-      Task.error(new UnsupportedOperationException(s"OpenSearch directGet only supports _id, but ${index.name} was attempted"))
-    }
-  }
-
   /**
-   * Flush buffered write ops to OpenSearch using bulk indexing.
-   *
-   * NOTE: This may run before `commit` if the buffered map exceeds `BufferedWritingTransaction.MaxTransactionWriteBuffer`.
-   * In that case, rollback can no longer fully undo side effects. This tradeoff is intentional to avoid OOM.
+   * Flush write ops to OpenSearch using bulk indexing.
    */
-  override protected def flushBuffer(stream: rapid.Stream[WriteOp[Doc]]): Task[Unit] = Task.defer {
+  def flushOps(ops: Seq[WriteOp[Doc]]): Task[Unit] = Task.defer {
     def withIngestPermit[A](task: => Task[A]): Task[A] =
       OpenSearchIngestLimiter.withPermit(
         key = config.normalizedBaseUrl,
@@ -790,7 +777,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     }
 
     applyIndexTuningIfNeeded.next(
-      stream.toList.flatMap { ops =>
+      Task(ops.toList).flatMap { ops =>
         val indexOps: List[OpenSearchBulkOp] = ops.flatMap {
           case WriteOp.Insert(doc) =>
             val prepared = prepareForIndexing(doc)
@@ -889,9 +876,9 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   }
 
   private def truncateWholeIndex: Task[Int] = {
-    // BufferedWritingTransaction.truncate clears the write buffer before calling `_truncate`.
-    // We still need to reset OpenSearchTransaction-local commit memoization so subsequent ops are valid.
+    // Reset commit memoization so subsequent ops are valid.
     commitResult = None
+    wroteToIndex = false
 
     def findJoinParentStoreAndConfig(): (DocumentModel[_], List[lightdb.field.Field[_, _]], OpenSearchConfig, String) = {
       // If not a join-domain, the current store is the source of truth for mappings.
@@ -1057,8 +1044,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     //   otherwise we'd wipe documents belonging to other join types (ex: parent/child).
     //   Instead, delete only this store's join type via `_delete_by_query`.
 
-    // BufferedWritingTransaction.truncate clears the write buffer before calling `_truncate`.
-    // We still need to reset OpenSearchTransaction-local commit memoization so subsequent ops are valid.
+    // Reset commit memoization so subsequent ops are valid.
     commitResult = None
 
     // Join-domain safe truncate: delete only docs for this logical store type in the shared index.
@@ -1092,22 +1078,11 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
    * Truncate all documents in the physical OpenSearch index, even for join-domain stores.
    * This is intended for full rebuilds where both parent + child docs are being reindexed.
    */
-  def truncateAll: Task[Int] = Task.defer {
-    var count = 0
-    withWriteBuffer { wb =>
-      Task {
-        count = wb.map.size
-        wb.copy(Map.empty)
-      }
-    }.flatMap { _ =>
-      truncateWholeIndex.map(_ + count)
-    }
-  }
+  def truncateAll: Task[Int] =
+    writeHandler.clear.next(truncateWholeIndex)
 
-  // BufferedWritingTransaction requires an `_truncate` hook for its own `truncate` implementation.
-  // We implement it by delegating to our index-level truncate logic.
-  override protected def _truncate: Task[Int] =
-    truncateIndexLevel
+  override def truncate: Task[Int] =
+    writeHandler.clear.next(truncateIndexLevel)
 
   private def captureBulkDeadLetters(chunk: List[OpenSearchBulkOpIndex], bulkResponse: Json): Task[Unit] = {
     if !config.deadLetterEnabled then {
@@ -1175,8 +1150,8 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   }
 
   override protected def _close: Task[Unit] =
-    // Best-effort restore of any index-level tuning we applied, then close the transaction.
-    restoreIndexTuningIfNeeded.next(super._close)
+    // Best-effort restore of any index-level tuning we applied.
+    restoreIndexTuningIfNeeded
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
     Task.defer {

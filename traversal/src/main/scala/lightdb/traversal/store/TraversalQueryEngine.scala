@@ -57,22 +57,23 @@ object TraversalQueryEngine {
     }
     val a = unwrap(a0)
     val b = unwrap(b0)
-    if a == null && b == null then return 0
-    if a == null then return -1
-    if b == null then return 1
-
-    (a, b) match {
-      case (x: java.lang.Number, y: java.lang.Number) =>
-        BigDecimal(x.toString).compare(BigDecimal(y.toString))
-      case (x: java.lang.Boolean, y: java.lang.Boolean) =>
-        x.compareTo(y)
-      case (x: String, y: String) =>
-        x.compareTo(y)
-      case (x: Comparable[Any @unchecked], y) =>
-        try x.compareTo(y)
-        catch { case _: Throwable => x.toString.compareTo(y.toString) }
-      case _ =>
-        a.toString.compareTo(b.toString)
+    if a == null && b == null then 0
+    else if a == null then -1
+    else if b == null then 1
+    else {
+      (a, b) match {
+        case (x: java.lang.Number, y: java.lang.Number) =>
+          BigDecimal(x.toString).compare(BigDecimal(y.toString))
+        case (x: java.lang.Boolean, y: java.lang.Boolean) =>
+          x.compareTo(y)
+        case (x: String, y: String) =>
+          x.compareTo(y)
+        case (x: Comparable[Any @unchecked], y) =>
+          try x.compareTo(y)
+          catch { case _: Throwable => x.toString.compareTo(y.toString) }
+        case _ =>
+          a.toString.compareTo(b.toString)
+      }
     }
   }
   def search[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](
@@ -3121,16 +3122,18 @@ object TraversalQueryEngine {
    * Anything more complex returns None (verify-only fallback).
    */
   private def extractLiteralFromRegex(expr: String): Option[String] = {
-    if expr == null || expr.isEmpty then return None
-    val s = expr
-    val stripped =
-      if s.startsWith(".*") && s.endsWith(".*") && s.length >= 4 then s.substring(2, s.length - 2)
-      else s
+    if expr == null || expr.isEmpty then None
+    else {
+      val s = expr
+      val stripped =
+        if s.startsWith(".*") && s.endsWith(".*") && s.length >= 4 then s.substring(2, s.length - 2)
+        else s
 
-    // Reject common regex metacharacters to avoid incorrect prefilters.
-    val meta = Set('.', '*', '+', '?', '[', ']', '(', ')', '{', '}', '\\', '^', '$', '|')
-    if stripped.exists(meta.contains) then None
-    else Some(stripped)
+      // Reject common regex metacharacters to avoid incorrect prefilters.
+      val meta = Set('.', '*', '+', '?', '[', ']', '(', ')', '{', '}', '\\', '^', '$', '|')
+      if stripped.exists(meta.contains) then None
+      else Some(stripped)
+    }
   }
 
   private def convert[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](
@@ -3173,39 +3176,41 @@ object TraversalQueryEngine {
     state: IndexingState,
     distanceCacheById: Map[String, List[Distance]]
   ): Vector[(Doc, Double)] = {
-    if sorts.isEmpty then return docs
+    if sorts.isEmpty then docs
+    else {
 
-    def dirFor(sort: Sort): SortDirection = sort match {
-      case Sort.BestMatch(direction) => direction
-      case Sort.ByField(_, direction) => direction
-      case Sort.IndexOrder => SortDirection.Ascending
-      case Sort.ByDistance(_, _, direction) => direction
-    }
+      def dirFor(sort: Sort): SortDirection = sort match {
+        case Sort.BestMatch(direction) => direction
+        case Sort.ByField(_, direction) => direction
+        case Sort.IndexOrder => SortDirection.Ascending
+        case Sort.ByDistance(_, _, direction) => direction
+      }
 
-    def keyFor(sort: Sort, doc: Doc, score: Double): Any = sort match {
-      case Sort.BestMatch(_) => score
-      case Sort.IndexOrder => doc._id.value
-      case Sort.ByField(field, _) =>
-        val f = field.asInstanceOf[Field[Doc, Any]]
-        f.get(doc, f, state)
-      case Sort.ByDistance(_, _, _) =>
-        val min = distanceCacheById
-          .get(doc._id.value)
-          .flatMap(_.map(_.valueInMeters).minOption)
-          .getOrElse(Double.PositiveInfinity)
-        min
-    }
+      def keyFor(sort: Sort, doc: Doc, score: Double): Any = sort match {
+        case Sort.BestMatch(_) => score
+        case Sort.IndexOrder => doc._id.value
+        case Sort.ByField(field, _) =>
+          val f = field.asInstanceOf[Field[Doc, Any]]
+          f.get(doc, f, state)
+        case Sort.ByDistance(_, _, _) =>
+          val min = distanceCacheById
+            .get(doc._id.value)
+            .flatMap(_.map(_.valueInMeters).minOption)
+            .getOrElse(Double.PositiveInfinity)
+          min
+      }
 
-    docs.sortWith { case ((d1, s1), (d2, s2)) =>
-      val cmp = sorts.iterator.map { sort =>
-        val k1 = keyFor(sort, d1, s1)
-        val k2 = keyFor(sort, d2, s2)
-        val base = compareAny(k1, k2)
-        if dirFor(sort) == SortDirection.Descending then -base else base
-      }.find(_ != 0).getOrElse(0)
+      docs.sortWith { case ((d1, s1), (d2, s2)) =>
+        val cmp = sorts.iterator.map { sort =>
+          val k1 = keyFor(sort, d1, s1)
+          val k2 = keyFor(sort, d2, s2)
+          val base = compareAny(k1, k2)
+          if dirFor(sort) == SortDirection.Descending then -base else base
+        }.find(_ != 0).getOrElse(0)
 
-      if cmp != 0 then cmp < 0
-      else d1._id.value < d2._id.value
+        if cmp != 0 then cmp < 0
+        else d1._id.value < d2._id.value
+      }
     }
   }
 

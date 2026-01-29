@@ -8,9 +8,14 @@ import lightdb.id.Id
 import lightdb.transaction.Transaction
 import rapid.Task
 
-case class HaloDBTransaction[Doc <: Document [Doc], Model <: DocumentModel[Doc]](store: HaloDBStore[Doc, Model],
-                                                                                 instance: HaloDBInstance,
-                                                                                 parent: Option[Transaction[Doc, Model]]) extends Transaction[Doc, Model] {
+case class HaloDBTransaction[Doc <: Document [Doc], Model <: DocumentModel[Doc]](
+  store: HaloDBStore[Doc, Model],
+  instance: HaloDBInstance,
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends Transaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   override def jsonStream: rapid.Stream[Json] = instance.stream
 
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = {

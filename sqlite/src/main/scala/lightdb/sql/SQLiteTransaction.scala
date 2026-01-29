@@ -14,9 +14,14 @@ import lightdb.ListExtras
 import fabric.io.JsonFormatter
 import fabric.{Bool, Json, NumDec, NumInt, Str}
 
-case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: SQLStore[Doc, Model],
-                                                                                state: SQLState[Doc, Model],
-                                                                                parent: Option[Transaction[Doc, Model]]) extends SQLStoreTransaction[Doc, Model] {
+case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: SQLStore[Doc, Model],
+  state: SQLState[Doc, Model],
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends SQLStoreTransaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   private def ftsTableName: String = s"${store.name}__fts"
   private def scoreColumn: String = "__score"
 
@@ -42,33 +47,40 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   override protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: lightdb.SortDirection): Option[BestMatchPlan] = {
-    if !SQLiteStore.EnableFTS then return None
-    val raw = findFirstTokenizedEquals(filter).getOrElse(return None)
-    val q = tokenizeQuery(raw)
-    // Use USING(_id) to avoid ambiguous column name errors when selecting "_id" from the base table + fts table.
-    val join = List(SQLPart.Fragment(s" JOIN $ftsTableName USING(_id)"))
-    val matchFilter = SQLPart(s"$ftsTableName MATCH ?", q.json)
-    val scoreField = SQLPart.Fragment(s"(-bm25($ftsTableName)) AS $scoreColumn")
-    val dir = direction match {
-      case SortDirection.Descending => "DESC"
-      case SortDirection.Ascending => "ASC"
+    if !SQLiteStore.EnableFTS then None
+    else {
+      findFirstTokenizedEquals(filter).map { raw =>
+        val q = tokenizeQuery(raw)
+        // Use USING(_id) to avoid ambiguous column name errors when selecting "_id" from the base table + fts table.
+        val join = List(SQLPart.Fragment(s" JOIN $ftsTableName USING(_id)"))
+        val matchFilter = SQLPart(s"$ftsTableName MATCH ?", q.json)
+        val scoreField = SQLPart.Fragment(s"(-bm25($ftsTableName)) AS $scoreColumn")
+        val dir = direction match {
+          case SortDirection.Descending => "DESC"
+          case SortDirection.Ascending => "ASC"
+        }
+        val sortPart = SQLPart.Fragment(s"$scoreColumn $dir")
+        BestMatchPlan(scoreColumn, scoreField, join, matchFilter, sortPart)
+      }
     }
-    val sortPart = SQLPart.Fragment(s"$scoreColumn $dir")
-    Some(BestMatchPlan(scoreColumn, scoreField, join, matchFilter, sortPart))
   }
 
   override protected def tokenizedEqualsPart(fieldName: String, value: String): SQLPart = {
     // Prefer FTS5 if enabled; fall back to LIKE if FTS isn't available.
-    if !SQLiteStore.EnableFTS then return super.tokenizedEqualsPart(fieldName, value)
-    val query = tokenizeQuery(value)
-    // contentless fts table stores _id and tokenized columns
-    SQLPart(s"_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?)", query.json)
+    if !SQLiteStore.EnableFTS then super.tokenizedEqualsPart(fieldName, value)
+    else {
+      val query = tokenizeQuery(value)
+      // contentless fts table stores _id and tokenized columns
+      SQLPart(s"_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?)", query.json)
+    }
   }
 
   override protected def tokenizedNotEqualsPart(fieldName: String, value: String): SQLPart = {
-    if !SQLiteStore.EnableFTS then return super.tokenizedNotEqualsPart(fieldName, value)
-    val query = tokenizeQuery(value)
-    SQLPart(s"NOT(_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?))", query.json)
+    if !SQLiteStore.EnableFTS then super.tokenizedNotEqualsPart(fieldName, value)
+    else {
+      val query = tokenizeQuery(value)
+      SQLPart(s"NOT(_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?))", query.json)
+    }
   }
 
   private def mvTable(fieldName: String): String = s"${store.name}__mv__${fieldName}"
@@ -83,23 +95,31 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   override protected def arrayContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = {
-    if !SQLiteStore.EnableMultiValueIndexes then return None
-    val extracted = values.flatMap(jsonToMVValue)
-    if extracted.isEmpty then return Some(SQLPart.Fragment("1=1"))
-    val parts = extracted.map { v =>
-      SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+    if !SQLiteStore.EnableMultiValueIndexes then None
+    else {
+      val extracted = values.flatMap(jsonToMVValue)
+      if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
+      else {
+        val parts = extracted.map { v =>
+          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+        }
+        Some(SQLQuery(parts.intersperse(SQLPart.Fragment(" AND "))))
+      }
     }
-    Some(SQLQuery(parts.intersperse(SQLPart.Fragment(" AND "))))
   }
 
   override protected def arrayNotContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] = {
-    if !SQLiteStore.EnableMultiValueIndexes then return None
-    val extracted = values.flatMap(jsonToMVValue)
-    if extracted.isEmpty then return Some(SQLPart.Fragment("1=1"))
-    val inner = extracted.map { v =>
-      SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+    if !SQLiteStore.EnableMultiValueIndexes then None
+    else {
+      val extracted = values.flatMap(jsonToMVValue)
+      if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
+      else {
+        val inner = extracted.map { v =>
+          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+        }
+        Some(SQLQuery(List(SQLPart.Fragment("NOT("), SQLQuery(inner.intersperse(SQLPart.Fragment(" AND "))), SQLPart.Fragment(")"))))
+      }
     }
-    Some(SQLQuery(List(SQLPart.Fragment("NOT("), SQLQuery(inner.intersperse(SQLPart.Fragment(" AND "))), SQLPart.Fragment(")"))))
   }
 
   override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] =

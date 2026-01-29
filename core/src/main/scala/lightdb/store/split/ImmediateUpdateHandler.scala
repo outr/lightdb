@@ -21,7 +21,7 @@ case class ImmediateUpdateHandler[
   override def upsert(doc: Doc): Task[Unit] = txn.searching.upsert(doc).unit
   override def delete(id: Id[Doc]): Task[Unit] = txn.searching.delete(id).unit
   override def commit: Task[Unit] = txn.searching.commit
-  override def rollback: Task[Unit] = txn.searching.rollback
+  override def rollback: Task[Unit] = SearchUpdateHandler.rollbackIfSupported(txn.searching)
   override def truncate: Task[Unit] = txn.searching.truncate.unit
   override def close: Task[Unit] = Task.unit
 }

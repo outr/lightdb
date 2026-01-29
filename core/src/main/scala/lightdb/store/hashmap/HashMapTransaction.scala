@@ -8,7 +8,13 @@ import lightdb.id.Id
 import lightdb.transaction.Transaction
 import rapid.Task
 
-case class HashMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: HashMapStore[Doc, Model], parent: Option[Transaction[Doc, Model]]) extends Transaction[Doc, Model] {
+case class HashMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: HashMapStore[Doc, Model],
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends Transaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task(store._map.valuesIterator.map(_.json(store.model.rw))))
 
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {

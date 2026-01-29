@@ -13,7 +13,7 @@ import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
 import lightdb.store.Conversion
-import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.transaction.{CollectionTransaction, RollbackSupport, Transaction}
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults, Sort}
 import lightdb.lucene.blockjoin.LuceneBlockJoinStore
@@ -25,10 +25,17 @@ import org.apache.lucene.search.{MatchAllDocsQuery, ScoreDoc}
 import org.apache.lucene.util.BytesRef
 import rapid.Task
 
-case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: LuceneStore[Doc, Model],
-                                                                                state: LuceneState[Doc],
-                                                                                parent: Option[Transaction[Doc, Model]],
-                                                                                ownedParent: Boolean = false) extends CollectionTransaction[Doc, Model] {
+case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: LuceneStore[Doc, Model],
+  state: LuceneState[Doc],
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model],
+  ownedParent: Boolean = false
+)
+  extends CollectionTransaction[Doc, Model]
+    with RollbackSupport[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   private lazy val searchBuilder = new LuceneSearchBuilder[Doc, Model](store, store.model, this)
 
   override def jsonStream: rapid.Stream[Json] =

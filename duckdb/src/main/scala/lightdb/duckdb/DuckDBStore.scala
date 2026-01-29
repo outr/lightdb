@@ -6,6 +6,7 @@ import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig}
 import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import rapid.Task
 
 import java.nio.file.Path
@@ -28,9 +29,11 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     s"INSERT INTO $fqn(${cols.mkString(", ")}) VALUES(${values.mkString(", ")}) ON CONFLICT(${model._id.name}) DO UPDATE SET $update"
   }
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[DuckDBTransaction[Doc, Model]] = Task {
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[DuckDBTransaction[Doc, Model]] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
-    DuckDBTransaction(this, state, parent)
+    DuckDBTransaction(this, state, parent, writeHandlerFactory)
   }
 
   // TODO: Use DuckDB's Appender for better performance

@@ -48,8 +48,8 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = {
-    if ps == null then return
-    if caching then {
+    if ps == null then ()
+    else if caching then {
       cache.computeIfAbsent(sql, _ => new ConcurrentLinkedQueue[PreparedStatement]).add(ps)
     } else {
       Try(ps.close())
