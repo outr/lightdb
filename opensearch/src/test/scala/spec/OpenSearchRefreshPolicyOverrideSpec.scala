@@ -9,7 +9,6 @@ import lightdb.id.Id
 import lightdb.opensearch.OpenSearchIndexName
 import lightdb.opensearch.OpenSearchStore
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
-import lightdb.store.BufferedWritingTransaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.LightDB
 import org.scalatest.matchers.should.Matchers
@@ -65,14 +64,10 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
         ))
         _ <- db.init
 
-        // Force an early flush (without commit) to validate refresh behavior at the bulk request level.
-        prevBuf <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer)
-        _ <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer = 1)
-
         // IMPORTANT:
         // Store.transaction(...) always commits in `guarantee(...)` even if the user task fails.
         // To test "early flush without commit refresh", we must explicitly rollback (no commit).
-        _ <- db.docs.transaction.create().flatMap { tx =>
+        _ <- db.docs.transaction.withBufferedBatch(1).create().flatMap { tx =>
           tx.truncate
             .next(tx.insert(Doc("no-refresh-a", _id = Id("a"))))
             .next(tx.insert(Doc("no-refresh-b", _id = Id("b")))) // triggers early flush (buffer > 1)
@@ -89,7 +84,7 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
             .flatMap(_.list)
         }
 
-        _ <- db.docs.transaction { tx0 =>
+        _ <- db.docs.transaction.withBufferedBatch(1) { tx0 =>
           tx0 match {
             case tx: lightdb.opensearch.OpenSearchTransaction[Doc, Doc.type] =>
               tx.withRefreshPolicy(Some("true"))
@@ -110,7 +105,6 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
         }
 
         _ <- db.dispose
-        _ <- Task(BufferedWritingTransaction.MaxTransactionWriteBuffer = prevBuf)
       yield {
         before shouldBe Nil
         after.map(_._id.value) shouldBe List("c")

@@ -106,16 +106,18 @@ case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
     }
 
     private def startsWith(buffer: ByteBuffer, prefix: Array[Byte]): Boolean = {
-      if buffer.remaining() < prefix.length then return false
-      val origPos = buffer.position()
-      for i <- prefix.indices do {
-        if buffer.get() != prefix(i) then {
-          buffer.position(origPos)
-          return false
+      if buffer.remaining() < prefix.length then false
+      else {
+        val origPos = buffer.position()
+        var matches = true
+        var i = 0
+        while i < prefix.length && matches do {
+          if buffer.get() != prefix(i) then matches = false
+          i += 1
         }
+        buffer.position(origPos)
+        matches
       }
-      buffer.position(origPos)
-      true
     }
 
     private def readKV(cursor: Cursor[ByteBuffer]): (Array[Byte], Array[Byte]) = {

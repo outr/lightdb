@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.id.Id
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import rapid.Task
 
 import java.nio.file.Path
@@ -21,7 +22,12 @@ class HashMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 
   def map: Map[Id[Doc], Doc] = _map
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task(HashMapTransaction(this, parent))
+  override def defaultBatchConfig: BatchConfig = BatchConfig.Direct
+
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] =
+    Task(HashMapTransaction(this, parent, writeHandlerFactory))
 
   override protected def doDispose(): Task[Unit] = Task {
     store.synchronized {

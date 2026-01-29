@@ -10,6 +10,7 @@ import lightdb.spatial.{Geo, Spatial}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import org.sqlite.Collation
 import rapid.*
 
@@ -66,34 +67,35 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   private def createFTS(tx: TX): Unit = {
     val tokenized = fields.collect { case t: lightdb.field.Field.Tokenized[Doc] => t }
-    if tokenized.isEmpty then return
+    if tokenized.isEmpty then ()
+    else {
+      val ftsTable = s"${this.name}__fts"
+      val cols = tokenized.map(_.name)
+      // contentless fts: we manage inserts via triggers
+      val colSql = (List("_id UNINDEXED") ::: cols).mkString(", ")
+      executeUpdate(s"CREATE VIRTUAL TABLE IF NOT EXISTS $ftsTable USING fts5($colSql)", tx)
 
-    val ftsTable = s"${this.name}__fts"
-    val cols = tokenized.map(_.name)
-    // contentless fts: we manage inserts via triggers
-    val colSql = (List("_id UNINDEXED") ::: cols).mkString(", ")
-    executeUpdate(s"CREATE VIRTUAL TABLE IF NOT EXISTS $ftsTable USING fts5($colSql)", tx)
+      // Keep FTS table in sync with base table.
+      val insertCols = ("_id" :: cols).mkString(", ")
+      val newCols = ("new._id" :: cols.map(c => s"new.$c")).mkString(", ")
 
-    // Keep FTS table in sync with base table.
-    val insertCols = ("_id" :: cols).mkString(", ")
-    val newCols = ("new._id" :: cols.map(c => s"new.$c")).mkString(", ")
-
-    executeUpdate(
-      s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ai AFTER INSERT ON ${this.name} BEGIN
-         |  INSERT INTO $ftsTable($insertCols) VALUES($newCols);
-         |END;""".stripMargin, tx
-    )
-    executeUpdate(
-      s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ad AFTER DELETE ON ${this.name} BEGIN
-         |  DELETE FROM $ftsTable WHERE _id = old._id;
+      executeUpdate(
+        s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ai AFTER INSERT ON ${this.name} BEGIN
+           |  INSERT INTO $ftsTable($insertCols) VALUES($newCols);
+           |END;""".stripMargin, tx
+      )
+      executeUpdate(
+        s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ad AFTER DELETE ON ${this.name} BEGIN
+           |  DELETE FROM $ftsTable WHERE _id = old._id;
          |END;""".stripMargin, tx
     )
     executeUpdate(
       s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_au AFTER UPDATE ON ${this.name} BEGIN
          |  DELETE FROM $ftsTable WHERE _id = old._id;
          |  INSERT INTO $ftsTable($insertCols) VALUES($newCols);
-         |END;""".stripMargin, tx
-    )
+           |END;""".stripMargin, tx
+      )
+    }
   }
 
   private def createMultiValueIndexes(tx: TX): Unit = {
@@ -130,9 +132,11 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
   }
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
-    SQLiteTransaction(this, state, parent)
+    SQLiteTransaction(this, state, parent, writeHandlerFactory)
   }
 
   override protected def initTransaction(tx: TX): Task[Unit] = super.initTransaction(tx).map { _ =>

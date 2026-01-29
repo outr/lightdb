@@ -20,7 +20,8 @@ import lightdb.spatial.{DistanceAndDoc, Geo}
 import lightdb.sql.dsl.TxnSqlDsl
 import lightdb.sql.query.{SQLPart, SQLQuery}
 import lightdb.store.{Conversion, Store}
-import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction}
+import lightdb.store.write.WriteOp
+import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, RollbackSupport}
 import lightdb.util.ActionIterator
 import lightdb.{Query, SearchResults, Sort, SortDirection}
 import rapid.Task
@@ -29,7 +30,10 @@ import java.sql.{PreparedStatement, ResultSet, SQLException, Types}
 import scala.collection.mutable
 import scala.util.Try
 
-trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] {
+trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
+  extends CollectionTransaction[Doc, Model]
+    with PrefixScanningTransaction[Doc, Model]
+    with RollbackSupport[Doc, Model] {
   override def store: SQLStore[Doc, Model]
 
   def state: SQLState[Doc, Model]
@@ -190,6 +194,62 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] ext
   }
 
   override def _delete(id: Id[Doc]): Task[Boolean] = _deleteInternal(store.model._id, id)
+
+  def flushOps(ops: Seq[WriteOp[Doc]]): Task[Unit] = Task {
+    val inserts = mutable.ArrayBuffer.empty[Doc]
+    val upserts = mutable.ArrayBuffer.empty[Doc]
+    val deletes = mutable.ArrayBuffer.empty[Id[Doc]]
+
+    ops.foreach {
+      case WriteOp.Insert(doc) => inserts += doc
+      case WriteOp.Upsert(doc) => upserts += doc
+      case WriteOp.Delete(id) => deletes += id
+    }
+
+    if inserts.nonEmpty then {
+      state.withInsertPreparedStatement { ps =>
+        inserts.foreach { doc =>
+          val indexingState = new IndexingState
+          store.fields.zipWithIndex.foreach {
+            case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
+          }
+          ps.addBatch()
+        }
+        ps.executeBatch()
+        state.batchInsert.set(0)
+      }
+    }
+
+    if upserts.nonEmpty then {
+      state.withUpsertPreparedStatement { ps =>
+        upserts.foreach { doc =>
+          val indexingState = new IndexingState
+          store.fields.zipWithIndex.foreach {
+            case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
+          }
+          ps.addBatch()
+        }
+        ps.executeBatch()
+        state.batchUpsert.set(0)
+        state.markDirty()
+      }
+    }
+
+    if deletes.nonEmpty then {
+      val connection = state.connectionManager.getConnection(state)
+      val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${store.model._id.name} = ?")
+      val ps = connection.prepareStatement(sql.query)
+      try {
+        deletes.foreach { id =>
+          sql.fillPlaceholder(store.model._id.rw.read(id)).populate(ps, this)
+          ps.addBatch()
+        }
+        ps.executeBatch()
+      } finally {
+        ps.close()
+      }
+    }
+  }
 
   protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val connection = state.connectionManager.getConnection(state)

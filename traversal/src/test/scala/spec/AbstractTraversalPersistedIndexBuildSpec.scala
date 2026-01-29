@@ -49,17 +49,17 @@ abstract class AbstractTraversalPersistedIndexBuildSpec
             Entry(name = "Alice", age = 20, _id = Id("c"))
           ))
 
-          readyBefore <- store.persistedIndexReady()
-          _ <- store.buildPersistedIndex()
-          readyAfter <- store.persistedIndexReady()
+          readyBefore <- tx.persistedIndexReady()
+          _ <- tx.buildPersistedIndex()
+          readyAfter <- tx.persistedIndexReady()
 
-          eq <- store.persistedEqPostings(fieldName = "name", value = "Alice")
-          ng <- store.persistedNgPostings(fieldName = "name", query = "lic")
-          sw <- store.persistedSwPostings(fieldName = "name", query = "Al")
-          ew <- store.persistedEwPostings(fieldName = "name", query = "ice")
-          rl <- store.persistedRangeLongPostings(fieldName = "age", from = Some(5L), to = Some(15L))
-          rl2 <- store.persistedRangeLongPostings(fieldName = "age", from = Some(15L), to = Some(25L))
-          rlFromOnly <- store.persistedRangeLongPostings(fieldName = "age", from = Some(15L), to = None)
+          eq <- tx.persistedEqPostings(fieldName = "name", value = "Alice")
+          ng <- tx.persistedNgPostings(fieldName = "name", query = "lic")
+          sw <- tx.persistedSwPostings(fieldName = "name", query = "Al")
+          ew <- tx.persistedEwPostings(fieldName = "name", query = "ice")
+          rl <- tx.persistedRangeLongPostings(fieldName = "age", from = Some(5L), to = Some(15L))
+          rl2 <- tx.persistedRangeLongPostings(fieldName = "age", from = Some(15L), to = Some(25L))
+          rlFromOnly <- tx.persistedRangeLongPostings(fieldName = "age", from = Some(15L), to = None)
         yield {
           // New DBs start with an empty store, so "ready" is set immediately, and write-through indexing keeps it ready.
           readyBefore shouldBe true

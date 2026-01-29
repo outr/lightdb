@@ -43,28 +43,30 @@ class LMDBValueIterator(dbi: Dbi[ByteBuffer], txn: Txn[ByteBuffer], prefix: Opti
       if k == null || k.remaining() < pb.length then {
         false
       } else {
+        val origPos = k.position()
         val arr = new Array[Byte](pb.length)
         k.get(arr)
-        k.position(k.position() - pb.length) // reset position after read
+        k.position(origPos) // reset position after read
         java.util.Arrays.equals(arr, pb)
       }
   }
 
   private def advanceCursor(): Boolean = {
-    while open && cursor.next() do {
+    var found = false
+    while open && !found && cursor.next() do {
       if keyMatchesPrefix then {
         val bb = cursor.`val`()
         if bb != null && bb.remaining() > 0 then {
           current = Some(bb)
-          return true
+          found = true
         }
       } else if prefixBytes.nonEmpty then {
         // keys are sorted; once prefix no longer matches, stop
         close()
       }
     }
-    close()
-    false
+    if !found then close()
+    found
   }
 
   override def hasNext: Boolean = {

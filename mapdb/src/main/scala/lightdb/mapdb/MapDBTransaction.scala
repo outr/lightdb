@@ -9,8 +9,13 @@ import rapid.Task
 
 import scala.jdk.CollectionConverters.*
 
-case class MapDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: MapDBStore[Doc, Model],
-                                                                               parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] {
+case class MapDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: MapDBStore[Doc, Model],
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends PrefixScanningTransaction[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     store.map.values()
       .iterator()

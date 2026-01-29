@@ -11,6 +11,7 @@ import lightdb.store.{Collection, StoreMode}
 import lightdb.store.hashmap.HashMapStore
 import lightdb.time.Timestamp
 import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.transaction.batch.BatchConfig
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import rapid.Task
@@ -50,7 +51,9 @@ class OpenSearchJoinBoostDslSpec extends AnyWordSpec with Matchers {
     extends Collection[Doc, Model](name, path = None, model = model, lightDB = DummyDB, storeManager = HashMapStore) {
     override type TX = CollectionTransaction[Doc, Model]
     override def storeMode: StoreMode[Doc, Model] = StoreMode.All()
-    override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] =
+    override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                             batchConfig: BatchConfig,
+                                             writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] =
       Task.error(new UnsupportedOperationException("DummyCollection does not support transactions"))
   }
 

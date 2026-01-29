@@ -9,7 +9,10 @@ import lightdb.field.Field.*
 import lightdb.id.Id
 import lightdb.lock.LockManager
 import lightdb.progress.ProgressManager
-import lightdb.transaction.Transaction
+import lightdb.transaction.{Transaction, WriteHandler}
+import lightdb.transaction.batch.BatchConfig
+import lightdb.transaction.handler.{AsyncWriteHandler, BufferedWriteHandler, DirectWriteHandler, QueuedWriteHandler}
+import lightdb.store.write.WriteOp
 import lightdb.trigger.StoreTriggers
 import lightdb.util.{Disposable, Initializable}
 import rapid.*
@@ -18,7 +21,7 @@ import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
-import scala.concurrent.duration.{DurationLong, FiniteDuration}
+import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
 
 abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name: String,
@@ -72,7 +75,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   lazy val hasSpatial: Task[Boolean] = Task(fields.exists(_.isSpatial)).singleton
 
-  protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX]
+  protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                  batchConfig: BatchConfig,
+                                  writeHandlerFactory: Transaction[Doc, Model] => WriteHandler[Doc, Model]): Task[TX]
 
   private def releaseTransaction(transaction: TX): Task[Unit] = transaction.commit
 
@@ -94,13 +99,39 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
    */
   def supportsNativeExistsChild: Boolean = false
 
+  /**
+   * Default batching behavior for transactions. Stores can override for optimal performance.
+   */
+  def defaultBatchConfig: BatchConfig = BatchConfig.Direct
+
   private val set = ConcurrentHashMap.newKeySet[TX]
   private val sharedMap = new ConcurrentHashMap[String, Shared]()
 
-  lazy val transaction = TransactionBuilder(None)
+  lazy val transaction = TransactionBuilder(None, defaultBatchConfig)
 
-  case class TransactionBuilder(parent: Option[Transaction[Doc, Model]]) {
+  case class TransactionBuilder(parent: Option[Transaction[Doc, Model]], batchConfig: BatchConfig) {
     def withParent(parent: Transaction[Doc, Model]): TransactionBuilder = copy(parent = Some(parent))
+
+    def withBatch(config: BatchConfig): TransactionBuilder = copy(batchConfig = config)
+
+    def withBufferedBatch(maxBufferSize: Int = 20_000): TransactionBuilder =
+      withBatch(BatchConfig.Buffered(maxBufferSize))
+
+    def withQueuedBatch(maxQueueSize: Int = 5_000): TransactionBuilder =
+      withBatch(BatchConfig.Queued(maxQueueSize))
+
+    def withAsyncBatch(activeThreads: Int = 4,
+                       chunkSize: Int = 5_000,
+                       waitTime: FiniteDuration = 250.millis,
+                       maxQueueSize: Int = 20_000): TransactionBuilder =
+      withBatch(BatchConfig.Async(activeThreads = activeThreads,
+                                  chunkSize = chunkSize,
+                                  waitTime = waitTime,
+                                  maxQueueSize = maxQueueSize))
+
+    def withStoreNativeBatch: TransactionBuilder = withBatch(BatchConfig.StoreNative)
+
+    def withDirectBatch: TransactionBuilder = withBatch(BatchConfig.Direct)
 
     def active: Int = set.size()
 
@@ -126,7 +157,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         }
       }
       _ <- logger.info(s"Creating new Transaction for $name").when(Store.LogTransactions)
-      transaction <- createTransaction(parent)
+      transaction <- createTransaction(parent, batchConfig, tx => createWriteHandler(tx, batchConfig))
       _ = set.add(transaction)
       _ <- trigger.transactionStart(transaction)
     yield transaction
@@ -147,6 +178,34 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       list.size
     }
   }
+
+  protected def flushOps(transaction: Transaction[Doc, Model], ops: Seq[WriteOp[Doc]]): Task[Unit] =
+    transaction.applyWriteOps(ops)
+
+  protected def createWriteHandler(transaction: Transaction[Doc, Model], config: BatchConfig): WriteHandler[Doc, Model] =
+    config match {
+      case BatchConfig.Direct =>
+        new DirectWriteHandler(
+          doc => transaction.applyWriteOps(Seq(WriteOp.Insert(doc))).map(_ => doc),
+          doc => transaction.applyWriteOps(Seq(WriteOp.Upsert(doc))).map(_ => doc),
+          id => transaction.applyWriteOps(Seq(WriteOp.Delete(id))).map(_ => true)
+        )
+      case BatchConfig.Buffered(maxBufferSize) =>
+        new BufferedWriteHandler(maxBufferSize, ops => flushOps(transaction, ops))
+      case BatchConfig.Queued(maxQueueSize) =>
+        new QueuedWriteHandler(maxQueueSize, ops => flushOps(transaction, ops))
+      case BatchConfig.Async(activeThreads, chunkSize, waitTime, maxQueueSize) =>
+        new AsyncWriteHandler(activeThreads, chunkSize, waitTime, maxQueueSize, ops => flushOps(transaction, ops))
+      case BatchConfig.StoreNative =>
+        createNativeWriteHandler(transaction)
+    }
+
+  protected def createNativeWriteHandler(transaction: Transaction[Doc, Model]): WriteHandler[Doc, Model] =
+    new DirectWriteHandler(
+      doc => transaction.applyWriteOps(Seq(WriteOp.Insert(doc))).map(_ => doc),
+      doc => transaction.applyWriteOps(Seq(WriteOp.Upsert(doc))).map(_ => doc),
+      id => transaction.applyWriteOps(Seq(WriteOp.Delete(id))).map(_ => true)
+    )
 
   private case class Shared(name: String, tx: TX, timeout: FiniteDuration) { shared =>
     private val active = new AtomicInteger(0)

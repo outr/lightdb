@@ -8,6 +8,10 @@ import lightdb.field.Field.*
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.*
 import lightdb.store.prefix.PrefixScanningStore
+import lightdb.transaction.batch.BatchConfig
+import lightdb.store.write.WriteOp
+import lightdb.transaction.{Transaction, WriteHandler}
+import lightdb.transaction.handler.QueuedWriteHandler
 import rapid.Task
 
 import java.nio.file.Path
@@ -20,6 +24,16 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            lightDB: LightDB,
                                                                            storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX <: SQLStoreTransaction[Doc, Model]
+
+  override def defaultBatchConfig: BatchConfig = BatchConfig.StoreNative
+
+  override protected def flushOps(transaction: Transaction[Doc, Model], ops: Seq[WriteOp[Doc]]): Task[Unit] =
+    transaction.asInstanceOf[TX].flushOps(ops)
+
+  override protected def createNativeWriteHandler(transaction: Transaction[Doc, Model]): WriteHandler[Doc, Model] = {
+    val maxBatch = math.max(1, Store.MaxInsertBatch)
+    new QueuedWriteHandler(maxBatch, ops => flushOps(transaction, ops), chunkSize = maxBatch)
+  }
 
   override def supportsNativeExistsChild: Boolean = false
 

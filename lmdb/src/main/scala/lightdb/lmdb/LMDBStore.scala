@@ -5,6 +5,8 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreMode}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
+import lightdb.store.write.WriteOp
 import org.lmdbjava.*
 import rapid.*
 
@@ -20,8 +22,15 @@ class LMDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                    storeManager: PrefixScanningStoreManager) extends Store[Doc, Model](name, path, model, db, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX = LMDBTransaction[Doc, Model]
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
-    LMDBTransaction(this, instance, parent)
+  override def defaultBatchConfig: BatchConfig = BatchConfig.Buffered()
+
+  override protected def flushOps(transaction: Transaction[Doc, Model], ops: Seq[WriteOp[Doc]]): Task[Unit] =
+    transaction.asInstanceOf[TX].flushOps(ops)
+
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = Task {
+    LMDBTransaction(this, instance, parent, writeHandlerFactory)
   }
 
   override protected def doDispose(): Task[Unit] = super.doDispose().map { _ =>

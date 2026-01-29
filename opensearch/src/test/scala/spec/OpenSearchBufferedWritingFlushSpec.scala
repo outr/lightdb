@@ -5,7 +5,6 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
 import lightdb.opensearch.{OpenSearchMetrics}
 import lightdb.opensearch.OpenSearchStore
-import lightdb.store.BufferedWritingTransaction
 import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB}
 import org.scalatest.matchers.should.Matchers
@@ -14,8 +13,8 @@ import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
 
 /**
- * Regression/spec coverage for OpenSearchTransaction using BufferedWritingTransaction:
- * - When the buffered write map exceeds MaxTransactionWriteBuffer, we should flush before commit to avoid OOM.
+ * Regression/spec coverage for OpenSearchTransaction using BufferedWriteHandler:
+ * - When the buffered write map exceeds maxBufferSize, we should flush before commit to avoid OOM.
  *
  * This spec uses OpenSearchMetrics as an observable side-effect that a bulk flush occurred before commit.
  */
@@ -41,9 +40,6 @@ class OpenSearchBufferedWritingFlushSpec extends AsyncWordSpec with AsyncTaskSpe
     "flush before commit when max buffer is exceeded" in {
       val db = new DB
 
-      val originalMax = BufferedWritingTransaction.MaxTransactionWriteBuffer
-      BufferedWritingTransaction.MaxTransactionWriteBuffer = 5
-
       // Ensure metrics are enabled so we can assert a flush occurred.
       Profig("lightdb.opensearch.metrics.enabled").store(true)
 
@@ -52,7 +48,7 @@ class OpenSearchBufferedWritingFlushSpec extends AsyncWordSpec with AsyncTaskSpe
       val docs = (1 to 25).toList.map(i => Doc(value = s"v$i", _id = Id[Doc](s"d$i")))
 
       val test = db.init.next {
-        db.docs.transaction { tx =>
+        db.docs.transaction.withBufferedBatch(5) { tx =>
           val before = Task(OpenSearchMetrics.snapshot(baseUrlKey))
           val insertAll = tx.truncate.next(tx.insert(docs))
           val after = Task(OpenSearchMetrics.snapshot(baseUrlKey))
@@ -66,9 +62,7 @@ class OpenSearchBufferedWritingFlushSpec extends AsyncWordSpec with AsyncTaskSpe
             (a.bulkDocs - b.bulkDocs) should be > 0L
           }
         }.guarantee(db.dispose)
-      }.guarantee(Task {
-        BufferedWritingTransaction.MaxTransactionWriteBuffer = originalMax
-      })
+      }
 
       test
     }

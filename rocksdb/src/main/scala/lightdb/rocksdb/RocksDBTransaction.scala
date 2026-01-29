@@ -8,6 +8,7 @@ import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.rocksdb.RocksDBTransaction.writeOptions
 import lightdb.store.Store
+import lightdb.store.write.WriteOp
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.rocksdb.{ReadOptions, RocksIterator, Slice, WriteBatch, WriteOptions}
 import rapid.*
@@ -15,8 +16,13 @@ import rapid.*
 import java.nio.charset.StandardCharsets
 import scala.jdk.CollectionConverters.*
 
-case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model],
-                                                                                 parent: Option[Transaction[Doc, Model]]) extends PrefixScanningTransaction[Doc, Model] { tx =>
+case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
+  store: RocksDBStore[Doc, Model],
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
+) extends PrefixScanningTransaction[Doc, Model] { tx =>
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   private def bytes2Doc(bytes: Array[Byte]): Doc = bytes2Json(bytes).as[Doc](store.model.rw)
 
   private def bytes2Json(bytes: Array[Byte]): Json = {
@@ -118,6 +124,36 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       })
   }
 
+  def flushOps(ops: Seq[WriteOp[Doc]]): Task[Unit] = Task {
+    val batch = new WriteBatch
+    try {
+      ops.foreach {
+        case WriteOp.Insert(doc) =>
+          val json = doc.json(store.model.rw)
+          val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
+          store.handle match {
+            case Some(h) => batch.put(h, doc._id.bytes, bytes)
+            case None => batch.put(doc._id.bytes, bytes)
+          }
+        case WriteOp.Upsert(doc) =>
+          val json = doc.json(store.model.rw)
+          val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
+          store.handle match {
+            case Some(h) => batch.put(h, doc._id.bytes, bytes)
+            case None => batch.put(doc._id.bytes, bytes)
+          }
+        case WriteOp.Delete(id) =>
+          store.handle match {
+            case Some(h) => batch.delete(h, id.bytes)
+            case None => batch.delete(id.bytes)
+          }
+      }
+      store.rocksDB.write(writeOptions, batch)
+    } finally {
+      batch.close()
+    }
+  }
+
   override protected def _exists(id: Id[Doc]): Task[Boolean] = Task {
     store.handle match {
       case Some(h) => store.rocksDB.keyExists(h, id.bytes)
@@ -208,13 +244,16 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       }
 
       private def startsWithBytes(key: Array[Byte], p: Array[Byte]): Boolean = {
-        if key.length < p.length then return false
-        var i = 0
-        while i < p.length do {
-          if key(i) != p(i) then return false
-          i += 1
+        if key.length < p.length then false
+        else {
+          var i = 0
+          var matches = true
+          while i < p.length && matches do {
+            if key(i) != p(i) then matches = false
+            i += 1
+          }
+          matches
         }
-        true
       }
 
       private lazy val readOptions: ReadOptions = {

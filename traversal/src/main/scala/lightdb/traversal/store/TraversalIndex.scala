@@ -19,10 +19,12 @@ object TraversalIndex {
     s"$Prefix${encode(storeName)}:${encode(fieldName)}:${encode(value)}:${encode(docId)}"
 
   def decodeDocId(key: String): Option[String] = {
-    if !key.startsWith(Prefix) then return None
-    val idx = key.lastIndexOf(':')
-    if idx == -1 || idx == key.length - 1 then None
-    else Some(decode(key.substring(idx + 1)))
+    if !key.startsWith(Prefix) then None
+    else {
+      val idx = key.lastIndexOf(':')
+      if idx == -1 || idx == key.length - 1 then None
+      else Some(decode(key.substring(idx + 1)))
+    }
   }
 
   def encodeValue(json: Json): String = json match {

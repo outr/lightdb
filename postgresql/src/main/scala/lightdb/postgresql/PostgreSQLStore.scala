@@ -8,6 +8,7 @@ import lightdb.sql.connect.ConnectionManager
 import lightdb.sql.{SQLState, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import rapid.Task
 
 import java.nio.file.Path
@@ -48,9 +49,11 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = Task {
     val state = SQLState(connectionManager, this, Store.CacheQueries)
-    PostgreSQLTransaction(this, state, parent)
+    PostgreSQLTransaction(this, state, parent, writeHandlerFactory)
   }
 
   protected def tables(connection: Connection): Set[String] = {

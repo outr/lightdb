@@ -66,7 +66,7 @@ case class QueuedUpdateHandler[
     .map(_ => deltas.clear())
   override def rollback: Task[Unit] = Task.defer {
     deltas.clear()
-    txn.searching.rollback
+    SearchUpdateHandler.rollbackIfSupported(txn.searching)
   }
   override def truncate: Task[Unit] = txn.searching.truncate.unit
 

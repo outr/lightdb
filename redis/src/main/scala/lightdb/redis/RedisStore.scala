@@ -5,6 +5,7 @@ import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import rapid.*
 
 import java.nio.file.Path
@@ -24,8 +25,10 @@ class RedisStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String
 
   override protected def initialize(): Task[Unit] = super.initialize().next(Task(pool.preparePool()))
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
-    RedisTransaction(this, pool.getResource, parent)
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = Task {
+    RedisTransaction(this, pool.getResource, parent, writeHandlerFactory)
   }
 
   override protected def doDispose(): Task[Unit] = super.doDispose().next(Task(pool.close()))

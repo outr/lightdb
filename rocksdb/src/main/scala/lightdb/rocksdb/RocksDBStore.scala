@@ -4,7 +4,10 @@ import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.*
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
-import lightdb.transaction.Transaction
+import lightdb.store.write.WriteOp
+import lightdb.transaction.{Transaction, WriteHandler}
+import lightdb.transaction.batch.BatchConfig
+import lightdb.transaction.handler.DirectWriteHandler
 import org.rocksdb.{BlockBasedTableConfig, BloomFilter, ColumnFamilyDescriptor, ColumnFamilyHandle, ColumnFamilyOptions, DBOptions, FlushOptions, LRUCache, Options, RocksDB}
 import profig.Profig
 import rapid.Task
@@ -25,6 +28,18 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
   override type TX = RocksDBTransaction[Doc, Model]
 
+  override def defaultBatchConfig: BatchConfig = BatchConfig.Buffered()
+
+  override protected def flushOps(transaction: Transaction[Doc, Model], ops: Seq[WriteOp[Doc]]): Task[Unit] =
+    transaction.asInstanceOf[TX].flushOps(ops)
+
+  override protected def createNativeWriteHandler(transaction: Transaction[Doc, Model]): WriteHandler[Doc, Model] =
+    new DirectWriteHandler(
+      doc => flushOps(transaction, Seq(WriteOp.Insert(doc))).map(_ => doc),
+      doc => flushOps(transaction, Seq(WriteOp.Upsert(doc))).map(_ => doc),
+      id => flushOps(transaction, Seq(WriteOp.Delete(id))).map(_ => true)
+    )
+
   private val iteratorThreads: Int = Profig("lightdb.rocksdb.iteratorThreadPoolSize").opt[Int].getOrElse(16)
   private[rocksdb] val iteratorThreadPool: RocksDBIteratorThreadPool =
     new RocksDBIteratorThreadPool(namePrefix = s"rocksdb-$name", size = iteratorThreads)
@@ -43,8 +58,10 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     }
   }
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task {
-    RocksDBTransaction(this, parent)
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => WriteHandler[Doc, Model]): Task[TX] = Task {
+    RocksDBTransaction(this, parent, writeHandlerFactory)
   }
 
   override protected def doDispose(): Task[Unit] =

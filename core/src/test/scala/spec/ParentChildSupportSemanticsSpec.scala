@@ -7,6 +7,7 @@ import lightdb.filter.Filter
 import lightdb.id.Id
 import lightdb.store.{Collection, StoreManager, StoreMode}
 import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.transaction.batch.BatchConfig
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -33,8 +34,11 @@ class ParentChildSupportSemanticsSpec extends AnyWordSpec with Matchers {
 
   private class DummyTx[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     override val store: Collection[Doc, Model],
-    override val parent: Option[Transaction[Doc, Model]]
+    override val parent: Option[Transaction[Doc, Model]],
+    writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
   ) extends CollectionTransaction[Doc, Model] {
+    override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
     override def doSearch[V](query: lightdb.Query[Doc, Model, V]) = ???
     override def aggregate(query: lightdb.aggregate.AggregateQuery[Doc, Model]) = ???
     override def aggregateCount(query: lightdb.aggregate.AggregateQuery[Doc, Model]) = ???
@@ -62,7 +66,9 @@ class ParentChildSupportSemanticsSpec extends AnyWordSpec with Matchers {
     storeManager: StoreManager
   ) extends Collection[Doc, Model](name, path, model, db, storeManager) {
     override type TX = DummyTx[Doc, Model]
-    override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] =
+    override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                             batchConfig: BatchConfig,
+                                             writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] =
       Task.error(new RuntimeException("DummyCollection transactions are not supported in ParentChildSupportSemanticsSpec"))
   }
 

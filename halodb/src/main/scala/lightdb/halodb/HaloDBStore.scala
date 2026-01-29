@@ -4,6 +4,7 @@ import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
+import lightdb.transaction.batch.BatchConfig
 import rapid.*
 import scribe.{Level, Logger}
 
@@ -19,7 +20,10 @@ class HaloDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = HaloDBTransaction[Doc, Model]
 
-  override protected def createTransaction(parent: Option[Transaction[Doc, Model]]): Task[TX] = Task(HaloDBTransaction(this, instance, parent))
+  override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
+                                           batchConfig: BatchConfig,
+                                           writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] =
+    Task(HaloDBTransaction(this, instance, parent, writeHandlerFactory))
 
   override protected def doDispose(): Task[Unit] = super.doDispose().next(instance.dispose())
 }

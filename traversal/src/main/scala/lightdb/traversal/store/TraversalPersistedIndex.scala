@@ -559,37 +559,39 @@ object TraversalPersistedIndex {
   private[traversal] def prefixesCoveringRange(fromHex: String, toHex: String): List[String] = {
     val from = BigInt(fromHex, 16)
     val to = BigInt(toHex, 16)
-    if from > to then return Nil
-    val max = (BigInt(1) << 64) - 1
+    if from > to then Nil
+    else {
+      val max = (BigInt(1) << 64) - 1
 
-    def hex16(u: BigInt): String = {
-      val s = u.toString(16)
-      ("0" * (16 - s.length)) + s
-    }
-
-    def trailingZeroNibbles(u: BigInt): Int = {
-      var tz = 0
-      while tz < 16 && ((u >> (tz * 4)) & 0xf) == 0 do tz += 1
-      tz
-    }
-
-    var cur = from
-    val out = scala.collection.mutable.ListBuffer.empty[String]
-    while cur <= to && cur <= max do {
-      val remaining = to - cur + 1
-      val kAlign = trailingZeroNibbles(cur)
-      val kRem = ((remaining.bitLength - 1) / 4) max 0
-      var k = math.min(kAlign, kRem)
-      var block = BigInt(1) << (k * 4)
-      while block > remaining && k > 0 do {
-        k -= 1
-        block = BigInt(1) << (k * 4)
+      def hex16(u: BigInt): String = {
+        val s = u.toString(16)
+        ("0" * (16 - s.length)) + s
       }
-      val prefixLen = 16 - k
-      out += hex16(cur).take(prefixLen)
-      cur += block
+
+      def trailingZeroNibbles(u: BigInt): Int = {
+        var tz = 0
+        while tz < 16 && ((u >> (tz * 4)) & 0xf) == 0 do tz += 1
+        tz
+      }
+
+      var cur = from
+      val out = scala.collection.mutable.ListBuffer.empty[String]
+      while cur <= to && cur <= max do {
+        val remaining = to - cur + 1
+        val kAlign = trailingZeroNibbles(cur)
+        val kRem = ((remaining.bitLength - 1) / 4) max 0
+        var k = math.min(kAlign, kRem)
+        var block = BigInt(1) << (k * 4)
+        while block > remaining && k > 0 do {
+          k -= 1
+          block = BigInt(1) << (k * 4)
+        }
+        val prefixLen = 16 - k
+        out += hex16(cur).take(prefixLen)
+        cur += block
+      }
+      out.toList
     }
-    out.toList
   }
 
   /**

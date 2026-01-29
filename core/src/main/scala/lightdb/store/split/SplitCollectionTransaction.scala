@@ -7,7 +7,7 @@ import lightdb.field.Field.UniqueIndex
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.store.{Collection, Store}
-import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.transaction.{CollectionTransaction, RollbackSupport, Transaction}
 import lightdb.{Query, SearchResults}
 import rapid.Task
 
@@ -17,7 +17,10 @@ case class SplitCollectionTransaction[
   Storage <: Store[Doc, Model],
   Searching <: Collection[Doc, Model],
 ](store: SplitCollection[Doc, Model, Storage, Searching],
-  parent: Option[Transaction[Doc, Model]]) extends CollectionTransaction[Doc, Model] {
+  parent: Option[Transaction[Doc, Model]],
+  writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]) extends CollectionTransaction[Doc, Model] with RollbackSupport[Doc, Model] {
+  override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
+
   private[split] var _storage: store.storage.TX = _
   private[split] var _searching: store.searching.TX = _
 
@@ -63,7 +66,7 @@ case class SplitCollectionTransaction[
   yield ()
 
   override protected def _rollback: Task[Unit] = for
-    _ <- storage.rollback
+    _ <- SearchUpdateHandler.rollbackIfSupported(storage)
     _ <- searchUpdateHandler.rollback
   yield ()
 

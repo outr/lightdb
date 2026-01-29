@@ -8,39 +8,45 @@ import lightdb.error.DocNotFoundException
 import lightdb.field.Field.UniqueIndex
 import lightdb.id.Id
 import lightdb.store.Store
-import lightdb.transaction.batch.{Batch, DirectBatch}
+import lightdb.store.write.WriteOp
 import rapid.*
 
 trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def store: Store[Doc, Model]
   def parent: Option[Transaction[Doc, Model]]
-  
-  final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this).next(_insert(doc))
-  def insert(stream: rapid.Stream[Doc]): Task[Int] = batch { b =>
-    stream.evalMap(b.insert).count
-  }
+  def writeHandler: WriteHandler[Doc, Model]
+
+  final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this)
+    .next(writeHandler.write(WriteOp.Insert(doc)))
+    .map(_ => doc)
+  def insert(stream: rapid.Stream[Doc]): Task[Int] =
+    stream.evalMap(insert).count.flatTap(_ => flush)
 
   final def insert(docs: Seq[Doc]): Task[Seq[Doc]] = insert(rapid.Stream.emits(docs)).map(_ => docs)
   def insertJson(stream: rapid.Stream[Json]): Task[Int] = insert(stream.map(_.as[Doc](store.model.rw)))
 
-  final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this).next(_upsert(doc))
-  def upsert(stream: rapid.Stream[Doc]): Task[Int] = batch { b =>
-    stream.evalMap(b.upsert).count
-  }
+  final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this)
+    .next(writeHandler.write(WriteOp.Upsert(doc)))
+    .map(_ => doc)
+  def upsert(stream: rapid.Stream[Doc]): Task[Int] =
+    stream.evalMap(upsert).count.flatTap(_ => flush)
   final def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = upsert(rapid.Stream.emits(docs)).map(_ => docs)
 
-  final def exists(id: Id[Doc]): Task[Boolean] = _exists(id)
+  final def exists(id: Id[Doc]): Task[Boolean] = get(id).map(_.nonEmpty)
   final def count: Task[Int] = _count
 
   /**
    * Gets an estimated count if supported by database. Falls back to using count.
    */
   def estimatedCount: Task[Int] = count
-  final def commit: Task[Unit] = _commit
-  final def rollback: Task[Unit] = _rollback
-  final def close: Task[Unit] = batch.closeAll.next(_close)
+  def flush: Task[Unit] = writeHandler.flush
+  final def commit: Task[Unit] = writeHandler.flush.next(_commit)
+  final def close: Task[Unit] = writeHandler.close.next(_close)
 
-  def get(id: Id[Doc]): Task[Option[Doc]] = _get(store.idField, id)
+  def get(id: Id[Doc]): Task[Option[Doc]] = writeHandler.get(id).flatMap {
+    case Some(result) => Task.pure(result)
+    case None => _get(store.idField, id)
+  }
   def getAll(ids: Seq[Id[Doc]]): rapid.Stream[Doc] = rapid.Stream
     .emits(ids)
     .evalMap(apply)
@@ -62,44 +68,21 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
       case None => Task.pure(None)
     }
   }
-  final def delete(id: Id[Doc]): Task[Boolean] = store.trigger.delete(id, this).next(_delete(id))
+  final def delete(id: Id[Doc]): Task[Boolean] = store.trigger.delete(id, this)
+    .next(writeHandler.write(WriteOp.Delete(id)))
+    .map(_ => true)
 
   def list: Task[List[Doc]] = stream.toList
   def stream: rapid.Stream[Doc] = jsonStream.map(_.as[Doc](store.model.rw))
   def jsonStream: rapid.Stream[Json]
   def truncate: Task[Int]
 
-  private var batches = Set.empty[Batch[Doc, Model]]
-
-  protected def createBatch(): Task[Batch[Doc, Model]] = Task.pure(DirectBatch(this))
-  protected def releaseBatch(batch: Batch[Doc, Model]): Task[Unit] = Task {
-    batch.synchronized {
-      batches -= batch
-    }
-  }
-
-  object batch { b =>
-    def active: Task[Int] = Task.function(batches.size)
-
-    def create: Task[Batch[Doc, Model]] = createBatch().flatTap { batch =>
-      Task {
-        b.synchronized {
-          batches += batch
-        }
-      }
-    }
-
-    def apply[Return](f: Batch[Doc, Model] => Task[Return]): Task[Return] = create
-      .flatMap { batch =>
-        f(batch).guarantee(batch.close)
-      }
-
-    def closeAll: Task[Unit] = if (batches.nonEmpty) {
-      batches.toSeq.map(_.close).tasks.unit
-    } else {
-      Task.unit
-    }
-  }
+  private[lightdb] def applyWriteOps(ops: Seq[WriteOp[Doc]]): Task[Unit] =
+    ops.map {
+      case WriteOp.Insert(doc) => _insert(doc).unit
+      case WriteOp.Upsert(doc) => _upsert(doc).unit
+      case WriteOp.Delete(id) => _delete(id).unit
+    }.tasks.unit
 
   protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
   protected def _insert(doc: Doc): Task[Doc]
@@ -114,10 +97,4 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   protected def toString(doc: Doc): String = JsonFormatter.Compact(doc.json(store.model.rw))
   protected def fromString(string: String): Doc = toJson(string).as[Doc](store.model.rw)
   protected def toJson(string: String): Json = JsonParser(string)
-}
-
-object Transaction {
-  def releaseBatch[Doc <: Document[Doc], Model <: DocumentModel[Doc]](transaction: Transaction[Doc, Model],
-                                                                      batch: Batch[Doc, Model]): Task[Unit] =
-    transaction.releaseBatch(batch)
 }

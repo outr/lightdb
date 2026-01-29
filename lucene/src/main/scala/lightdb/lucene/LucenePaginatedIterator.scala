@@ -26,26 +26,26 @@ case class LucenePaginatedIterator(searcher: IndexSearcher,
 
   // Collect results page by page
   private def fetchPage(): Unit = {
-    if exhausted then return
+    if exhausted then ()
+    else {
+      val start = currentPageIndex * pageSize
 
-    val start = currentPageIndex * pageSize
+      val threshold = if totalHits == -1 then Int.MaxValue else 0
 
-    val threshold = if totalHits == -1 then Int.MaxValue else 0
+      val after = currentDocs.lastOption.map(_.asInstanceOf[FieldDoc]).orNull
+      val collectorManager = new TopFieldCollectorManager(sort, pageSize, after, threshold)
+      val topDocs = searcher.search(query, collectorManager)
 
-    val after = currentDocs.lastOption.map(_.asInstanceOf[FieldDoc]).orNull
-    val collectorManager = new TopFieldCollectorManager(sort, pageSize, after, threshold)
-    val topDocs = searcher.search(query, collectorManager)
+      if currentPageIndex == 0 then totalHits = topDocs.totalHits.value.toInt
 
-    if currentPageIndex == 0 then totalHits = topDocs.totalHits.value.toInt
-
-    if start >= totalHits then {
-      exhausted = true
-      return
+      if start >= totalHits then {
+        exhausted = true
+      } else {
+        currentDocs = topDocs.scoreDocs
+        currentIndexInPage = 0
+        currentPageIndex += 1
+      }
     }
-
-    currentDocs = topDocs.scoreDocs
-    currentIndexInPage = 0
-    currentPageIndex += 1
   }
 
   override def hasNext: Boolean = {
