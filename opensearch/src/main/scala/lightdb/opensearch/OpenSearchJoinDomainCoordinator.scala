@@ -129,13 +129,21 @@ object OpenSearchJoinDomainCoordinator {
   def withSysProps[A](config: Map[String, String])(f: => A): A = {
     val prev = config.keys.map(k => k -> Profig(k).opt[String]).toMap
     applySysProps(config)
-    try {
-      f
-    } finally {
-      prev.foreach {
-        case (k, Some(v)) => Profig(k).store(v)
-        case (k, None) => Profig(k).remove()
-      }
+    val result = f
+    result match {
+      case task: Task[?] =>
+        task.guarantee(Task {
+          prev.foreach {
+            case (k, Some(v)) => Profig(k).store(v)
+            case (k, None) => Profig(k).remove()
+          }
+        }).asInstanceOf[A]
+      case _ =>
+        prev.foreach {
+          case (k, Some(v)) => Profig(k).store(v)
+          case (k, None) => Profig(k).remove()
+        }
+        result
     }
   }
 
