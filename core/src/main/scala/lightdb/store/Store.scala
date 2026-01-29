@@ -207,11 +207,13 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       id => transaction.applyWriteOps(Seq(WriteOp.Delete(id))).map(_ => true)
     )
 
-  private case class Shared(name: String, tx: TX, timeout: FiniteDuration) { shared =>
+  protected def maximumConcurrency: Int = 1_000
+
+  protected case class Shared(name: String, tx: TX, timeout: FiniteDuration) { shared =>
     private val active = new AtomicInteger(0)
     private val lastUsed = new AtomicLong(0L)
     @volatile private var started = false
-    private val mutex = new Semaphore(1, true)
+    private val mutex = new Semaphore(maximumConcurrency, true)
 
     private val timeoutMillis = timeout.toMillis
 
