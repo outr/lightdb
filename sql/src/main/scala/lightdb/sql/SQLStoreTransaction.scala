@@ -24,6 +24,7 @@ import lightdb.store.write.WriteOp
 import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, RollbackSupport}
 import lightdb.util.ActionIterator
 import lightdb.{Query, SearchResults, Sort, SortDirection}
+import profig.Profig
 import rapid.Task
 
 import java.sql.{PreparedStatement, ResultSet, SQLException, Types}
@@ -37,6 +38,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   override def store: SQLStore[Doc, Model]
 
   def state: SQLState[Doc, Model]
+
+  private val upsertBatchMax: Int = math.max(1, Profig("lightdb.sql.batch.upsert.max").opt[Int].getOrElse(1))
 
   def fqn: String = store.fqn
 
@@ -173,10 +176,11 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       }
       ps.addBatch()
       state.batchUpsert.incrementAndGet()
-      // Flush immediately to ensure compatibility with single-connection, auto-commit drivers
-      ps.executeBatch()
-      state.batchUpsert.set(0)
-      state.markDirty()
+      if upsertBatchMax <= 1 || state.batchUpsert.get() >= upsertBatchMax then {
+        ps.executeBatch()
+        state.batchUpsert.set(0)
+        state.markDirty()
+      }
     }
     doc
   }

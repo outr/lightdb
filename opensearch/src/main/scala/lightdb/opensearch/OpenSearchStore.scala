@@ -36,11 +36,9 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     new BufferedWriteHandler(config.bulkMaxDocs, ops => flushOps(transaction, ops))
 
   private def ensureAutoJoinDomainRegistry(): Unit = {
-    // Respect explicit configuration and programmatic registry entries.
     if OpenSearchJoinDomainRegistry.get(lightDB.name, name).nonEmpty then {
       ()
     } else {
-
       def hasExplicitJoinKeys(storeName: String): Boolean = {
         val prefix = s"lightdb.opensearch.$storeName."
         val keys = List(
@@ -53,72 +51,90 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
         keys.exists(k => profig.Profig(k).exists())
       }
 
-      if hasExplicitJoinKeys(name) then {
-        ()
-      } else {
+      if hasExplicitJoinKeys(name) then ()
+      else {
+      case class Candidate(parentStoreName: String, joinDomain: String, joinFieldName: String, childStoreName: String, childParentFieldName: String)
 
-        // Build relationship candidates from all stores in this DB by inspecting ParentChildSupport models.
-        // This is safe under the "no transactions before init" invariant and the fact that all stores are constructed
-        // before LightDB initialization begins.
-        case class Candidate(parentStoreName: String, joinDomain: String, joinFieldName: String, childStoreName: String, childParentFieldName: String)
+      def profigString(key: String): Option[String] =
+        profig.Profig(key).get().map(_.asString).map(_.trim).filter(_.nonEmpty)
 
-        def profigString(key: String): Option[String] =
-          profig.Profig(key).get().map(_.asString).map(_.trim).filter(_.nonEmpty)
-
-        def candidates: List[Candidate] =
-          lightDB.stores.flatMap { s =>
-            s.model match {
-              case pcs: ParentChildSupport[?, ?, ?] @unchecked =>
-                val parentStoreName = s.name
-                try {
-                  val childStoreName = pcs.childStoreName
-                  val childParentFieldName = pcs.childJoinParentFieldName
-                  // If the parent store is explicitly configured, prefer that joinDomain/joinFieldName so children match.
-                  val joinDomain =
-                    profigString(s"lightdb.opensearch.$parentStoreName.joinDomain")
-                      .getOrElse(pcs.joinDomainName(parentStoreName))
-                  val joinFieldName =
-                    profigString("lightdb.opensearch.joinFieldName")
-                      .getOrElse(pcs.joinFieldName)
-                  List(Candidate(parentStoreName, joinDomain, joinFieldName, childStoreName, childParentFieldName))
-                } catch {
-                  case _: Throwable =>
-                    // If a ParentChildSupport model cannot be inspected safely here, skip it (it will fall back to explicit config).
-                    Nil
-                }
-              case _ =>
-                Nil
-            }
+      def parseChildParentFields(s: String): Map[String, String] = {
+        s.split(",").toList.flatMap { pair =>
+          val i = pair.indexOf(':')
+          if i <= 0 || i >= pair.length - 1 then Nil
+          else {
+            val child = pair.substring(0, i).trim
+            val field = pair.substring(i + 1).trim
+            if child.isEmpty || field.isEmpty then Nil else List(child -> field)
           }
+        }.toMap
+      }
 
-        val directParent = candidates.find(_.parentStoreName == name)
-        val asChild = candidates.filter(_.childStoreName == name)
-
-        (directParent, asChild) match {
-          case (Some(c), _) =>
-            OpenSearchJoinDomainRegistry.register(
-              dbName = lightDB.name,
-              joinDomain = c.joinDomain,
-              parentStoreName = c.parentStoreName,
-              childJoinParentFields = Map(c.childStoreName -> c.childParentFieldName),
-              joinFieldName = c.joinFieldName
-            )
-          case (None, one :: Nil) =>
-            OpenSearchJoinDomainRegistry.register(
-              dbName = lightDB.name,
-              joinDomain = one.joinDomain,
-              parentStoreName = one.parentStoreName,
-              childJoinParentFields = Map(one.childStoreName -> one.childParentFieldName),
-              joinFieldName = one.joinFieldName
-            )
-          case (None, Nil) =>
-            () // no relationship, nothing to do
-          case (None, many) =>
-            throw new IllegalArgumentException(
-              s"OpenSearch auto join-domain configuration for '$name' is ambiguous. Multiple ParentChildSupport parents claim this child: " +
-                many.map(_.parentStoreName).distinct.sorted.mkString(", ")
-            )
+      def candidates: List[Candidate] =
+        lightDB.stores.flatMap { s =>
+          s.model match {
+            case pcs: ParentChildSupport[?, ?, ?] @unchecked =>
+              val parentStoreName = s.name
+              try {
+                val explicitParent = hasExplicitJoinKeys(parentStoreName)
+                val childStoreName = pcs.childStoreName
+                val childParentFieldName = if explicitParent then {
+                  val mapping = profigString(s"lightdb.opensearch.$parentStoreName.joinChildParentFields")
+                    .map(parseChildParentFields)
+                    .getOrElse(Map.empty)
+                  mapping.getOrElse(childStoreName, pcs.childJoinParentFieldName)
+                } else {
+                  pcs.childJoinParentFieldName
+                }
+                val joinDomain = if explicitParent then {
+                  profigString(s"lightdb.opensearch.$parentStoreName.joinDomain")
+                    .getOrElse(pcs.joinDomainName(parentStoreName))
+                } else {
+                  pcs.joinDomainName(parentStoreName)
+                }
+                val joinFieldName = if explicitParent then {
+                  profigString("lightdb.opensearch.joinFieldName").getOrElse(pcs.joinFieldName)
+                } else {
+                  pcs.joinFieldName
+                }
+                List(Candidate(parentStoreName, joinDomain, joinFieldName, childStoreName, childParentFieldName))
+              } catch {
+                case _: Throwable =>
+                  Nil
+              }
+            case _ =>
+              Nil
+          }
         }
+
+      val directParent = candidates.find(_.parentStoreName == name)
+      val asChild = candidates.filter(_.childStoreName == name)
+
+      (directParent, asChild) match {
+        case (Some(c), _) =>
+          OpenSearchJoinDomainRegistry.register(
+            dbName = lightDB.name,
+            joinDomain = c.joinDomain,
+            parentStoreName = c.parentStoreName,
+            childJoinParentFields = Map(c.childStoreName -> c.childParentFieldName),
+            joinFieldName = c.joinFieldName
+          )
+        case (None, one :: Nil) =>
+          OpenSearchJoinDomainRegistry.register(
+            dbName = lightDB.name,
+            joinDomain = one.joinDomain,
+            parentStoreName = one.parentStoreName,
+            childJoinParentFields = Map(one.childStoreName -> one.childParentFieldName),
+            joinFieldName = one.joinFieldName
+          )
+        case (None, Nil) =>
+          ()
+        case (None, many) =>
+          throw new IllegalArgumentException(
+            s"OpenSearch auto join-domain configuration for '$name' is ambiguous. Multiple ParentChildSupport parents claim this child: " +
+              many.map(_.parentStoreName).distinct.sorted.mkString(", ")
+          )
+      }
       }
     }
   }

@@ -11,6 +11,7 @@ import lightdb.store.Store
 import lightdb.store.write.WriteOp
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import org.rocksdb.{ReadOptions, RocksIterator, Slice, WriteBatch, WriteOptions}
+import profig.Profig
 import rapid.*
 
 import java.nio.charset.StandardCharsets
@@ -101,7 +102,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def batchUpsert(stream: rapid.Stream[Doc]): Task[Int] = Task.defer {
     // Chunk to bound batch size and memory usage.
-    val chunkSize = math.max(1, Store.MaxInsertBatch)
+    val chunkSize = math.max(1, Profig("lightdb.rocksdb.batch.chunkSize").opt[Int].getOrElse(Store.MaxInsertBatch))
     stream
       .chunk(chunkSize)
       .fold(0)((total, chunk) => Task {

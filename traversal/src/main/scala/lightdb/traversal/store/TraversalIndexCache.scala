@@ -4,8 +4,8 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.IndexingState
 import lightdb.time.Timestamp
 
-import java.util.NavigableMap
-import java.util.TreeMap
+import java.util.{NavigableMap, TreeMap}
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.mutable
 
 /**
@@ -23,7 +23,9 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   model: Model,
   val enabled: Boolean
 ) {
-  private val lock = new AnyRef
+  private val lock = new ReentrantReadWriteLock()
+  private val readLock = lock.readLock()
+  private val writeLock = lock.writeLock()
   private var built: Boolean = false
   private val ngramSize: Int = 3
 
@@ -35,126 +37,176 @@ final class TraversalIndexCache[Doc <: Document[Doc], Model <: DocumentModel[Doc
   // field -> ngram -> docIds
   private val ngrams = mutable.HashMap.empty[String, mutable.HashMap[String, mutable.HashSet[String]]]
 
-  def ensureBuilt(buildFromDocs: => Iterator[Doc]): Unit = lock.synchronized {
-    if !enabled || built then ()
-    else {
-      eq.clear()
-      numLong.clear()
-      numDouble.clear()
-      ngrams.clear()
-      val state = new IndexingState
-      buildFromDocs.foreach(addDoc(state, _))
-      built = true
-    }
-  }
-
-  def clear(): Unit = lock.synchronized {
-    if !enabled then ()
-    else {
-      eq.clear()
-      numLong.clear()
-      numDouble.clear()
-      ngrams.clear()
-      built = false
-    }
-  }
-
-  def onInsert(doc: Doc): Unit = lock.synchronized {
-    if !enabled || !built then ()
-    else addDoc(new IndexingState, doc)
-  }
-
-  def onUpsert(oldDoc: Option[Doc], newDoc: Doc): Unit = lock.synchronized {
-    if !enabled || !built then ()
-    else {
-      val state = new IndexingState
-      oldDoc.foreach(removeDoc(state, _))
-      addDoc(state, newDoc)
-    }
-  }
-
-  def onDelete(doc: Doc): Unit = lock.synchronized {
-    if !enabled || !built then ()
-    else removeDoc(new IndexingState, doc)
-  }
-
-  def equalsPostings(fieldName: String, value: Any): Set[String] = lock.synchronized {
-    if !enabled then Set.empty
-    else {
-      val required = TraversalIndex.valuesForIndexValue(value).map {
-        case null => "null"
-        case s: String => s.toLowerCase
-        case v => v.toString
-      }
-      if required.isEmpty then Set.empty
+  def ensureBuilt(buildFromDocs: => Iterator[Doc]): Unit = {
+    writeLock.lock()
+    try {
+      if !enabled || built then ()
       else {
-        val sets = required.map { v =>
-          eq.get(fieldName).flatMap(_.get(v)).map(_.toSet).getOrElse(Set.empty[String])
+        eq.clear()
+        numLong.clear()
+        numDouble.clear()
+        ngrams.clear()
+        val state = new IndexingState
+        buildFromDocs.foreach(addDoc(state, _))
+        built = true
+      }
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  def clear(): Unit = {
+    writeLock.lock()
+    try {
+      if !enabled then ()
+      else {
+        eq.clear()
+        numLong.clear()
+        numDouble.clear()
+        ngrams.clear()
+        built = false
+      }
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  def onInsert(doc: Doc): Unit = {
+    writeLock.lock()
+    try {
+      if !enabled || !built then ()
+      else addDoc(new IndexingState, doc)
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  def onUpsert(oldDoc: Option[Doc], newDoc: Doc): Unit = {
+    writeLock.lock()
+    try {
+      if !enabled || !built then ()
+      else {
+        val state = new IndexingState
+        oldDoc.foreach(removeDoc(state, _))
+        addDoc(state, newDoc)
+      }
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  def onDelete(doc: Doc): Unit = {
+    writeLock.lock()
+    try {
+      if !enabled || !built then ()
+      else removeDoc(new IndexingState, doc)
+    } finally {
+      writeLock.unlock()
+    }
+  }
+
+  def equalsPostings(fieldName: String, value: Any): Set[String] = {
+    readLock.lock()
+    try {
+      if !enabled then Set.empty
+      else {
+        val required = TraversalIndex.valuesForIndexValue(value).map {
+          case null => "null"
+          case s: String => s.toLowerCase
+          case v => v.toString
         }
-        sets.reduce(_.intersect(_))
-      }
-    }
-  }
-
-  def startsWithPostings(fieldName: String, prefix: String): Set[String] = lock.synchronized {
-    if !enabled then Set.empty
-    else {
-      val p = prefix.toLowerCase
-      eq.get(fieldName).toList.flatMap { byValue =>
-        byValue.collect { case (v, ids) if v.startsWith(p) => ids }.flatMap(_.toSet)
-      }.toSet
-    }
-  }
-
-  def containsPostings(fieldName: String, query: String): Set[String] = lock.synchronized {
-    if !enabled then Set.empty
-    else {
-      val q = Option(query).getOrElse("").toLowerCase
-      if q.length < ngramSize then Set.empty
-      else {
-        val grams = gramsOf(q)
-        val byGram = ngrams.get(fieldName).getOrElse(mutable.HashMap.empty)
-        val sets = grams.map(g => byGram.get(g).map(_.toSet).getOrElse(Set.empty[String]))
-        if sets.isEmpty then Set.empty else sets.reduce(_ intersect _)
-      }
-    }
-  }
-
-  def rangeLongPostings(fieldName: String, from: Option[Long], to: Option[Long]): Set[String] = lock.synchronized {
-    if !enabled then Set.empty
-    else {
-      val map = numLong.getOrElse(fieldName, new TreeMap[Long, mutable.HashSet[String]]())
-      if map.isEmpty then Set.empty
-      else {
-        val f = from.getOrElse(map.firstKey())
-        val t = to.getOrElse(map.lastKey())
-        if f > t then Set.empty
+        if required.isEmpty then Set.empty
         else {
-          map.subMap(f, true, t, true).values().toArray.toList
-            .asInstanceOf[List[mutable.HashSet[String]]]
-            .flatMap(_.toSet)
-            .toSet
+          val sets = required.map { v =>
+            eq.get(fieldName).flatMap(_.get(v)).map(_.toSet).getOrElse(Set.empty[String])
+          }
+          sets.reduce(_.intersect(_))
         }
       }
+    } finally {
+      readLock.unlock()
     }
   }
 
-  def rangeDoublePostings(fieldName: String, from: Option[Double], to: Option[Double]): Set[String] = lock.synchronized {
-    if !enabled then Set.empty
-    else {
-      val map = numDouble.getOrElse(fieldName, new TreeMap[Double, mutable.HashSet[String]]())
-      if map.isEmpty then Set.empty
+  def startsWithPostings(fieldName: String, prefix: String): Set[String] = {
+    readLock.lock()
+    try {
+      if !enabled then Set.empty
       else {
-        val f = from.getOrElse(map.firstKey())
-        val t = to.getOrElse(map.lastKey())
-        if f > t then Set.empty
+        val p = prefix.toLowerCase
+        eq.get(fieldName).toList.flatMap { byValue =>
+          byValue.collect { case (v, ids) if v.startsWith(p) => ids }.flatMap(_.toSet)
+        }.toSet
+      }
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  def containsPostings(fieldName: String, query: String): Set[String] = {
+    readLock.lock()
+    try {
+      if !enabled then Set.empty
+      else {
+        val q = Option(query).getOrElse("").toLowerCase
+        if q.length < ngramSize then Set.empty
         else {
-          map.subMap(f, true, t, true).values().toArray.toList
-            .asInstanceOf[List[mutable.HashSet[String]]]
-            .flatMap(_.toSet)
-            .toSet
+          val grams = gramsOf(q)
+          val byGram = ngrams.get(fieldName).getOrElse(mutable.HashMap.empty)
+          val sets = grams.map(g => byGram.get(g).map(_.toSet).getOrElse(Set.empty[String]))
+          if sets.isEmpty then Set.empty else sets.reduce(_ intersect _)
         }
       }
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  def rangeLongPostings(fieldName: String, from: Option[Long], to: Option[Long]): Set[String] = {
+    readLock.lock()
+    try {
+      if !enabled then Set.empty
+      else {
+        val map = numLong.getOrElse(fieldName, new TreeMap[Long, mutable.HashSet[String]]())
+        if map.isEmpty then Set.empty
+        else {
+          val f = from.getOrElse(map.firstKey())
+          val t = to.getOrElse(map.lastKey())
+          if f > t then Set.empty
+          else {
+            map.subMap(f, true, t, true).values().toArray.toList
+              .asInstanceOf[List[mutable.HashSet[String]]]
+              .flatMap(_.toSet)
+              .toSet
+          }
+        }
+      }
+    } finally {
+      readLock.unlock()
+    }
+  }
+
+  def rangeDoublePostings(fieldName: String, from: Option[Double], to: Option[Double]): Set[String] = {
+    readLock.lock()
+    try {
+      if !enabled then Set.empty
+      else {
+        val map = numDouble.getOrElse(fieldName, new TreeMap[Double, mutable.HashSet[String]]())
+        if map.isEmpty then Set.empty
+        else {
+          val f = from.getOrElse(map.firstKey())
+          val t = to.getOrElse(map.lastKey())
+          if f > t then Set.empty
+          else {
+            map.subMap(f, true, t, true).values().toArray.toList
+              .asInstanceOf[List[mutable.HashSet[String]]]
+              .flatMap(_.toSet)
+              .toSet
+          }
+        }
+      }
+    } finally {
+      readLock.unlock()
     }
   }
 

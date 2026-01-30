@@ -84,6 +84,7 @@ object TraversalQueryEngine {
     persistedIndex: Option[lightdb.transaction.PrefixScanningTransaction[lightdb.KeyValue, lightdb.KeyValue.type]],
     query: lightdb.Query[Doc, Model, V],
   ): Task[SearchResults[Doc, Model, V]] = Task.defer {
+    val startNanos = System.nanoTime()
     def containsExistsChild(filterOpt: Option[Filter[Doc]]): Boolean = {
       def loop(f: Filter[Doc]): Boolean = f match {
         case _: Filter.ExistsChild[Doc @unchecked] => true
@@ -749,6 +750,9 @@ object TraversalQueryEngine {
     }
 
     seedIdsTask.flatMap { seedIdsResolved =>
+      if seedIdsResolved.isEmpty && query.filter.nonEmpty then {
+        TraversalMetrics.recordScanFallback()
+      }
       // Optional guardrails: avoid accidental full scans with verify-only filters (regex/contains) at massive scale.
       def hasUnscopedVerifyFilter(filter: Option[Filter[Doc]]): Boolean = {
         def loop(f: Filter[Doc]): Boolean = f match {
@@ -2676,7 +2680,7 @@ object TraversalQueryEngine {
         }
       }
     }
-    }
+    }.guarantee(Task(TraversalMetrics.recordQueryDuration(System.nanoTime() - startNanos)))
   }
 
   /**
