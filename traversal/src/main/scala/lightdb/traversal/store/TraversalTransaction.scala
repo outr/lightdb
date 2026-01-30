@@ -18,6 +18,7 @@ import lightdb.{Query, SearchResults}
 import rapid.Task
 import rapid.taskSeq2Ops
 import rapid.taskTaskOps
+import scala.util.*
 
 case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   store: TraversalStore[Doc, Model],
@@ -93,7 +94,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
               val tx = kv.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
               TraversalPersistedIndex
                 .indexDoc(store.name, store.model, d, tx)
-            }.attempt.map(_ => ())
+            }.attempt.flatMap {
+              case Failure(_) => store.markPersistedIndexNotReady()
+              case Success(_) => Task.unit
+            }
           case None => Task.unit
         }
       } else Task.unit
@@ -130,7 +134,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                 }
               }
               .fold(0)((total, inserted) => Task.pure(total + inserted))
-          }.attempt.map(_.getOrElse(-1)) // best-effort index maintenance; docs are already inserted
+          }.attempt.flatMap {
+            case Success(count) => Task.pure(count)
+            case Failure(_) => store.markPersistedIndexNotReady().map(_ => -1)
+          }
       }
     }
   }
@@ -144,7 +151,6 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
         case Some(idx) =>
           val ChunkSize: Int = 256
           idx.transaction.withStoreNativeBatch { kv =>
-//            val kv = kv0.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
             stream
               .chunk(ChunkSize)
               .evalMap { chunk =>
@@ -179,7 +185,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
                 }
               }
               .fold(0)((total, inserted) => Task.pure(total + inserted))
-          }.attempt.map(_.getOrElse(-1)) // best-effort index maintenance
+          }.attempt.flatMap {
+            case Success(count) => Task.pure(count)
+            case Failure(_) => store.markPersistedIndexNotReady().map(_ => -1)
+          }
       }
     }
   }
@@ -200,7 +209,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
               }
               de
                 .next(TraversalPersistedIndex.indexDoc(store.name, store.model, d, tx))
-            }.attempt.unit
+            }.attempt.flatMap {
+              case Failure(_) => store.markPersistedIndexNotReady()
+              case Success(_) => Task.unit
+            }
           case None => Task.unit
         }
       } else Task.unit
@@ -224,7 +236,10 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
             idx.transaction.withStoreNativeBatch { kv =>
               val tx = kv.asInstanceOf[PrefixScanningTransaction[KeyValue, KeyValue.type]]
               TraversalPersistedIndex.deindexDoc(store.name, store.model, old, tx)
-            }.attempt.unit
+            }.attempt.flatMap {
+              case Failure(_) => store.markPersistedIndexNotReady()
+              case Success(_) => Task.unit
+            }
           case _ => Task.unit
         }
       } else Task.unit

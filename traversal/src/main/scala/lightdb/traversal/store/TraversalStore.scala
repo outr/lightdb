@@ -225,6 +225,17 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
         Task.pure(false)
     }
 
+  private[traversal] def markPersistedIndexNotReady(): Task[Unit] =
+    if !persistedIndexEnabled || name == "_backingStore" then Task.unit
+    else effectiveIndexBacking match {
+      case Some(idx) =>
+        idx.transaction.withStoreNativeBatch { kv =>
+          TraversalPersistedIndex.markNotReady(name, kv.asInstanceOf[lightdb.transaction.PrefixScanningTransaction[KeyValue, KeyValue.type]])
+        }.attempt.unit
+      case None =>
+        Task.unit
+    }
+
   /**
    * Exposes persisted equality postings for diagnostics/tests.
    */

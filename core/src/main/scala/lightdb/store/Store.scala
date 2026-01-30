@@ -14,12 +14,12 @@ import lightdb.transaction.batch.BatchConfig
 import lightdb.transaction.handler.{AsyncWriteHandler, BufferedWriteHandler, DirectWriteHandler, QueuedWriteHandler}
 import lightdb.store.write.WriteOp
 import lightdb.trigger.StoreTriggers
-import lightdb.util.{Disposable, Initializable}
+import lightdb.util.{Disposable, Initializable, StoreMetrics}
 import rapid.*
 
 import java.io.File
 import java.nio.file.Path
-import java.util.concurrent.{ConcurrentHashMap, Semaphore}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, Semaphore}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 import scala.jdk.CollectionConverters.IteratorHasAsScala
@@ -144,10 +144,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
                       (f: TX => Task[Return]): Task[Return] = Task.defer {
       val s = sharedMap.computeIfAbsent(name, _ => {
         scribe.info(s"Creating Shared Transaction: $name")
-        val tx = create().sync()
-        Shared(name, tx, timeout)
+        Shared(name, timeout, () => create(), tx => release(tx))
       })
-      s.withLock(f(s.tx))
+      s.init().flatMap(_ => s.withLock(f))
     }
 
     def create(): Task[TX] = for
@@ -208,16 +207,56 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     )
 
   protected def maximumConcurrency: Int = 1_000
+  protected def defaultSharedTransactions: Int = 1
 
-  protected case class Shared(name: String, tx: TX, timeout: FiniteDuration) { shared =>
+  protected case class Shared(name: String,
+                              timeout: FiniteDuration,
+                              createTx: () => Task[TX],
+                              releaseTx: TX => Task[Unit]) { shared =>
     private val active = new AtomicInteger(0)
     private val lastUsed = new AtomicLong(0L)
     @volatile private var started = false
-    private val mutex = new Semaphore(maximumConcurrency, true)
+    @volatile private var initialized = false
+    private val maxTransactions = math.max(1, maximumConcurrency)
+    private val initialTransactions = math.min(math.max(1, defaultSharedTransactions), maxTransactions)
+    private val mutex = new Semaphore(maxTransactions, true)
+    private val pool = new LinkedBlockingQueue[TX]()
+    private val total = new AtomicInteger(0)
 
     private val timeoutMillis = timeout.toMillis
 
-    def withLock[A](task: => Task[A]): Task[A] = Task.defer {
+    def init(): Task[Unit] = Task.defer {
+      if initialized then Task.unit
+      else shared.synchronized {
+        if initialized then Task.unit
+        else {
+          initialized = true
+          List.fill(initialTransactions)(createTx()).tasks.flatMap { txs =>
+            Task {
+              txs.foreach(pool.offer)
+              total.set(txs.size)
+            }
+          }
+        }
+      }
+    }
+
+    private def acquireTx: Task[TX] = Task.defer {
+      val tx = pool.poll()
+      if tx != null then Task.pure(tx)
+      else {
+        val current = total.get()
+        if current < maxTransactions && total.compareAndSet(current, current + 1) then {
+          createTx()
+        } else {
+          Task(pool.take())
+        }
+      }
+    }
+
+    private def releaseToPool(tx: TX): Task[Unit] = Task(pool.offer(tx)).unit
+
+    def withLock[A](task: TX => Task[A]): Task[A] = Task.defer {
       active.incrementAndGet()
       if !started then {
         shared.synchronized {
@@ -228,10 +267,15 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         }
       }
       Task.defer {
+        val waitStart = System.nanoTime()
         Task(mutex.acquire())
-          .next(task)
+          .map(_ => StoreMetrics.recordSharedWait(System.nanoTime() - waitStart))
+          .next {
+            acquireTx.flatMap { tx =>
+              task(tx).guarantee(releaseToPool(tx).guarantee(Task(mutex.release())))
+            }
+          }
           .guarantee(Task {
-            mutex.release()
             active.decrementAndGet()
             lastUsed.set(System.currentTimeMillis())
           })
@@ -248,7 +292,17 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         if active.get() == 0 && lastUsed.get() < System.currentTimeMillis() - timeoutMillis then {
           scribe.info(s"Releasing Shared Transaction: $name")
           sharedMap.remove(name)
-          transaction.release(tx)
+          val drained = Task {
+            val list = scala.collection.mutable.ListBuffer.empty[TX]
+            var next = pool.poll()
+            while next != null do {
+              list += next
+              next = pool.poll()
+            }
+            total.set(0)
+            list.toList
+          }
+          drained.flatMap(_.map(releaseTx).tasks.unit)
         } else {
           recurse()
         }

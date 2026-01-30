@@ -27,6 +27,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   override def defaultBatchConfig: BatchConfig = BatchConfig.StoreNative
 
+  override protected def defaultSharedTransactions: Int = 4
+
   override protected def flushOps(transaction: Transaction[Doc, Model], ops: Seq[WriteOp[Doc]]): Task[Unit] =
     transaction.asInstanceOf[TX].flushOps(ops)
 

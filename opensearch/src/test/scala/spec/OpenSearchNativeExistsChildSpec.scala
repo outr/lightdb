@@ -10,24 +10,12 @@ import lightdb.upgrade.DatabaseUpgrade
 import lightdb.{LightDB}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import profig.Profig
 import rapid.{AsyncTaskSpec, Task}
 
 import java.nio.file.Path
 
 @EmbeddedTest
 class OpenSearchNativeExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with OpenSearchTestSupport {
-  // Configure a join-domain shared index:
-  // - Parent store is the join parent type and declares allowed children
-  // - Child store is the join child type and declares which field contains parent id for routing/join
-  Profig("lightdb.opensearch.Parent.joinDomain").store("native_exists_child")
-  Profig("lightdb.opensearch.Parent.joinRole").store("parent")
-  Profig("lightdb.opensearch.Parent.joinChildren").store("Child")
-
-  Profig("lightdb.opensearch.Child.joinDomain").store("native_exists_child")
-  Profig("lightdb.opensearch.Child.joinRole").store("child")
-  Profig("lightdb.opensearch.Child.joinParentField").store("parentId")
-
   private val alpha = Parent(name = "Alpha")
   private val bravo = Parent(name = "Bravo")
 

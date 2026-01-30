@@ -25,8 +25,8 @@ import java.util.PriorityQueue
  */
 object TraversalPersistedIndex {
   private val N: Int = 3
-  private val ClearChunkSize: Int = 1_000
-  private val BuildChunkSize: Int = 256
+  private val ClearChunkSize: Int = Profig("lightdb.traversal.persistedIndex.clearChunkSize").opt[Int].getOrElse(1_000)
+  private val BuildChunkSize: Int = Profig("lightdb.traversal.persistedIndex.buildChunkSize").opt[Int].getOrElse(256)
   private val PrefixMaxLen: Int = Profig("lightdb.traversal.persistedIndex.prefixMaxLen").opt[Int].getOrElse(8)
   private val NumericPrefixMaxLen: Int = Profig("lightdb.traversal.persistedIndex.numericPrefixMaxLen").opt[Int].getOrElse(16)
   private val NumericOrderedPrefixLen: Int =
@@ -178,6 +178,11 @@ object TraversalPersistedIndex {
   def markReady(storeName: String, kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Unit] = {
     val k = TraversalKeys.metaReadyKey(storeName)
     kv.upsert(KeyValue(_id = Id[KeyValue](k), json = Null)).unit
+  }
+
+  def markNotReady(storeName: String, kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Unit] = {
+    val k = TraversalKeys.metaReadyKey(storeName)
+    kv.delete(Id[KeyValue](k)).unit
   }
 
   def isReady(storeName: String, kv: PrefixScanningTransaction[KeyValue, KeyValue.type]): Task[Boolean] =

@@ -434,10 +434,10 @@ object OpenSearchConfig {
 
     // Programmatic join-domain config (no JVM system properties): allow apps to register join config in code.
     val registryEntry = OpenSearchJoinDomainRegistry.get(db.name, collectionName)
-    val joinDomainRaw2 = joinDomainRaw.orElse(registryEntry.map(_.joinDomain))
-    val joinRoleRaw2 = joinRoleRaw.orElse(registryEntry.map(_.joinRole))
-    val joinChildrenRaw2 = if joinChildrenRaw.nonEmpty then joinChildrenRaw else registryEntry.map(_.joinChildren).getOrElse(Nil)
-    val joinParentFieldRaw2 = joinParentFieldRaw.orElse(registryEntry.flatMap(_.joinParentField))
+    val joinDomainRaw2 = registryEntry.map(_.joinDomain).orElse(joinDomainRaw)
+    val joinRoleRaw2 = registryEntry.map(_.joinRole).orElse(joinRoleRaw)
+    val joinChildrenRaw2 = if registryEntry.exists(_.joinChildren.nonEmpty) then registryEntry.map(_.joinChildren).getOrElse(Nil) else joinChildrenRaw
+    val joinParentFieldRaw2 = registryEntry.flatMap(_.joinParentField).orElse(joinParentFieldRaw)
     // Join-domain inference:
     //
     // To reduce config duplication, child stores may infer join config from a parent store that declares:
@@ -525,8 +525,8 @@ object OpenSearchConfig {
 
     val joinParentField = joinParentFieldRaw2.orElse(inferredChild.map(_.joinParentField))
 
-    val joinFieldName = optString("lightdb.opensearch.joinFieldName")
-      .orElse(registryEntry.map(_.joinFieldName))
+    val joinFieldName = registryEntry.map(_.joinFieldName)
+      .orElse(optString("lightdb.opensearch.joinFieldName"))
       .getOrElse("__lightdb_join")
     val joinScoreMode = optString(s"lightdb.opensearch.$collectionName.joinScoreMode")
       .orElse(optString("lightdb.opensearch.joinScoreMode"))

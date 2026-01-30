@@ -24,7 +24,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
 
   private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
 
-  def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = {
+  def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = synchronized {
     val connection = connectionManager.getConnection(this)
 
     def createPs(): PreparedStatement = {
@@ -47,7 +47,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     }
   }
 
-  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = {
+  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = synchronized {
     if ps == null then ()
     else if caching then {
       cache.computeIfAbsent(sql, _ => new ConcurrentLinkedQueue[PreparedStatement]).add(ps)
@@ -86,7 +86,9 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     }
   }
 
-  def markDirty(): Unit = dirty = true
+  def markDirty(): Unit = synchronized {
+    dirty = true
+  }
 
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
       if psInsert == null then {
@@ -119,18 +121,19 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def commit: Task[Unit] = Task {
-    if dirty then {
-      // TODO: SingleConnection shares
-      if batchInsert.get() > 0 then {
-        psInsert.executeBatch()
-        batchInsert.set(0)
+    synchronized {
+      if dirty then {
+        if batchInsert.get() > 0 then {
+          psInsert.executeBatch()
+          batchInsert.set(0)
+        }
+        if batchUpsert.get() > 0 then {
+          psUpsert.executeBatch()
+          batchUpsert.set(0)
+        }
+        dirty = false
+        commitInternal()
       }
-      if batchUpsert.get() > 0 then {
-        psUpsert.executeBatch()
-        batchUpsert.set(0)
-      }
-      dirty = false
-      commitInternal()
     }
   }
 
@@ -141,27 +144,31 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def rollback: Task[Unit] = Task {
-    if dirty then {
-      dirty = false
-      Try(connectionManager.getConnection(this).rollback()).failed.foreach { t =>
-        scribe.warn(s"Rollback failed: ${t.getMessage}")
+    synchronized {
+      if dirty then {
+        dirty = false
+        Try(connectionManager.getConnection(this).rollback()).failed.foreach { t =>
+          scribe.warn(s"Rollback failed: ${t.getMessage}")
+        }
       }
     }
   }
 
   def close: Task[Unit] = Task {
-    if batchInsert.get() > 0 then {
-      psInsert.executeBatch()
-      batchInsert.set(0)
+    synchronized {
+      if batchInsert.get() > 0 then {
+        psInsert.executeBatch()
+        batchInsert.set(0)
+      }
+      if batchUpsert.get() > 0 then {
+        psUpsert.executeBatch()
+        batchUpsert.set(0)
+      }
+      resultSets.foreach(rs => Try(rs.close()))
+      statements.foreach(s => Try(s.close()))
+      if psInsert != null then psInsert.close()
+      if psUpsert != null then psUpsert.close()
+      connectionManager.releaseConnection(this)
     }
-    if batchUpsert.get() > 0 then {
-      psUpsert.executeBatch()
-      batchUpsert.set(0)
-    }
-    resultSets.foreach(rs => Try(rs.close()))
-    statements.foreach(s => Try(s.close()))
-    if psInsert != null then psInsert.close()
-    if psUpsert != null then psUpsert.close()
-    connectionManager.releaseConnection(this)
   }
 }

@@ -7,6 +7,8 @@ import org.apache.lucene.facet.taxonomy.directory.{DirectoryTaxonomyReader, Dire
 import org.apache.lucene.index.{ConcurrentMergeScheduler, IndexWriter, IndexWriterConfig, TieredMergePolicy}
 import org.apache.lucene.search.{IndexSearcher, SearcherFactory, SearcherManager}
 import org.apache.lucene.store.{BaseDirectory, ByteBuffersDirectory, FSDirectory}
+import profig.Profig
+import fabric.rw.*
 
 import java.nio.file.{Files, Path}
 
@@ -17,11 +19,11 @@ case class Index(path: Option[Path]) {
   private lazy val config = {
     val c = new IndexWriterConfig(analyzer)
     c.setCommitOnClose(true)
-    c.setRAMBufferSizeMB(2_000)
-    c.setMaxBufferedDocs(10_000)
+    c.setRAMBufferSizeMB(Profig("lightdb.lucene.ramBufferMB").opt[Double].getOrElse(2_000d))
+    c.setMaxBufferedDocs(Profig("lightdb.lucene.maxBufferedDocs").opt[Int].getOrElse(10_000))
     c.setMergePolicy(new TieredMergePolicy)
     c.setMergeScheduler(new ConcurrentMergeScheduler)
-    c.setUseCompoundFile(false)
+    c.setUseCompoundFile(Profig("lightdb.lucene.useCompoundFile").opt[Boolean].getOrElse(false))
     c
   }
   lazy val indexWriter = new IndexWriter(indexDirectory, config)
