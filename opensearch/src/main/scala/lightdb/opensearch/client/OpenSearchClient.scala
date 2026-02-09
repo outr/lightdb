@@ -29,7 +29,7 @@ case class OpenSearchClient(config: OpenSearchConfig) {
   }
 
   private lazy val client: HttpClient = HttpClient
-    .headers(Headers().withHeaders(List(
+    .headers(Headers.default.withHeaders(List(
       config.authHeader.map(auth => Headers.Request.Authorization(auth)),
       config.opaqueId.map(id => Header(HeaderKey("X-Opaque-Id"), id))
     ).flatten: _*))

@@ -939,7 +939,7 @@ object TraversalQueryEngine {
         val streamingPrefixMaxLen: Int =
           Profig("lightdb.traversal.persistedIndex.prefixMaxLen").opt[Int].getOrElse(8) max 1
         val streamingMaxInTerms: Int =
-          Profig("lightdb.traversal.persistedIndex.streamingSeed.maxInTerms").opt[Int].getOrElse(32) max 1
+          Profig("lightdb.traversal.persistedIndex.streamingSeed.maxInTerms").opt[Int].getOrElse(1024) max 1
         val streamingMaxInPageDocs: Int =
           Profig("lightdb.traversal.persistedIndex.streamingSeed.maxInPageDocs").opt[Int].getOrElse(10_000) max 1
         val streamingMaxRangePrefixes: Int =
@@ -1095,11 +1095,10 @@ object TraversalQueryEngine {
           in: Filter.In[Doc, _]
         ): Option[rapid.Stream[Doc]] = {
           val values0 = in.values.asInstanceOf[Seq[Any]]
-          val values = values0.take(streamingMaxInTerms)
 
           // Only support simple scalars here (one normalized term per input value).
           val encodedValues: Option[List[String]] = {
-            val encoded = values.map { v =>
+            val encoded = values0.map { v =>
               TraversalIndex.valuesForIndexValue(v) match {
                 case List(null) => Some("null")
                 case List(s: String) => Some(s.toLowerCase)
@@ -1114,20 +1113,25 @@ object TraversalQueryEngine {
             case None => None
             case Some(enc) if enc.isEmpty => None
             case Some(enc) =>
-              val prefixes = enc.distinct.map(v => TraversalKeys.eqPrefix(storeName, in.fieldName, v))
+              val allPrefixes = enc.distinct.map(v => TraversalKeys.eqPrefix(storeName, in.fieldName, v))
               val seen = mutable.HashSet.empty[String]
-              val mergedDocIds: rapid.Stream[String] =
-                rapid.Stream.merge {
-                  Task.pure {
-                    val iterator = prefixes.iterator.map { pfx =>
-                      TraversalPersistedIndex.postingsStream(pfx, kv)
+
+              // Chunk prefixes into groups of streamingMaxInTerms and flatMap across chunks.
+              // Each chunk opens up to streamingMaxInTerms concurrent RocksDB iterators via Stream.merge.
+              val chunkedDocIds: rapid.Stream[String] =
+                rapid.Stream.emits(allPrefixes.grouped(streamingMaxInTerms).toList).flatMap { chunk =>
+                  rapid.Stream.merge {
+                    Task.pure {
+                      val iterator = chunk.iterator.map { pfx =>
+                        TraversalPersistedIndex.postingsStream(pfx, kv)
+                      }
+                      Pull.fromIterator(iterator)
                     }
-                    Pull.fromIterator(iterator)
                   }
                 }
 
               Some(
-                mergedDocIds
+                chunkedDocIds
                   .collect { case docId if seen.add(docId) => docId }
                   .map(docId => Id[Doc](docId))
                   .evalMap(id => backing.get(id))
@@ -1145,10 +1149,9 @@ object TraversalQueryEngine {
           else if required > streamingMaxInPageDocs then Task.pure(None)
           else {
             val values0 = in.values.asInstanceOf[Seq[Any]]
-            val values = values0.take(streamingMaxInTerms)
 
             val encodedValuesOpt: Option[List[String]] = {
-              val encoded = values.map { v =>
+              val encoded = values0.map { v =>
                 TraversalIndex.valuesForIndexValue(v) match {
                   case List(null) => Some("null")
                   case List(s: String) => Some(s.toLowerCase)
@@ -1167,11 +1170,18 @@ object TraversalQueryEngine {
                 if enc.isEmpty then Task.pure(None)
                 else {
                   val takeN = required
-                  val tasks: List[Task[List[String]]] = enc.map { v =>
-                    val pfx = TraversalKeys.eqoPrefix(storeName, in.fieldName, v)
-                    TraversalPersistedIndex.postingsTake(pfx, kv, takeN)
-                  }
-                  tasks.tasks.map { lists =>
+                  // Chunk the tasks into groups of streamingMaxInTerms to avoid unbounded in-flight Tasks.
+                  val chunkedLists: Task[List[List[String]]] =
+                    enc.grouped(streamingMaxInTerms).toList
+                      .foldLeft(Task.pure(List.empty[List[String]])) { (accT, chunk) =>
+                        accT.flatMap { acc =>
+                          chunk.map { v =>
+                            val pfx = TraversalKeys.eqoPrefix(storeName, in.fieldName, v)
+                            TraversalPersistedIndex.postingsTake(pfx, kv, takeN)
+                          }.tasks.map(acc ++ _)
+                        }
+                      }
+                  chunkedLists.map { lists =>
                     val ids = TraversalPersistedIndex.mergeSortedDistinctTake(lists, takeN)
                     Some(
                       rapid.Stream
@@ -1474,11 +1484,47 @@ object TraversalQueryEngine {
                   query.sort == List(Sort.IndexOrder) && Option(e.query).exists(_.length > streamingPrefixMaxLen),
                   false
                 )
+              case (Some(kv), Some(c: Filter.Contains[Doc, _]))
+                  if canStreamSeed &&
+                    (query.sort.isEmpty || query.sort == List(Sort.IndexOrder)) &&
+                    c.field(model).indexed &&
+                    Option(c.query).exists(_.length >= 3) =>
+                (rapid.Stream.force(
+                  TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
+                    if !ready then Task.pure(backing.stream)
+                    else TraversalPersistedIndex.ngSeedPostings(storeName, c.fieldName, c.query, kv).map {
+                      case Some(ids) if ids.nonEmpty =>
+                        rapid.Stream.emits(ids.toList.sorted)
+                          .map(docId => Id[Doc](docId))
+                          .evalMap(id => backing.get(id))
+                          .collect { case Some(doc) => doc }
+                      case _ => backing.stream
+                    }
+                  }
+                ), true, false)
+              case (Some(kv), Some(r: Filter.Regex[Doc, _]))
+                  if canStreamSeed &&
+                    (query.sort.isEmpty || query.sort == List(Sort.IndexOrder)) &&
+                    r.field(model).indexed &&
+                    extractLiteralFromRegex(r.expression).exists(_.length >= 3) =>
+                val literal = extractLiteralFromRegex(r.expression).get.toLowerCase
+                (rapid.Stream.force(
+                  TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
+                    if !ready then Task.pure(backing.stream)
+                    else TraversalPersistedIndex.ngSeedPostings(storeName, r.fieldName, literal, kv).map {
+                      case Some(ids) if ids.nonEmpty =>
+                        rapid.Stream.emits(ids.toList.sorted)
+                          .map(docId => Id[Doc](docId))
+                          .evalMap(id => backing.get(id))
+                          .collect { case Some(doc) => doc }
+                      case _ => backing.stream
+                    }
+                  }
+                ), true, false)
               case (Some(kv), Some(i: Filter.In[Doc, _]))
                   if canStreamSeed &&
                     i.field(model).indexed &&
-                    i.values.asInstanceOf[Seq[Any]].nonEmpty &&
-                    i.values.asInstanceOf[Seq[Any]].size <= streamingMaxInTerms =>
+                    i.values.asInstanceOf[Seq[Any]].nonEmpty =>
                 val required = offset + limitIntOpt.getOrElse(0)
                 if query.sort == List(Sort.IndexOrder) then {
                   (rapid.Stream.force(
@@ -1591,8 +1637,11 @@ object TraversalQueryEngine {
                   case e: Filter.EndsWith[Doc, _] => e.field(model).indexed && Option(e.query).exists(_.nonEmpty)
                   case i: Filter.In[Doc, _] =>
                     i.field(model).indexed &&
-                      i.values.asInstanceOf[Seq[Any]].nonEmpty &&
-                      i.values.asInstanceOf[Seq[Any]].size <= streamingMaxInTerms
+                      i.values.asInstanceOf[Seq[Any]].nonEmpty
+                  case c: Filter.Contains[Doc, _] =>
+                    c.field(model).indexed && Option(c.query).exists(_.length >= 3)
+                  case r: Filter.Regex[Doc, _] =>
+                    r.field(model).indexed && extractLiteralFromRegex(r.expression).exists(_.length >= 3)
                   case r: Filter.RangeLong[Doc] => r.field(model).indexed
                   case r: Filter.RangeDouble[Doc] => r.field(model).indexed
                   case _ => false
@@ -1682,7 +1731,8 @@ object TraversalQueryEngine {
 
                   case i: Filter.In[Doc, _] =>
                     // Upper bound: sum per-term postings counts (overcounts due to overlaps, but safe as a hint).
-                    val values0 = i.values.asInstanceOf[Seq[Any]].take(streamingMaxInTerms)
+                    // Early-bail on streamingMultiDriverMaxCount already bounds work.
+                    val values0 = i.values.asInstanceOf[Seq[Any]]
                     val encodedValuesOpt: Option[List[String]] = {
                       val encoded = values0.map { v =>
                         TraversalIndex.valuesForIndexValue(v) match {
@@ -1889,7 +1939,7 @@ object TraversalQueryEngine {
                                 }
 
                               case i: Filter.In[Doc, _] if i.field(model).indexed =>
-                                val values0 = i.values.asInstanceOf[Seq[Any]].take(streamingMaxInTerms).toList
+                                val values0 = i.values.asInstanceOf[Seq[Any]].toList
                                 val encodedOpt: Option[List[String]] = {
                                   val encoded = values0.map { v =>
                                     TraversalIndex.valuesForIndexValue(v) match {
@@ -1905,9 +1955,16 @@ object TraversalQueryEngine {
                                   case None => Task.pure(None)
                                   case Some(enc) if enc.isEmpty => Task.pure(None)
                                   case Some(enc) =>
-                                    enc
-                                      .map(v => TraversalPersistedIndex.postingsTake(TraversalKeys.eqoPrefix(storeName, i.fieldName, v), kv, takeN))
-                                      .tasks
+                                    // Chunk tasks into groups of streamingMaxInTerms to bound parallelism.
+                                    enc.grouped(streamingMaxInTerms).toList
+                                      .foldLeft(Task.pure(List.empty[List[String]])) { (accT, chunk) =>
+                                        accT.flatMap { acc =>
+                                          chunk
+                                            .map(v => TraversalPersistedIndex.postingsTake(TraversalKeys.eqoPrefix(storeName, i.fieldName, v), kv, takeN))
+                                            .tasks
+                                            .map(acc ++ _)
+                                        }
+                                      }
                                       .map { lists =>
                                         val ids = TraversalPersistedIndex.mergeSortedDistinctTake(lists, takeN)
                                         if ids.isEmpty then None else Some(ids -> ids.size)
@@ -2425,6 +2482,22 @@ object TraversalQueryEngine {
                   }
 
                 (rapid.Stream.force(streamTask), true, false)
+              case (Some(kv), someFilter) =>
+                // Last resort: attempt seed materialization via persisted index before falling back to full scan.
+                val seedFallbackStream = rapid.Stream.force {
+                  TraversalPersistedIndex.isReady(storeName, kv).flatMap { ready =>
+                    if !ready then Task.pure(backing.stream)
+                    else seedCandidatesPersisted(storeName, model, someFilter, kv).map {
+                      case Some(ids) if ids.nonEmpty =>
+                        rapid.Stream.emits(ids.toList.sorted)
+                          .map(docId => Id[Doc](docId))
+                          .evalMap(id => backing.get(id))
+                          .collect { case Some(doc) => doc }
+                      case _ => backing.stream
+                    }
+                  }
+                }
+                (seedFallbackStream, true, false)
               case _ =>
                 (backing.stream, false, false)
             }

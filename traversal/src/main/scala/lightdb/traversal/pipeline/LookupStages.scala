@@ -2,8 +2,10 @@ package lightdb.traversal.pipeline
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.IndexingState
+import lightdb.graph.EdgeDocument
 import lightdb.id.Id
-import lightdb.transaction.{CollectionTransaction, Transaction}
+import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, Transaction}
+import lightdb.traversal.graph.{EdgeTraversalBuilder, TraversalStrategy}
 import rapid.*
 
 /**
@@ -87,6 +89,42 @@ object LookupStages {
     key: A => K
   ): Stage[A, (A, List[Child])] =
     lookupMany(childTx, (_: ChildModel) => foreignKey, key)
+
+  /**
+   * Recursive multi-hop join, analogous to MongoDB's `$graphLookup`.
+   *
+   * For each upstream row, starts a graph traversal from `startWith(row)` and collects
+   * all edges reachable within `maxDepth` hops. Results are emitted as `(row, List[E])`.
+   *
+   * @param edgeTx     Transaction for the edge collection (must support prefix scanning)
+   * @param startWith  Extracts the starting node ID from each upstream row
+   * @param maxDepth   Maximum traversal depth (default: Int.MaxValue)
+   * @param edgeFilter Optional predicate to filter edges during traversal
+   * @param strategy   Traversal strategy (BFS or DFS, default: BFS)
+   */
+  def graphLookup[A, E <: EdgeDocument[E, N, N], N <: Document[N]](
+    edgeTx: PrefixScanningTransaction[E, _],
+    startWith: A => Id[N],
+    maxDepth: Int = Int.MaxValue,
+    edgeFilter: E => Boolean = (_: E) => true,
+    strategy: TraversalStrategy = TraversalStrategy.BFS
+  ): Stage[A, (A, List[E])] =
+    (in: Stream[A]) =>
+      in.chunk(DefaultLookupChunkSize).flatMap { chunk =>
+        Stream.force {
+          val list = chunk.toList
+          list.map { a =>
+            val startId = startWith(a)
+            EdgeTraversalBuilder(
+              fromIds = Stream.emit(startId),
+              tx = edgeTx,
+              maxDepth = maxDepth,
+              edgeFilter = edgeFilter,
+              strategy = strategy
+            ).edges.toList.map(edges => a -> edges)
+          }.tasks.map(pairs => Stream.emits(pairs))
+        }
+      }
 }
 
 

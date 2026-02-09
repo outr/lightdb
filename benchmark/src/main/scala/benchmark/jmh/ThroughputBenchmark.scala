@@ -4,11 +4,9 @@ import fabric.{obj, str}
 import fabric.rw.*
 import lightdb.*
 import lightdb.doc.*
-import lightdb.duckdb.DuckDBStore
 import lightdb.h2.H2Store
 import lightdb.id.Id
 import lightdb.lmdb.LMDBStore
-import lightdb.mapdb.MapDBStore
 import lightdb.rocksdb.RocksDBStore
 import lightdb.sql.SQLiteStore
 import lightdb.store.hashmap.HashMapStore
@@ -24,10 +22,10 @@ import scala.jdk.CollectionConverters.*
 
 @State(Scope.Thread)
 class ThroughputState {
-  @Param(Array("rocksdb", "lmdb", "mapdb", "sqlite", "duckdb", "h2", "hashmap"))
+  @Param(Array("rocksdb", "lmdb", "sqlite", "h2"))
   var backend: String = _
 
-  @Param(Array("buffered"))
+  @Param(Array("buffered", "async"))
   var batchType: String = _
 
   @Param(Array("10000000"))
@@ -74,9 +72,7 @@ class ThroughputState {
     name match {
       case "rocksdb" => RocksDBStore
       case "lmdb"    => LMDBStore
-      case "mapdb"   => MapDBStore
       case "sqlite"  => SQLiteStore
-      case "duckdb"  => DuckDBStore
       case "h2"      => H2Store
       case "hashmap" => HashMapStore
       case other     => throw new IllegalArgumentException(s"Unknown backend: $other")

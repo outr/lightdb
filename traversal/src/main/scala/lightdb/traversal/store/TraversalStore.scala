@@ -37,10 +37,10 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
    * Persisted index writes (postings in `effectiveIndexBacking`) are enabled by default for scaling.
    *
    * Disable explicitly with:
-   * -Dlightdb.traversal.persistedIndex=false
+   * -Dlightdb.traversal.persistedIndex.enabled=false
    */
   private[traversal] val persistedIndexEnabled: Boolean =
-    Profig("lightdb.traversal.persistedIndex").opt[Boolean].getOrElse(true)
+    Profig("lightdb.traversal.persistedIndex.enabled").opt[Boolean].getOrElse(true)
 
   /**
    * When enabled, non-empty collections will automatically build/backfill the persisted postings index on init if the
