@@ -271,7 +271,7 @@ class ImdbQueryComparisonState {
 }
 
 private trait ImdbQueryDb[SM] extends LightDB {
-  val aka: Store[TitleAka, TitleAka.type]
+  val aka: Collection[TitleAka, TitleAka.type]
   val basics: Store[TitleBasics, TitleBasics.type]
 }
 
@@ -289,7 +289,7 @@ private object ImdbQueryDb {
     override val storeManager: SMParam = sm
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
+    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
     val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
   }
 
@@ -299,7 +299,7 @@ private object ImdbQueryDb {
     override val storeManager: SM = sm
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
+    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
     val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
   }
 
@@ -333,7 +333,7 @@ private object ImdbQueryDb {
     }
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
+    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
     val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
   }
 }

@@ -12,6 +12,7 @@ import fabric.rw.*
 
 import java.nio.file.Path
 
+@EmbeddedTest
 class OpenSearchConfigSpec extends AnyWordSpec with Matchers with ProfigTestSupport {
   "OpenSearchConfig.from" should {
     "respect store-specific requestTimeoutMillis override" in {

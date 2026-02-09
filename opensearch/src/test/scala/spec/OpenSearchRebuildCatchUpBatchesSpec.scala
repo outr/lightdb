@@ -5,6 +5,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import rapid.Task
 
+@EmbeddedTest
 class OpenSearchRebuildCatchUpBatchesSpec extends AnyWordSpec with Matchers {
   "OpenSearchRebuild.collectCatchUpBatches" should {
     "iterate batches until None and preserve nextToken chaining" in {

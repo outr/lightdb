@@ -16,6 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import rapid.Task
 
+@EmbeddedTest
 class OpenSearchJoinBoostDslSpec extends AnyWordSpec with Matchers {
   case class Parent(name: String,
                     created: Timestamp = Timestamp(),

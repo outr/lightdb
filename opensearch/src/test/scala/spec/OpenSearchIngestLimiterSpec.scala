@@ -9,6 +9,7 @@ import rapid.taskSeq2Ops
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationLong
 
+@EmbeddedTest
 class OpenSearchIngestLimiterSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   "OpenSearchIngestLimiter" should {
     "enforce max concurrent permits" in {
