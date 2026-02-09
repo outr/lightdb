@@ -1,9 +1,12 @@
-package lightdb.opensearch
+package spec
 
 import fabric.*
+import lightdb.opensearch.{OpenSearchBulkOp, OpenSearchBulkRequest}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
+import spec.EmbeddedTest
 
+@EmbeddedTest
 class OpenSearchBulkDeleteNdjsonSpec extends AnyWordSpec with Matchers {
   "OpenSearchBulkRequest" should {
     "encode delete actions as single-line NDJSON entries (with optional routing)" in {

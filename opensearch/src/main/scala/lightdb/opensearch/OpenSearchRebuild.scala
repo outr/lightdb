@@ -97,7 +97,12 @@ object OpenSearchRebuild {
       } else {
         catchUp(token).flatMap {
           case None => Task.pure(acc)
-          case Some(batch) => loop(batch.nextToken, n + 1, acc :+ batch)
+          case Some(batch) =>
+            val updated = acc :+ batch
+            batch.nextToken match {
+              case None => Task.pure(updated)
+              case Some(next) => loop(Some(next), n + 1, updated)
+            }
         }
       }
     }

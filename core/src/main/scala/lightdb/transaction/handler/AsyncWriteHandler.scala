@@ -7,7 +7,7 @@ import lightdb.transaction.WriteHandler
 import lightdb.util.AtomicQueue
 import rapid.{Task, logger}
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.duration.FiniteDuration
 
 class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
@@ -21,13 +21,15 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected val maxQueueSize: Int = maxQueueSize0
 
   @volatile private var keepAlive = true
-  @volatile private var throwable: Option[Throwable] = None
+  private val throwable = new AtomicReference[Throwable](null)
   private val finished = new AtomicInteger(0)
 
   private val active = (0 until activeThreads).map { index =>
     recursivelyProcess.handleError { t =>
-      throwable = Some(t)
-      logger.error(s"Error in AsyncWriteHandler.active[$index]", t).map(_ => keepAlive = false)
+      Task {
+        throwable.compareAndSet(null, t)
+        keepAlive = false
+      }.next(logger.error(s"Error in AsyncWriteHandler.active[$index]", t))
     }.guarantee(Task {
       finished.incrementAndGet()
     }).start()
@@ -35,13 +37,18 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def onOverflow: Task[Unit] = super.onOverflow
 
-  override def write(op: WriteOp[Doc]): Task[Unit] = enqueue(op)
+  private def failIfError: Task[Unit] = Task.defer {
+    val t = throwable.get()
+    if (t == null) Task.unit else Task.error(t)
+  }
+
+  override def write(op: WriteOp[Doc]): Task[Unit] = failIfError.next(enqueue(op))
 
   override def get(id: Id[Doc]): Task[Option[Option[Doc]]] = Task.pure(None)
 
   private def recursivelyProcess: Task[Unit] = Task.defer {
     val chunk = drain(chunkSize)
-    if ((chunk.isEmpty && !keepAlive) || throwable.nonEmpty) {
+    if ((chunk.isEmpty && !keepAlive) || throwable.get() != null) {
       Task.unit
     } else {
       val task = if (chunk.nonEmpty) {
@@ -54,9 +61,11 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   override def flush: Task[Unit] = Task.defer {
-    val chunk = drain(chunkSize)
-    if (chunk.isEmpty) Task.unit
-    else flushOps(chunk).next(flush)
+    failIfError.next {
+      val chunk = drain(chunkSize)
+      if (chunk.isEmpty) Task.unit
+      else flushOps(chunk).next(flush)
+    }
   }
 
   override def clear: Task[Unit] = Task {
@@ -64,9 +73,13 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   override def close: Task[Unit] = Task.defer {
-    keepAlive = false
-    Task.condition(Task.function(finished.get() == activeThreads), delay = waitTime)
-  }.next(flush).function {
-    throwable.foreach(t => throw t)
+    failIfError.next(Task {
+      keepAlive = false
+    }).next(Task.condition(Task.function(finished.get() == activeThreads), delay = waitTime)).next {
+      failIfError.next(flush)
+    }
+  }.function {
+    val t = throwable.get()
+    if (t != null) throw t
   }
 }

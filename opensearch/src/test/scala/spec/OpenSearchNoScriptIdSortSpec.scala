@@ -14,6 +14,7 @@ import org.scalatest.wordspec.AnyWordSpec
  * By default, OpenSearchSearchBuilder should sort Id-like string fields using doc-values (`<field>.keyword`),
  * and never emit `_script` sorts unless explicitly enabled by config.
  */
+@EmbeddedTest
 class OpenSearchNoScriptIdSortSpec extends AnyWordSpec with Matchers {
   case class Parent(_id: Id[Parent] = Parent.id()) extends Document[Parent]
   object Parent extends DocumentModel[Parent] with JsonConversion[Parent] {

@@ -1646,9 +1646,9 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   }
 }
 
-private[opensearch] sealed trait OpenSearchBulkOp
+sealed trait OpenSearchBulkOp
 
-private[opensearch] object OpenSearchBulkOp {
+object OpenSearchBulkOp {
   def index(index: String, id: String, source: Json, routing: Option[String] = None): OpenSearchBulkOp =
     OpenSearchBulkOpIndex(index, id, source, routing)
 
@@ -1656,11 +1656,11 @@ private[opensearch] object OpenSearchBulkOp {
     OpenSearchBulkOpDelete(index, id, routing)
 }
 
-private[opensearch] case class OpenSearchBulkOpIndex(index: String, id: String, source: Json, routing: Option[String]) extends OpenSearchBulkOp
+case class OpenSearchBulkOpIndex(index: String, id: String, source: Json, routing: Option[String]) extends OpenSearchBulkOp
 
-private[opensearch] case class OpenSearchBulkOpDelete(index: String, id: String, routing: Option[String]) extends OpenSearchBulkOp
+case class OpenSearchBulkOpDelete(index: String, id: String, routing: Option[String]) extends OpenSearchBulkOp
 
-private[opensearch] case class OpenSearchBulkRequest(ops: List[OpenSearchBulkOp]) {
+case class OpenSearchBulkRequest(ops: List[OpenSearchBulkOp]) {
   def toBulkNdjson: String = ops.map {
     case OpenSearchBulkOpIndex(index, id, source, routing) =>
       val routingPart = routing.map(r => s""","routing":"${escapeJson(r)}"""").getOrElse("")
