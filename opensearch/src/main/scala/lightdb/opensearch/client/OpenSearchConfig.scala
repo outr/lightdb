@@ -489,21 +489,48 @@ object OpenSearchConfig {
             case Some(parentField) =>
               List(InferredChild(parentStoreName = parentStoreName, joinDomain = joinDomain, joinParentField = parentField))
             case None =>
-              throw new IllegalArgumentException(
-                s"OpenSearch join-domain inference for '$collectionName' found parent store '$parentStoreName', but no parent-field mapping was provided. " +
-                  s"Set 'lightdb.opensearch.$parentStoreName.joinChildParentFields' (e.g. '$collectionName:parentId') " +
-                  s"or explicitly configure 'lightdb.opensearch.$collectionName.joinParentField'."
-              )
+              Nil
           }
         }
       }
+      val missingMappingParents = candidateParentStores.toList.filter { parentStoreName =>
+        val parentJoinChildren = optString(s"lightdb.opensearch.$parentStoreName.joinChildren").map(parseCsv).getOrElse(Nil)
+        val parentChildParentFields =
+          optString(s"lightdb.opensearch.$parentStoreName.joinChildParentFields").map(parseChildParentFields).getOrElse(Map.empty)
+        val mentionedAsChild: Boolean =
+          parentJoinChildren.contains(collectionName) || parentChildParentFields.contains(collectionName)
+        mentionedAsChild && !parentChildParentFields.contains(collectionName)
+      }
+      val totalClaimingParents = (candidates.map(_.parentStoreName) ++ missingMappingParents).distinct
       candidates match {
-        case Nil => None
-        case one :: Nil => Some(one)
+        case Nil =>
+          missingMappingParents match {
+            case one :: Nil =>
+              throw new IllegalArgumentException(
+                s"OpenSearch join-domain inference for '$collectionName' found parent store '$one', but no parent-field mapping was provided. " +
+                  s"Set 'lightdb.opensearch.$one.joinChildParentFields' (e.g. '$collectionName:parentId') " +
+                  s"or explicitly configure 'lightdb.opensearch.$collectionName.joinParentField'."
+              )
+            case Nil => None
+            case _ =>
+              throw new IllegalArgumentException(
+                s"OpenSearch join-domain inference for '$collectionName' is ambiguous. Multiple parent stores claim this child: " +
+                  totalClaimingParents.sorted.mkString(", ")
+              )
+          }
+        case one :: Nil =>
+          if totalClaimingParents.size > 1 then {
+            throw new IllegalArgumentException(
+              s"OpenSearch join-domain inference for '$collectionName' is ambiguous. Multiple parent stores claim this child: " +
+                totalClaimingParents.sorted.mkString(", ")
+            )
+          } else {
+            Some(one)
+          }
         case many =>
           throw new IllegalArgumentException(
             s"OpenSearch join-domain inference for '$collectionName' is ambiguous. Multiple parent stores claim this child: " +
-              many.map(_.parentStoreName).distinct.sorted.mkString(", ")
+              totalClaimingParents.sorted.mkString(", ")
           )
       }
     }
