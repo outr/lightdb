@@ -7,10 +7,8 @@ import lightdb.doc.*
 import lightdb.id.Id
 import lightdb.rocksdb.RocksDBStore
 import lightdb.lmdb.LMDBStore
-import lightdb.mapdb.MapDBStore
 import lightdb.sql.SQLiteStore
 import lightdb.h2.H2Store
-import lightdb.duckdb.DuckDBStore
 import lightdb.store.hashmap.HashMapStore
 import lightdb.store.{Store, StoreManager}
 import lightdb.upgrade.DatabaseUpgrade
@@ -25,7 +23,7 @@ import scala.jdk.CollectionConverters.*
 
 @State(Scope.Benchmark)
 class KvState {
-  @Param(Array("rocksdb", "lmdb", "mapdb", "sqlite", "duckdb", "h2", "hashmap"))
+  @Param(Array("rocksdb", "lmdb", "sqlite", "h2"))
   var backend: String = _
 
   @Param(Array("10000"))
@@ -47,9 +45,7 @@ class KvState {
     db = backend match {
       case "rocksdb" => new KVDb(RocksDBStore, tempDir)
       case "lmdb"    => new KVDb(LMDBStore, tempDir)
-      case "mapdb"   => new KVDb(MapDBStore, tempDir)
       case "sqlite"  => new KVDb(SQLiteStore, tempDir)
-      case "duckdb"  => new KVDb(DuckDBStore, tempDir)
       case "h2"      => new KVDb(H2Store, tempDir)
       case "hashmap" => new KVDb(HashMapStore, None)
       case other     => throw new IllegalArgumentException(s"Unknown backend: $other")

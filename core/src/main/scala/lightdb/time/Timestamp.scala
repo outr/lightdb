@@ -1,22 +1,48 @@
 package lightdb.time
 
-import fabric.{NumInt, Str}
+import fabric.*
 import fabric.define.DefType
 import fabric.rw.*
 import perfolation.long2Implicits
 import lightdb.*
 
 import java.util.Calendar
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.*
 
 case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
-  def year: Int = value.t.year
-  def month: Int = value.t.month + 1
-  def day: Int = value.t.dayOfMonth
-  def hour: Int = value.t.hour24
-  def minute: Int = value.t.minuteOfHour
-  def second: Int = value.t.secondOfMinute
-  def millisecond: Int = value.t.milliOfSecond
+  def year: Int = apply(Timestamp.Field.Year)
+  def month: Int = apply(Timestamp.Field.Month)
+  def day: Int = apply(Timestamp.Field.Day)
+  def hour: Int = apply(Timestamp.Field.Hour)
+  def minute: Int = apply(Timestamp.Field.Minute)
+  def second: Int = apply(Timestamp.Field.Second)
+  def millisecond: Int = apply(Timestamp.Field.Millisecond)
+
+  def apply(field: Timestamp.Field): Int = field match {
+    case Timestamp.Field.Year => value.t.year
+    case Timestamp.Field.Month => value.t.month + 1
+    case Timestamp.Field.Day => value.t.dayOfMonth
+    case Timestamp.Field.Hour => value.t.hour24
+    case Timestamp.Field.Minute => value.t.minuteOfHour
+    case Timestamp.Field.Second => value.t.secondOfMinute
+    case Timestamp.Field.Millisecond => value.t.milliOfSecond
+  }
+
+  def plus(field: Timestamp.Field, amount: Int): Timestamp = if (amount == 0) {
+    this
+  } else {
+    val c = Calendar.getInstance()
+    c.setTimeInMillis(value)
+    c.add(field.calendarField, amount)
+    Timestamp(c.getTimeInMillis)
+  }
+
+  def minus(field: Timestamp.Field, amount: Int): Timestamp = plus(field, -amount)
+
+  def durationFromNow: FiniteDuration = {
+    val now = System.currentTimeMillis()
+    if value > now then (value - now).millis else 0.millis
+  }
 
   def +(millis: Long): Timestamp = Timestamp(value + millis)
   def -(millis: Long): Timestamp = Timestamp(value - millis)
@@ -43,19 +69,28 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
 }
 
 object Timestamp {
+  enum Field(val calendarField: Int) {
+    case Year extends Field(java.util.Calendar.YEAR)
+    case Month extends Field(java.util.Calendar.MONTH)
+    case Day extends Field(java.util.Calendar.DAY_OF_MONTH)
+    case Hour extends Field(java.util.Calendar.HOUR_OF_DAY)
+    case Minute extends Field(java.util.Calendar.MINUTE)
+    case Second extends Field(java.util.Calendar.SECOND)
+    case Millisecond extends Field(java.util.Calendar.MILLISECOND)
+  }
+
   /**
    * Convenience method to get the current year.
    */
   def CurrentYear: Int = Timestamp().year
-  
-  def seconds(v: Int): Long = v * 1000L
-  def minutes(v: Int): Long = seconds(v * 60)
-  def hours(v: Int): Long = minutes(v * 60)
-  def days(v: Int): Long = hours(v * 24)
-  def weeks(v: Int): Long = days(v * 7)
+
+  val MillisecondsJson: Timestamp => Json = _.value.json
+  val YearMonthDayJson: Timestamp => Json = ts => str(s"${ts.value.t.Y}-${ts.value.t.m}-${ts.value.t.d}")
+
+  var ToJson: Timestamp => Json = MillisecondsJson
 
   implicit val rw: RW[Timestamp] = RW.from(
-    r = _.value.json,
+    r = (ts: Timestamp) => ToJson(ts),
     w = {
       case NumInt(l, _) => Timestamp(l)
       case Str(s, _) => TimestampParser(s).getOrElse(throw new RuntimeException(s"Unable to parse Timestamp from: [$s]"))

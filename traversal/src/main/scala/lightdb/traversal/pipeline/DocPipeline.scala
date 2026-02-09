@@ -2,6 +2,8 @@ package lightdb.traversal.pipeline
 
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.filter.Filter
+import lightdb.graph.EdgeDocument
+import lightdb.traversal.graph.{EdgeTraversalBuilder, TraversalStrategy}
 import lightdb.traversal.store.{TraversalIndexCache, TraversalQueryEngine}
 import lightdb.transaction.PrefixScanningTransaction
 import profig.Profig
@@ -79,6 +81,58 @@ final case class DocPipeline[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   def project[A](f: Doc => A): Pipeline[A] = Pipeline(stream.map(f))
+
+  /**
+   * Hop from current documents across edges to reach target documents, returning a new pipeline.
+   *
+   * This bridges `DocPipeline` directly into `EdgeTraversalBuilder`, enabling type-safe
+   * graph traversal within the pipeline pattern:
+   *
+   * {{{
+   * personPipeline
+   *   .filter(_.age >= 18)
+   *   .hop(friendEdgeTx, personTx, maxDepth = 2)
+   *   .filter(_.city === "Austin")
+   *   .toList
+   * }}}
+   *
+   * @param edgeTx     Transaction for the edge collection
+   * @param targetTx   Transaction for the target document collection
+   * @param maxDepth   Maximum traversal depth (default: 1 for single-hop)
+   * @param edgeFilter Optional predicate to filter edges during traversal
+   * @param strategy   Traversal strategy (BFS or DFS, default: BFS)
+   */
+  def hop[E <: EdgeDocument[E, Doc, T], T <: Document[T], TModel <: DocumentModel[T]](
+    edgeTx: PrefixScanningTransaction[E, _],
+    targetTx: PrefixScanningTransaction[T, TModel],
+    maxDepth: Int = 1,
+    edgeFilter: E => Boolean = (_: E) => true,
+    strategy: TraversalStrategy = TraversalStrategy.BFS
+  ): DocPipeline[T, TModel] = {
+    val targetIds: Stream[lightdb.id.Id[T]] = stream.flatMap { doc =>
+      EdgeTraversalBuilder(
+        fromIds = Stream.emit(doc._id.asInstanceOf[lightdb.id.Id[Doc]].coerce),
+        tx = edgeTx,
+        maxDepth = maxDepth,
+        edgeFilter = edgeFilter,
+        strategy = strategy
+      ).edges.map(_._to)
+    }.distinct
+
+    val targetStream: Stream[T] = targetIds.evalMap(id => targetTx.get(id)).collect { case Some(doc) => doc }
+
+    DocPipeline(
+      storeName = targetTx.store.name,
+      model = targetTx.store.model,
+      tx = targetTx,
+      indexCache = new TraversalIndexCache[T, TModel](
+        storeName = targetTx.store.name,
+        model = targetTx.store.model,
+        enabled = false
+      ),
+      stream = targetStream
+    )
+  }
 
   def toList: Task[List[Doc]] = stream.toList
   def count: Task[Long] = stream.count.map(_.toLong)

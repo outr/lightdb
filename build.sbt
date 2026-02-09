@@ -99,7 +99,7 @@ val postgresqlVersion: String = "42.7.9"
 
 val chronicleMapVersion: String = "2026.0"
 
-val spiceVersion: String = "0.10.20"
+val spiceVersion: String = "0.11.0"
 
 val scalaTestVersion: String = "3.2.19"
 

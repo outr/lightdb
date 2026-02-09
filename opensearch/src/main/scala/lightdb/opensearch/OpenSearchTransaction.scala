@@ -934,6 +934,11 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       msg.contains("resource_already_exists_exception") || msg.contains("already exists")
     }
 
+    def isCreateBlocked(t: Throwable): Boolean = {
+      val msg = Option(t.getMessage).getOrElse("").toLowerCase
+      msg.contains("index_create_block_exception") || msg.contains("create-index blocked")
+    }
+
     def waitForIndexDeleted(index: String,
                             maxWait: FiniteDuration = 30.minutes,
                             poll: FiniteDuration = 1.second): Task[Unit] = Task.defer {
@@ -979,6 +984,10 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                 if elapsed >= maxWait then Task.error(t)
                 else Task.sleep(poll).next(loop())
             }
+          case Failure(t) if isCreateBlocked(t) =>
+            val elapsed = (System.nanoTime() - startNanos).nanos
+            if elapsed >= maxWait then Task.error(t)
+            else Task.sleep(poll).next(loop())
           case Failure(t) =>
             Task.error(t)
         }

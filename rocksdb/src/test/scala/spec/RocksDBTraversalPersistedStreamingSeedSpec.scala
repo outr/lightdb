@@ -37,6 +37,8 @@ class RocksDBTraversalPersistedStreamingSeedSpec
     // Keep oversampling minimal to exercise correctness fallback when postings are approximate.
     System.setProperty("lightdb.traversal.persistedIndex.streamingSeed.indexOrder.rangeOversample", "1")
     System.setProperty("lightdb.traversal.persistedIndex.streamingSeed.indexOrder.prefixOversample", "1")
+    // Small chunk size to exercise chunked In filter path with few values.
+    System.setProperty("lightdb.traversal.persistedIndex.streamingSeed.maxInTerms", "2")
     super.beforeAll()
   }
 
@@ -47,6 +49,7 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       System.clearProperty("lightdb.traversal.persistedIndex.streamingSeed.enabled")
       System.clearProperty("lightdb.traversal.persistedIndex.streamingSeed.indexOrder.rangeOversample")
       System.clearProperty("lightdb.traversal.persistedIndex.streamingSeed.indexOrder.prefixOversample")
+      System.clearProperty("lightdb.traversal.persistedIndex.streamingSeed.maxInTerms")
     }
   }
 
@@ -372,6 +375,31 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       }
     }
 
+    "use chunked streaming seed for In filter with more values than streamingMaxInTerms (no sort)" in {
+      // maxInTerms is set to 2 in beforeAll(), so 4 In values create 2 chunks.
+      val docs = (1 to 6).toList.map(i => Person(name = s"chk$i", age = i, _id = Id(s"chk$i")))
+      for
+        _ <- DB.init
+        _ <- DB.people.transaction(_.truncate)
+        _ <- DB.people.transaction(_.insert(docs))
+        _ <- DB.people
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
+          .buildPersistedIndex()
+        // 4 distinct In values -> 2 chunks of 2 with maxInTerms=2
+        results <- DB.people.transaction { tx =>
+          tx.query
+            .clearPageSize
+            .limit(3)
+            .filter(_.age.in(Seq(1, 2, 3, 4)))
+            .search
+        }
+        list <- results.stream.toList
+      yield {
+        list.size shouldBe 3
+        all(list.map(a => a.age >= 1 && a.age <= 4)) shouldBe true
+      }
+    }
+
     "use persisted streaming seed for page-only rangeLong when seed materialization is skipped" in {
       // Intentionally choose docIds so lexicographic order starts with many out-of-range docs
       // (to validate oversampling for approximate IndexOrder range postings).
@@ -401,6 +429,84 @@ class RocksDBTraversalPersistedStreamingSeedSpec
       yield {
         list.size shouldBe 5
         all(list.map(_.rank)) should (be >= 50L and be <= 150L)
+      }
+    }
+
+    "use persisted streaming seed for page-only Contains when seed materialization is skipped" in {
+      val docs = (1 to 50).toList.map(i =>
+        Person(name = if i <= 30 then s"alice_$i" else s"zzz_$i", age = i, _id = Id(s"c$i"))
+      )
+      for
+        _ <- DB.init
+        _ <- DB.people.transaction(_.truncate)
+        _ <- DB.people.transaction(_.insert(docs))
+        _ <- DB.people
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
+          .buildPersistedIndex()
+        results <- DB.people.transaction { tx =>
+          tx.query
+            .clearPageSize
+            .limit(5)
+            .filter(_.name.contains("alice"))
+            .search
+        }
+        list <- results.stream.toList
+      yield {
+        list.size shouldBe 5
+        all(list.map(_.name.contains("alice"))) shouldBe true
+      }
+    }
+
+    "use persisted streaming seed for page-only Regex when seed materialization is skipped" in {
+      val docs = (1 to 50).toList.map(i =>
+        Person(name = if i <= 30 then s"alice_$i" else s"zzz_$i", age = i, _id = Id(s"rx$i"))
+      )
+      for
+        _ <- DB.init
+        _ <- DB.people.transaction(_.truncate)
+        _ <- DB.people.transaction(_.insert(docs))
+        _ <- DB.people
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
+          .buildPersistedIndex()
+        results <- DB.people.transaction { tx =>
+          tx.query
+            .clearPageSize
+            .limit(5)
+            .filter(_.name.regex(".*alice.*"))
+            .search
+        }
+        list <- results.stream.toList
+      yield {
+        list.size shouldBe 5
+        all(list.map(_.name.contains("alice"))) shouldBe true
+      }
+    }
+
+    "use seed fallback for filter not covered by streaming-seed match (custom sort)" in {
+      // A Contains filter with a custom (non-empty, non-IndexOrder) sort does not match any
+      // streaming-seed case. The seed fallback should use seedCandidatesPersisted instead of full scan.
+      val docs = (1 to 50).toList.map(i =>
+        Person(name = if i <= 30 then s"alice_$i" else s"zzz_$i", age = i, _id = Id(s"fb$i"))
+      )
+      for
+        _ <- DB.init
+        _ <- DB.people.transaction(_.truncate)
+        _ <- DB.people.transaction(_.insert(docs))
+        _ <- DB.people
+          .asInstanceOf[lightdb.traversal.store.TraversalStore[_, _]]
+          .buildPersistedIndex()
+        results <- DB.people.transaction { tx =>
+          tx.query
+            .clearPageSize
+            .limit(5)
+            .sort(Sort.ByField(Person.age).asc)
+            .filter(_.name.contains("alice"))
+            .search
+        }
+        list <- results.stream.toList
+      yield {
+        list.size shouldBe 5
+        all(list.map(_.name.contains("alice"))) shouldBe true
       }
     }
   }
