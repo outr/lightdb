@@ -16,3 +16,4 @@ metals.sbt
 derby.log
 *report-*.json
 benchdb/
+benchmarks.json
