@@ -9,7 +9,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.16.0"
+ThisBuild / version := "4.17.0-SNAPSHOT"
 ThisBuild / scalaVersion := "3.8.1"
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 

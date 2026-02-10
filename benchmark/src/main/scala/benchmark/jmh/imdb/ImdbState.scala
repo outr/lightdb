@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters.*
 
 @State(Scope.Benchmark)
 class ImdbState {
-  @Param(Array("rocksdb", "lmdb", "mapdb", "sqlite", "duckdb", "h2", "hashmap", "rocksdb-lucene"))
+  @Param(Array("rocksdb", "lmdb", "mapdb", "sqlite", "duckdb", "h2", "halodb", "rocksdb-lucene"))
   var backend: String = _
 
   @Param(Array("50000"))
@@ -215,6 +215,7 @@ private object ImdbDb {
     case "sqlite"  => new SqlDb(SQLiteStore, dir)
     case "duckdb"  => new SqlDb(DuckDBStore, dir)
     case "h2"      => new SqlDb(H2Store, dir)
+    case "halodb"  => new SqlDb(HaloDBStore, dir)
     case "hashmap" => new Rocks(None, HashMapStore)
     case "rocksdb-lucene" =>
       new SplitDb(SplitStoreManager(RocksDBStore, LuceneStore), dir)
