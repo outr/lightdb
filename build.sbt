@@ -63,7 +63,7 @@ val rapidVersion: String = "2.3.2"
 
 val profigVersion: String = "3.4.18"
 
-val reactifyVersion: String = "4.1.5"
+val reactifyVersion: String = "4.2.0"
 
 val spatial4JVersion: String = "0.8"
 
