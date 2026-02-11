@@ -220,6 +220,25 @@ object Filter {
     }
   }
 
+  sealed trait NestedSemantics
+  object NestedSemantics {
+    /**
+     * All nested predicates must match the same nested element for the configured path.
+     */
+    case object SameElementAll extends NestedSemantics
+  }
+
+  /**
+   * Document-side nested filter that scopes the inner predicate to a nested path.
+   *
+   * Example path: "items" for fields like "items.name", "items.percent".
+   */
+  case class Nested[Doc <: Document[Doc]](path: String,
+                                          filter: Filter[Doc],
+                                          semantics: NestedSemantics = NestedSemantics.SameElementAll) extends Filter[Doc] {
+    override val fieldNames: List[String] = Nil
+  }
+
   /**
    * A filter that intentionally matches no documents.
    */

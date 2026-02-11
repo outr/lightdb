@@ -483,6 +483,11 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.add(LatLonPoint.newDistanceQuery(mapped, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
           b.add(LatLonPoint.newBoxQuery(mapped, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
           b.build()
+        case f: Filter.Nested[D @unchecked] =>
+          throw new UnsupportedOperationException(
+            s"Lucene has no native same-element nested query support (path='${f.path}'). " +
+              s"Use transaction query execution so nested fallback evaluation is applied."
+          )
         case Filter.Multi(minShould, clauses) =>
           val b = new BooleanQuery.Builder
           val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)

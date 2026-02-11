@@ -100,6 +100,14 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   def supportsNativeExistsChild: Boolean = false
 
   /**
+   * Whether this store supports Filter.Nested query functionality.
+   *
+   * Stores that do not support nested queries should keep this false so Query can fail fast with
+   * a deterministic unsupported-operation error.
+   */
+  def supportsNestedQueries: Boolean = false
+
+  /**
    * Default batching behavior for transactions. Stores can override for optimal performance.
    */
   def defaultBatchConfig: BatchConfig = BatchConfig.Direct

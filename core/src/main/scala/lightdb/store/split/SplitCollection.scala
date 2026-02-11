@@ -38,6 +38,8 @@ class SplitCollection[
    */
   override def supportsNativeExistsChild: Boolean = searching.supportsNativeExistsChild
 
+  override def supportsNestedQueries: Boolean = searching.supportsNestedQueries
+
   override protected def initialize(): Task[Unit] = storage.init.and(searching.init).next(super.initialize())
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]],

@@ -5,6 +5,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.*
 import lightdb.lucene.index.Index
 import lightdb.store.*
+import lightdb.store.nested.NestedQueryStore
 import lightdb.transaction.Transaction
 import lightdb.transaction.batch.BatchConfig
 import org.apache.lucene.facet.FacetsConfig
@@ -22,7 +23,9 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      model: Model,
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      lightDB: LightDB,
-                                                                     storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) {
+                                                                     storeManager: StoreManager)
+  extends Collection[Doc, Model](name, path, model, lightDB, storeManager)
+    with NestedQueryStore[Doc, Model] {
   override type TX = LuceneTransaction[Doc, Model]
 
   override def defaultBatchConfig: BatchConfig = BatchConfig.Direct
