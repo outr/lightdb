@@ -11,7 +11,7 @@ object TimestampParser {
    *
    * @param s              input text (date/time or raw epoch)
    * @param defaultZone    used when the input has no zone/offset (e.g., "2025-09-18 07:30")
-   * @param preferDayFirst if true, try dd/MM/yyyy patterns before MM/dd/yyyy
+   * @param preferDayFirst if true, try dd/MM/yyyy patterns before MM/dd/yyyy, defaults to false
    */
   def apply(s: String,
             defaultZone: ZoneId = ZoneId.systemDefault(),

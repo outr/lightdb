@@ -18,6 +18,13 @@ object OpenSearchDsl {
       "score_mode" -> str(scoreMode)
     ))
 
+  def nested(path: String, query: Json, scoreMode: String = "none"): Json =
+    obj("nested" -> obj(
+      "path" -> str(path),
+      "query" -> query,
+      "score_mode" -> str(scoreMode)
+    ))
+
   def exists(field: String): Json =
     obj("exists" -> obj("field" -> str(field)))
 

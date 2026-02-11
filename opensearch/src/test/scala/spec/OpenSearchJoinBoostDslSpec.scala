@@ -6,6 +6,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.field.Field
 import lightdb.filter.{Condition, Filter, FilterClause, ParentChildRelation}
+import lightdb.filter.*
 import lightdb.id.Id
 import lightdb.store.{Collection, StoreMode}
 import lightdb.store.hashmap.HashMapStore
@@ -18,6 +19,11 @@ import rapid.Task
 
 @EmbeddedTest
 class OpenSearchJoinBoostDslSpec extends AnyWordSpec with Matchers {
+  case class ChildAttr(key: String, percent: Double)
+  object ChildAttr {
+    implicit val rw: RW[ChildAttr] = RW.gen
+  }
+
   case class Parent(name: String,
                     created: Timestamp = Timestamp(),
                     modified: Timestamp = Timestamp(),
@@ -29,13 +35,19 @@ class OpenSearchJoinBoostDslSpec extends AnyWordSpec with Matchers {
 
   case class Child(parentId: Id[Parent],
                    tag: String,
+                   attrs: List[ChildAttr] = Nil,
                    created: Timestamp = Timestamp(),
                    modified: Timestamp = Timestamp(),
                    _id: Id[Child] = Child.id()) extends RecordDocument[Child]
   object Child extends RecordDocumentModel[Child] with JsonConversion[Child] {
     override implicit val rw: RW[Child] = RW.gen
+    trait Attrs extends Nested[List[ChildAttr]] {
+      val key: NP[String]
+      val percent: NP[Double]
+    }
     val parentId: I[Id[Parent]] = field.index(_.parentId)
     val tag: I[String] = field.index(_.tag)
+    val attrs: N[Attrs] = field.index.nested[Attrs](_.attrs)
   }
 
   object DummyDB extends LightDB {
@@ -75,6 +87,42 @@ class OpenSearchJoinBoostDslSpec extends AnyWordSpec with Matchers {
       val hasChildObj = must0.asObj.value("has_child").asObj
 
       hasChildObj.value("boost") shouldBe num(2.0)
+    }
+
+    "compile nested filters under has_child with same-element semantics" in {
+      val childStore: Collection[Child, Child.type] = new DummyCollection[Child, Child.type]("Children", Child)
+      val relation = ParentChildRelation[Parent, Child, Child.type](childStore, _ => Child.parentId)
+
+      val nestedChildFilter = Child.attrs.nested { attrs =>
+        attrs.key === "tract-a" && attrs.percent >= 0.5
+      }
+      val existsChild = Filter.ExistsChild(relation, (_: Child.type) => nestedChildFilter)
+      val builder = new lightdb.opensearch.query.OpenSearchSearchBuilder[Parent, Parent.type](Parent, joinScoreMode = "none")
+      val dsl = builder.filterToDsl(existsChild)
+
+      val hasChildObj = dsl.asObj.value("has_child").asObj
+      val nestedObj = hasChildObj.value("query").asObj.value("nested").asObj
+      nestedObj.value("path") shouldBe str("attrs")
+
+      val must = nestedObj.value("query").asObj.value("bool").asObj.value("must").asArr.value
+      must.exists(_.asObj.value.contains("range")) shouldBe true
+      must.exists { clause =>
+        val keys = clause.asObj.value.keySet
+        keys.contains("bool") || keys.contains("term")
+      } shouldBe true
+    }
+
+    "fail fast when nested path is not declared on the model" in {
+      val childStore: Collection[Child, Child.type] = new DummyCollection[Child, Child.type]("Children", Child)
+      val relation = ParentChildRelation[Parent, Child, Child.type](childStore, _ => Child.parentId)
+
+      val invalid = Filter.ExistsChild(relation, (_: Child.type) => Filter.Nested[Child]("unknown", Filter.Equals[Child, String]("key", "x")))
+      val builder = new lightdb.opensearch.query.OpenSearchSearchBuilder[Parent, Parent.type](Parent, joinScoreMode = "none")
+
+      val t = intercept[IllegalArgumentException] {
+        builder.filterToDsl(invalid)
+      }
+      t.getMessage should include ("Nested path 'unknown' is not declared")
     }
   }
 }

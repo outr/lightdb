@@ -4,6 +4,7 @@ import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion, ParentChildSupport}
 import lightdb.filter.Filter
+import lightdb.filter.*
 import lightdb.id.Id
 import lightdb.store.{Collection, StoreManager, StoreMode}
 import lightdb.transaction.{CollectionTransaction, Transaction}
@@ -17,13 +18,26 @@ import java.nio.file.Path
 
 @EmbeddedTest
 class ParentChildSupportSemanticsSpec extends AnyWordSpec with Matchers {
+  case class ChildAttr(key: String, percent: Double)
+  object ChildAttr {
+    implicit val rw: RW[ChildAttr] = RW.gen
+  }
+
   case class Parent(_id: Id[Parent] = Parent.id()) extends Document[Parent]
-  case class Child(parentId: Id[Parent], value: String, _id: Id[Child] = Child.id()) extends Document[Child]
+  case class Child(parentId: Id[Parent],
+                   value: String,
+                   attrs: List[ChildAttr] = Nil,
+                   _id: Id[Child] = Child.id()) extends Document[Child]
 
   object Child extends DocumentModel[Child] with JsonConversion[Child] {
     override implicit val rw: RW[Child] = RW.gen
+    trait Attrs extends Nested[List[ChildAttr]] {
+      val key: NP[String]
+      val percent: NP[Double]
+    }
     val parentId = field.index(_.parentId)
     val value = field.index(_.value)
+    val attrs: N[Attrs] = field.index.nested[Attrs](_.attrs)
   }
 
   object Parent extends DocumentModel[Parent] with JsonConversion[Parent] with ParentChildSupport[Parent, Child, Child.type] {
@@ -124,6 +138,25 @@ class ParentChildSupportSemanticsSpec extends AnyWordSpec with Matchers {
       cc.semantics shouldBe Filter.ChildSemantics.CollectiveAll
       cc.builds.length shouldBe 2
       cc.expandToExistsChildFilters shouldBe a[Filter.Multi[_]]
+    }
+
+    "support nested predicates inside same-child constraints" in {
+      val f = Parent.childFilterSameAll(
+        cm => cm.attrs.nested { attrs =>
+          attrs.key === "tract-a" && attrs.percent >= 0.5
+        }
+      )
+
+      val cc = f.asInstanceOf[Filter.ChildConstraints[Parent]]
+      cc.semantics shouldBe Filter.ChildSemantics.SameChildAll
+      cc.builds.length shouldBe 1
+
+      val exists = cc.expandToExistsChildFilters.asInstanceOf[Filter.ExistsChild[Parent]]
+      val childModel = exists.relation.childStore.model.asInstanceOf[exists.ChildModel]
+      val childFilter = exists.childFilter(childModel)
+      val nested = childFilter.asInstanceOf[Filter.Nested[Child]]
+      nested.path shouldBe "attrs"
+      nested.semantics shouldBe Filter.NestedSemantics.SameElementAll
     }
 
     "treat empty same-child semantics as 'exists any child'" in {

@@ -138,6 +138,9 @@ object FilterPlanner {
         resolveWith(clause.filter, model, resolveExistsChild, existsChildResolver, joinMetadataProvider)
           .map(resolved => clause.copy(filter = resolved))
       }.tasks.map(resolvedClauses => multi.copy(filters = resolvedClauses))
+    case nested: Filter.Nested[Doc] =>
+      resolveWith(nested.filter, model, resolveExistsChild, existsChildResolver, joinMetadataProvider)
+        .map(resolved => nested.copy(filter = resolved))
     case other =>
       Task.pure(other)
   }
