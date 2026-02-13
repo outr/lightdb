@@ -59,11 +59,13 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.14.0"
 
-val rapidVersion: String = "2.3.2"
+val rapidVersion: String = "2.4.0"
 
 val profigVersion: String = "3.4.18"
 
 val reactifyVersion: String = "4.1.5"
+
+val spiceVersion: String = "0.12.0"
 
 val spatial4JVersion: String = "0.8"
 
@@ -98,8 +100,6 @@ val h2Version: String = "2.4.240"
 val postgresqlVersion: String = "42.7.9"
 
 val chronicleMapVersion: String = "2026.0"
-
-val spiceVersion: String = "0.11.0"
 
 val scalaTestVersion: String = "3.2.19"
 
