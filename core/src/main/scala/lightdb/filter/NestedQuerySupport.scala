@@ -63,15 +63,17 @@ object NestedQuerySupport {
       val clauses = clausesRev.reverse
       if clauses.isEmpty then None
       else {
+        // Check if this Multi filter uses OR semantics (any clause with Condition.Should)
+        val hasOrSemantics = m.filters.exists(_.condition == Condition.Should)
+        
         val adjustedMulti =
-          m.condition match
+          if hasOrSemantics && removedAny then
             // For OR-semantics, dropping clauses while keeping the original minShould
             // could make the filter *stricter*. If any nested clause was removed,
             // relax minShould to 0 so the stripped filter remains a superset.
-            case Filter.Condition.Should if removedAny =>
-              m.copy(filters = clauses, minShould = 0)
-            case _ =>
-              m.copy(filters = clauses)
+            m.copy(filters = clauses, minShould = 0)
+          else
+            m.copy(filters = clauses)
         Some(adjustedMulti)
       }
     case other =>
