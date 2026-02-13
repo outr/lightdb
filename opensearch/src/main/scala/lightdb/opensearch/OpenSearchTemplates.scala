@@ -99,6 +99,10 @@ object OpenSearchTemplates {
                                                                             fields: List[Field[Doc, _]],
                                                                             config: OpenSearchConfig,
                                                                             storeName: String): Json = {
+    val nestedPaths = model.nestedPaths.toList.sorted
+    def isMappedByNestedPath(fieldName: String): Boolean =
+      nestedPaths.exists(path => fieldName == path || fieldName.startsWith(s"$path."))
+
     val baseProps = List(
       InternalIdField -> obj("type" -> str("keyword"))
     )
@@ -134,6 +138,9 @@ object OpenSearchTemplates {
         // Derived keyword tokens to support drill-down + hierarchical facet aggregation.
         // NOTE: do not apply keyword normalization here; facet tokens use reserved markers like "$ROOT$".
         List(s"${f.name}__facet" -> obj("type" -> str("keyword")))
+      case f if isMappedByNestedPath(f.name) =>
+        // Backed by a declared nested path. Let OpenSearch dynamically infer child field types under that nested mapping.
+        Nil
       case f =>
         val mapping = mappingForField(f, config)
         // If we don't have an explicit mapping (empty object), omit the property and let OpenSearch infer it.
@@ -172,9 +179,55 @@ object OpenSearchTemplates {
       }
     }
 
-    val baseMap = (baseProps ++ joinProps ++ props0).toMap
-    val props = baseProps ++ joinProps ++ props0 ++ injectedSortProps(baseMap)
+    val nestedProps = nestedPathMappings(nestedPaths)
+    val baseMap = (baseProps ++ joinProps ++ nestedProps ++ props0).toMap
+    val props = baseProps ++ joinProps ++ nestedProps ++ props0 ++ injectedSortProps(baseMap)
     obj(props: _*)
+  }
+
+  private def nestedPathMappings(paths: List[String]): List[(String, Json)] = {
+    final class Node {
+      var isNested: Boolean = false
+      val children = scala.collection.mutable.Map.empty[String, Node]
+    }
+
+    val root = new Node
+    paths.foreach { rawPath =>
+      val segments = rawPath.split("\\.").toList.map(_.trim).filter(_.nonEmpty)
+      if segments.nonEmpty then {
+        var node = root
+        segments.foreach { segment =>
+          node = node.children.getOrElseUpdate(segment, new Node)
+        }
+        node.isNested = true
+      }
+    }
+
+    def toJson(node: Node): Json = {
+      val base = if node.isNested then {
+        obj(
+          "type" -> str("nested"),
+          "dynamic" -> bool(true)
+        )
+      } else {
+        obj(
+          "type" -> str("object"),
+          "dynamic" -> bool(true)
+        )
+      }
+      val children = node.children.toList.sortBy(_._1).map {
+        case (name, child) => name -> toJson(child)
+      }
+      if children.isEmpty then {
+        base
+      } else {
+        obj((base.asObj.value.toSeq :+ ("properties" -> obj(children: _*))): _*)
+      }
+    }
+
+    root.children.toList.sortBy(_._1).map {
+      case (name, node) => name -> toJson(node)
+    }
   }
 
   private def mappingForField[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = field.rw.definition match {

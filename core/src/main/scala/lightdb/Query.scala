@@ -35,6 +35,12 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   private type Q = Query[Doc, Model, V]
 
   private def validateFilters(q: Query[Doc, Model, V]): Task[Unit] = Task {
+    if NestedQuerySupport.containsNested(q.filter) && !q.collection.supportsNestedQueries then {
+      throw new UnsupportedOperationException(
+        s"Nested queries are not supported by store '${q.collection.name}' (${q.collection.getClass.getSimpleName}). " +
+          s"Use a backend with native nested support or a NestedQueryTransaction-based fallback implementation."
+      )
+    }
     val storeMode = q.collection.storeMode
     if Query.Validation || (Query.WarnFilteringWithoutIndex && storeMode.isAll) then {
       val notIndexed = q.filter.toList.flatMap(_.fields(q.model)).filter(!_.indexed)
@@ -222,8 +228,12 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
   /**
    * Returns a stream of distinct values for the given field under this query's filters.
    *
-   * Note: This is backend-dependent. For now only OpenSearch implements this efficiently. Other backends throw
-   * NotImplementedError until implemented.
+   * Backend support is implementation-dependent:
+   * - OpenSearch: native composite aggregation paging
+   * - Lucene: grouping/docvalues-backed distinct
+   * - SQL-family backends: SQL DISTINCT paging
+   *
+   * Backends that do not implement distinct will throw NotImplementedError.
    */
   def distinct[F](f: Model => Field[Doc, F],
                   pageSize: Int = 1000): Stream[F] =

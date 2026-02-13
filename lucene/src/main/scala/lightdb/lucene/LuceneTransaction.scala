@@ -8,12 +8,12 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field.{FacetField, Tokenized}
 import lightdb.field.{Field, IndexingState}
-import lightdb.filter.{Filter, FilterPlanner, QueryOptimizer}
+import lightdb.filter.{Filter, FilterPlanner, NestedQuerySupport, QueryOptimizer}
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
 import lightdb.store.Conversion
-import lightdb.transaction.{CollectionTransaction, RollbackSupport, Transaction}
+import lightdb.transaction.{CollectionTransaction, NestedQueryTransaction, RollbackSupport, Transaction}
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults, Sort}
 import lightdb.lucene.blockjoin.LuceneBlockJoinStore
@@ -33,6 +33,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   ownedParent: Boolean = false
 )
   extends CollectionTransaction[Doc, Model]
+    with NestedQueryTransaction[Doc, Model]
     with RollbackSupport[Doc, Model] {
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
 
@@ -108,7 +109,88 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     )
   }
 
-  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = searchBuilder(query)
+  private def doSearchDirect[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
+    searchBuilder(query)
+
+  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
+    if NestedQuerySupport.containsNested(query.filter) then {
+      doSearchWithNestedFallback(query)
+    } else {
+      doSearchDirect(query)
+    }
+  }
+
+  private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
+    if query.facets.nonEmpty then {
+      Task.error(new UnsupportedOperationException("Facets with nested fallback are not supported in Lucene"))
+    } else if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal then {
+      Task.error(new UnsupportedOperationException(
+        s"Lucene nested fallback requires limit or pageSize to keep memory bounded for store '${store.name}'."
+      ))
+    } else {
+      NestedQuerySupport.validateFallbackCompatible(query.filter)
+      val broadFilter = NestedQuerySupport.stripNested(query.filter)
+      val broadQuery = Query[Doc, Model, Doc](this, Conversion.Doc()).copy(
+        filter = broadFilter,
+        sort = query.sort,
+        offset = 0,
+        limit = None,
+        pageSize = None,
+        countTotal = false,
+        scoreDocs = query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch]) || query.minDocScore.nonEmpty,
+        minDocScore = query.minDocScore,
+        facets = Nil,
+        optimize = query.optimize
+      )
+      val requestedLimit = query.limit.orElse(query.pageSize).getOrElse(Int.MaxValue)
+      val scanPageSize = math.max(1, math.min(query.pageSize.getOrElse(1000), requestedLimit))
+
+      def loop(scanOffset: Int,
+               matchedSoFar: Int,
+               collected: Vector[(V, Double)]): Task[(Int, Vector[(V, Double)])] = {
+        val enoughForPage = collected.size >= requestedLimit
+        if !query.countTotal && enoughForPage then {
+          Task.pure(matchedSoFar -> collected)
+        } else {
+          val pageQuery = broadQuery.copy(offset = scanOffset, limit = Some(scanPageSize), pageSize = None)
+          doSearchDirect(pageQuery).flatMap(_.listWithScore).flatMap { page =>
+            if page.isEmpty then {
+              Task.pure(matchedSoFar -> collected)
+            } else {
+              var matched = matchedSoFar
+              val buffer = scala.collection.mutable.ArrayBuffer.from(collected)
+              page.foreach {
+                case (doc, score) =>
+                  if query.filter.forall(f => NestedQuerySupport.eval(f, store.model, doc)) then {
+                    if matched >= query.offset && buffer.size < requestedLimit then {
+                      buffer += (convertDoc(doc, query.conversion) -> score)
+                    }
+                    matched += 1
+                  }
+              }
+              val continue =
+                page.size >= scanPageSize &&
+                  (query.countTotal || buffer.size < requestedLimit)
+              if continue then loop(scanOffset + page.size, matched, buffer.toVector)
+              else Task.pure(matched -> buffer.toVector)
+            }
+          }
+        }
+      }
+
+      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty).map { case (matched, collected) =>
+        SearchResults(
+          model = store.model,
+          offset = query.offset,
+          limit = query.limit,
+          total = if query.countTotal then Some(matched) else None,
+          streamWithScore = rapid.Stream.emits(collected),
+          facetResults = Map.empty,
+          transaction = this
+        )
+      }
+    }
+  }
 
   /**
    * Prefer keyset (searchAfter) pagination for streaming on Lucene when possible.
@@ -117,7 +199,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
    * Otherwise we fall back to the default offset-based implementation.
    */
   override def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
-    if query.pageSize.nonEmpty && query.offset == 0 then {
+    if query.pageSize.nonEmpty && query.offset == 0 && !NestedQuerySupport.containsNested(query.filter) then {
       val basePageSize = query.pageSize.getOrElse(1000)
 
       def loop(after: Option[ScoreDoc], remaining: Option[Int]): rapid.Stream[(V, Double)] =
@@ -311,6 +393,30 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       }
     }
     doc
+  }
+
+  private def convertDoc[V](doc: Doc, conversion: Conversion[Doc, V]): V = conversion match {
+    case Conversion.Doc() =>
+      doc.asInstanceOf[V]
+    case Conversion.Value(field) =>
+      field.get(doc, field, new IndexingState).asInstanceOf[V]
+    case Conversion.Converted(c) =>
+      c(doc)
+    case Conversion.Materialized(fields) =>
+      val state = new IndexingState
+      val json = fabric.obj(fields.map(f => f.name -> f.getJson(doc, state)): _*)
+      lightdb.materialized.MaterializedIndex[Doc, Model](json, store.model).asInstanceOf[V]
+    case Conversion.DocAndIndexes() =>
+      val state = new IndexingState
+      val json = fabric.obj(store.fields.filter(_.indexed).map(f => f.name -> f.getJson(doc, state)): _*)
+      lightdb.materialized.MaterializedAndDoc[Doc, Model](json, store.model, doc).asInstanceOf[V]
+    case Conversion.Json(fields) =>
+      val state = new IndexingState
+      fabric.obj(fields.map(f => f.name -> f.getJson(doc, state)): _*).asInstanceOf[V]
+    case Conversion.Distance(field, from, _, _) =>
+      val state = new IndexingState
+      val distance = field.get(doc, field, state).map(g => lightdb.spatial.Spatial.distance(from, g))
+      lightdb.spatial.DistanceAndDoc(doc, distance).asInstanceOf[V]
   }
 
   private def createLuceneFields(field: Field[Doc, _], doc: Doc, state: IndexingState): List[LuceneField] = {

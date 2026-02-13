@@ -21,6 +21,8 @@ object QueryOptimizer {
           List(clause)
       }
       multi.copy(filters = flattenedClauses)
+    case nested: Filter.Nested[Doc] =>
+      nested.copy(filter = optimize(nested.filter))
     case other =>
       other
   }

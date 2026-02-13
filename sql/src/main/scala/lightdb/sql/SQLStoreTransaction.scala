@@ -11,7 +11,7 @@ import lightdb.facet.{FacetQuery, FacetResult, FacetResultValue, FacetValue}
 import lightdb.field.Field.Tokenized
 import lightdb.field.Field.FacetField
 import lightdb.field.{Field, FieldAndValue, IndexingState}
-import lightdb.filter.{Condition, Filter}
+import lightdb.filter.{Condition, Filter, NestedQuerySupport}
 import lightdb.filter.{FilterPlanner, QueryOptimizer}
 import lightdb.*
 import lightdb.id.Id
@@ -21,7 +21,7 @@ import lightdb.sql.dsl.TxnSqlDsl
 import lightdb.sql.query.{SQLPart, SQLQuery}
 import lightdb.store.{Conversion, Store}
 import lightdb.store.write.WriteOp
-import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, RollbackSupport}
+import lightdb.transaction.{CollectionTransaction, NestedQueryTransaction, PrefixScanningTransaction, RollbackSupport}
 import lightdb.util.ActionIterator
 import lightdb.{Query, SearchResults, Sort, SortDirection}
 import profig.Profig
@@ -33,6 +33,7 @@ import scala.util.Try
 
 trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   extends CollectionTransaction[Doc, Model]
+    with NestedQueryTransaction[Doc, Model]
     with PrefixScanningTransaction[Doc, Model]
     with RollbackSupport[Doc, Model] {
   override def store: SQLStore[Doc, Model]
@@ -521,7 +522,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     )
   }
 
-  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
+  private def doSearchDirect[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task.defer {
     val b = toSQL[V](query)
     val facetResults = if query.facets.nonEmpty then {
       computeFacets(b, query.facets)
@@ -535,6 +536,86 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         None
       }
       execute[V](b.query, b.offset, b.limit, query.conversion, scoreCol, if query.countTotal then Some(b.totalQuery) else None, fr)
+    }
+  }
+
+  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
+    if NestedQuerySupport.containsNested(query.filter) then {
+      doSearchWithNestedFallback(query)
+    } else {
+      doSearchDirect(query)
+    }
+  }
+
+  private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
+    if query.facets.nonEmpty then {
+      Task.error(new UnsupportedOperationException("Facets with nested fallback are not supported in SQL"))
+    } else if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal then {
+      Task.error(new UnsupportedOperationException(
+        s"SQL nested fallback requires limit or pageSize to keep memory bounded for store '${store.name}'."
+      ))
+    } else {
+      NestedQuerySupport.validateFallbackCompatible(query.filter)
+      val broadFilter = NestedQuerySupport.stripNested(query.filter)
+      val broadQuery = Query[Doc, Model, Doc](this, Conversion.Doc()).copy(
+        filter = broadFilter,
+        sort = query.sort,
+        offset = 0,
+        limit = None,
+        pageSize = None,
+        countTotal = false,
+        scoreDocs = query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch]) || query.minDocScore.nonEmpty,
+        minDocScore = query.minDocScore,
+        facets = Nil,
+        optimize = query.optimize
+      )
+      val requestedLimit = query.limit.orElse(query.pageSize).getOrElse(Int.MaxValue)
+      val scanPageSize = math.max(1, math.min(query.pageSize.getOrElse(1000), requestedLimit))
+
+      def loop(scanOffset: Int,
+               matchedSoFar: Int,
+               collected: Vector[(V, Double)]): Task[(Int, Vector[(V, Double)])] = {
+        val enoughForPage = collected.size >= requestedLimit
+        if !query.countTotal && enoughForPage then {
+          Task.pure(matchedSoFar -> collected)
+        } else {
+          val pageQuery = broadQuery.copy(offset = scanOffset, limit = Some(scanPageSize), pageSize = None)
+          doSearchDirect(pageQuery).flatMap(_.listWithScore).flatMap { page =>
+            if page.isEmpty then {
+              Task.pure(matchedSoFar -> collected)
+            } else {
+              var matched = matchedSoFar
+              val buffer = scala.collection.mutable.ArrayBuffer.from(collected)
+              page.foreach {
+                case (doc, score) =>
+                  if query.filter.forall(f => NestedQuerySupport.eval(f, store.model, doc)) then {
+                    if matched >= query.offset && buffer.size < requestedLimit then {
+                      buffer += (convertDoc(doc, query.conversion) -> score)
+                    }
+                    matched += 1
+                  }
+              }
+              val continue =
+                page.size >= scanPageSize &&
+                  (query.countTotal || buffer.size < requestedLimit)
+              if continue then loop(scanOffset + page.size, matched, buffer.toVector)
+              else Task.pure(matched -> buffer.toVector)
+            }
+          }
+        }
+      }
+
+      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty).map { case (matched, collected) =>
+        SearchResults(
+          model = store.model,
+          offset = query.offset,
+          limit = query.limit,
+          total = if query.countTotal then Some(matched) else None,
+          streamWithScore = rapid.Stream.emits(collected),
+          facetResults = Map.empty,
+          transaction = this
+        )
+      }
     }
   }
 
@@ -1072,6 +1153,11 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case _: Filter.MatchNone[C] => SQLPart.Fragment("1=0")
       case _: Filter.ExistsChild[_] =>
         throw new UnsupportedOperationException("ExistsChild should have been resolved before SQL translation")
+      case f: Filter.Nested[C] =>
+        throw new UnsupportedOperationException(
+          s"Nested filter translation is not supported for direct SQL parts (path='${f.path}'). " +
+            s"Execute through query.search so nested fallback/native planning can apply."
+        )
       case f: Filter.DrillDownFacetFilter[C] =>
         // Facets are stored as JSON (List[FacetValue]) in a single column.
         // We implement drill-down by matching the "path" JSON substring.
@@ -1182,6 +1268,58 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         } else {
           SQLQuery(validParts.intersperse(SQLPart.Fragment(" AND ")))
         }
+    }
+  }
+
+  private def convertDoc[V](doc: Doc, conversion: Conversion[Doc, V]): V = conversion match {
+    case Conversion.Doc() =>
+      doc.asInstanceOf[V]
+    case Conversion.Value(field) =>
+      field.get(doc, field, new IndexingState).asInstanceOf[V]
+    case Conversion.Converted(c) =>
+      c(doc)
+    case Conversion.Materialized(fields) =>
+      val state = new IndexingState
+      val json = obj(fields.map(f => f.name -> f.getJson(doc, state)): _*)
+      lightdb.materialized.MaterializedIndex[Doc, Model](json, store.model).asInstanceOf[V]
+    case Conversion.DocAndIndexes() =>
+      val state = new IndexingState
+      val json = obj(store.fields.filter(_.indexed).map(f => f.name -> f.getJson(doc, state)): _*)
+      lightdb.materialized.MaterializedAndDoc[Doc, Model](json, store.model, doc).asInstanceOf[V]
+    case Conversion.Json(fields) =>
+      val state = new IndexingState
+      obj(fields.map(f => f.name -> f.getJson(doc, state)): _*).asInstanceOf[V]
+    case Conversion.Distance(field, from, _, _) =>
+      val state = new IndexingState
+      val distance = field.get(doc, field, state).map(g => lightdb.spatial.Spatial.distance(from, g))
+      DistanceAndDoc(doc, distance).asInstanceOf[V]
+  }
+
+  private def rewriteFilterFieldsForNestedPath[C <: Document[C]](path: String, filter: Filter[C]): Filter[C] = {
+    val prefix = s"$path."
+    def qualify(fieldName: String): String =
+      if fieldName.startsWith(prefix) then fieldName else s"$prefix$fieldName"
+
+    filter match {
+      case f: Filter.Equals[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.NotEquals[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Regex[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.In[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeLong[C] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeDouble[C] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.StartsWith[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.EndsWith[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Contains[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Exact[C, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Distance[C] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.DrillDownFacetFilter[C] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Multi[C] =>
+        f.copy(filters = f.filters.map(clause => clause.copy(filter = rewriteFilterFieldsForNestedPath(path, clause.filter))))
+      case f: Filter.Nested[C] =>
+        val nestedPath = if f.path.startsWith(prefix) then f.path else s"$prefix${f.path}"
+        f.copy(path = nestedPath, filter = rewriteFilterFieldsForNestedPath(nestedPath, f.filter))
+      case other =>
+        other
     }
   }
 

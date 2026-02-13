@@ -123,6 +123,23 @@ object Field {
     override def toString: String = s"Indexed(name = ${this.name})"
   }
 
+  def nestedIndexed[Doc <: Document[Doc], V, A](name: String,
+                                                 get: FieldGetter[Doc, V],
+                                                 stored: Boolean,
+                                                 path: String,
+                                                 access: A)(implicit getRW: => RW[V]): NestedIndex[Doc, V] { type Access = A } = new Field[Doc, V](
+    name = name,
+    get = get,
+    getRW = () => getRW,
+    indexed = true,
+    stored = stored
+  ) with NestedIndex[Doc, V] {
+    override type Access = A
+    override val nestedPath: String = path
+    override val nestedAccess: A = access
+    override def toString: String = s"NestedIndex(name = ${this.name}, path = $path)"
+  }
+
   def tokenized[Doc <: Document[Doc]](name: String,
                                       get: FieldGetter[Doc, String]): Tokenized[Doc] = new Field[Doc, String](
     name = name,
@@ -178,6 +195,20 @@ object Field {
   }
 
   trait Indexed[Doc <: Document[Doc], V] extends Field[Doc, V]
+
+  trait NestedIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V] {
+    type Access
+    def nestedPath: String
+    def nestedAccess: Access
+    /**
+     * Builds a nested filter using the typed accessors produced when the nested field was declared.
+     *
+     * Recommended declaration style:
+     * - model trait: `trait Attrs extends Nested[List[Attr]] { val key: NP[String]; ... }`
+     * - field: `val attrs: N[Attrs] = field.index.nested[Attrs](_.attrs)`
+     */
+    def nested(build: Access => Filter[Doc]): Filter[Doc] = Filter.Nested(path = nestedPath, filter = build(nestedAccess))
+  }
 
   trait UniqueIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V]
 

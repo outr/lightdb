@@ -33,6 +33,10 @@ class TraversalStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: St
     with PrefixScanningStore[Doc, Model] {
   override type TX = TraversalTransaction[Doc, Model]
 
+  // Traversal currently does not expose NestedQueryStore capability.
+  // Nested filters are rejected at Query validation time for this backend.
+  override def supportsNestedQueries: Boolean = false
+
   /**
    * Persisted index writes (postings in `effectiveIndexBacking`) are enabled by default for scaling.
    *

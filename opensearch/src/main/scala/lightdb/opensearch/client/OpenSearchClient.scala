@@ -12,7 +12,7 @@ import spice.net.{ContentType, URL}
 import lightdb.opensearch.OpenSearchStore
 
 import java.util.concurrent.ThreadLocalRandom
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 import scala.util.{Failure, Success}
 
@@ -97,6 +97,11 @@ case class OpenSearchClient(config: OpenSearchConfig) {
     def attempt(n: Int, delayMs: Long): Task[HttpResponse] = Task.defer {
       val started = System.nanoTime()
       val completed = new AtomicBoolean(false)
+      val attemptId = s"${System.currentTimeMillis()}-${ThreadLocalRandom.current().nextInt(1_000_000)}"
+      val hardCapMsOpt = sys.props
+        .get("lightdb.opensearch.hardCapMs")
+        .flatMap(v => scala.util.Try(v.toLong).toOption)
+        .filter(_ > 0L)
 
       def elapsedMs: Long = (System.nanoTime() - started) / 1000000L
 
@@ -110,8 +115,9 @@ case class OpenSearchClient(config: OpenSearchConfig) {
                 // Check if OpenSearch is reachable right now (short timeout) to disambiguate "slow" vs "down".
                 ping(timeout = 2.seconds).map { ok =>
                   val health = if ok then "reachable" else "unreachable"
+                  val hardCapPart = hardCapMsOpt.map(v => s" hardCapMs=$v").getOrElse("")
                   scribe.warn(
-                    s"OpenSearch request still running after ${elapsedMs}ms: $name attempt=$n/$maxAttempts timeoutMs=${config.requestTimeout.toMillis} opensearch=$health"
+                    s"OpenSearch request still running after ${elapsedMs}ms: $name attempt=$n/$maxAttempts attemptId=$attemptId timeoutMs=${config.requestTimeout.toMillis}${hardCapPart} opensearch=$health"
                   )
                 }
               } else {
@@ -136,10 +142,55 @@ case class OpenSearchClient(config: OpenSearchConfig) {
         slowLogLoop(after.toMillis).start()
       }
 
-      req
-        .send()
-        .guarantee(Task(completed.set(true)))
-        .map { resp =>
+      val responseAttempt: Task[HttpResponse] = hardCapMsOpt match {
+        case Some(hardCapMs) =>
+          val terminalReason = new AtomicReference[String]("pending")
+          val responseTask = Task.completable[HttpResponse]
+
+          def completeSuccessOnce(resp: HttpResponse): Unit = {
+            if (completed.compareAndSet(false, true)) {
+              terminalReason.set("success")
+              responseTask.success(resp)
+            }
+          }
+
+          def completeFailureOnce(reason: String, t: Throwable): Unit = {
+            if (completed.compareAndSet(false, true)) {
+              terminalReason.set(reason)
+              responseTask.error(t)
+            }
+          }
+
+          req.send().attempt.map {
+            case Success(resp) => completeSuccessOnce(resp)
+            case Failure(t) => completeFailureOnce(s"exception:${t.getClass.getSimpleName}", t)
+          }.start()
+
+          Task.sleep(hardCapMs.millis).next {
+            Task {
+              if (!completed.get()) {
+                val timeout = new RuntimeException(
+                  s"OpenSearch request exceeded hard cap (${hardCapMs}ms): name=$name attempt=$n/$maxAttempts attemptId=$attemptId timeoutMs=${config.requestTimeout.toMillis}"
+                )
+                completeFailureOnce("deadlineExceeded", timeout)
+              }
+            }
+          }.start()
+
+          responseTask.guarantee {
+            Task {
+              if (config.logRequests) {
+                scribe.info(
+                  s"OpenSearch request terminal: name=$name attempt=$n/$maxAttempts attemptId=$attemptId elapsedMs=${elapsedMs} reason=${terminalReason.get()}"
+                )
+              }
+            }
+          }
+        case None =>
+          req.send().guarantee(Task(completed.set(true)))
+      }
+
+      responseAttempt.map { resp =>
         val tookMs = (System.nanoTime() - started) / 1000000L
         log(req.method, req.url, resp.status, tookMs)
         if config.metricsEnabled then {

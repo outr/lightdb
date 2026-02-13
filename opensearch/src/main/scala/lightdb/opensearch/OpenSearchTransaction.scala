@@ -8,7 +8,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.{FacetQuery, FacetValue}
-import lightdb.filter.{FilterPlanner, QueryOptimizer}
+import lightdb.filter.{FilterPlanner, NestedQuerySupport, QueryOptimizer}
 import lightdb.field.Field.FacetField
 import lightdb.field.Field.UniqueIndex
 import lightdb.field.FieldAndValue
@@ -19,7 +19,7 @@ import lightdb.opensearch.util.OpenSearchCursor
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.opensearch.query.{OpenSearchDsl, OpenSearchSearchBuilder}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
-import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction, RollbackSupport, Transaction}
+import lightdb.transaction.{CollectionTransaction, NestedQueryTransaction, PrefixScanningTransaction, RollbackSupport, Transaction}
 import lightdb.store.{Conversion, StoreMode}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.{Query, SearchResults, Sort}
@@ -35,6 +35,7 @@ import scala.util.{Failure, Success, Try}
 import lightdb.opensearch.OpenSearchMetrics
 import lightdb.store.write.WriteOp
 import rapid.Unique
+import profig.Profig
 
 case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   store: OpenSearchStore[Doc, Model],
@@ -44,6 +45,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
 )
   extends CollectionTransaction[Doc, Model]
+    with NestedQueryTransaction[Doc, Model]
     with PrefixScanningTransaction[Doc, Model]
     with RollbackSupport[Doc, Model] {
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
@@ -271,6 +273,26 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       facetChildCountPrecisionThreshold = config.facetChildCountPrecisionThreshold,
       facetChildCountPageSize = config.facetChildCountPageSize
     )
+
+  private lazy val nestedFallbackAllowed: Boolean =
+    Profig("lightdb.opensearch.nested.fallback.allowed").opt[Boolean].getOrElse(false)
+
+  private lazy val nestedFallbackScanPageSize: Int =
+    Profig("lightdb.opensearch.nested.fallback.pageSize").opt[Int].filter(_ > 0).getOrElse(1000)
+
+  private def nativeNestedEligibility[V](query: Query[Doc, Model, V]): Either[String, Unit] = {
+    query.filter match {
+      case None => Right(())
+      case Some(f) =>
+        try {
+          searchBuilderFor(query).filterToDsl(f)
+          Right(())
+        } catch {
+          case t: Throwable =>
+            Left(Option(t.getMessage).getOrElse(t.getClass.getSimpleName))
+        }
+    }
+  }
 
   /**
    * Overrides the configured refresh policy for this transaction only.
@@ -1162,7 +1184,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     // Best-effort restore of any index-level tuning we applied.
     restoreIndexTuningIfNeeded
 
-  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
+  private def doSearchDirect[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
     Task.defer {
       beforeRead.next {
         prepared(query).flatMap { q =>
@@ -1329,6 +1351,101 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       }
     }
 
+  override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
+    if NestedQuerySupport.containsNested(query.filter) then {
+      nativeNestedEligibility(query) match {
+        case Right(_) =>
+          // Hard requirement: keep nested query execution on native OpenSearch DSL whenever supported.
+          doSearchDirect(query)
+        case Left(reason) =>
+          val msg =
+            s"OpenSearch nested query fallback blocked for store='${store.name}'. " +
+              s"Native nested DSL is not applicable: $reason. " +
+              s"Set lightdb.opensearch.nested.fallback.allowed=true to allow broad-filter fallback."
+          if !nestedFallbackAllowed then {
+            Task.error(new UnsupportedOperationException(msg))
+          } else {
+            scribe.warn(s"$msg Falling back to broad-filter + in-memory nested evaluation.")
+            doSearchWithNestedFallback(query, reason)
+          }
+      }
+    } else {
+      doSearchDirect(query)
+    }
+  }
+
+  private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V], reason: String): Task[SearchResults[Doc, Model, V]] = {
+    if query.facets.nonEmpty then {
+      Task.error(new UnsupportedOperationException("Facets with nested fallback are not supported in OpenSearch"))
+    } else if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal then {
+      Task.error(new UnsupportedOperationException(
+        s"OpenSearch nested fallback requires limit or pageSize to keep memory bounded (store='${store.name}'). " +
+          s"Reason for fallback: $reason"
+      ))
+    } else {
+      val broadFilter = NestedQuerySupport.stripNested(query.filter)
+      val broadQuery = Query[Doc, Model, Doc](this, Conversion.Doc()).copy(
+        filter = broadFilter,
+        sort = query.sort,
+        offset = 0,
+        limit = None,
+        pageSize = None,
+        countTotal = false,
+        scoreDocs = query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch]) || query.minDocScore.nonEmpty,
+        minDocScore = query.minDocScore,
+        facets = Nil,
+        optimize = query.optimize
+      )
+      val requestedLimit = query.limit.orElse(query.pageSize).getOrElse(Int.MaxValue)
+      val scanPageSize = math.max(1, math.min(nestedFallbackScanPageSize, requestedLimit))
+
+      def loop(scanOffset: Int,
+               matchedSoFar: Int,
+               collected: Vector[(V, Double)]): Task[(Int, Vector[(V, Double)])] = {
+        val enoughForPage = collected.size >= requestedLimit
+        if !query.countTotal && enoughForPage then {
+          Task.pure(matchedSoFar -> collected)
+        } else {
+          val pageQuery = broadQuery.copy(offset = scanOffset, limit = Some(scanPageSize), pageSize = None)
+          doSearchDirect(pageQuery).flatMap(_.listWithScore).flatMap { page =>
+            if page.isEmpty then {
+              Task.pure(matchedSoFar -> collected)
+            } else {
+              var matched = matchedSoFar
+              val buffer = scala.collection.mutable.ArrayBuffer.from(collected)
+              page.foreach {
+                case (doc, score) =>
+                  if query.filter.forall(f => NestedQuerySupport.eval(f, store.model, doc)) then {
+                    if matched >= query.offset && buffer.size < requestedLimit then {
+                      buffer += (convertDoc(doc, query.conversion) -> score)
+                    }
+                    matched += 1
+                  }
+              }
+              val continue =
+                page.size >= scanPageSize &&
+                  (query.countTotal || buffer.size < requestedLimit)
+              if continue then loop(scanOffset + page.size, matched, buffer.toVector)
+              else Task.pure(matched -> buffer.toVector)
+            }
+          }
+        }
+      }
+
+      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty).map { case (matched, collected) =>
+        SearchResults(
+          model = store.model,
+          offset = query.offset,
+          limit = query.limit,
+          total = if query.countTotal then Some(matched) else None,
+          streamWithScore = rapid.Stream.emits(collected),
+          facetResults = Map.empty,
+          transaction = this
+        )
+      }
+    }
+  }
+
   /**
    * Prefer keyset (cursor) pagination for streaming on OpenSearch when possible to avoid `max_result_window` limits.
    *
@@ -1342,7 +1459,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     val normalizedQuery =
       if query.pageSize.isEmpty then query.copy(pageSize = Some(1000)) else query
 
-    if normalizedQuery.pageSize.nonEmpty && normalizedQuery.offset == 0 then {
+    if normalizedQuery.pageSize.nonEmpty && normalizedQuery.offset == 0 && !NestedQuerySupport.containsNested(normalizedQuery.filter) then {
       // IMPORTANT:
       // Do NOT implement cursor streaming via recursive `Stream.append(...)`. In Rapid, `Step.Concat` pushes
       // the previous pull onto a stack until the entire stream completes, which retains every prior page's
@@ -1439,6 +1556,30 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     } else {
       super.streamScored(normalizedQuery)
     }
+  }
+
+  private def convertDoc[V](doc: Doc, conversion: Conversion[Doc, V]): V = conversion match {
+    case Conversion.Doc() =>
+      doc.asInstanceOf[V]
+    case Conversion.Value(field) =>
+      field.get(doc, field, new IndexingState).asInstanceOf[V]
+    case Conversion.Converted(c) =>
+      c(doc)
+    case Conversion.Materialized(fields) =>
+      val state = new IndexingState
+      val json = obj(fields.map(f => f.name -> f.getJson(doc, state)): _*)
+      lightdb.materialized.MaterializedIndex[Doc, Model](json, store.model).asInstanceOf[V]
+    case Conversion.DocAndIndexes() =>
+      val state = new IndexingState
+      val json = obj(store.fields.filter(_.indexed).map(f => f.name -> f.getJson(doc, state)): _*)
+      lightdb.materialized.MaterializedAndDoc[Doc, Model](json, store.model, doc).asInstanceOf[V]
+    case Conversion.Json(fields) =>
+      val state = new IndexingState
+      obj(fields.map(f => f.name -> f.getJson(doc, state)): _*).asInstanceOf[V]
+    case Conversion.Distance(field, from, _, _) =>
+      val state = new IndexingState
+      val distance = field.get(doc, field, state).map(g => Spatial.distance(from, g))
+      DistanceAndDoc(doc, distance).asInstanceOf[V]
   }
 
   def doSearchAfter[V](query: Query[Doc, Model, V],
