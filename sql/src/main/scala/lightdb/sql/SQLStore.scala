@@ -7,6 +7,7 @@ import lightdb.field.Field
 import lightdb.field.Field.*
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.*
+import lightdb.store.nested.NestedQueryStore
 import lightdb.store.prefix.PrefixScanningStore
 import lightdb.transaction.batch.BatchConfig
 import lightdb.store.write.WriteOp
@@ -22,7 +23,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
                                                                            path: Option[Path],
                                                                            model: Model,
                                                                            lightDB: LightDB,
-                                                                           storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
+                                                                           storeManager: StoreManager)
+  extends Collection[Doc, Model](name, path, model, lightDB, storeManager)
+    with PrefixScanningStore[Doc, Model]
+    with NestedQueryStore[Doc, Model] {
   override type TX <: SQLStoreTransaction[Doc, Model]
 
   override def defaultBatchConfig: BatchConfig = BatchConfig.StoreNative

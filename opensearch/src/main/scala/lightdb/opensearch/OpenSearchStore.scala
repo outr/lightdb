@@ -6,6 +6,7 @@ import fabric.*
 import lightdb.doc.ParentChildSupport
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
+import lightdb.store.nested.NestedQueryStore
 import lightdb.store.{Collection, CollectionManager, StoreManager, StoreMode}
 import lightdb.store.write.WriteOp
 import lightdb.transaction.{Transaction, WriteHandler}
@@ -24,7 +25,8 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
                                                                          lightDB: LightDB,
                                                                          storeManager: StoreManager)
   extends Collection[Doc, Model](name, path, model, lightDB, storeManager)
-    with PrefixScanningStore[Doc, Model] {
+    with PrefixScanningStore[Doc, Model]
+    with NestedQueryStore[Doc, Model] {
   override type TX = OpenSearchTransaction[Doc, Model]
 
   override def defaultBatchConfig: BatchConfig = BatchConfig.StoreNative

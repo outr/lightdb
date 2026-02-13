@@ -36,6 +36,9 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     keywordNormalize && fieldName.endsWith(".keyword")
   }
 
+  private def hasModelField(fieldName: String): Boolean =
+    model.fields.exists(_.name == fieldName)
+
   def filterToDsl(filter: Filter[Doc]): Json = filter2Dsl(filter)
 
   def sortsToDsl(sorts: List[Sort]): List[Json] = sorts2Dsl(sorts)
@@ -115,6 +118,16 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     filter match {
       case _: Filter.MatchNone[Doc] =>
         obj("match_none" -> obj())
+      case f: Filter.Nested[Doc] =>
+        if !model.nestedPaths.contains(f.path) then {
+          throw new IllegalArgumentException(
+            s"Nested path '${f.path}' is not declared on model ${model.modelName}. " +
+              s"Declare it via nestedPath(\"${f.path}\") in the model."
+          )
+        }
+        val nestedFilter = rewriteFilterFieldsForNestedPath(f.path, f.filter)
+        val nestedQuery = filter2Dsl(nestedFilter)
+        OpenSearchDsl.nested(path = f.path, query = nestedQuery)
       case f: Filter.ChildConstraints[Doc @unchecked] =>
         val relation = f.relation
         val childModel: f.ChildModel = relation.childStore.model
@@ -215,6 +228,17 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         model.fields.find(_.name == fieldName) match {
           case Some(f) if f.isTokenized =>
             OpenSearchDsl.regexp(fieldNameForPattern(fieldName), s"${escapeRegexLiteral(q)}.*")
+          case None =>
+            val base = rewriteReservedIdFieldName(fieldName)
+            val keyword = s"$base.keyword"
+            val v = if keywordNormalize then normalizeKeyword(q) else q
+            OpenSearchDsl.boolQuery(
+              should = List(
+                OpenSearchDsl.prefix(keyword, v),
+                OpenSearchDsl.prefix(base, v)
+              ),
+              minimumShouldMatch = Some(1)
+            )
           case _ =>
             val fn = fieldNameForPattern(fieldName)
             // fn is a keyword field for non-tokenized strings.
@@ -222,17 +246,53 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             OpenSearchDsl.prefix(fn, v)
         }
       case Filter.EndsWith(fieldName, q) =>
-        val fn = fieldNameForPattern(fieldName)
         val v = if keywordNormalize then normalizeKeyword(q) else q
-        OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}")
+        if hasModelField(fieldName) then {
+          val fn = fieldNameForPattern(fieldName)
+          OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}")
+        } else {
+          val base = rewriteReservedIdFieldName(fieldName)
+          val keyword = s"$base.keyword"
+          OpenSearchDsl.boolQuery(
+            should = List(
+              OpenSearchDsl.regexp(keyword, s".*${escapeRegexLiteral(v)}"),
+              OpenSearchDsl.regexp(base, s".*${escapeRegexLiteral(v)}")
+            ),
+            minimumShouldMatch = Some(1)
+          )
+        }
       case Filter.Contains(fieldName, q) =>
-        val fn = fieldNameForPattern(fieldName)
         val v = if keywordNormalize then normalizeKeyword(q) else q
-        OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}.*")
+        if hasModelField(fieldName) then {
+          val fn = fieldNameForPattern(fieldName)
+          OpenSearchDsl.regexp(fn, s".*${escapeRegexLiteral(v)}.*")
+        } else {
+          val base = rewriteReservedIdFieldName(fieldName)
+          val keyword = s"$base.keyword"
+          OpenSearchDsl.boolQuery(
+            should = List(
+              OpenSearchDsl.regexp(keyword, s".*${escapeRegexLiteral(v)}.*"),
+              OpenSearchDsl.regexp(base, s".*${escapeRegexLiteral(v)}.*")
+            ),
+            minimumShouldMatch = Some(1)
+          )
+        }
       case Filter.Exact(fieldName, q) =>
-        val fn = fieldNameForPattern(fieldName)
         val v = if keywordNormalize then normalizeKeyword(q) else q
-        OpenSearchDsl.term(fn, str(v))
+        if hasModelField(fieldName) then {
+          val fn = fieldNameForPattern(fieldName)
+          OpenSearchDsl.term(fn, str(v))
+        } else {
+          val base = rewriteReservedIdFieldName(fieldName)
+          val keyword = s"$base.keyword"
+          OpenSearchDsl.boolQuery(
+            should = List(
+              OpenSearchDsl.term(keyword, str(v)),
+              OpenSearchDsl.term(base, str(v))
+            ),
+            minimumShouldMatch = Some(1)
+          )
+        }
       case Filter.Distance(fieldName, from, radius) =>
         // OpenSearch expects a distance string like "10km"
         val centerField = s"$fieldName${lightdb.opensearch.OpenSearchTemplates.SpatialCenterSuffix}"
@@ -291,6 +351,48 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case Filter.DrillDownFacetFilter(_, _, _) =>
         val f = filter.asInstanceOf[Filter.DrillDownFacetFilter[Doc]]
         drillDownFacetFilter(f)
+    }
+  }
+
+  private def rewriteFilterFieldsForNestedPath(path: String, filter: Filter[Doc]): Filter[Doc] = {
+    val prefix = s"$path."
+
+    def qualify(fieldName: String): String =
+      if fieldName.startsWith(prefix) then fieldName else s"$prefix$fieldName"
+
+    filter match {
+      case f: Filter.Equals[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.NotEquals[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Regex[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.In[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeLong[Doc] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeDouble[Doc] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.StartsWith[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.EndsWith[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Contains[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Exact[Doc, _] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Distance[Doc] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.DrillDownFacetFilter[Doc] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Multi[Doc] =>
+        f.copy(filters = f.filters.map(clause => clause.copy(filter = rewriteFilterFieldsForNestedPath(path, clause.filter))))
+      case f: Filter.Nested[Doc] =>
+        // Preserve nested boundaries; inner nested path can be absolute or relative to this path.
+        val nestedPath = if f.path.startsWith(prefix) then f.path else s"$prefix${f.path}"
+        f.copy(path = nestedPath, filter = rewriteFilterFieldsForNestedPath(nestedPath, f.filter))
+      case other =>
+        other
     }
   }
 

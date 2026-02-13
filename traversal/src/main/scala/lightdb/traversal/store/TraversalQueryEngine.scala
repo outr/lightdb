@@ -3345,6 +3345,9 @@ object TraversalQueryEngine {
     state: IndexingState
   ): Boolean = filter match {
     case _: Filter.MatchNone[Doc] => false
+    case f: Filter.Nested[Doc] =>
+      val nestedFilter = rewriteFilterFieldsForNestedPath(f.path, f.filter)
+      evalFilter(nestedFilter, model, doc, state)
     case f: Filter.Equals[Doc, _] =>
       val field = f.field(model).asInstanceOf[Field[Doc, Any]]
       val v = field.get(doc, field, state)
@@ -3523,6 +3526,34 @@ object TraversalQueryEngine {
       val shouldCount = should.count(f => evalFilter(f, model, doc, state))
       val requiredShould = if should.nonEmpty then m.minShould else 0
       mustOk && mustNotOk && shouldCount >= requiredShould
+  }
+
+  private def rewriteFilterFieldsForNestedPath[Doc <: Document[Doc]](path: String, filter: Filter[Doc]): Filter[Doc] = {
+    val prefix = s"$path."
+    def qualify(fieldName: String): String =
+      if fieldName.startsWith(prefix) then fieldName else s"$prefix$fieldName"
+
+    filter match {
+      case f: Filter.Equals[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.NotEquals[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Regex[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.In[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeLong[Doc] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeDouble[Doc] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.StartsWith[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.EndsWith[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Contains[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Exact[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Distance[Doc] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.DrillDownFacetFilter[Doc] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Multi[Doc] =>
+        f.copy(filters = f.filters.map(clause => clause.copy(filter = rewriteFilterFieldsForNestedPath(path, clause.filter))))
+      case f: Filter.Nested[Doc] =>
+        val nestedPath = if f.path.startsWith(prefix) then f.path else s"$prefix${f.path}"
+        f.copy(path = nestedPath, filter = rewriteFilterFieldsForNestedPath(nestedPath, f.filter))
+      case other =>
+        other
+    }
   }
 
   private def iterable(value: Any): Option[Iterable[Any]] = value match {
