@@ -192,16 +192,19 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             }
           case None =>
             // Fallback for unknown fields (e.g., nested subfields like "attrs.key" not registered in model)
-            val json = f.value match {
+            // We can't call f.getJson(model) because the field isn't in the model
+            // Instead, we'll convert the value directly to JSON based on common types
+            val json: Json = f.value match {
               case s: String => str(s)
               case b: Boolean => bool(b)
               case i: Int => num(i)
               case l: Long => num(l)
               case d: Double => num(d)
               case bd: BigDecimal => num(bd)
-              case other => throw new IllegalArgumentException(
-                s"Unsupported NotEquals value type for field '${f.fieldName}': ${other.getClass.getName}"
-              )
+              case null => Null
+              case other => 
+                // For other types, try to serialize as string
+                str(other.toString)
             }
             val base = rewriteReservedIdFieldName(f.fieldName)
             val keyword = s"$base.keyword"
@@ -251,16 +254,17 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             // Fallback for unknown fields (e.g., nested subfields like "attrs.key" not registered in model)
             val base = rewriteReservedIdFieldName(f.fieldName)
             val keyword = s"$base.keyword"
-            val values = f.values.map {
-              case s: String => str(if keywordNormalize then normalizeKeyword(s) else s)
-              case b: Boolean => bool(b)
-              case i: Int => num(i)
-              case l: Long => num(l)
-              case d: Double => num(d)
-              case bd: BigDecimal => num(bd)
-              case other => throw new IllegalArgumentException(
-                s"Unsupported In value type for field '${f.fieldName}': ${other.getClass.getName}"
-              )
+            val values = f.values.map { value =>
+              value match {
+                case s: String => str(if keywordNormalize then normalizeKeyword(s) else s)
+                case b: Boolean => bool(b)
+                case i: Int => num(i)
+                case l: Long => num(l)
+                case d: Double => num(d)
+                case bd: BigDecimal => num(bd)
+                case null => Null
+                case other => str(other.toString)
+              }
             }
 
             // Compatibility: some indices map non-tokenized strings/enums as `keyword` directly (no `.keyword` subfield),
