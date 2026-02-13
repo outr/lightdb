@@ -88,6 +88,69 @@ class NestedFilterCoreSpec extends AnyWordSpec with Matchers {
       }
       ex.getMessage should include("does not support Distance inside nested filters")
     }
+
+    "stripNested should relax minShould to 0 when nested clause is removed from OR" in {
+      // Test for regression: nested clauses in Should (OR) conditions must relax minShould
+      // when stripped to ensure the broad filter remains a superset
+      val nestedFilter = Filter.Nested[Doc]("items", Filter.Equals[Doc, String]("name", "alpha"))
+      val otherFilter = Filter.Equals[Doc, String]("other", "value")
+      
+      // Create an OR filter: nested OR other
+      val orFilter = Filter.Multi[Doc](
+        minShould = 1,
+        filters = List(
+          FilterClause(nestedFilter, Condition.Should, None),
+          FilterClause(otherFilter, Condition.Should, None)
+        )
+      )
+      
+      val stripped = NestedQuerySupport.stripNested(orFilter)
+      
+      stripped should be(defined)
+      val result = stripped.get.asInstanceOf[Filter.Multi[Doc]]
+      result.minShould shouldBe 0  // Should be relaxed to 0, not kept at 1
+      result.filters should have size 1
+      result.filters.head.filter shouldBe otherFilter
+    }
+
+    "stripNested should handle nested-only OR filters" in {
+      // When all clauses in an OR are nested, stripping should return None
+      val nestedFilter1 = Filter.Nested[Doc]("items", Filter.Equals[Doc, String]("name", "alpha"))
+      val nestedFilter2 = Filter.Nested[Doc]("items", Filter.Equals[Doc, String]("name", "beta"))
+      
+      val orFilter = Filter.Multi[Doc](
+        minShould = 1,
+        filters = List(
+          FilterClause(nestedFilter1, Condition.Should, None),
+          FilterClause(nestedFilter2, Condition.Should, None)
+        )
+      )
+      
+      val stripped = NestedQuerySupport.stripNested(orFilter)
+      stripped should be(None)
+    }
+
+    "stripNested should preserve minShould for AND filters when nested clauses are removed" in {
+      // Test that AND filters don't get their minShould modified
+      val nestedFilter = Filter.Nested[Doc]("items", Filter.Equals[Doc, String]("name", "alpha"))
+      val otherFilter = Filter.Equals[Doc, String]("other", "value")
+      
+      val andFilter = Filter.Multi[Doc](
+        minShould = 0,
+        filters = List(
+          FilterClause(nestedFilter, Condition.Must, None),
+          FilterClause(otherFilter, Condition.Must, None)
+        )
+      )
+      
+      val stripped = NestedQuerySupport.stripNested(andFilter)
+      
+      stripped should be(defined)
+      val result = stripped.get.asInstanceOf[Filter.Multi[Doc]]
+      result.minShould shouldBe 0  // Should remain 0 for AND
+      result.filters should have size 1
+      result.filters.head.filter shouldBe otherFilter
+    }
   }
 }
 
