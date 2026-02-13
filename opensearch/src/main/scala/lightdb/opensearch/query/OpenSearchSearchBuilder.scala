@@ -199,7 +199,9 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
               case l: Long => num(l)
               case d: Double => num(d)
               case bd: BigDecimal => num(bd)
-              case other => throw new IllegalArgumentException(s"Unsupported NotEquals value type: ${other.getClass}")
+              case other => throw new IllegalArgumentException(
+                s"Unsupported NotEquals value type for field '${f.fieldName}': ${other.getClass.getName}"
+              )
             }
             val base = rewriteReservedIdFieldName(f.fieldName)
             val keyword = s"$base.keyword"
@@ -256,7 +258,9 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
               case l: Long => num(l)
               case d: Double => num(d)
               case bd: BigDecimal => num(bd)
-              case other => throw new IllegalArgumentException(s"Unsupported In value type: ${other.getClass}")
+              case other => throw new IllegalArgumentException(
+                s"Unsupported In value type for field '${f.fieldName}': ${other.getClass.getName}"
+              )
             }
 
             // Compatibility: some indices map non-tokenized strings/enums as `keyword` directly (no `.keyword` subfield),

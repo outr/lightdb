@@ -51,15 +51,16 @@ object NestedQuerySupport {
     case _: Filter.Nested[Doc] =>
       None
     case m: Filter.Multi[Doc] =>
-      val (clauses, removedAny) = m.filters.foldLeft((List.empty[FilterClause[Doc]], false)) {
+      val (clausesRev, removedAny) = m.filters.foldLeft((List.empty[FilterClause[Doc]], false)) {
         case ((acc, removed), fc) =>
           stripNested(fc.filter) match
             case Some(f) =>
-              (acc :+ fc.copy(filter = f), removed)
+              (fc.copy(filter = f) :: acc, removed)
             case None =>
               // This clause was entirely nested and has been stripped out.
               (acc, true)
       }
+      val clauses = clausesRev.reverse
       if clauses.isEmpty then None
       else {
         val adjustedMulti =
