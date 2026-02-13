@@ -176,48 +176,98 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           exactQuery(field, json, boost = None)
         }
       case f: Filter.NotEquals[Doc, _] =>
-        val field = f.field(model)
-        val json = f.getJson(model)
-        if field.name == "_id" then {
-          OpenSearchDsl.boolQuery(
-            must = List(OpenSearchDsl.matchAll()),
-            mustNot = List(OpenSearchDsl.ids(List(jsonToIdString(json))))
-          )
-        } else {
-          OpenSearchDsl.boolQuery(
-            must = List(OpenSearchDsl.matchAll()),
-            mustNot = List(exactQuery(field, json, boost = None))
-          )
+        model.fields.find(_.name == f.fieldName) match {
+          case Some(field) =>
+            val json = f.getJson(model)
+            if field.name == "_id" then {
+              OpenSearchDsl.boolQuery(
+                must = List(OpenSearchDsl.matchAll()),
+                mustNot = List(OpenSearchDsl.ids(List(jsonToIdString(json))))
+              )
+            } else {
+              OpenSearchDsl.boolQuery(
+                must = List(OpenSearchDsl.matchAll()),
+                mustNot = List(exactQuery(field, json, boost = None))
+              )
+            }
+          case None =>
+            // Fallback for unknown fields (e.g., nested subfields like "attrs.key" not registered in model)
+            val json = f.value match {
+              case s: String => str(s)
+              case b: Boolean => bool(b)
+              case i: Int => num(i)
+              case l: Long => num(l)
+              case d: Double => num(d)
+              case bd: BigDecimal => num(bd)
+              case other => throw new IllegalArgumentException(s"Unsupported NotEquals value type: ${other.getClass}")
+            }
+            val base = rewriteReservedIdFieldName(f.fieldName)
+            val keyword = s"$base.keyword"
+            OpenSearchDsl.boolQuery(
+              must = List(OpenSearchDsl.matchAll()),
+              mustNot = List(OpenSearchDsl.boolQuery(
+                should = List(
+                  OpenSearchDsl.term(keyword, json, boost = None),
+                  OpenSearchDsl.term(base, json, boost = None)
+                ),
+                minimumShouldMatch = Some(1)
+              ))
+            )
         }
       case f: Filter.Regex[Doc, _] =>
         val fieldName = fieldNameForPattern(f.fieldName)
         OpenSearchDsl.regexp(fieldName, f.expression)
       case f: Filter.In[Doc, _] =>
         // simplest initial mapping; later we can split by type like lucene does
-        val field = f.field(model)
-        if field.name == "_id" then {
-          OpenSearchDsl.ids(f.getJson(model).map(jsonToIdString))
-        } else {
-          val base = rewriteReservedIdFieldName(field.name)
-          val keyword = s"$base.keyword"
-          val values = if keywordNormalize then {
-            f.getJson(model).map {
-              case Str(s, _) => str(normalizeKeyword(s))
-              case other => other
-            }
-          } else {
-            f.getJson(model)
-          }
+        model.fields.find(_.name == f.fieldName) match {
+          case Some(field) =>
+            if field.name == "_id" then {
+              OpenSearchDsl.ids(f.getJson(model).map(jsonToIdString))
+            } else {
+              val base = rewriteReservedIdFieldName(field.name)
+              val keyword = s"$base.keyword"
+              val values = if keywordNormalize then {
+                f.getJson(model).map {
+                  case Str(s, _) => str(normalizeKeyword(s))
+                  case other => other
+                }
+              } else {
+                f.getJson(model)
+              }
 
-          // Compatibility: some indices map non-tokenized strings/enums as `keyword` directly (no `.keyword` subfield),
-          // while others use `text` with a `.keyword` multifield. Use OR so both mapping styles match.
-          OpenSearchDsl.boolQuery(
-            should = List(
-              OpenSearchDsl.terms(keyword, values),
-              OpenSearchDsl.terms(base, values)
-            ),
-            minimumShouldMatch = Some(1)
-          )
+              // Compatibility: some indices map non-tokenized strings/enums as `keyword` directly (no `.keyword` subfield),
+              // while others use `text` with a `.keyword` multifield. Use OR so both mapping styles match.
+              OpenSearchDsl.boolQuery(
+                should = List(
+                  OpenSearchDsl.terms(keyword, values),
+                  OpenSearchDsl.terms(base, values)
+                ),
+                minimumShouldMatch = Some(1)
+              )
+            }
+          case None =>
+            // Fallback for unknown fields (e.g., nested subfields like "attrs.key" not registered in model)
+            val base = rewriteReservedIdFieldName(f.fieldName)
+            val keyword = s"$base.keyword"
+            val values = f.values.map {
+              case s: String => str(if keywordNormalize then normalizeKeyword(s) else s)
+              case b: Boolean => bool(b)
+              case i: Int => num(i)
+              case l: Long => num(l)
+              case d: Double => num(d)
+              case bd: BigDecimal => num(bd)
+              case other => throw new IllegalArgumentException(s"Unsupported In value type: ${other.getClass}")
+            }
+
+            // Compatibility: some indices map non-tokenized strings/enums as `keyword` directly (no `.keyword` subfield),
+            // while others use `text` with a `.keyword` multifield. Use OR so both mapping styles match.
+            OpenSearchDsl.boolQuery(
+              should = List(
+                OpenSearchDsl.terms(keyword, values),
+                OpenSearchDsl.terms(base, values)
+              ),
+              minimumShouldMatch = Some(1)
+            )
         }
       case Filter.RangeLong(fieldName, from, to) =>
         OpenSearchDsl.range(fieldName, gte = from.map(num), lte = to.map(num))

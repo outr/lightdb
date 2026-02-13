@@ -51,10 +51,29 @@ object NestedQuerySupport {
     case _: Filter.Nested[Doc] =>
       None
     case m: Filter.Multi[Doc] =>
+      var removedNestedClause = false
       val clauses = m.filters.flatMap { fc =>
-        stripNested(fc.filter).map(f => fc.copy(filter = f))
+        stripNested(fc.filter) match
+          case Some(f) =>
+            Some(fc.copy(filter = f))
+          case None =>
+            // This clause was entirely nested and has been stripped out.
+            removedNestedClause = true
+            None
       }
-      if clauses.isEmpty then None else Some(m.copy(filters = clauses))
+      if clauses.isEmpty then None
+      else {
+        val adjustedMulti =
+          m.condition match
+            // For OR-semantics, dropping clauses while keeping the original minShould
+            // could make the filter *stricter*. If any nested clause was removed,
+            // relax minShould to 0 so the stripped filter remains a superset.
+            case Filter.Condition.Should if removedNestedClause =>
+              m.copy(filters = clauses, minShould = 0)
+            case _ =>
+              m.copy(filters = clauses)
+        Some(adjustedMulti)
+      }
     case other =>
       Some(other)
   }

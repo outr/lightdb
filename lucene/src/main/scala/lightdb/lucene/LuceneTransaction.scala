@@ -123,7 +123,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
     if query.facets.nonEmpty then {
       Task.error(new UnsupportedOperationException("Facets with nested fallback are not supported in Lucene"))
-    } else if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal then {
+    } else if query.limit.isEmpty && query.pageSize.isEmpty then {
       Task.error(new UnsupportedOperationException(
         s"Lucene nested fallback requires limit or pageSize to keep memory bounded for store '${store.name}'."
       ))

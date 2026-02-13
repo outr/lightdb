@@ -1377,7 +1377,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V], reason: String): Task[SearchResults[Doc, Model, V]] = {
     if query.facets.nonEmpty then {
       Task.error(new UnsupportedOperationException("Facets with nested fallback are not supported in OpenSearch"))
-    } else if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal then {
+    } else if query.limit.isEmpty && query.pageSize.isEmpty then {
       Task.error(new UnsupportedOperationException(
         s"OpenSearch nested fallback requires limit or pageSize to keep memory bounded (store='${store.name}'). " +
           s"Reason for fallback: $reason"
