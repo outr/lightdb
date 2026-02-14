@@ -65,7 +65,7 @@ val profigVersion: String = "3.4.18"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "0.12.0"
+val spiceVersion: String = "0.12.1"
 
 val spatial4JVersion: String = "0.8"
 

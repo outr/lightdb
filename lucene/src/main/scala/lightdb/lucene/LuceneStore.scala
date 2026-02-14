@@ -27,6 +27,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   extends Collection[Doc, Model](name, path, model, lightDB, storeManager)
     with NestedQueryStore[Doc, Model] {
   override type TX = LuceneTransaction[Doc, Model]
+  override def nestedQueryCapability: NestedQueryCapability = NestedQueryCapability.Native
 
   override def defaultBatchConfig: BatchConfig = BatchConfig.Direct
 

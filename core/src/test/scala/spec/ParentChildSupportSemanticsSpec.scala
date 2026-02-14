@@ -159,6 +159,27 @@ class ParentChildSupportSemanticsSpec extends AnyWordSpec with Matchers {
       nested.semantics shouldBe Filter.NestedSemantics.SameElementAll
     }
 
+    "preserve nested child semantics through optimization" in {
+      val f = Parent.childFilterSameAll(
+        cm => cm.attrs.nested { attrs =>
+          attrs.key === "tract-a" && attrs.percent >= 0.5
+        },
+        cm => Filter.Equals(cm.value, "c1")
+      )
+
+      val expanded = f.asInstanceOf[Filter.ChildConstraints[Parent]].expandToExistsChildFilters
+      val optimized = QueryOptimizer.optimize(expanded)
+
+      val exists = optimized.asInstanceOf[Filter.ExistsChild[Parent]]
+      val childModel = exists.relation.childStore.model.asInstanceOf[exists.ChildModel]
+      val childFilter = exists.childFilter(childModel).asInstanceOf[Filter.Multi[Child]]
+      val nested = childFilter.filters.map(_.filter).collectFirst {
+        case n: Filter.Nested[Child] => n
+      }.getOrElse(fail("Expected optimized child filter to retain nested predicate"))
+      nested.path shouldBe "attrs"
+      nested.semantics shouldBe Filter.NestedSemantics.SameElementAll
+    }
+
     "treat empty same-child semantics as 'exists any child'" in {
       val f = Parent.childFilterSameAll()
       val cc = f.asInstanceOf[Filter.ChildConstraints[Parent]]

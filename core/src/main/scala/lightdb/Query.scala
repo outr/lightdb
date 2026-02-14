@@ -36,9 +36,11 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
 
   private def validateFilters(q: Query[Doc, Model, V]): Task[Unit] = Task {
     if NestedQuerySupport.containsNested(q.filter) && !q.collection.supportsNestedQueries then {
+      val capability = q.collection.nestedQueryCapability
       throw new UnsupportedOperationException(
         s"Nested queries are not supported by store '${q.collection.name}' (${q.collection.getClass.getSimpleName}). " +
-          s"Use a backend with native nested support or a NestedQueryTransaction-based fallback implementation."
+          s"nestedCapability=$capability. " +
+          s"Use a backend with native nested support or a fallback-capable implementation."
       )
     }
     val storeMode = q.collection.storeMode

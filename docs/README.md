@@ -3,6 +3,9 @@
 
 Computationally focused database using pluggable stores
 
+Nested-query parity contract: see [`docs/nested-parity-matrix.md`](nested-parity-matrix.md).
+Nested rollout and verification: see [`docs/nested-rollout.md`](nested-rollout.md).
+
 ## Provided Stores
 | Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Prefix Scan | Notes                                 |
 |------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|-----------|---------------------------------------|

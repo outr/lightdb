@@ -7,7 +7,7 @@ import lightdb.doc.ParentChildSupport
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.store.nested.NestedQueryStore
-import lightdb.store.{Collection, CollectionManager, StoreManager, StoreMode}
+import lightdb.store.{Collection, CollectionManager, NestedQueryCapability, StoreManager, StoreMode}
 import lightdb.store.write.WriteOp
 import lightdb.transaction.{Transaction, WriteHandler}
 import lightdb.transaction.batch.BatchConfig
@@ -28,6 +28,8 @@ class OpenSearchStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     with PrefixScanningStore[Doc, Model]
     with NestedQueryStore[Doc, Model] {
   override type TX = OpenSearchTransaction[Doc, Model]
+
+  override def nestedQueryCapability: NestedQueryCapability = NestedQueryCapability.Native
 
   override def defaultBatchConfig: BatchConfig = BatchConfig.StoreNative
 
