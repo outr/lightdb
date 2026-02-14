@@ -105,7 +105,11 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
    * Stores that do not support nested queries should keep this false so Query can fail fast with
    * a deterministic unsupported-operation error.
    */
-  def supportsNestedQueries: Boolean = false
+  def nestedQueryCapability: NestedQueryCapability = NestedQueryCapability.Unsupported
+
+  def supportsNestedQueries: Boolean = nestedQueryCapability.supportsNestedQueries
+
+  def supportsNativeNestedQueries: Boolean = nestedQueryCapability.isNative
 
   /**
    * Default batching behavior for transactions. Stores can override for optimal performance.

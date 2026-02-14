@@ -7,7 +7,7 @@ import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field.Tokenized
 import lightdb.field.{Field, IndexingState}
-import lightdb.filter.{Condition, Filter}
+import lightdb.filter.{Condition, Filter, NestedQuerySupport}
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
 import lightdb.spatial.{DistanceAndDoc, Spatial}
@@ -30,6 +30,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
                                                                              model: Model,
                                                                              tx: LuceneTransaction[Doc, Model]) {
   private lazy val isBlockJoin: Boolean = store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]]
+  private lazy val hasNativeNestedBlocks: Boolean = !isBlockJoin && store.model.nestedPaths.nonEmpty
 
   private def parentFieldName(name: String): String =
     if isBlockJoin then LuceneBlockJoinFields.mapParentFieldName(name) else name
@@ -43,8 +44,13 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
   private lazy val childTypeQuery: LuceneQuery =
     new TermQuery(new Term(LuceneBlockJoinFields.TypeField, LuceneBlockJoinFields.ChildTypeValue))
 
+  private lazy val nestedChildTypeQuery: LuceneQuery =
+    new TermQuery(new Term(LuceneBlockJoinFields.TypeField, LuceneBlockJoinFields.NestedChildTypeValue))
+
   private lazy val parentBitSetProducer: AnyRef =
     LuceneJoinCompat.queryBitSetProducer(parentTypeQuery)
+
+  def parentDocsQuery: LuceneQuery = parentTypeQuery
 
   def apply[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task {
     val indexSearcher = tx.state.indexSearcher
@@ -371,7 +377,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
 
   def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = {
     val compiled = compileFilter(filter, model, parentFieldName, allowDrillDownFacets = true)
-    if isBlockJoin then {
+    if isBlockJoin || hasNativeNestedBlocks then {
       val b = new BooleanQuery.Builder
       b.add(compiled, BooleanClause.Occur.MUST)
       b.add(parentTypeQuery, BooleanClause.Occur.FILTER)
@@ -484,10 +490,22 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.add(LatLonPoint.newBoxQuery(mapped, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
           b.build()
         case f: Filter.Nested[D @unchecked] =>
-          throw new UnsupportedOperationException(
-            s"Lucene has no native same-element nested query support (path='${f.path}'). " +
-              s"Use transaction query execution so nested fallback evaluation is applied."
-          )
+          if !hasNativeNestedBlocks then {
+            throw new UnsupportedOperationException(
+              s"Lucene has no native same-element nested query support (path='${f.path}'). " +
+                s"Use transaction query execution so nested fallback evaluation is applied."
+            )
+          }
+          val (leafPath, rewritten) = normalizeNestedFilter(f.path, f.filter.asInstanceOf[Filter[D]])
+          val nestedInner = compileFilter(Some(rewritten), m, mapName, allowDrillDownFacets = false)
+          val childQuery = {
+            val b = new BooleanQuery.Builder
+            b.add(nestedInner, BooleanClause.Occur.MUST)
+            b.add(nestedChildTypeQuery, BooleanClause.Occur.FILTER)
+            b.add(new TermQuery(new Term(LuceneBlockJoinFields.NestedPathField, leafPath)), BooleanClause.Occur.FILTER)
+            b.build()
+          }
+          LuceneJoinCompat.toParentBlockJoinQuery(childQuery, parentBitSetProducer)
         case Filter.Multi(minShould, clauses) =>
           val b = new BooleanQuery.Builder
           val hasShould = clauses.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
@@ -547,5 +565,72 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case _ => new TermQuery(new Term(mapName(field.name), "null"))
     }
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")
+  }
+
+  private def rewriteFilterFieldsForNestedPath[D <: Document[D]](path: String, filter: Filter[D]): Filter[D] = {
+    val prefix = s"$path."
+    def qualify(fieldName: String): String =
+      if fieldName.startsWith(prefix) then fieldName else s"$prefix$fieldName"
+
+    filter match {
+      case f: Filter.Equals[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.NotEquals[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Regex[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.In[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeLong[D] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.RangeDouble[D] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.StartsWith[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.EndsWith[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Contains[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Exact[D, _] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Distance[D] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.DrillDownFacetFilter[D] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.Multi[D] =>
+        f.copy(filters = f.filters.map(clause => clause.copy(filter = rewriteFilterFieldsForNestedPath(path, clause.filter))))
+      case f: Filter.Nested[D] =>
+        val nestedPath = if f.path.startsWith(prefix) then f.path else s"$prefix${f.path}"
+        f.copy(path = nestedPath, filter = rewriteFilterFieldsForNestedPath(nestedPath, f.filter))
+      case other => other
+    }
+  }
+
+  private def normalizeNestedFilter[D <: Document[D]](basePath: String, filter: Filter[D]): (String, Filter[D]) = {
+    def depth(path: String): Int = path.split("\\.").count(_.nonEmpty)
+    def absolutePath(parent: String, child: String): String = {
+      val prefix = s"$parent."
+      if child.startsWith(prefix) then child else s"$prefix$child"
+    }
+
+    def loop(currentPath: String, current: Filter[D]): (String, Filter[D]) = current match {
+      case n: Filter.Nested[D] =>
+        loop(absolutePath(currentPath, n.path), n.filter)
+      case m: Filter.Multi[D] =>
+        val normalizedClauses = m.filters.map { clause =>
+          val (leaf, f) = loop(currentPath, clause.filter)
+          (leaf, clause.copy(filter = f))
+        }
+        val targetLeaf = normalizedClauses.map(_._1).maxBy(depth)
+        normalizedClauses.foreach { case (leaf, _) =>
+          val compatible =
+            leaf == targetLeaf ||
+              targetLeaf.startsWith(s"$leaf.")
+          if !compatible then {
+            throw new UnsupportedOperationException(
+              s"Lucene native nested cannot combine divergent nested paths ('$leaf' vs '$targetLeaf') in the same nested scope."
+            )
+          }
+        }
+        (targetLeaf, m.copy(filters = normalizedClauses.map(_._2)))
+      case other =>
+        (currentPath, rewriteFilterFieldsForNestedPath(currentPath, other))
+    }
+
+    val (leaf, rewritten) = loop(basePath, filter)
+    if NestedQuerySupport.containsNested(rewritten) then {
+      throw new UnsupportedOperationException(
+        s"Lucene native nested normalization failed to eliminate nested operators under path '$basePath'."
+      )
+    }
+    (leaf, rewritten)
   }
 }

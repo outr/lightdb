@@ -11,9 +11,11 @@ package lightdb.lucene.blockjoin
 object LuceneBlockJoinFields {
   val TypeField: String = "__lightdb_type"
   val ParentIdField: String = "__lightdb_parentId"
+  val NestedPathField: String = "__lightdb_nestedPath"
 
   val ParentTypeValue: String = "parent"
   val ChildTypeValue: String = "child"
+  val NestedChildTypeValue: String = "nestedChild"
 
   val ParentPrefix: String = "p."
   val ChildPrefix: String = "c."

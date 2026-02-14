@@ -3,6 +3,7 @@ package spec
 import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
+import lightdb.facet.{FacetConfig, FacetValue}
 import lightdb.filter.*
 import lightdb.id.Id
 import lightdb.store.{Collection, CollectionManager}
@@ -38,13 +39,14 @@ abstract class AbstractNestedSpec extends AsyncWordSpec with AsyncTaskSpec with 
 
     val title: I[String] = field.index(_.title)
     val attrs: N[Attrs] = field.index.nested[Attrs](_.attrs)
+    val attrsFacet: FF = field.facet("attrsFacet", _.attrs.map(a => FacetValue(a.key)), FacetConfig(multiValued = true))
   }
 
   object DB extends LightDB {
     override type SM = CollectionManager
     override val storeManager: CollectionManager = spec.storeManager
     override def name: String = specName
-    override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
+    override lazy val directory: Option[Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
     val entries: Collection[Entry, Entry.type] = store(Entry)
   }
@@ -100,6 +102,76 @@ abstract class AbstractNestedSpec extends AsyncWordSpec with AsyncTaskSpec with 
           .id
           .toList
           .map(_ should be(List(d2._id)))
+      }
+    }
+    "support nested boolean combinations with must-not semantics" in {
+      DB.entries.transaction { tx =>
+        tx.query
+          .filter(_.attrs.nested { attrs =>
+            Filter.Multi[Entry](
+              minShould = 1,
+              filters = List(
+                FilterClause(attrs.key === "tract-a", Condition.Should, None),
+                FilterClause(attrs.key === "tract-c", Condition.Should, None),
+                FilterClause(attrs.percent >= 0.5, Condition.Must, None),
+                FilterClause(attrs.key === "tract-c", Condition.MustNot, None)
+              )
+            )
+          })
+          .id
+          .toList
+          .map(_.toSet should be(Set(d2._id, d4._id)))
+      }
+    }
+    "return countTotal for nested queries" in {
+      DB.entries.transaction { tx =>
+        tx.query
+          .filter(_.attrs.nested { attrs =>
+            attrs.key === "tract-a" && attrs.percent >= 0.5
+          })
+          .countTotal(true)
+          .search
+          .map(_.total should be(Some(2)))
+      }
+    }
+    "support distinct values with nested filters" in {
+      DB.entries.transaction { tx =>
+        tx.query
+          .filter(_.attrs.nested { attrs =>
+            attrs.key === "tract-a" && attrs.percent >= 0.5
+          })
+          .distinct(_.title, pageSize = 10)
+          .toList
+          .map(_.toSet should be(Set("second", "fourth")))
+      }
+    }
+    "stream nested results with page sizing" in {
+      DB.entries.transaction { tx =>
+        tx.query
+          .filter(_.attrs.nested { attrs =>
+            attrs.key === "tract-a" && attrs.percent >= 0.5
+          })
+          .sort(Sort.IndexOrder)
+          .pageSize(1)
+          .id
+          .stream
+          .toList
+          .map(_ should be(List(d2._id, d4._id)))
+      }
+    }
+    "handle nested facet queries" in {
+      DB.entries.transaction { tx =>
+        tx.query
+          .filter(_.attrs.nested { attrs =>
+            attrs.key === "tract-a" && attrs.percent >= 0.5
+          })
+          .facet(_.attrsFacet)
+          .search
+          .map { results =>
+            val facet = results.facet(_.attrsFacet)
+            facet.totalCount should be >= 2
+            facet.values.map(v => v.value -> v.count).toMap should contain("tract-a" -> 2)
+          }
       }
     }
     "paginate nested results consistently" in {

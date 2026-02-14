@@ -3,9 +3,10 @@ package lightdb.lucene
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw.Asable
-import fabric.{Arr, Json, Null, NumDec, NumInt, Str}
+import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str}
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.facet.FacetComputation
 import lightdb.field.Field.{FacetField, Tokenized}
 import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Filter, FilterPlanner, NestedQuerySupport, QueryOptimizer}
@@ -16,12 +17,12 @@ import lightdb.store.Conversion
 import lightdb.transaction.{CollectionTransaction, NestedQueryTransaction, RollbackSupport, Transaction}
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults, Sort}
-import lightdb.lucene.blockjoin.LuceneBlockJoinStore
+import lightdb.lucene.blockjoin.{LuceneBlockJoinFields, LuceneBlockJoinStore}
 import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
 import org.apache.lucene.index.Term
-import org.apache.lucene.search.{MatchAllDocsQuery, ScoreDoc}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, MatchAllDocsQuery, ScoreDoc, TermQuery}
 import org.apache.lucene.util.BytesRef
 import rapid.Task
 
@@ -38,6 +39,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
 
   private lazy val searchBuilder = new LuceneSearchBuilder[Doc, Model](store, store.model, this)
+  private lazy val hasNestedBlockDocs: Boolean = !store.isInstanceOf[LuceneBlockJoinStore[_, _, _, _]] && store.model.nestedPaths.nonEmpty
 
   override def jsonStream: rapid.Stream[Json] =
     rapid.Stream.force(doSearch[Json](Query[Doc, Model, Json](this, Conversion.Json(store.fields))).map(_.stream))
@@ -54,13 +56,30 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = get(id).map(_.nonEmpty)
 
-  override protected def _count: Task[Int] = Task(state.indexSearcher.count(new MatchAllDocsQuery))
+  override protected def _count: Task[Int] = Task {
+    if hasNestedBlockDocs then {
+      state.indexSearcher.count(searchBuilder.parentDocsQuery)
+    } else {
+      state.indexSearcher.count(new MatchAllDocsQuery)
+    }
+  }
 
   override protected def _delete(id: Id[Doc]): Task[Boolean] = _deleteInternal(store.idField, id)
 
   protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
-    val query = searchBuilder.filter2Lucene(Some(index === value))
-    store.index.indexWriter.deleteDocuments(query)
+    if hasNestedBlockDocs && index.name == "_id" then {
+      val parentId = value match {
+        case id: Id[?] => id.value
+        case other => other.toString
+      }
+      val b = new BooleanQuery.Builder
+      b.add(new TermQuery(new Term("_id", parentId)), BooleanClause.Occur.SHOULD)
+      b.add(new TermQuery(new Term(LuceneBlockJoinFields.ParentIdField, parentId)), BooleanClause.Occur.SHOULD)
+      store.index.indexWriter.deleteDocuments(b.build())
+    } else {
+      val query = searchBuilder.filter2Lucene(Some(index === value))
+      store.index.indexWriter.deleteDocuments(query)
+    }
     true
   }
 
@@ -113,7 +132,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     searchBuilder(query)
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
-    if NestedQuerySupport.containsNested(query.filter) then {
+    if NestedQuerySupport.containsNested(query.filter) && !store.supportsNativeNestedQueries then {
       doSearchWithNestedFallback(query)
     } else {
       doSearchDirect(query)
@@ -121,9 +140,8 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
-    if query.facets.nonEmpty then {
-      Task.error(new UnsupportedOperationException("Facets with nested fallback are not supported in Lucene"))
-    } else if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal then {
+    val includeFacets = query.facets.nonEmpty
+    if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal && !includeFacets then {
       Task.error(new UnsupportedOperationException(
         s"Lucene nested fallback requires limit or pageSize to keep memory bounded for store '${store.name}'."
       ))
@@ -147,21 +165,26 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
       def loop(scanOffset: Int,
                matchedSoFar: Int,
-               collected: Vector[(V, Double)]): Task[(Int, Vector[(V, Double)])] = {
+               collected: Vector[(V, Double)],
+               facetDocs: Vector[Doc]): Task[(Int, Vector[(V, Double)], Vector[Doc])] = {
         val enoughForPage = collected.size >= requestedLimit
-        if !query.countTotal && enoughForPage then {
-          Task.pure(matchedSoFar -> collected)
+        if !query.countTotal && enoughForPage && !includeFacets then {
+          Task.pure((matchedSoFar, collected, facetDocs))
         } else {
           val pageQuery = broadQuery.copy(offset = scanOffset, limit = Some(scanPageSize), pageSize = None)
           doSearchDirect(pageQuery).flatMap(_.listWithScore).flatMap { page =>
             if page.isEmpty then {
-              Task.pure(matchedSoFar -> collected)
+              Task.pure((matchedSoFar, collected, facetDocs))
             } else {
               var matched = matchedSoFar
               val buffer = scala.collection.mutable.ArrayBuffer.from(collected)
+              val facetBuffer = scala.collection.mutable.ArrayBuffer.from(facetDocs)
               page.foreach {
                 case (doc, score) =>
                   if query.filter.forall(f => NestedQuerySupport.eval(f, store.model, doc)) then {
+                    if includeFacets then {
+                      facetBuffer += doc
+                    }
                     if matched >= query.offset && buffer.size < requestedLimit then {
                       buffer += (convertDoc(doc, query.conversion) -> score)
                     }
@@ -170,22 +193,27 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
               }
               val continue =
                 page.size >= scanPageSize &&
-                  (query.countTotal || buffer.size < requestedLimit)
-              if continue then loop(scanOffset + page.size, matched, buffer.toVector)
-              else Task.pure(matched -> buffer.toVector)
+                  (query.countTotal || buffer.size < requestedLimit || includeFacets)
+              if continue then loop(scanOffset + page.size, matched, buffer.toVector, facetBuffer.toVector)
+              else Task.pure((matched, buffer.toVector, facetBuffer.toVector))
             }
           }
         }
       }
 
-      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty).map { case (matched, collected) =>
+      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty, facetDocs = Vector.empty).map { case (matched, collected, facetDocs) =>
+        val facetResults = if includeFacets then {
+          FacetComputation.fromDocs(facetDocs, query.facets, store.model)
+        } else {
+          Map.empty[FacetField[Doc], lightdb.facet.FacetResult]
+        }
         SearchResults(
           model = store.model,
           offset = query.offset,
           limit = query.limit,
           total = if query.countTotal then Some(matched) else None,
           streamWithScore = rapid.Stream.emits(collected),
-          facetResults = Map.empty,
+          facetResults = facetResults,
           transaction = this
         )
       }
@@ -241,6 +269,39 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                            pageSize: Int): rapid.Stream[F] = {
     if pageSize <= 0 then {
       rapid.Stream.empty
+    } else if NestedQuerySupport.containsNested(query.filter) && !store.supportsNativeNestedQueries then {
+      // Grouping-based distinct currently compiles filters directly, which bypasses nested fallback.
+      // For nested filters, evaluate through the existing nested fallback search path and distinct in-process.
+      rapid.Stream.force {
+        val resolveExistsChild = !store.supportsNativeExistsChild
+        FilterPlanner.resolve(query.filter, store.model, resolveExistsChild = resolveExistsChild).flatMap { resolved =>
+          val optimizedFilter = if query.optimize then resolved.map(QueryOptimizer.optimize) else resolved
+          val docsQ: Query[Doc, Model, Doc] = Query(this, Conversion.Doc()).copy(
+            filter = optimizedFilter,
+            sort = Nil,
+            offset = 0,
+            limit = None,
+            pageSize = Some(math.max(1000, pageSize)),
+            countTotal = false,
+            scoreDocs = false,
+            minDocScore = None,
+            facets = Nil,
+            optimize = false
+          )
+          doSearchWithNestedFallback(docsQ).flatMap(_.stream.toList).map { docs =>
+            val seen = scala.collection.mutable.LinkedHashSet.empty[F]
+            val state = new IndexingState
+            docs.foreach { doc =>
+              val value = field.get(doc, field, state)
+              value match {
+                case None => // skip missing/null option values
+                case _ => seen += value
+              }
+            }
+            rapid.Stream.emits(seen.toList)
+          }
+        }
+      }
     } else {
       // Lucene can do exact "distinct with filters" via grouping (term grouping on docvalues).
       //
@@ -380,16 +441,30 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     if store.fields.tail.nonEmpty then {
       val id = doc._id
       val state = new IndexingState
-      val luceneFields = store.fields.flatMap { field =>
-        createLuceneFields(field, doc, state)
-      }
-      val document = new LuceneDocument
-      luceneFields.foreach(document.add)
-
-      if upsert then {
-        store.index.indexWriter.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document))
+      if hasNestedBlockDocs then {
+        val docs = createNestedBlockDocs(doc, state)
+        if upsert then {
+          val deleteBuilder = new BooleanQuery.Builder
+          deleteBuilder.add(new TermQuery(new Term("_id", id.value)), BooleanClause.Occur.SHOULD)
+          deleteBuilder.add(new TermQuery(new Term(LuceneBlockJoinFields.ParentIdField, id.value)), BooleanClause.Occur.SHOULD)
+          val deleteQuery = deleteBuilder.build()
+          store.index.indexWriter.deleteDocuments(deleteQuery)
+          store.index.indexWriter.addDocuments(docs)
+        } else {
+          store.index.indexWriter.addDocuments(docs)
+        }
       } else {
-        store.index.indexWriter.addDocument(facetsPrepareDoc(document))
+        val luceneFields = store.fields.flatMap { field =>
+          createLuceneFields(field, doc, state)
+        }
+        val document = new LuceneDocument
+        luceneFields.foreach(document.add)
+
+        if upsert then {
+          store.index.indexWriter.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document))
+        } else {
+          store.index.indexWriter.addDocument(facetsPrepareDoc(document))
+        }
       }
     }
     doc
@@ -493,6 +568,120 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
           case _ => // Ignore
         }
         fields
+    }
+  }
+
+  private def createNestedBlockDocs(doc: Doc, state: IndexingState): java.util.List[LuceneDocument] = {
+    val docs = new java.util.ArrayList[LuceneDocument]()
+    val docJson = store.model.rw.read(doc)
+    val parentId = doc._id.value
+
+    val nestedScopes = collectNestedScopes(docJson, store.model.nestedPaths.toList.sorted)
+    nestedScopes.foreach { scope =>
+      val childDoc = new LuceneDocument
+      childDoc.add(new StringField(LuceneBlockJoinFields.TypeField, LuceneBlockJoinFields.NestedChildTypeValue, LuceneField.Store.NO))
+      childDoc.add(new StringField(LuceneBlockJoinFields.ParentIdField, parentId, LuceneField.Store.NO))
+      childDoc.add(new StringField(LuceneBlockJoinFields.NestedPathField, scope.path, LuceneField.Store.NO))
+
+      scope.ancestors.foreach { case (path, obj) =>
+        flattenObject(path, obj).foreach { case (fieldName, json) =>
+          addJsonField(childDoc, fieldName, json)
+        }
+      }
+      flattenObject(scope.path, scope.element).foreach { case (fieldName, json) =>
+        addJsonField(childDoc, fieldName, json)
+      }
+      docs.add(childDoc)
+    }
+
+    val parentDoc = new LuceneDocument
+    parentDoc.add(new StringField(LuceneBlockJoinFields.TypeField, LuceneBlockJoinFields.ParentTypeValue, LuceneField.Store.NO))
+    store.fields.flatMap { field =>
+      createLuceneFields(field, doc, state)
+    }.foreach(parentDoc.add)
+    docs.add(facetsPrepareDoc(parentDoc))
+    docs
+  }
+
+  private case class NestedScope(path: String, element: Obj, ancestors: List[(String, Obj)])
+
+  private def collectNestedScopes(docJson: Json, rootPaths: List[String]): List[NestedScope] = {
+    def descend(path: String, element: Obj, ancestors: List[(String, Obj)]): List[NestedScope] = {
+      val self = NestedScope(path = path, element = element, ancestors = ancestors)
+      val nextAncestors = ancestors :+ (path -> element)
+      val children = element.value.toList.flatMap {
+        case (fieldName, Arr(values, _)) =>
+          val childPath = s"$path.$fieldName"
+          values.toList.collect {
+            case o: Obj => descend(childPath, o, nextAncestors)
+          }.flatten
+        case _ =>
+          Nil
+      }
+      self :: children
+    }
+
+    rootPaths.flatMap { path =>
+      nestedElements(docJson, path).collect {
+        case o: Obj => descend(path, o, Nil)
+      }.flatten
+    }.distinctBy(scope => (scope.path, JsonFormatter.Compact(scope.element)))
+  }
+
+  private def flattenObject(prefix: String, obj: Obj): List[(String, Json)] = {
+    def loop(base: String, json: Json): List[(String, Json)] = json match {
+      case o: Obj =>
+        o.value.toList.flatMap { case (k, v) =>
+          val name = s"$base.$k"
+          loop(name, v)
+        }
+      case a: Arr =>
+        a.value.toList.flatMap(v => loop(base, v))
+      case other =>
+        List(base -> other)
+    }
+    obj.value.toList.flatMap { case (k, v) =>
+      loop(s"$prefix.$k", v)
+    }
+  }
+
+  private def addJsonField(doc: LuceneDocument, fieldName: String, json: Json): Unit = {
+    json match {
+      case Str(s, _) =>
+        doc.add(new StringField(fieldName, s, LuceneField.Store.NO))
+      case Bool(b, _) =>
+        doc.add(new IntField(fieldName, if b then 1 else 0, LuceneField.Store.NO))
+      case NumInt(l, _) =>
+        doc.add(new LongField(fieldName, l, LuceneField.Store.NO))
+      case NumDec(d, _) =>
+        doc.add(new DoubleField(fieldName, d.toDouble, LuceneField.Store.NO))
+      case Null => // skip null
+      case other =>
+        doc.add(new StringField(fieldName, JsonFormatter.Compact(other), LuceneField.Store.NO))
+    }
+  }
+
+  private def nestedElements(docJson: Json, path: String): List[Json] = {
+    val segments = path.split("\\.").toList.filter(_.nonEmpty)
+    if segments.isEmpty then Nil
+    else {
+      def descend(nodes: List[Json], remaining: List[String]): List[Json] = remaining match {
+        case Nil => nodes
+        case h :: t =>
+          val next = nodes.flatMap {
+            case o: Obj => o.value.get(h).toList
+            case a: Arr => a.value.toList.flatMap {
+              case oo: Obj => oo.value.get(h).toList
+              case _ => Nil
+            }
+            case _ => Nil
+          }
+          descend(next, t)
+      }
+      descend(List(docJson), segments).flatMap {
+        case a: Arr => a.value.toList
+        case other => List(other)
+      }
     }
   }
 

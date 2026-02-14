@@ -8,6 +8,7 @@ import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, Ag
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetQuery, FacetResult, FacetResultValue, FacetValue}
+import lightdb.facet.FacetComputation
 import lightdb.field.Field.Tokenized
 import lightdb.field.Field.FacetField
 import lightdb.field.{Field, FieldAndValue, IndexingState}
@@ -548,9 +549,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
-    if query.facets.nonEmpty then {
-      Task.error(new UnsupportedOperationException("Facets with nested fallback are not supported in SQL"))
-    } else if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal then {
+    val includeFacets = query.facets.nonEmpty
+    if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal && !includeFacets then {
       Task.error(new UnsupportedOperationException(
         s"SQL nested fallback requires limit or pageSize to keep memory bounded for store '${store.name}'."
       ))
@@ -574,21 +574,26 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
       def loop(scanOffset: Int,
                matchedSoFar: Int,
-               collected: Vector[(V, Double)]): Task[(Int, Vector[(V, Double)])] = {
+               collected: Vector[(V, Double)],
+               facetDocs: Vector[Doc]): Task[(Int, Vector[(V, Double)], Vector[Doc])] = {
         val enoughForPage = collected.size >= requestedLimit
-        if !query.countTotal && enoughForPage then {
-          Task.pure(matchedSoFar -> collected)
+        if !query.countTotal && enoughForPage && !includeFacets then {
+          Task.pure((matchedSoFar, collected, facetDocs))
         } else {
           val pageQuery = broadQuery.copy(offset = scanOffset, limit = Some(scanPageSize), pageSize = None)
           doSearchDirect(pageQuery).flatMap(_.listWithScore).flatMap { page =>
             if page.isEmpty then {
-              Task.pure(matchedSoFar -> collected)
+              Task.pure((matchedSoFar, collected, facetDocs))
             } else {
               var matched = matchedSoFar
               val buffer = scala.collection.mutable.ArrayBuffer.from(collected)
+              val facetBuffer = scala.collection.mutable.ArrayBuffer.from(facetDocs)
               page.foreach {
                 case (doc, score) =>
                   if query.filter.forall(f => NestedQuerySupport.eval(f, store.model, doc)) then {
+                    if includeFacets then {
+                      facetBuffer += doc
+                    }
                     if matched >= query.offset && buffer.size < requestedLimit then {
                       buffer += (convertDoc(doc, query.conversion) -> score)
                     }
@@ -597,22 +602,27 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
               }
               val continue =
                 page.size >= scanPageSize &&
-                  (query.countTotal || buffer.size < requestedLimit)
-              if continue then loop(scanOffset + page.size, matched, buffer.toVector)
-              else Task.pure(matched -> buffer.toVector)
+                  (query.countTotal || buffer.size < requestedLimit || includeFacets)
+              if continue then loop(scanOffset + page.size, matched, buffer.toVector, facetBuffer.toVector)
+              else Task.pure((matched, buffer.toVector, facetBuffer.toVector))
             }
           }
         }
       }
 
-      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty).map { case (matched, collected) =>
+      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty, facetDocs = Vector.empty).map { case (matched, collected, facetDocs) =>
+        val facetResults = if includeFacets then {
+          FacetComputation.fromDocs(facetDocs, query.facets, store.model)
+        } else {
+          Map.empty[FacetField[Doc], FacetResult]
+        }
         SearchResults(
           model = store.model,
           offset = query.offset,
           limit = query.limit,
           total = if query.countTotal then Some(matched) else None,
           streamWithScore = rapid.Stream.emits(collected),
-          facetResults = Map.empty,
+          facetResults = facetResults,
           transaction = this
         )
       }
@@ -624,6 +634,39 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
                            pageSize: Int): rapid.Stream[F] = {
     if pageSize <= 0 then {
       rapid.Stream.empty
+    } else if NestedQuerySupport.containsNested(query.filter) then {
+      // SQL DISTINCT translation bypasses nested fallback. For nested filters, evaluate using
+      // nested fallback search and distinct values in-process.
+      rapid.Stream.force {
+        val resolveExistsChild = !store.supportsNativeExistsChild
+        FilterPlanner.resolve(query.filter, store.model, resolveExistsChild = resolveExistsChild).flatMap { resolved =>
+          val optimizedFilter = if query.optimize then resolved.map(QueryOptimizer.optimize) else resolved
+          val docsQ: Query[Doc, Model, Doc] = Query(this, Conversion.Doc()).copy(
+            filter = optimizedFilter,
+            sort = Nil,
+            offset = 0,
+            limit = None,
+            pageSize = Some(math.max(1000, pageSize)),
+            countTotal = false,
+            scoreDocs = false,
+            minDocScore = None,
+            facets = Nil,
+            optimize = false
+          )
+          doSearchWithNestedFallback(docsQ).flatMap(_.stream.toList).map { docs =>
+            val seen = scala.collection.mutable.LinkedHashSet.empty[F]
+            val state = new IndexingState
+            docs.foreach { doc =>
+              val value = field.get(doc, field, state)
+              value match {
+                case None => // skip missing/null option values
+                case _ => seen += value
+              }
+            }
+            rapid.Stream.emits(seen.toList)
+          }
+        }
+      }
     } else {
       // Streaming DISTINCT with paging.
       //
