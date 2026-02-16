@@ -1,6 +1,7 @@
 package lightdb.progress
 
 import rapid.Task
+import rapid.logger
 import reactify.Var
 
 import scala.concurrent.duration.{DurationLong, FiniteDuration}
@@ -63,25 +64,48 @@ object ProgressManager {
     private var lastProgress = 0L
     private var current = Option.empty[Progress]
 
-    override def apply(value: Option[Double], message: Option[String]): Unit = synchronized {
+    private def emit(progress: Progress): Unit = {
+      try {
+        progressManager(progress.value, progress.message)
+      } catch {
+        case t: Throwable =>
+          logger.warn("ProgressManager.timeDelayed failed to emit progress update", t)
+      }
+    }
+
+    override def apply(value: Option[Double], message: Option[String]): Unit = {
       val now = System.currentTimeMillis()
-      current match {
-        case Some(_) => current = Some(Progress(value, message))
-        case None if lastProgress + delayMS < now =>
-          progressManager(value, message)
-          lastProgress = now
-        case None =>
-          val delay = (lastProgress + delayMS) - now
-          current = Some(Progress(value, message))
-          Task.sleep(delay.millis).function {
-            pm.synchronized {
-              current.foreach { p =>
-                progressManager(p.value, p.message)
-              }
-              current = None
-              lastProgress = System.currentTimeMillis()
-            }
-          }.start()
+      var emitNow: Option[Progress] = None
+      var scheduleDelayMs = 0L
+      var schedule = false
+
+      synchronized {
+        current match {
+          case Some(_) =>
+            current = Some(Progress(value, message))
+          case None if lastProgress + delayMS < now =>
+            val progress = Progress(value, message)
+            lastProgress = now
+            emitNow = Some(progress)
+          case None =>
+            scheduleDelayMs = (lastProgress + delayMS) - now
+            current = Some(Progress(value, message))
+            schedule = true
+        }
+      }
+
+      emitNow.foreach(emit)
+
+      if (schedule) {
+        Task.sleep(scheduleDelayMs.millis).function {
+          val toEmit = pm.synchronized {
+            val pending = current
+            current = None
+            lastProgress = System.currentTimeMillis()
+            pending
+          }
+          toEmit.foreach(emit)
+        }.start()
       }
     }
   }

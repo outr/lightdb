@@ -17,7 +17,6 @@ import java.nio.file.Path
 
 abstract class AbstractNestedInNestedSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   protected lazy val specName: String = getClass.getSimpleName
-  protected def declareOuterNestedPath: Boolean = true
 
   case class Inner(code: String, score: Double)
   object Inner {
@@ -45,11 +44,7 @@ abstract class AbstractNestedInNestedSpec extends AsyncWordSpec with AsyncTaskSp
     trait Outers extends Nested[List[Outer]]
 
     val title: I[String] = field.index(_.title)
-    val outers = if spec.declareOuterNestedPath then {
-      field.index.nested[Outers](_.outers)
-    } else {
-      field.index(_.outers)
-    }
+    val outers = field.index.nested[Outers](_.outers)
     val childCodeField = field("outers.children.code", _.outers.headOption.flatMap(_.children.headOption.map(_.code)).getOrElse(""))
     val childScoreField = field("outers.children.score", _.outers.headOption.flatMap(_.children.headOption.map(_.score)).getOrElse(0.0))
   }
@@ -141,10 +136,7 @@ abstract class AbstractNestedInNestedSpec extends AsyncWordSpec with AsyncTaskSp
           .sort(Sort.IndexOrder)
           .id
           .toList
-          .map { ids =>
-            val expected = if spec.declareOuterNestedPath then List(d2._id) else List(d2._id, d4._id)
-            ids should be(expected)
-          }
+          .map(ids => ids should be(List(d2._id)))
       }
     }
     "paginate nested-in-nested results consistently" in {

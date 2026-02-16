@@ -42,6 +42,13 @@ case class OpenSearchConfig(baseUrl: String,
                             logRequestsExcludePaths: List[String] = Nil,
                             maxResultWindow: Int = 250_000,
                             /**
+                             * Optional OpenSearch nested object limit (`index.mapping.nested_objects.limit`).
+                             *
+                             * This is useful for stores that contain very large nested arrays in a single document
+                             * (for example, aggregated "stats" documents).
+                             */
+                            nestedObjectsLimit: Option[Int] = None,
+                            /**
                              * Optional OpenSearch index sorting configuration.
                              *
                              * When configured, LightDB will emit `index.sort.field` / `index.sort.order` in the index settings
@@ -271,6 +278,10 @@ object OpenSearchConfig {
     val maxResultWindow = optInt("lightdb.opensearch.maxResultWindow")
       .filter(_ >= 1)
       .getOrElse(250_000)
+
+    val nestedObjectsLimit = optInt(s"lightdb.opensearch.$collectionName.nestedObjectsLimit")
+      .orElse(optInt("lightdb.opensearch.nestedObjectsLimit"))
+      .filter(_ >= 10_000)
 
     val indexSortFields = optStringList(s"lightdb.opensearch.$collectionName.index.sort.fields") match {
       case Nil => optStringList("lightdb.opensearch.index.sort.fields")
@@ -572,6 +583,7 @@ object OpenSearchConfig {
       logRequests = logRequests,
       logRequestsExcludePaths = logRequestsExcludePaths,
       maxResultWindow = maxResultWindow,
+      nestedObjectsLimit = nestedObjectsLimit,
       indexSortFields = indexSortFields,
       indexSortOrders = indexSortOrders,
       trackTotalHitsUpTo = trackTotalHitsUpTo,
