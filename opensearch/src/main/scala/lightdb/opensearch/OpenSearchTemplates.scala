@@ -40,8 +40,15 @@ object OpenSearchTemplates {
                                                                    maxResultWindow: Int = 250_000): Json = {
     val props = properties(model, fields, config, storeName)
     val hash = mappingHash(props)
+    val hasNestedPaths = model.nestedPaths.nonEmpty
+    // OpenSearch defaults `index.mapping.nested_objects.limit` to 10_000.
+    // Some stores (for example aggregated UnifiedEntity docs) can exceed this per-document.
+    // Apply an explicit limit when nested paths are declared.
+    val nestedObjectsLimit = if hasNestedPaths then config.nestedObjectsLimit.orElse(Some(100_000)) else None
     val indexObjBase: List[(String, Json)] =
-      List("max_result_window" -> num(maxResultWindow))
+      List("max_result_window" -> num(maxResultWindow)) ::: nestedObjectsLimit.toList.map { limit =>
+        "mapping.nested_objects.limit" -> num(limit)
+      }
 
     val sortFields: List[String] = config.indexSortFields.map(_.trim).filter(_.nonEmpty)
     val sortOrdersRaw: List[String] = config.indexSortOrders.map(_.trim.toLowerCase).filter(_.nonEmpty)
@@ -147,6 +154,28 @@ object OpenSearchTemplates {
         if mapping.asObj.value.nonEmpty then List(f.name -> mapping) else Nil
     }.flatten
 
+    val nestedLeafPropsFromIndexedFields = fields.collect {
+      case f if isMappedByNestedPath(f.name) &&
+        f.name.contains(".") &&
+        f.name != "_id" &&
+        !f.isSpatial &&
+        !f.isInstanceOf[lightdb.field.Field.FacetField[_]] =>
+        val mapping = mappingForField(f, config)
+        if mapping.asObj.value.nonEmpty then Some(f.name -> mapping) else None
+    }.flatten
+
+    val nestedLeafPropsFromNestedRoots = nestedPaths.flatMap { nestedPath =>
+      fields.find(_.name == nestedPath).toList.flatMap { f =>
+        nestedLeafMappingsFromDef(nestedPath, f.rw.definition, config)
+      }
+    }
+
+    // Merge discovered nested leaf mappings. Explicit indexed subfield mappings win.
+    val nestedLeafProps = (nestedLeafPropsFromNestedRoots ++ nestedLeafPropsFromIndexedFields)
+      .foldLeft(Map.empty[String, Json]) { case (acc, (name, mapping)) => acc.updated(name, mapping) }
+      .toList
+      .sortBy(_._1)
+
     // Index sorting requires sort fields to be present in the mapping at index creation time.
     // In join-domain indices, the join-parent's model may not declare child-only fields (ex: EntityRecord fields),
     // but users still may want to index-sort on them. Support this by injecting minimal mappings for configured
@@ -179,16 +208,17 @@ object OpenSearchTemplates {
       }
     }
 
-    val nestedProps = nestedPathMappings(nestedPaths)
+    val nestedProps = nestedPathMappings(nestedPaths, nestedLeafProps)
     val baseMap = (baseProps ++ joinProps ++ nestedProps ++ props0).toMap
     val props = baseProps ++ joinProps ++ nestedProps ++ props0 ++ injectedSortProps(baseMap)
     obj(props: _*)
   }
 
-  private def nestedPathMappings(paths: List[String]): List[(String, Json)] = {
+  private def nestedPathMappings(paths: List[String], fieldMappings: List[(String, Json)]): List[(String, Json)] = {
     final class Node {
       var isNested: Boolean = false
       val children = scala.collection.mutable.Map.empty[String, Node]
+      val leafMappings = scala.collection.mutable.Map.empty[String, Json]
     }
 
     val root = new Node
@@ -200,6 +230,21 @@ object OpenSearchTemplates {
           node = node.children.getOrElseUpdate(segment, new Node)
         }
         node.isNested = true
+      }
+    }
+
+    fieldMappings.foreach { case (rawFieldName, mapping) =>
+      val segments = rawFieldName.split("\\.").toList.map(_.trim).filter(_.nonEmpty)
+      if segments.nonEmpty then {
+        var node = root
+        segments.dropRight(1).foreach { segment =>
+          node = node.children.getOrElseUpdate(segment, new Node)
+        }
+        val leaf = segments.last
+        // Do not overwrite an existing object/nested node at the same key.
+        if !node.children.contains(leaf) then {
+          node.leafMappings.update(leaf, mapping)
+        }
       }
     }
 
@@ -218,10 +263,12 @@ object OpenSearchTemplates {
       val children = node.children.toList.sortBy(_._1).map {
         case (name, child) => name -> toJson(child)
       }
-      if children.isEmpty then {
+      val leaves = node.leafMappings.toList.sortBy(_._1)
+      val props = children ++ leaves
+      if props.isEmpty then {
         base
       } else {
-        obj((base.asObj.value.toSeq :+ ("properties" -> obj(children: _*))): _*)
+        obj((base.asObj.value.toSeq :+ ("properties" -> obj(props: _*))): _*)
       }
     }
 
@@ -296,6 +343,58 @@ object OpenSearchTemplates {
     case DefType.Obj(_, _) | DefType.Poly(_, _) => obj("type" -> str("object"), "dynamic" -> bool(true))
     case DefType.Json => obj("type" -> str("keyword"))
     case _ => obj()
+  }
+
+  private def nestedLeafMappingsFromDef(path: String, definition: DefType, config: OpenSearchConfig): List[(String, Json)] = {
+    def recurse(prefix: String, t: DefType): List[(String, Json)] = t match {
+      case DefType.Opt(inner) =>
+        recurse(prefix, inner)
+      case DefType.Arr(inner) =>
+        inner match {
+          case DefType.Obj(map, _) =>
+            map.toList.flatMap { case (name, dt) => recurse(s"$prefix.$name", dt) }
+          case other =>
+            val mapping = nestedScalarMapping(other, config)
+            if mapping.asObj.value.nonEmpty then List(prefix -> mapping) else Nil
+        }
+      case DefType.Obj(map, _) =>
+        map.toList.flatMap { case (name, dt) => recurse(s"$prefix.$name", dt) }
+      case other =>
+        val mapping = nestedScalarMapping(other, config)
+        if mapping.asObj.value.nonEmpty then List(prefix -> mapping) else Nil
+    }
+
+    recurse(path, definition)
+  }
+
+  private def nestedScalarMapping(d: DefType, config: OpenSearchConfig): Json = d match {
+    case DefType.Str | DefType.Enum(_, _) =>
+      val keyword = if config.keywordNormalize then {
+        obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))
+      } else {
+        obj("type" -> str("keyword"))
+      }
+      obj(
+        "type" -> str("text"),
+        "analyzer" -> str("standard"),
+        "fields" -> obj("keyword" -> keyword)
+      )
+    case DefType.Bool =>
+      obj("type" -> str("boolean"))
+    case DefType.Int =>
+      obj("type" -> str("long"))
+    case DefType.Dec =>
+      obj("type" -> str("double"))
+    case DefType.Opt(inner) =>
+      nestedScalarMapping(inner, config)
+    case DefType.Arr(inner) =>
+      nestedScalarMapping(inner, config)
+    case DefType.Obj(_, _) | DefType.Poly(_, _) =>
+      obj("type" -> str("object"), "dynamic" -> bool(true))
+    case DefType.Json =>
+      obj("type" -> str("keyword"))
+    case _ =>
+      obj()
   }
 
   /**

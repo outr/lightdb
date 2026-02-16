@@ -9,7 +9,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.17.0"
+ThisBuild / version := "4.18.0-SNAPSHOT"
 ThisBuild / scalaVersion := "3.8.1"
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 
@@ -59,13 +59,13 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.14.0"
 
-val rapidVersion: String = "2.4.0"
+val rapidVersion: String = "2.5.0"
 
 val profigVersion: String = "3.4.18"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "0.12.1"
+val spiceVersion: String = "0.12.2-SNAPSHOT"
 
 val spatial4JVersion: String = "0.8"
 
