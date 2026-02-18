@@ -79,7 +79,7 @@ val mapdbVersion: String = "3.1.0"
 
 val lmdbVersion: String = "0.9.2"
 
-val jedisVersion: String = "7.2.1"
+val jedisVersion: String = "7.3.0"
 
 val fabricVersion: String = "1.19.0"
 
