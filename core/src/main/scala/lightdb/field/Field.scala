@@ -127,7 +127,8 @@ object Field {
                                                  get: FieldGetter[Doc, V],
                                                  stored: Boolean,
                                                  path: String,
-                                                 access: A)(implicit getRW: => RW[V]): NestedIndex[Doc, V] { type Access = A } = new Field[Doc, V](
+                                                 access: A,
+                                                 indexParentValue: Boolean)(implicit getRW: => RW[V]): NestedIndex[Doc, V] { type Access = A } = new Field[Doc, V](
     name = name,
     get = get,
     getRW = () => getRW,
@@ -137,6 +138,7 @@ object Field {
     override type Access = A
     override val nestedPath: String = path
     override val nestedAccess: A = access
+    override val indexParent: Boolean = indexParentValue
     override def toString: String = s"NestedIndex(name = ${this.name}, path = $path)"
   }
 
@@ -200,6 +202,7 @@ object Field {
     type Access
     def nestedPath: String
     def nestedAccess: Access
+    def indexParent: Boolean
     /**
      * Builds a nested filter using the typed accessors produced when the nested field was declared.
      *

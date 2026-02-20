@@ -23,6 +23,8 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   @volatile private var keepAlive = true
   private val throwable = new AtomicReference[Throwable](null)
   private val finished = new AtomicInteger(0)
+  private val minChunkSize = math.max(1, chunkSize / 4)
+  private val maxChunkSize = math.max(chunkSize, chunkSize * 4)
 
   private val active = (0 until activeThreads).map { index =>
     recursivelyProcess.handleError { t =>
@@ -46,8 +48,22 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override def get(id: Id[Doc]): Task[Option[Option[Doc]]] = Task.pure(None)
 
+  /**
+   * Adapt chunk size to queue depth so bursty writers flush larger batches,
+   * while light traffic still gets low-latency small flushes.
+   */
+  private def adaptiveChunkSize(): Int = {
+    val qSize = queue.size
+    if (qSize <= 0) {
+      chunkSize
+    } else {
+      val perThreadBacklog = math.max(1, qSize / math.max(1, activeThreads))
+      math.max(minChunkSize, math.min(maxChunkSize, math.max(chunkSize, perThreadBacklog)))
+    }
+  }
+
   private def recursivelyProcess: Task[Unit] = Task.defer {
-    val chunk = drain(chunkSize)
+    val chunk = drain(adaptiveChunkSize())
     if ((chunk.isEmpty && !keepAlive) || throwable.get() != null) {
       Task.unit
     } else {
@@ -62,7 +78,7 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override def flush: Task[Unit] = Task.defer {
     failIfError.next {
-      val chunk = drain(chunkSize)
+      val chunk = drain(adaptiveChunkSize())
       if (chunk.isEmpty) Task.unit
       else flushOps(chunk).next(flush)
     }
