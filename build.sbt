@@ -9,7 +9,7 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.18.0-SNAPSHOT"
+ThisBuild / version := "4.18.0"
 ThisBuild / scalaVersion := "3.8.1"
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 
@@ -65,7 +65,7 @@ val profigVersion: String = "3.4.18"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "0.12.2-SNAPSHOT"
+val spiceVersion: String = "0.12.2"
 
 val spatial4JVersion: String = "0.8"
 
