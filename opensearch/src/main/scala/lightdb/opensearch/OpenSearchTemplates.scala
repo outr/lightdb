@@ -106,7 +106,7 @@ object OpenSearchTemplates {
                                                                             fields: List[Field[Doc, _]],
                                                                             config: OpenSearchConfig,
                                                                             storeName: String): Json = {
-    val nestedPaths = model.nestedPaths.toList.sorted
+    val nestedPaths = effectiveNestedPaths(model, fields).toList.sorted
     def isMappedByNestedPath(fieldName: String): Boolean =
       nestedPaths.exists(path => fieldName == path || fieldName.startsWith(s"$path."))
 
@@ -212,6 +212,38 @@ object OpenSearchTemplates {
     val baseMap = (baseProps ++ joinProps ++ nestedProps ++ props0).toMap
     val props = baseProps ++ joinProps ++ nestedProps ++ props0 ++ injectedSortProps(baseMap)
     obj(props: _*)
+  }
+
+  private def effectiveNestedPaths[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
+                                                                                       fields: List[Field[Doc, _]]): Set[String] = {
+    val declared = model.nestedPaths
+    val inferred = declared.flatMap { rootPath =>
+      fields.find(_.name == rootPath).toList.flatMap { rootField =>
+        inferNestedDescendantPaths(rootPath, rootField.rw.definition) - rootPath
+      }
+    }
+    declared ++ inferred
+  }
+
+  private def inferNestedDescendantPaths(path: String, definition: DefType): Set[String] = definition match {
+    case DefType.Opt(inner) =>
+      inferNestedDescendantPaths(path, inner)
+    case DefType.Arr(inner) =>
+      inner match {
+        case DefType.Obj(map, _) =>
+          val descendants = map.toList.flatMap { case (name, dt) =>
+            inferNestedDescendantPaths(s"$path.$name", dt)
+          }.toSet
+          descendants + path
+        case _ =>
+          Set.empty
+      }
+    case DefType.Obj(map, _) =>
+      map.toList.flatMap { case (name, dt) =>
+        inferNestedDescendantPaths(s"$path.$name", dt)
+      }.toSet
+    case _ =>
+      Set.empty
   }
 
   private def nestedPathMappings(paths: List[String], fieldMappings: List[(String, Json)]): List[(String, Json)] = {

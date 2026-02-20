@@ -39,6 +39,37 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   private def hasModelField(fieldName: String): Boolean =
     model.fields.exists(_.name == fieldName)
 
+  private lazy val effectiveNestedPaths: Set[String] = {
+    val declared = model.nestedPaths
+    val inferred = declared.flatMap { rootPath =>
+      model.fields.find(_.name == rootPath).toList.flatMap { rootField =>
+        inferNestedDescendantPaths(rootPath, rootField.rw.definition) - rootPath
+      }
+    }
+    declared ++ inferred
+  }
+
+  private def inferNestedDescendantPaths(path: String, definition: DefType): Set[String] = definition match {
+    case DefType.Opt(inner) =>
+      inferNestedDescendantPaths(path, inner)
+    case DefType.Arr(inner) =>
+      inner match {
+        case DefType.Obj(map, _) =>
+          val descendants = map.toList.flatMap { case (name, dt) =>
+            inferNestedDescendantPaths(s"$path.$name", dt)
+          }.toSet
+          descendants + path
+        case _ =>
+          Set.empty
+      }
+    case DefType.Obj(map, _) =>
+      map.toList.flatMap { case (name, dt) =>
+        inferNestedDescendantPaths(s"$path.$name", dt)
+      }.toSet
+    case _ =>
+      Set.empty
+  }
+
   def filterToDsl(filter: Filter[Doc]): Json = filter2Dsl(filter)
 
   def sortsToDsl(sorts: List[Sort]): List[Json] = sorts2Dsl(sorts)
@@ -119,15 +150,14 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case _: Filter.MatchNone[Doc] =>
         obj("match_none" -> obj())
       case f: Filter.Nested[Doc] =>
-        if !model.nestedPaths.contains(f.path) then {
+        if !effectiveNestedPaths.contains(f.path) then {
           throw new IllegalArgumentException(
             s"Nested path '${f.path}' is not declared on model ${model.modelName}. " +
               s"Declare it via nestedPath(\"${f.path}\") in the model."
           )
         }
         val nestedFilter = rewriteFilterFieldsForNestedPath(f.path, f.filter)
-        val nestedQuery = filter2Dsl(nestedFilter)
-        OpenSearchDsl.nested(path = f.path, query = nestedQuery)
+        nestedFilterToDsl(f.path, nestedFilter)
       case f: Filter.ChildConstraints[Doc @unchecked] =>
         val relation = f.relation
         val childModel: f.ChildModel = relation.childStore.model
@@ -352,6 +382,41 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val f = filter.asInstanceOf[Filter.DrillDownFacetFilter[Doc]]
         drillDownFacetFilter(f)
     }
+  }
+
+  /**
+   * OpenSearch evaluates `must_not` inside a nested query per nested document, which can differ from LightDB's
+   * collective "none of the nested children match this forbidden predicate" expectation.
+   *
+   * When a nested filter contains `must_not` clauses, rewrite to:
+   * - must: nested(path, positive-clauses)
+   * - must_not: nested(path, each forbidden-clause)
+   *
+   * This preserves expected nested-must-not behavior for nested-in-nested specs.
+   */
+  private def nestedFilterToDsl(path: String, filter: Filter[Doc]): Json = filter match {
+    case m: Filter.Multi[Doc] =>
+      val forbidden = m.filters.filter(_.condition == lightdb.filter.Condition.MustNot)
+      if forbidden.isEmpty then {
+        OpenSearchDsl.nested(path = path, query = filter2Dsl(filter))
+      } else {
+        val positive = m.filters.filterNot(_.condition == lightdb.filter.Condition.MustNot)
+        val mustQueries = if positive.nonEmpty then {
+          val positiveQuery = filter2Dsl(m.copy(filters = positive))
+          List(OpenSearchDsl.nested(path = path, query = positiveQuery))
+        } else {
+          List(OpenSearchDsl.matchAll())
+        }
+        val forbiddenQueries = forbidden.map { clause =>
+          OpenSearchDsl.nested(path = path, query = filter2Dsl(clause.filter))
+        }
+        OpenSearchDsl.boolQuery(
+          must = mustQueries,
+          mustNot = forbiddenQueries
+        )
+      }
+    case _ =>
+      OpenSearchDsl.nested(path = path, query = filter2Dsl(filter))
   }
 
   private def rewriteFilterFieldsForNestedPath(path: String, filter: Filter[Doc]): Filter[Doc] = {

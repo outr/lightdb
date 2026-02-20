@@ -68,6 +68,13 @@ object LuceneBlockJoinIndexer {
                                                                    storeAll: Boolean,
                                                                    add: LuceneField => Unit): Unit = {
     fields.foreach { field =>
+      val skipParentField = field match {
+        case nested: Field.NestedIndex[?, ?] => !nested.indexParent
+        case _ => false
+      }
+      if skipParentField then {
+        ()
+      } else {
       val json = field.getJson(doc, state)
       val fieldName = mapName(field.name)
       val sortFieldName = s"${fieldName}Sort"
@@ -136,6 +143,7 @@ object LuceneBlockJoinIndexer {
               }
             case _ =>
           }
+      }
       }
     }
   }

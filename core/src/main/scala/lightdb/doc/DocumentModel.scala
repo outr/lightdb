@@ -175,7 +175,7 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
        * }
        * }}}
        */
-      def nested[Nested: RW, A](get: Doc => List[Nested])(build: NestedIndexBuilder[Nested] => A)(implicit name: Name): Field.NestedIndex[Doc, List[Nested]] { type Access = A } = {
+      def nested[Nested: RW, A](get: Doc => List[Nested], indexParent: Boolean)(build: NestedIndexBuilder[Nested] => A)(implicit name: Name): Field.NestedIndex[Doc, List[Nested]] { type Access = A } = {
         val path = nestedPath(name.value)
         val access: A = build(new NestedIndexBuilder[Nested](path, get))
         add[List[Nested], Field.NestedIndex[Doc, List[Nested]] { type Access = A }](
@@ -184,10 +184,14 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
             get = FieldGetter.func(get),
             stored = true,
             path = path,
-            access = access
+            access = access,
+            indexParentValue = indexParent
           )
         )
       }
+
+      def nested[Nested: RW, A](get: Doc => List[Nested])(build: NestedIndexBuilder[Nested] => A)(implicit name: Name): Field.NestedIndex[Doc, List[Nested]] { type Access = A } =
+        nested(get, indexParent = true)(build)
 
       /**
        * Declares a nested indexed list field using macro-derived accessors from an `Access` trait.
@@ -207,7 +211,7 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
        * tx.query.filter(_.attrs.nested(a => a.key === "tract-a" && a.percent >= 0.5))
        * }}}
        */
-      inline def nested[A](using ne: NestedElemOf[A], name: Name)(get: Doc => List[ne.Elem]): N[A] = {
+      inline def nested[A](using ne: NestedElemOf[A], name: Name)(get: Doc => List[ne.Elem], indexParent: Boolean = true): N[A] = {
         val path = nestedPath(name.value)
         val access: A = NestedAccessMacros.deriveAccess[A](path)
         val getter: FieldGetter[Doc, List[ne.Elem]] = FieldGetter.func(get)
@@ -217,7 +221,8 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
             get = getter,
             stored = true,
             path = path,
-            access = access
+            access = access,
+            indexParentValue = indexParent
           )(using ne.rw)
         ).asInstanceOf[N[A]]
       }

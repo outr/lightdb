@@ -499,6 +499,16 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     if fs == LuceneField.Store.NO then {
       scribe.info(s"*** ${store.name}.${field.name}")
     }
+    val shouldSkipParentNestedIndexing =
+      hasNestedBlockDocs && (field match {
+        case nested: Field.NestedIndex[?, ?] => !nested.indexParent
+        case _ => false
+      })
+    if shouldSkipParentNestedIndexing then {
+      // Nested containers are indexed via child block docs. When indexParent is disabled,
+      // skip indexing the parent container as raw JSON StringField terms.
+      Nil
+    } else {
     val json = field.getJson(doc, state)
     var fields = List.empty[LuceneField]
     def add(field: LuceneField): Unit = fields = field :: fields
@@ -568,6 +578,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
           case _ => // Ignore
         }
         fields
+    }
     }
   }
 

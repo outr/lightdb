@@ -10,6 +10,7 @@ import lightdb.facet.FacetValue
 import lightdb.opensearch.client.OpenSearchConfig
 import lightdb.spatial.Geo
 
+import scala.collection.mutable
 import scala.util.Try
 
 /**
@@ -26,6 +27,15 @@ object OpenSearchDocEncoding {
   private val RootMarker: String = "$ROOT$"
   private val MissingMarker: String = "$MISSING$"
 
+  private def shouldIndexParentField[Doc <: Document[Doc]](field: Field[Doc, _]): Boolean = field match {
+    case _: Field.NestedIndex[?, ?] =>
+      // OpenSearch nested queries execute against nested objects embedded in the parent document.
+      // Unlike Lucene block-join indexing, OpenSearch has no separate nested-child storage path,
+      // so we must always include nested fields in parent _source regardless of indexParent.
+      true
+    case _ => true
+  }
+
   /**
    * Build the OpenSearch `_source` for a doc and compute routing (join-domain aware).
    */
@@ -38,6 +48,7 @@ object OpenSearchDocEncoding {
 
     val pairs = fields.iterator
       .filterNot(_.name == "_id")
+      .filter(f => shouldIndexParentField(f))
       .map { f =>
         val j = f.getJson(doc, state)
         val normalized = escapeReservedIds(j)
@@ -79,7 +90,9 @@ object OpenSearchDocEncoding {
       base
     }
 
-    val source = augmentFacetTokens(augmentSpatialCenters(withJoin, fields), doc, fields, state, config)
+    val source = normalizeDottedFieldNames(
+      augmentFacetTokens(augmentSpatialCenters(withJoin, fields), doc, fields, state, config)
+    )
 
     val routing = if config.joinDomain.nonEmpty then {
       config.joinRole match {
@@ -206,6 +219,76 @@ object OpenSearchDocEncoding {
         case _ => source
       }
     }
+  }
+
+  /**
+   * OpenSearch treats dotted field names as object paths.
+   *
+   * When `_source` contains both a concrete object/array root (for example `outers`) and a dotted key under the same
+   * root (for example `outers.children.code`), bulk indexing can fail with mapper parsing exceptions.
+   *
+   * Normalize top-level dotted keys into nested object structures and skip keys that conflict with an existing
+   * non-object container (for example arrays).
+   */
+  private def normalizeDottedFieldNames(source: Json): Json = source match {
+    case o: Obj =>
+      val base = mutable.LinkedHashMap.empty[String, Json]
+      val dotted = mutable.ListBuffer.empty[(String, Json)]
+      o.value.foreach { case (k, v) =>
+        if k.contains(".") then dotted += ((k, v)) else base.update(k, v)
+      }
+
+      def splitSegments(key: String): List[String] =
+        key.split("\\.").toList.map(_.trim).filter(_.nonEmpty)
+
+      def insertPath(map: mutable.LinkedHashMap[String, Json], segments: List[String], value: Json): Boolean =
+        segments match {
+          case Nil =>
+            false
+          case key :: Nil =>
+            map.get(key) match {
+              case None =>
+                map.update(key, value)
+                true
+              case Some(Null) =>
+                map.update(key, value)
+                true
+              case Some(_: Obj) =>
+                false
+              case Some(_) =>
+                // Preserve explicit field values if both dotted and non-dotted names target the same key.
+                false
+            }
+          case head :: tail =>
+            map.get(head) match {
+              case None | Some(Null) =>
+                val child = mutable.LinkedHashMap.empty[String, Json]
+                val ok = insertPath(child, tail, value)
+                if ok then map.update(head, obj(child.toSeq: _*))
+                ok
+              case Some(existing: Obj) =>
+                val child = mutable.LinkedHashMap.empty[String, Json]
+                existing.value.foreach { case (k, v) => child.update(k, v) }
+                val ok = insertPath(child, tail, value)
+                if ok then map.update(head, obj(child.toSeq: _*))
+                ok
+              case Some(_: Arr) =>
+                // Cannot inject object-path children into an existing array node.
+                false
+              case Some(_) =>
+                false
+            }
+        }
+
+      dotted.foreach { case (rawKey, value) =>
+        val segments = splitSegments(rawKey)
+        if segments.nonEmpty then {
+          insertPath(base, segments, value)
+        }
+      }
+      obj(base.toSeq: _*)
+    case other =>
+      other
   }
 }
 
