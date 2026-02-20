@@ -181,12 +181,16 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       _ <- logger.info(s"Released Transaction for $name").when(Store.LogTransactions)
     yield ()
 
-    def releaseAll(): Task[Int] = Task {
+    def releaseAll(): Task[Int] = Task.defer {
       val list = set.iterator().asScala.toList
-      list.foreach { transaction =>
-        release(transaction)
+      if list.isEmpty then Task.pure(0)
+      else list.map(tx => release(tx).attempt).tasks.map { results =>
+        results.foreach {
+          case scala.util.Failure(t) => scribe.warn(s"Error releasing transaction during dispose of $name: ${t.getMessage}")
+          case _ =>
+        }
+        list.size
       }
-      list.size
     }
   }
 
@@ -228,7 +232,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     private val active = new AtomicInteger(0)
     private val lastUsed = new AtomicLong(0L)
     @volatile private var started = false
-    @volatile private var initialized = false
+    private val initStarted = new java.util.concurrent.atomic.AtomicBoolean(false)
+    private val initLatch = new java.util.concurrent.CountDownLatch(1)
     private val maxTransactions = math.max(1, maximumConcurrency)
     private val initialTransactions = math.min(math.max(1, defaultSharedTransactions), maxTransactions)
     private val mutex = new Semaphore(maxTransactions, true)
@@ -238,17 +243,17 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     private val timeoutMillis = timeout.toMillis
 
     def init(): Task[Unit] = Task.defer {
-      if initialized then Task.unit
-      else shared.synchronized {
-        if initialized then Task.unit
-        else {
-          initialized = true
-          List.fill(initialTransactions)(createTx()).tasks.flatMap { txs =>
-            Task {
-              txs.foreach(pool.offer)
-              total.set(txs.size)
-            }
+      if initStarted.compareAndSet(false, true) then {
+        List.fill(initialTransactions)(createTx()).tasks.flatMap { txs =>
+          Task {
+            txs.foreach(pool.offer)
+            total.set(txs.size)
+            initLatch.countDown()
           }
+        }
+      } else {
+        Task {
+          initLatch.await()
         }
       }
     }
@@ -298,7 +303,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       val nextPossibleTimeout: Long = if active.get() > 0 then {
         timeoutMillis
       } else {
-        (lastUsed.get() + timeoutMillis) - System.currentTimeMillis()
+        math.max(0L, (lastUsed.get() + timeoutMillis) - System.currentTimeMillis())
       }
       Task.sleep(nextPossibleTimeout.millis).next {
         if active.get() == 0 && lastUsed.get() < System.currentTimeMillis() - timeoutMillis then {
