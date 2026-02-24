@@ -609,12 +609,12 @@ case class OpenSearchClient(config: OpenSearchConfig) {
     }
   }
 
-  def deleteByQuery(index: String, query: Json, refresh: Option[String]): Task[Int] = {
+  def deleteByQuery(index: String, query: Json, refresh: Option[String], conflicts: Option[String] = None): Task[Int] = {
     val baseReq = client
       .post
       .header(Headers.`Content-Type`(ContentType.`application/json`))
       .modifyUrl { u =>
-        u.withPath(s"/$index/_delete_by_query").withParamOpt("refresh", refresh)
+        u.withPath(s"/$index/_delete_by_query").withParamOpt("refresh", refresh).withParamOpt("conflicts", conflicts)
       }
       .json(query)
     val syncReq = baseReq.modifyUrl(_.withParam("wait_for_completion", "true"))
