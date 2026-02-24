@@ -1093,7 +1093,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
           logger
             .debug(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} count=$deleted; starting deleteByQuery refresh=$refreshForDeleteByQuery (elapsedMs=$elapsedMs) ...")
             .next {
-              client.deleteByQuery(store.readIndexName, q, refresh = refreshForDeleteByQuery)
+              client.deleteByQuery(store.readIndexName, q, refresh = refreshForDeleteByQuery, conflicts = Some("proceed"))
             }
             .map { _ =>
               scribe.debug(s"[reindex-trace] OpenSearch truncate join-domain store=${store.name} index=${store.readIndexName} deleteByQuery done (elapsedMs=$elapsedMs).")
