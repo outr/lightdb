@@ -741,6 +741,44 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   override protected def _delete(id: Id[Doc]): Task[Boolean] =
     flushOps(Seq(WriteOp.Delete(id))).map(_ => true)
 
+  /**
+   * Delete a document by ID with explicit routing.
+   *
+   * This is necessary for join-domain child documents whose shard placement is determined by routing (the parent ID),
+   * not by the document's own `_id`. A routing-less delete targets shard(hash(_id)) which is typically the wrong shard,
+   * causing the delete to silently miss the document.
+   */
+  def deleteWithRouting(id: Id[Doc], routing: String): Task[Unit] = {
+    val op = OpenSearchBulkOp.delete(store.writeIndexName, id.value, routing = Some(routing))
+    val body = OpenSearchBulkRequest(List(op)).toBulkNdjson
+    wroteToIndex = true
+    client.bulkResponse(body, refresh = effectiveRefreshPolicy).flatMap { json =>
+      val errors = json.asObj.get("errors").exists(_.asBoolean)
+      if !errors then Task.unit
+      else {
+        val firstError = json.asObj
+          .get("items")
+          .map(_.asArr.value.toList)
+          .getOrElse(Nil)
+          .iterator
+          .flatMap(j => j.asObj.value.valuesIterator.flatMap(_.asObj.get("error")).toList)
+          .take(1)
+          .toList
+          .headOption
+        val msg = firstError.map(e => s" firstError=${JsonFormatter.Compact(e)}").getOrElse("")
+        // "not_found" from a delete is harmless — don't throw.
+        val isOnlyNotFound = json.asObj
+          .get("items")
+          .map(_.asArr.value.toList)
+          .getOrElse(Nil)
+          .flatMap(j => j.asObj.value.valuesIterator.flatMap(_.asObj.get("result")).toList)
+          .forall(r => r.asString == "not_found" || r.asString == "deleted")
+        if isOnlyNotFound then Task.unit
+        else Task.error(new RuntimeException(s"OpenSearch bulk delete with routing reported errors=true.$msg"))
+      }
+    }
+  }
+
   override protected def _exists(id: Id[Doc]): Task[Boolean] =
     _get(store.idField, id).map(_.nonEmpty)
 

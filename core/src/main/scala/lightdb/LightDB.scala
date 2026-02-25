@@ -93,7 +93,10 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   def reIndex(stores: List[Store[_, _]] = stores, progressManager: ProgressManager = ProgressManager.none): Task[Int] = if stores.nonEmpty then {
     val pms = progressManager.split(stores.length)
     stores.zip(pms).map {
-      case (store, pm) => store.reIndex(pm)
+      case (store, pm) => store.reIndex(pm).map { result =>
+        if !result then pm(Some(1.0), None) // Mark non-indexing stores as complete so they don't drag down progress
+        result
+      }
     }.tasksPar.map(_.count(identity))
   } else {
     Task.pure(0)
