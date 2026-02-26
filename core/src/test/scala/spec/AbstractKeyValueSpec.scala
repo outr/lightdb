@@ -15,6 +15,7 @@ import java.util.Comparator
 
 abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   val CreateRecords = 100_000
+  def truncateAfter: Boolean = true
 
   private val adam = User("Adam", 21, _id = User.id("adam"))
   private val brenda = User("Brenda", 11, _id = User.id("brenda"))
@@ -79,6 +80,18 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
   specName should {
     "initialize the database" in {
       db.init.succeed
+    }
+    "truncate the stores before inserting" in {
+      if truncateAfter then {
+        db.users.transaction { transaction =>
+          transaction.count.map(_ should be(0))
+        }
+      } else {
+        for
+          _ <- db.users.transaction(_.truncate)
+          _ <- db.addresses.transaction(_.truncate)
+        yield succeed
+      }
     }
     "verify the database is empty" in {
       db.users.transaction { transaction =>
@@ -173,14 +186,18 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
       }
     }
     "truncate the store again" in {
-      db.users.transaction { transaction =>
-        transaction.truncate.map(_ should be(CreateRecords + 24))
-      }
+      if truncateAfter then {
+        db.users.transaction { transaction =>
+          transaction.truncate.map(_ should be(CreateRecords + 24))
+        }
+      } else succeed
     }
     "truncate the addresses store" in {
-      db.addresses.transaction { transaction =>
-        transaction.truncate.map(_ should be(3))
-      }
+      if truncateAfter then {
+        db.addresses.transaction { transaction =>
+          transaction.truncate.map(_ should be(3))
+        }
+      } else succeed
     }
     "dispose the database" in {
       db.dispose.next(dispose()).succeed
