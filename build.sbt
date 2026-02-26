@@ -9,8 +9,11 @@ val developerURL: String = "https://matthicks.com"
 
 name := projectName
 ThisBuild / organization := org
-ThisBuild / version := "4.19.2"
+
+ThisBuild / version := "4.20.0-SNAPSHOT"
+
 ThisBuild / scalaVersion := "3.8.2"
+
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 
 publishMavenStyle := true
@@ -85,7 +88,7 @@ val fabricVersion: String = "1.19.0"
 
 val scribeVersion: String = "3.17.0"
 
-val luceneVersion: String = "10.3.2"
+val luceneVersion: String = "10.4.0"
 
 val hikariCPVersion: String = "7.0.2"
 
@@ -99,6 +102,12 @@ val h2Version: String = "2.4.240"
 
 val postgresqlVersion: String = "42.7.9"
 
+val googleSheetsVersion: String = "v4-rev20251110-2.0.0"
+
+val googleAuthVersion: String = "1.43.0"
+
+val googleHttpClientGsonVersion: String = "1.44.1"
+
 val chronicleMapVersion: String = "2026.1"
 
 val scalaTestVersion: String = "3.2.19"
@@ -106,7 +115,7 @@ val scalaTestVersion: String = "3.2.19"
 val testcontainersVersion: String = "2.0.3"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -303,6 +312,20 @@ lazy val chronicleMap = project.in(file("chronicleMap"))
 		Test / fork := true
 	)
 
+lazy val googleSheets = project.in(file("googleSheets"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-google-sheets",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"com.google.apis" % "google-api-services-sheets" % googleSheetsVersion,
+			"com.google.auth" % "google-auth-library-oauth2-http" % googleAuthVersion,
+			"com.google.http-client" % "google-http-client-gson" % googleHttpClientGsonVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val redis = project.in(file("redis"))
 	.dependsOn(core.jvm, core.jvm % "test->test")
 	.settings(
@@ -316,7 +339,7 @@ lazy val redis = project.in(file("redis"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
