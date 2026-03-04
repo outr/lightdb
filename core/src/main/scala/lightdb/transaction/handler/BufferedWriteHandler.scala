@@ -23,7 +23,17 @@ class BufferedWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override def write(op: WriteOp[Doc]): Task[Unit] = Task.defer {
     val buffer = bufferRef.get()
     val previous = buffer.put(op.id, op)
-    val overflow = if (previous == null) size.incrementAndGet() > maxBufferSize else size.get() > maxBufferSize
+    // If the buffer was swapped by a concurrent flush between get() and put(),
+    // the item is in the old buffer which may or may not include it in its iteration.
+    // Ensure the item is also in the current (new) buffer for safety.
+    val current = bufferRef.get()
+    val isNew = if (current ne buffer) {
+      // Buffer was swapped — put into the new active buffer
+      current.put(op.id, op) == null
+    } else {
+      previous == null
+    }
+    val overflow = if (isNew) size.incrementAndGet() > maxBufferSize else size.get() > maxBufferSize
     if (overflow) {
       StoreMetrics.recordBufferedOverflow()
       flush
@@ -41,8 +51,8 @@ class BufferedWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override def flush: Task[Unit] = Task.defer {
     val buffer = bufferRef.getAndSet(new ConcurrentHashMap[Id[Doc], WriteOp[Doc]]())
-    val count = size.getAndSet(0)
-    if (count == 0) Task.unit
+    size.set(0)
+    if (buffer.isEmpty) Task.unit
     else {
       val values = ArraySeq.from(buffer.values().asScala)
       StoreMetrics.recordBufferedFlush(values.size)
