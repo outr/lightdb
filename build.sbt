@@ -10,7 +10,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 
-ThisBuild / version := "4.23.0"
+ThisBuild / version := "4.24.0"
 
 ThisBuild / scalaVersion := "3.8.2"
 
@@ -62,13 +62,13 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val collectionCompatVersion: String = "2.14.0"
 
-val rapidVersion: String = "2.7.1"
+val rapidVersion: String = "2.8.0"
 
 val profigVersion: String = "3.4.18"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "1.1.0"
+val spiceVersion: String = "1.2.1"
 
 val spatial4JVersion: String = "0.8"
 
@@ -135,7 +135,6 @@ lazy val core = crossProject(JVMPlatform)
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,
 			"com.outr" %%% "rapid-core" % rapidVersion,
-			"com.outr" %%% "rapid-scribe" % rapidVersion,
 			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
 			"com.outr" %%% "rapid-test" % rapidVersion % Test
 		)
