@@ -39,6 +39,32 @@ object H2SpatialFunctions {
     }
   }
 
+  /**
+   * Returns 1 if any geometry in geosJson spatially contains the geometry in otherJson, 0 otherwise.
+   */
+  def spatialContains(geosJson: String, otherJson: String): Int = {
+    if geosJson == null || otherJson == null then 0
+    else {
+      val geos = parseGeos(geosJson)
+      val other = parseGeos(otherJson)
+      val contains = geos.exists(g => other.exists(o => Spatial.relation(g, o) == lightdb.spatial.SpatialRelation.Contains))
+      if contains then 1 else 0
+    }
+  }
+
+  /**
+   * Returns 1 if any geometry in geosJson spatially intersects (is not disjoint with) the geometry in otherJson, 0 otherwise.
+   */
+  def spatialIntersects(geosJson: String, otherJson: String): Int = {
+    if geosJson == null || otherJson == null then 0
+    else {
+      val geos = parseGeos(geosJson)
+      val other = parseGeos(otherJson)
+      val intersects = geos.exists(g => other.exists(o => Spatial.overlap(g, o)))
+      if intersects then 1 else 0
+    }
+  }
+
   private def parseGeos(jsonStr: String): List[Geo] = {
     if jsonStr == null then Nil
     else {

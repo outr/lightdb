@@ -97,6 +97,12 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   override def distance(from: Point, radius: Distance): Filter[Doc] =
     Filter.Distance(name, from, radius)
 
+  override def spatialContains(geo: Geo): Filter[Doc] =
+    Filter.SpatialContains(name, geo)
+
+  override def spatialIntersects(geo: Geo): Filter[Doc] =
+    Filter.SpatialIntersects(name, geo)
+
   override def toString: String = s"Field(name = $name)"
 }
 

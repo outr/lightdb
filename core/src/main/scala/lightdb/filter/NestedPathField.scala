@@ -3,7 +3,7 @@ package lightdb.filter
 import fabric.rw.RW
 import lightdb.doc.Document
 import lightdb.distance.Distance
-import lightdb.spatial.Point
+import lightdb.spatial.{Geo, Point}
 
 final class NestedPathField[Doc <: Document[Doc], V](val fieldName: String)(implicit val rw: RW[V])
   extends FilterSupport[V, Doc, Filter[Doc]] {
@@ -61,6 +61,12 @@ final class NestedPathField[Doc <: Document[Doc], V](val fieldName: String)(impl
 
   override def distance(from: Point, radius: Distance): Filter[Doc] =
     Filter.Distance(fieldName, from, radius)
+
+  override def spatialContains(geo: Geo): Filter[Doc] =
+    Filter.SpatialContains(fieldName, geo)
+
+  override def spatialIntersects(geo: Geo): Filter[Doc] =
+    Filter.SpatialIntersects(fieldName, geo)
 
   override def range(from: Option[V],
                      to: Option[V],

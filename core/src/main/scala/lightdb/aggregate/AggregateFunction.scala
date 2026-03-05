@@ -52,4 +52,10 @@ case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Fi
 
   override def distance(from: Point, radius: Distance): AggregateFilter[Doc] =
     AggregateFilter.Distance(name, this.asInstanceOf[Field[Doc, Point]], from, radius)
+
+  override def spatialContains(geo: Geo): AggregateFilter[Doc] =
+    throw new UnsupportedOperationException("SpatialContains is not supported on aggregate functions")
+
+  override def spatialIntersects(geo: Geo): AggregateFilter[Doc] =
+    throw new UnsupportedOperationException("SpatialIntersects is not supported on aggregate functions")
 }

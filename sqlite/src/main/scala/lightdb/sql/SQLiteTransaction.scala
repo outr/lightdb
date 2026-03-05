@@ -128,6 +128,12 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
     SQLPart(s"DISTANCE_LESS_THAN(${f.fieldName}Distance, ?)", f.radius.valueInMeters.json)
 
+  override protected def spatialContainsFilter(f: Filter.SpatialContains[Doc]): SQLPart =
+    SQLPart(s"SPATIAL_CONTAINS(${f.fieldName}, ?) = 1", f.geo.toJson)
+
+  override protected def spatialIntersectsFilter(f: Filter.SpatialIntersects[Doc]): SQLPart =
+    SQLPart(s"SPATIAL_INTERSECTS(${f.fieldName}, ?) = 1", f.geo.toJson)
+
   override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = direction match {
     case SortDirection.Ascending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_ASCENDING")
     case SortDirection.Descending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_DESCENDING")

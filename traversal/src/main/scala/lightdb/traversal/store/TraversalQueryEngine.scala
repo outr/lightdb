@@ -3513,6 +3513,22 @@ object TraversalQueryEngine {
           }
       }
       geos.exists(g => Spatial.distance(g, f.from).valueInMeters <= f.radius.valueInMeters)
+    case f: Filter.SpatialContains[Doc] =>
+      val field = model.fieldByName[Any](f.fieldName).asInstanceOf[Field[Doc, Any]]
+      val v = field.get(doc, field, state)
+      val geos: List[Geo] = iterable(v) match {
+        case Some(values) => values.toList.collect { case g: Geo => g }
+        case None => v match { case g: Geo => List(g); case _ => Nil }
+      }
+      geos.exists(g => Spatial.relation(g, f.geo) == lightdb.spatial.SpatialRelation.Contains)
+    case f: Filter.SpatialIntersects[Doc] =>
+      val field = model.fieldByName[Any](f.fieldName).asInstanceOf[Field[Doc, Any]]
+      val v = field.get(doc, field, state)
+      val geos: List[Geo] = iterable(v) match {
+        case Some(values) => values.toList.collect { case g: Geo => g }
+        case None => v match { case g: Geo => List(g); case _ => Nil }
+      }
+      geos.exists(g => Spatial.overlap(g, f.geo))
     case f: Filter.ExistsChild[Doc @unchecked] =>
       // In a normal LightDB execution path, FilterPlanner.resolve will have already resolved ExistsChild.
       // If it reaches here, treat it as unsupported to avoid silent wrong answers.
@@ -3545,6 +3561,8 @@ object TraversalQueryEngine {
       case f: Filter.Contains[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Exact[Doc, _] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Distance[Doc] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialContains[Doc] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialIntersects[Doc] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.DrillDownFacetFilter[Doc] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Multi[Doc] =>
         f.copy(filters = f.filters.map(clause => clause.copy(filter = rewriteFilterFieldsForNestedPath(path, clause.filter))))

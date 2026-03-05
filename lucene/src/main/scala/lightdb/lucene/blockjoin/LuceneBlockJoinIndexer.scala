@@ -149,16 +149,17 @@ object LuceneBlockJoinIndexer {
   }
 
   private def createGeoFields(fieldName: String, json: Json, add: LuceneField => Unit): Unit = {
+    val shapeFieldName = s"${fieldName}__shape"
     def indexPoint(p: Point): Unit =
-      LatLonShape.createIndexableFields(fieldName, p.latitude, p.longitude).foreach(add)
+      LatLonShape.createIndexableFields(shapeFieldName, p.latitude, p.longitude).foreach(add)
     def indexLine(l: Line): Unit = {
       val line = new org.apache.lucene.geo.Line(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray)
-      LatLonShape.createIndexableFields(fieldName, line).foreach(add)
+      LatLonShape.createIndexableFields(shapeFieldName, line).foreach(add)
     }
     def indexPolygon(p: Polygon): Unit = {
       def convert(p: Polygon): org.apache.lucene.geo.Polygon =
         new org.apache.lucene.geo.Polygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray)
-      LatLonShape.createIndexableFields(fieldName, convert(p)).foreach(add)
+      LatLonShape.createIndexableFields(shapeFieldName, convert(p)).foreach(add)
     }
     def indexGeo(geo: Geo): Unit = geo match {
       case p: Point => indexPoint(p)

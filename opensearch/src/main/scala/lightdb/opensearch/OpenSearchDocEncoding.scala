@@ -116,7 +116,8 @@ object OpenSearchDocEncoding {
         case (k, _) =>
           k == OpenSearchTemplates.InternalIdField ||
             k == config.joinFieldName ||
-            k.endsWith(OpenSearchTemplates.SpatialCenterSuffix)
+            k.endsWith(OpenSearchTemplates.SpatialCenterSuffix) ||
+            k.endsWith(OpenSearchTemplates.SpatialShapeSuffix)
       }: _*)
       unescapeReservedIds(cleaned)
     case other => unescapeReservedIds(other)
@@ -154,8 +155,7 @@ object OpenSearchDocEncoding {
 
   private def augmentSpatialCenters(source: Json, fields: List[Field[_, _]]): Json = source match {
     case o: Obj =>
-      val extras = fields.collect {
-        case f if f.isSpatial && f.name != "_id" =>
+      val extras = fields.filter(f => f.isSpatial && f.name != "_id").flatMap { f =>
           val fieldName = f.name
           val centerFieldName = s"$fieldName${OpenSearchTemplates.SpatialCenterSuffix}"
           val geos: List[Geo] = o.value.get(fieldName) match {
@@ -172,7 +172,13 @@ object OpenSearchDocEncoding {
           } else {
             geos.map(g => geoPoint(g.center.latitude, g.center.longitude))
           }
-          (centerFieldName, arr(centers: _*))
+          val shapeFieldName = s"$fieldName${OpenSearchTemplates.SpatialShapeSuffix}"
+          val shapeJson: Option[(String, Json)] = if geos.isEmpty then None else {
+            val shapeValue = if geos.size == 1 then geos.head.toJson
+            else fabric.obj("type" -> fabric.str("geometrycollection"), "geometries" -> fabric.arr(geos.map(_.toJson): _*))
+            Some((shapeFieldName, shapeValue))
+          }
+          List((centerFieldName, arr(centers: _*))) ++ shapeJson.toList
       }
       obj((o.value.toSeq ++ extras): _*)
     case other => other
