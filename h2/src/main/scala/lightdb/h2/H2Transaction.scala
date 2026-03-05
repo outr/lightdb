@@ -110,6 +110,12 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
     SQLPart(s"GEO_DISTANCE_MIN(${f.fieldName}, ?) <= ?", f.from.json, f.radius.valueInMeters.json)
 
+  override protected def spatialContainsFilter(f: Filter.SpatialContains[Doc]): SQLPart =
+    SQLPart(s"GEO_SPATIAL_CONTAINS(${f.fieldName}, ?) = 1", f.geo.toJson)
+
+  override protected def spatialIntersectsFilter(f: Filter.SpatialIntersects[Doc]): SQLPart =
+    SQLPart(s"GEO_SPATIAL_INTERSECTS(${f.fieldName}, ?) = 1", f.geo.toJson)
+
   override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
     val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
     SQLPart.Fragment(s"${field.name}DistanceMin $dir")

@@ -52,6 +52,9 @@ object OpenSearchDsl {
   def regexp(field: String, value: String): Json =
     obj("regexp" -> obj(field -> obj("value" -> str(value))))
 
+  def geoShape(field: String, shape: Json, relation: String): Json =
+    obj("geo_shape" -> obj(field -> obj("shape" -> shape, "relation" -> str(relation))))
+
   def geoDistance(field: String, lat: Double, lon: Double, distance: String): Json =
     obj("geo_distance" -> obj(
       "distance" -> str(distance),

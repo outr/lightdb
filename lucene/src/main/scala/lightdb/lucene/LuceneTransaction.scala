@@ -701,20 +701,21 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                               add: LuceneField => Unit): Unit = {
     field.className match {
       case _ =>
+        val shapeFieldName = s"${field.name}__shape"
         def indexPoint(p: Point): Unit = try {
-          LatLonShape.createIndexableFields(field.name, p.latitude, p.longitude)
+          LatLonShape.createIndexableFields(shapeFieldName, p.latitude, p.longitude).foreach(add)
         } catch {
-          case t: Throwable => throw new RuntimeException(s"Failed to add LatLonPoint.createIndexableFields(${field.name}, ${p.latitude}, ${p.longitude}): ${JsonFormatter.Default(json)}", t)
+          case t: Throwable => throw new RuntimeException(s"Failed to add LatLonShape.createIndexableFields(${field.name}, ${p.latitude}, ${p.longitude}): ${JsonFormatter.Default(json)}", t)
         }
         def indexLine(l: Line): Unit = {
           val line = new LuceneLine(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray)
-          LatLonShape.createIndexableFields(field.name, line)
+          LatLonShape.createIndexableFields(shapeFieldName, line).foreach(add)
         }
         def indexPolygon(p: Polygon): Unit = {
           def convert(p: Polygon): LucenePolygon =
             new LucenePolygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray)
           val polygon = convert(p)
-          LatLonShape.createIndexableFields(field.name, polygon)
+          LatLonShape.createIndexableFields(shapeFieldName, polygon).foreach(add)
         }
         def indexGeo(geo: Geo): Unit = geo match {
           case p: Point => indexPoint(p)

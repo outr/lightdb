@@ -10,11 +10,13 @@ import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter, NestedQuerySupport}
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
-import lightdb.spatial.{DistanceAndDoc, Spatial}
+import lightdb.spatial.{DistanceAndDoc, Geo, Line, MultiLine, MultiPolygon, Point, Polygon, Spatial}
 import lightdb.store.{Conversion, StoreMode}
 import lightdb.{Query, SearchResults, Sort, SortDirection}
 import lightdb.lucene.blockjoin.{LuceneBlockJoinFields, LuceneBlockJoinStore}
 import org.apache.lucene.document.*
+import org.apache.lucene.document.ShapeField.QueryRelation
+import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
 import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
@@ -489,6 +491,12 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           b.add(LatLonPoint.newDistanceQuery(mapped, from.latitude, from.longitude, radius.toMeters), BooleanClause.Occur.MUST)
           b.add(LatLonPoint.newBoxQuery(mapped, 0.0, 0.0, 0.0, 0.0), BooleanClause.Occur.MUST_NOT)
           b.build()
+        case f: Filter.SpatialContains[D] =>
+          val mapped = s"${mapName(f.fieldName)}__shape"
+          geo2LuceneQuery(mapped, f.geo, QueryRelation.CONTAINS)
+        case f: Filter.SpatialIntersects[D] =>
+          val mapped = s"${mapName(f.fieldName)}__shape"
+          geo2LuceneQuery(mapped, f.geo, QueryRelation.INTERSECTS)
         case f: Filter.Nested[D @unchecked] =>
           if !hasNativeNestedBlocks then {
             throw new UnsupportedOperationException(
@@ -584,6 +592,8 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case f: Filter.Contains[D, _] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Exact[D, _] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Distance[D] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialContains[D] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialIntersects[D] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.DrillDownFacetFilter[D] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Multi[D] =>
         f.copy(filters = f.filters.map(clause => clause.copy(filter = rewriteFilterFieldsForNestedPath(path, clause.filter))))
@@ -592,6 +602,21 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         f.copy(path = nestedPath, filter = rewriteFilterFieldsForNestedPath(nestedPath, f.filter))
       case other => other
     }
+  }
+
+  private def geo2LuceneQuery(fieldName: String, geo: Geo, relation: QueryRelation): LuceneQuery = {
+    import org.apache.lucene.geo.{Point => LucenePoint}
+    def toLuceneGeometries(g: Geo): List[org.apache.lucene.geo.LatLonGeometry] = g match {
+      case p: Point => List(new LucenePoint(p.latitude, p.longitude))
+      case l: Line => List(new LuceneLine(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray))
+      case p: Polygon => List(new LucenePolygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray))
+      case lightdb.spatial.MultiPoint(points) => points.map(p => new LucenePoint(p.latitude, p.longitude))
+      case MultiLine(lines) => lines.map(l => new LuceneLine(l.points.map(_.latitude).toArray, l.points.map(_.longitude).toArray))
+      case MultiPolygon(polygons) => polygons.map(p => new LucenePolygon(p.points.map(_.latitude).toArray, p.points.map(_.longitude).toArray))
+      case lightdb.spatial.GeometryCollection(geometries) => geometries.flatMap(toLuceneGeometries)
+    }
+    val geometries = toLuceneGeometries(geo)
+    LatLonShape.newGeometryQuery(fieldName, relation, geometries: _*)
   }
 
   private def normalizeNestedFilter[D <: Document[D]](basePath: String, filter: Filter[D]): (String, Filter[D]) = {

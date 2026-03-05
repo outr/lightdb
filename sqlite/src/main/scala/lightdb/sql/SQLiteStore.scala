@@ -6,7 +6,7 @@ import fabric.rw.*
 import lightdb.LightDB
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.spatial.{Geo, Spatial}
+import lightdb.spatial.{Geo, Spatial, SpatialRelation}
 import lightdb.sql.connect.{ConnectionManager, SQLConfig, SingleConnectionManager}
 import lightdb.store.{CollectionManager, Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
@@ -192,6 +192,38 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
           val min1 = JsonParser(str1).as[List[Double]].min
           val min2 = JsonParser(str2).as[List[Double]].min
           min2.compareTo(min1)
+        }
+      })
+      org.sqlite.Function.create(c, "SPATIAL_CONTAINS", new org.sqlite.Function() {
+        override def xFunc(): Unit = {
+          def s(index: Int): List[Geo] = Option(value_text(index))
+            .map(s => JsonParser(s))
+            .map {
+              case Arr(vector, _) => vector.toList.map(_.as[Geo])
+              case json => List(json.as[Geo])
+            }
+            .getOrElse(Nil)
+          val shapes1 = s(0)
+          val shapes2 = s(1)
+          val contains = shapes1.exists(g => shapes2.exists(o =>
+            Spatial.relation(g, o) == SpatialRelation.Contains
+          ))
+          result(if contains then 1 else 0)
+        }
+      })
+      org.sqlite.Function.create(c, "SPATIAL_INTERSECTS", new org.sqlite.Function() {
+        override def xFunc(): Unit = {
+          def s(index: Int): List[Geo] = Option(value_text(index))
+            .map(s => JsonParser(s))
+            .map {
+              case Arr(vector, _) => vector.toList.map(_.as[Geo])
+              case json => List(json.as[Geo])
+            }
+            .getOrElse(Nil)
+          val shapes1 = s(0)
+          val shapes2 = s(1)
+          val intersects = shapes1.exists(g => shapes2.exists(o => Spatial.overlap(g, o)))
+          result(if intersects then 1 else 0)
         }
       })
     }

@@ -1281,6 +1281,18 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         } else {
           throw new UnsupportedOperationException("Distance filtering not supported on related child store")
         }
+      case f: Filter.SpatialContains[C] =>
+        if targetStore eq store then {
+          spatialContainsFilter(f.asInstanceOf[Filter.SpatialContains[Doc]])
+        } else {
+          throw new UnsupportedOperationException("SpatialContains filtering not supported on related child store")
+        }
+      case f: Filter.SpatialIntersects[C] =>
+        if targetStore eq store then {
+          spatialIntersectsFilter(f.asInstanceOf[Filter.SpatialIntersects[Doc]])
+        } else {
+          throw new UnsupportedOperationException("SpatialIntersects filtering not supported on related child store")
+        }
       case f: Filter.Multi[C] =>
         val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
         if f.minShould != 1 && shoulds.nonEmpty then {
@@ -1355,6 +1367,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case f: Filter.Contains[C, _] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Exact[C, _] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Distance[C] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialContains[C] => f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialIntersects[C] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.DrillDownFacetFilter[C] => f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Multi[C] =>
         f.copy(filters = f.filters.map(clause => clause.copy(filter = rewriteFilterFieldsForNestedPath(path, clause.filter))))
@@ -1384,6 +1398,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
     throw new UnsupportedOperationException("Distance filtering not supported in SQL!")
+
+  protected def spatialContainsFilter(f: Filter.SpatialContains[Doc]): SQLPart =
+    throw new UnsupportedOperationException("SpatialContains filtering not supported in SQL!")
+
+  protected def spatialIntersectsFilter(f: Filter.SpatialIntersects[Doc]): SQLPart =
+    throw new UnsupportedOperationException("SpatialIntersects filtering not supported in SQL!")
 
   protected def extraFieldsForDistance(conversion: Conversion.Distance[Doc, _]): List[SQLPart] =
     throw new UnsupportedOperationException("Distance conversions not supported")

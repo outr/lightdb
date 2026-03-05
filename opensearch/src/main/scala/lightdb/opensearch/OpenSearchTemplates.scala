@@ -10,6 +10,7 @@ import lightdb.opensearch.client.OpenSearchConfig
 
 object OpenSearchTemplates {
   val SpatialCenterSuffix: String = "__center"
+  val SpatialShapeSuffix: String = "__shape"
   // Stored in _source so we can do prefix queries / sort-by-id without depending on OpenSearch's metadata _id behavior.
   // Also used as an escape hatch for nested "_id" fields (which are problematic in OpenSearch).
   val InternalIdField: String = "__lightdb_id"
@@ -139,8 +140,12 @@ object OpenSearchTemplates {
       case f if f.name == "_id" => Nil
       case f if f.isSpatial =>
         // Store the original GeoJSON in the field itself (dynamic mapping is fine),
-        // but index a separate derived geo_point field for distance/sort parity.
-        List(s"${f.name}$SpatialCenterSuffix" -> obj("type" -> str("geo_point")))
+        // index a derived geo_shape field for spatial contains/intersects queries,
+        // and index a derived geo_point field for distance/sort parity.
+        List(
+          s"${f.name}$SpatialShapeSuffix" -> obj("type" -> str("geo_shape")),
+          s"${f.name}$SpatialCenterSuffix" -> obj("type" -> str("geo_point"))
+        )
       case f if f.isInstanceOf[lightdb.field.Field.FacetField[_]] =>
         // Derived keyword tokens to support drill-down + hierarchical facet aggregation.
         // NOTE: do not apply keyword normalization here; facet tokens use reserved markers like "$ROOT$".

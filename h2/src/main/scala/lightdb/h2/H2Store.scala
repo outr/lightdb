@@ -74,6 +74,8 @@ class H2Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
 
         s.execute("""CREATE ALIAS IF NOT EXISTS GEO_DISTANCE_JSON FOR "lightdb.h2.H2SpatialFunctions.distanceJson"""")
         s.execute("""CREATE ALIAS IF NOT EXISTS GEO_DISTANCE_MIN FOR "lightdb.h2.H2SpatialFunctions.distanceMin"""")
+        s.execute("""CREATE ALIAS IF NOT EXISTS GEO_SPATIAL_CONTAINS FOR "lightdb.h2.H2SpatialFunctions.spatialContains"""")
+        s.execute("""CREATE ALIAS IF NOT EXISTS GEO_SPATIAL_INTERSECTS FOR "lightdb.h2.H2SpatialFunctions.spatialIntersects"""")
       } finally {
         s.close()
       }

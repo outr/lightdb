@@ -67,6 +67,10 @@ trait FilterSupport[F, Doc, Filter] {
             matchEndsWith: Boolean = false): Filter
 
   def distance(from: Point, radius: Distance): Filter
+
+  def spatialContains(geo: Geo): Filter
+
+  def spatialIntersects(geo: Geo): Filter
 }
 
 object FilterSupport {

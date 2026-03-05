@@ -18,6 +18,10 @@ object NestedQuerySupport {
         loop(n.filter, inNested = true)
       case _: Filter.Distance[Doc] if inNested =>
         throw new UnsupportedOperationException("Nested fallback does not support Distance inside nested filters")
+      case _: Filter.SpatialContains[Doc] if inNested =>
+        throw new UnsupportedOperationException("Nested fallback does not support SpatialContains inside nested filters")
+      case _: Filter.SpatialIntersects[Doc] if inNested =>
+        throw new UnsupportedOperationException("Nested fallback does not support SpatialIntersects inside nested filters")
       case _: Filter.DrillDownFacetFilter[Doc] if inNested =>
         throw new UnsupportedOperationException("Nested fallback does not support DrillDownFacetFilter inside nested filters")
       case _: Filter.ExistsChild[Doc @unchecked] if inNested =>
@@ -119,6 +123,22 @@ object NestedQuerySupport {
         case _ => Nil
       })
       geos.exists(g => Spatial.distance(g, f.from).valueInMeters <= f.radius.valueInMeters)
+    case f: Filter.SpatialContains[Doc] =>
+      val field = model.fieldByName[Any](f.fieldName).asInstanceOf[Field[Doc, Any]]
+      val value = field.get(doc, field, state)
+      val geos = iterable(value).map(_.collect { case g: Geo => g }.toList).getOrElse(value match {
+        case g: Geo => List(g)
+        case _ => Nil
+      })
+      geos.exists(g => Spatial.relation(g, f.geo) == lightdb.spatial.SpatialRelation.Contains)
+    case f: Filter.SpatialIntersects[Doc] =>
+      val field = model.fieldByName[Any](f.fieldName).asInstanceOf[Field[Doc, Any]]
+      val value = field.get(doc, field, state)
+      val geos = iterable(value).map(_.collect { case g: Geo => g }.toList).getOrElse(value match {
+        case g: Geo => List(g)
+        case _ => Nil
+      })
+      geos.exists(g => Spatial.overlap(g, f.geo))
     case f: Filter.DrillDownFacetFilter[Doc] =>
       val field = model.fieldByName[List[lightdb.facet.FacetValue]](f.fieldName).asInstanceOf[Field[Doc, List[lightdb.facet.FacetValue]]]
       val values = field.get(doc, field, state)
@@ -197,6 +217,10 @@ object NestedQuerySupport {
         valueForField(f.fieldName).exists(j => Try(f.expression.r.findFirstIn(jsonString(j)).nonEmpty).getOrElse(false))
       case _: Filter.Distance[Doc] =>
         throw new UnsupportedOperationException("Nested fallback does not support Distance inside nested filters")
+      case _: Filter.SpatialContains[Doc] =>
+        throw new UnsupportedOperationException("Nested fallback does not support SpatialContains inside nested filters")
+      case _: Filter.SpatialIntersects[Doc] =>
+        throw new UnsupportedOperationException("Nested fallback does not support SpatialIntersects inside nested filters")
       case _: Filter.DrillDownFacetFilter[Doc] =>
         throw new UnsupportedOperationException("Nested fallback does not support DrillDownFacetFilter inside nested filters")
       case _: Filter.ExistsChild[Doc @unchecked] =>

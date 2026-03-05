@@ -41,6 +41,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
   )
 
   protected def supportsAggregateFunctions: Boolean = true
+  protected def supportsSpatialFilters: Boolean = true
 
   private val p1 = Person(
     name = "John Doe",
@@ -124,6 +125,31 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
           point = yonkers,
           geo = geo
         )).succeed
+      }
+    }
+    if (supportsSpatialFilters) {
+      "find person whose polygon contains a point" in {
+        DB.people.transaction { transaction =>
+          val moore = Point(35.33, -97.47) // inside moorePolygon
+          transaction.query.filter(_.geo.spatialContains(moore)).toList.map { list =>
+            list.map(_.name) should be(List("Jane Doe"))
+          }
+        }
+      }
+      "find person whose geometry intersects a polygon" in {
+        DB.people.transaction { transaction =>
+          // Bounding box overlapping moorePolygon (lat 35.30–35.35, lon -97.50 to -97.45)
+          val bbox = Polygon.lonLat(
+            -97.50, 35.30,
+            -97.45, 35.30,
+            -97.45, 35.35,
+            -97.50, 35.35,
+            -97.50, 35.30
+          )
+          transaction.query.filter(_.geo.spatialIntersects(bbox)).toList.map { list =>
+            list.map(_.name) should be(List("Jane Doe"))
+          }
+        }
       }
     }
     "truncate the database" in {

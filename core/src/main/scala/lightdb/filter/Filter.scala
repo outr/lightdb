@@ -94,6 +94,16 @@ object Filter {
     override lazy val fieldNames: List[String] = List(fieldName)
   }
 
+  case class SpatialContains[Doc <: Document[Doc]](fieldName: String, geo: Geo) extends Filter[Doc] {
+    def field(model: DocumentModel[Doc]): Field[Doc, Geo] = model.fieldByName(fieldName)
+    override lazy val fieldNames: List[String] = List(fieldName)
+  }
+
+  case class SpatialIntersects[Doc <: Document[Doc]](fieldName: String, geo: Geo) extends Filter[Doc] {
+    def field(model: DocumentModel[Doc]): Field[Doc, Geo] = model.fieldByName(fieldName)
+    override lazy val fieldNames: List[String] = List(fieldName)
+  }
+
   case class Multi[Doc <: Document[Doc]](minShould: Int, filters: List[FilterClause[Doc]] = Nil) extends Filter[Doc] {
     def conditional(filter: Filter[Doc], condition: Condition, boost: Option[Double] = None): Multi[Doc] =
       copy(filters = filters ::: List(FilterClause(filter, condition, boost)))

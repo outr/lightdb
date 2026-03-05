@@ -332,6 +332,12 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val eps = 1e-6
         val excludeZero = OpenSearchDsl.geoBoundingBox(centerField, eps, -eps, -eps, eps)
         OpenSearchDsl.boolQuery(must = List(distance), mustNot = List(excludeZero))
+      case f: Filter.SpatialContains[Doc] =>
+        val shapeField = s"${f.fieldName}${lightdb.opensearch.OpenSearchTemplates.SpatialShapeSuffix}"
+        OpenSearchDsl.geoShape(shapeField, f.geo.toJson, "contains")
+      case f: Filter.SpatialIntersects[Doc] =>
+        val shapeField = s"${f.fieldName}${lightdb.opensearch.OpenSearchTemplates.SpatialShapeSuffix}"
+        OpenSearchDsl.geoShape(shapeField, f.geo.toJson, "intersects")
       case Filter.Multi(minShould, clauses) =>
         if clauses.isEmpty then {
           OpenSearchDsl.matchAll()
@@ -447,6 +453,10 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case f: Filter.Exact[Doc, _] =>
         f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.Distance[Doc] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialContains[Doc] =>
+        f.copy(fieldName = qualify(f.fieldName))
+      case f: Filter.SpatialIntersects[Doc] =>
         f.copy(fieldName = qualify(f.fieldName))
       case f: Filter.DrillDownFacetFilter[Doc] =>
         f.copy(fieldName = qualify(f.fieldName))
