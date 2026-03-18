@@ -102,7 +102,7 @@ val h2Version: String = "2.4.240"
 
 val postgresqlVersion: String = "42.7.9"
 
-val googleSheetsVersion: String = "v4-rev20251110-2.0.0"
+val googleSheetsVersion: String = "v4-rev20260213-2.0.0"
 
 val googleAuthVersion: String = "1.43.0"
 
