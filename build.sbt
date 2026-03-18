@@ -68,7 +68,7 @@ val profigVersion: String = "3.4.18"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "1.2.1"
+val spiceVersion: String = "1.2.2"
 
 val spatial4JVersion: String = "0.8"
 
@@ -76,17 +76,17 @@ val jtsVersion: String = "1.20.0"
 
 val haloDBVersion: String = "0.5.7"
 
-val rocksDBVersion: String = "10.4.2"
+val rocksDBVersion: String = "10.5.1"
 
 val mapdbVersion: String = "3.1.0"
 
 val lmdbVersion: String = "0.9.2"
 
-val jedisVersion: String = "7.3.0"
+val jedisVersion: String = "7.4.0"
 
-val fabricVersion: String = "1.19.0"
+val fabricVersion: String = "1.19.1"
 
-val scribeVersion: String = "3.17.0"
+val scribeVersion: String = "3.18.0"
 
 val luceneVersion: String = "10.4.0"
 
@@ -94,19 +94,19 @@ val hikariCPVersion: String = "7.0.2"
 
 val commonsDBCP2Version: String = "2.14.0"
 
-val sqliteVersion: String = "3.51.2.0"
+val sqliteVersion: String = "3.51.3.0"
 
-val duckdbVersion: String = "1.4.4.0"
+val duckdbVersion: String = "1.5.0.0"
 
 val h2Version: String = "2.4.240"
 
 val postgresqlVersion: String = "42.7.9"
 
-val googleSheetsVersion: String = "v4-rev20251110-2.0.0"
+val googleSheetsVersion: String = "v4-rev20260213-2.0.0"
 
 val googleAuthVersion: String = "1.43.0"
 
-val googleHttpClientGsonVersion: String = "1.44.2"
+val googleHttpClientGsonVersion: String = "1.47.1"
 
 val chronicleMapVersion: String = "2026.1"
 
