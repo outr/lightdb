@@ -707,7 +707,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case _ => fieldName
   }
 
-  private val regexChars = ".?+*|{}[]()\"\\#".toSet
+  private val regexChars = ".?+*|{}[]()\"\\#~&<>@".toSet
   private def escapeRegexLiteral(s: String): String =
     s.flatMap(c => if regexChars.contains(c) then s"\\$c" else c.toString)
 
