@@ -106,7 +106,7 @@ val googleSheetsVersion: String = "v4-rev20260213-2.0.0"
 
 val googleAuthVersion: String = "1.43.0"
 
-val googleHttpClientGsonVersion: String = "1.44.2"
+val googleHttpClientGsonVersion: String = "1.47.1"
 
 val chronicleMapVersion: String = "2026.1"
 
