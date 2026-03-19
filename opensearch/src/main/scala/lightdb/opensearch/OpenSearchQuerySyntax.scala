@@ -15,7 +15,8 @@ object OpenSearchQuerySyntax {
                    groupSort: Option[List[Sort]] = None,
                    withinGroupSort: Option[List[Sort]] = None,
                    includeScores: Boolean = query.scoreDocs,
-                   includeTotalGroupCount: Boolean = true): Task[OpenSearchGroupedSearchResults[Doc, Model, G, V]] = query.transaction match {
+                   includeTotalGroupCount: Boolean = true,
+                   cardinalityPrecisionThreshold: Int = 40_000): Task[OpenSearchGroupedSearchResults[Doc, Model, G, V]] = query.transaction match {
       case tx: OpenSearchTransaction[Doc, Model] =>
         val resolvedDocsPerGroup = docsPerGroup.orElse(query.pageSize).getOrElse(1)
         val resolvedGroupOffset = groupOffset.getOrElse(query.offset)
@@ -31,10 +32,41 @@ object OpenSearchQuerySyntax {
           groupSort = resolvedGroupSort,
           withinGroupSort = resolvedWithinGroupSort,
           includeScores = includeScores,
-          includeTotalGroupCount = includeTotalGroupCount
+          includeTotalGroupCount = includeTotalGroupCount,
+          cardinalityPrecisionThreshold = cardinalityPrecisionThreshold
         )
       case _ =>
         Task.error(new RuntimeException("OpenSearch grouping is only supported when using an OpenSearch-backed collection"))
+    }
+
+    /**
+     * Cursor-based group pagination using OpenSearch composite aggregation.
+     * Constant cost per page regardless of depth. Groups sorted by key ascending, not by count.
+     */
+    def compositeGroupBy[G](field: Model => Field[Doc, G],
+                            pageSize: Int = 100,
+                            afterKey: Option[String] = None,
+                            docsPerGroup: Option[Int] = None,
+                            withinGroupSort: Option[List[Sort]] = None,
+                            includeScores: Boolean = query.scoreDocs,
+                            includeTotalGroupCount: Boolean = false,
+                            cardinalityPrecisionThreshold: Int = 40_000): Task[OpenSearchGroupedSearchResults[Doc, Model, G, V]] = query.transaction match {
+      case tx: OpenSearchTransaction[Doc, Model] =>
+        val resolvedDocsPerGroup = docsPerGroup.orElse(query.pageSize).getOrElse(1)
+        val resolvedWithinGroupSort = withinGroupSort.getOrElse(query.sort)
+        tx.compositeGroupBy(
+          query = query,
+          groupField = field(query.model),
+          pageSize = pageSize,
+          afterKey = afterKey,
+          docsPerGroup = resolvedDocsPerGroup,
+          withinGroupSort = resolvedWithinGroupSort,
+          includeScores = includeScores,
+          includeTotalGroupCount = includeTotalGroupCount,
+          cardinalityPrecisionThreshold = cardinalityPrecisionThreshold
+        )
+      case _ =>
+        Task.error(new RuntimeException("OpenSearch composite grouping is only supported when using an OpenSearch-backed collection"))
     }
   }
 

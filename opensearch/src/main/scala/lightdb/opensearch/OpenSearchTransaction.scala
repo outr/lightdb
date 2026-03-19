@@ -458,7 +458,8 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                     groupSort: List[lightdb.Sort],
                     withinGroupSort: List[lightdb.Sort],
                     includeScores: Boolean,
-                    includeTotalGroupCount: Boolean): Task[OpenSearchGroupedSearchResults[Doc, Model, G, V]] = Task.defer {
+                    includeTotalGroupCount: Boolean,
+                    cardinalityPrecisionThreshold: Int = 40_000): Task[OpenSearchGroupedSearchResults[Doc, Model, G, V]] = Task.defer {
     val limit = groupLimit.getOrElse(100_000_000)
     if limit <= 0 then Task.error(new RuntimeException(s"Group limit must be positive but was $limit"))
     else if docsPerGroup <= 0 then Task.error(new RuntimeException(s"Docs per group must be positive but was $docsPerGroup"))
@@ -501,7 +502,10 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       val aggs = if includeTotalGroupCount then {
         obj(
           "groups" -> groupAgg,
-          "total_groups" -> obj("cardinality" -> obj("field" -> str(groupFieldName)))
+          "total_groups" -> obj("cardinality" -> obj(
+            "field" -> str(groupFieldName),
+            "precision_threshold" -> num(cardinalityPrecisionThreshold)
+          ))
         )
       } else {
         obj("groups" -> groupAgg)
@@ -533,6 +537,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
         val groupTasks: List[Task[OpenSearchGroupedResult[G, V]]] =
           buckets.map(_.asObj).drop(groupOffset).take(limit).map { b =>
             val groupKey = b.get("key").getOrElse(throw new RuntimeException("Missing group key")).asString
+            val docCount = b.get("doc_count").map(_.asInt).getOrElse(0)
             val topHits = b
               .get("top")
               .flatMap(_.asObj.get("hits"))
@@ -551,7 +556,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
               materialize(query.conversion, id, hydratedSource).map(v => (v, score))
             }
 
-            sequence(resultTasks).map(results => OpenSearchGroupedResult(groupKey.asInstanceOf[G], results))
+            sequence(resultTasks).map(results => OpenSearchGroupedResult(groupKey.asInstanceOf[G], results, docCount))
           }
 
         sequence(groupTasks).map { groups =>
@@ -562,6 +567,151 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
             totalGroups = totalGroups,
             groups = groups,
             transaction = this
+          )
+        }
+      }
+    }
+  }
+
+  /**
+   * Cursor-based group pagination using OpenSearch composite aggregation.
+   *
+   * Unlike `groupBy` (which uses terms aggregation and becomes expensive at deep offsets),
+   * composite aggregation has constant cost per page regardless of depth. Groups are sorted
+   * by key (ascending), not by doc_count.
+   *
+   * @param afterKey cursor from a previous result's `afterKey` field, or None for the first page
+   * @param pageSize number of groups per page
+   */
+  def compositeGroupBy[G, V](query: Query[Doc, Model, V],
+                              groupField: lightdb.field.Field[Doc, G],
+                              pageSize: Int,
+                              afterKey: Option[String] = None,
+                              docsPerGroup: Int = 1,
+                              withinGroupSort: List[lightdb.Sort] = Nil,
+                              includeScores: Boolean = false,
+                              includeTotalGroupCount: Boolean = false,
+                              cardinalityPrecisionThreshold: Int = 40_000): Task[OpenSearchGroupedSearchResults[Doc, Model, G, V]] = Task.defer {
+    if pageSize <= 0 then Task.error(new RuntimeException(s"Page size must be positive but was $pageSize"))
+    else if docsPerGroup <= 0 then Task.error(new RuntimeException(s"Docs per group must be positive but was $docsPerGroup"))
+    else {
+      val sb = searchBuilderFor(query)
+      val groupFieldName = sb.exactFieldName(groupField.asInstanceOf[lightdb.field.Field[Doc, _]])
+      val q = query.filter.getOrElse(lightdb.filter.Filter.Multi[Doc](minShould = 0))
+      val qDsl0 = sb.filterToDsl(q)
+      val qDsl = if config.joinDomain.nonEmpty && config.joinRole.nonEmpty then {
+        OpenSearchDsl.boolQuery(
+          must = List(qDsl0),
+          filter = List(joinTypeFilterDsl)
+        )
+      } else {
+        qDsl0
+      }
+      val withinSortDsl = sb.sortsToDsl(withinGroupSort)
+
+      val compositeSource = obj(
+        "group_key" -> obj("terms" -> obj("field" -> str(groupFieldName)))
+      )
+      val compositeObj = afterKey match {
+        case Some(ak) => obj(
+          "size" -> num(pageSize),
+          "sources" -> arr(compositeSource),
+          "after" -> obj("group_key" -> str(ak))
+        )
+        case None => obj(
+          "size" -> num(pageSize),
+          "sources" -> arr(compositeSource)
+        )
+      }
+
+      val compositeAgg = obj(
+        "composite" -> compositeObj,
+        "aggs" -> obj(
+          "top" -> obj(
+            "top_hits" -> obj(
+              "size" -> num(docsPerGroup),
+              "track_scores" -> bool(includeScores),
+              "_source" -> bool(true),
+              "sort" -> (if withinSortDsl.nonEmpty then arr(withinSortDsl*) else arr(obj("_score" -> obj("order" -> str("desc")))))
+            )
+          )
+        )
+      )
+
+      val aggs = if includeTotalGroupCount then {
+        obj(
+          "groups" -> compositeAgg,
+          "total_groups" -> obj("cardinality" -> obj(
+            "field" -> str(groupFieldName),
+            "precision_threshold" -> num(cardinalityPrecisionThreshold)
+          ))
+        )
+      } else {
+        obj("groups" -> compositeAgg)
+      }
+
+      val body = obj(
+        "query" -> qDsl,
+        "from" -> num(0),
+        "size" -> num(0),
+        "track_total_hits" -> bool(false),
+        "aggregations" -> aggs
+      )
+
+      client.search(store.readIndexName, body).flatMap { json =>
+        val aggsObj = json.asObj.get("aggregations").getOrElse(obj()).asObj
+        val totalGroups = if includeTotalGroupCount then {
+          aggsObj
+            .get("total_groups")
+            .flatMap(_.asObj.get("value"))
+            .map(_.asInt)
+        } else None
+
+        val groupsObj = aggsObj.get("groups").map(_.asObj).getOrElse(obj().asObj)
+        val nextAfterKey = groupsObj.get("after_key")
+          .flatMap(_.asObj.get("group_key"))
+          .map(_.asString)
+
+        val buckets = groupsObj
+          .get("buckets")
+          .map(_.asArr.value.toList)
+          .getOrElse(Nil)
+
+        val groupTasks: List[Task[OpenSearchGroupedResult[G, V]]] =
+          buckets.map(_.asObj).map { b =>
+            val groupKey = b.get("key").flatMap(_.asObj.get("group_key"))
+              .getOrElse(throw new RuntimeException("Missing composite group key")).asString
+            val docCount = b.get("doc_count").map(_.asInt).getOrElse(0)
+            val topHits = b
+              .get("top")
+              .flatMap(_.asObj.get("hits"))
+              .flatMap(_.asObj.get("hits"))
+              .map(_.asArr.value.toList)
+              .getOrElse(Nil)
+
+            val resultTasks: List[Task[(V, Double)]] = topHits.map(_.asObj).map { h =>
+              val id = Id[Doc](h.get("_id").getOrElse(throw new RuntimeException("OpenSearch hit missing _id")).asString)
+              val score = h.get("_score") match {
+                case Some(Null) | None => 0.0
+                case Some(j) => j.asDouble
+              }
+              val source = h.get("_source").getOrElse(obj())
+              val hydratedSource = stripInternalFields(sourceWithId(source, id))
+              materialize(query.conversion, id, hydratedSource).map(v => (v, score))
+            }
+
+            sequence(resultTasks).map(results => OpenSearchGroupedResult(groupKey.asInstanceOf[G], results, docCount))
+          }
+
+        sequence(groupTasks).map { groups =>
+          OpenSearchGroupedSearchResults(
+            model = store.model,
+            offset = 0,
+            limit = Some(pageSize),
+            totalGroups = totalGroups,
+            groups = groups,
+            transaction = this,
+            afterKey = nextAfterKey
           )
         }
       }

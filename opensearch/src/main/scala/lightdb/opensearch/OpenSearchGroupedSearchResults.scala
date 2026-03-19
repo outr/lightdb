@@ -4,7 +4,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.transaction.Transaction
 import rapid.Grouped
 
-case class OpenSearchGroupedResult[G, V](group: G, results: List[(V, Double)]) {
+case class OpenSearchGroupedResult[G, V](group: G, results: List[(V, Double)], docCount: Int = 0) {
   def withoutScores: Grouped[G, V] = Grouped(group, results.map(_._1))
 }
 
@@ -13,7 +13,8 @@ case class OpenSearchGroupedSearchResults[Doc <: Document[Doc], Model <: Documen
                                                                                                   limit: Option[Int],
                                                                                                   totalGroups: Option[Int],
                                                                                                   groups: List[OpenSearchGroupedResult[G, V]],
-                                                                                                  transaction: Transaction[Doc, Model]) {
+                                                                                                  transaction: Transaction[Doc, Model],
+                                                                                                  afterKey: Option[String] = None) {
   def stream: rapid.Stream[OpenSearchGroupedResult[G, V]] =
     rapid.Stream.fromIterator(rapid.Task(groups.iterator))
 
