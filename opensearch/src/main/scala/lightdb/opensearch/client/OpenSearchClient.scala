@@ -250,8 +250,9 @@ case class OpenSearchClient(config: OpenSearchConfig) {
     case _: java.util.concurrent.TimeoutException => true
     case _: java.net.SocketTimeoutException => true
     case other =>
+      val className = other.getClass.getSimpleName.toLowerCase
       val msg = Option(other.getMessage).map(_.toLowerCase).getOrElse("")
-      msg.contains("timeout") || msg.contains("connection became idle")
+      className.contains("timeout") || msg.contains("timeout") || msg.contains("connection became idle")
   }
 
   private def parseJsonOrError(resp: HttpResponse, errorMsg: String): Task[Json] =
