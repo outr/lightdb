@@ -112,7 +112,7 @@ val chronicleMapVersion: String = "2026.1"
 
 val scalaTestVersion: String = "3.2.19"
 
-val testcontainersVersion: String = "2.0.3"
+val testcontainersVersion: String = "2.0.4"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, all)
