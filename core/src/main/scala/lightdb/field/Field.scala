@@ -21,16 +21,16 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
   implicit def rw: RW[V] = getRW()
 
   def isArr: Boolean = rw.definition match {
-    case DefType.Arr(_) => true
+    case DefType.Arr(_, _) => true
     case _ => false
   }
 
   lazy val className: Option[String] = {
     def lookup(d: DefType): Option[String] = d match {
-      case DefType.Opt(d) => lookup(d)
-      case DefType.Arr(d) => lookup(d)
-      case DefType.Poly(_, cn) => cn
-      case DefType.Obj(_, cn) => cn
+      case DefType.Opt(d, _) => lookup(d)
+      case DefType.Arr(d, _) => lookup(d)
+      case DefType.Poly(_, cn, _) => cn
+      case DefType.Obj(_, cn, _) => cn
       case _ => None
     }
     lookup(rw.definition)
@@ -192,9 +192,9 @@ object Field {
       case "1" | "true" => true
       case _ => false
     })
-    case DefType.Opt(d) => string2Json(name, s, d)
-    case DefType.Enum(_, _) => str(s)
-    case DefType.Arr(d) if !s.startsWith("[") => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
+    case DefType.Opt(d, _) => string2Json(name, s, d)
+    case DefType.Enum(_, _, _) => str(s)
+    case DefType.Arr(d, _) if !s.startsWith("[") => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
     case _ => try {
       JsonParser(s)
     } catch {

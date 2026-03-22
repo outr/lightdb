@@ -101,14 +101,14 @@ object LuceneBlockJoinIndexer {
                     case fabric.Null => add(new StringField(fieldName, Field.NullString, storeField))
                     case _ => add(new StringField(fieldName, j.asString, storeField))
                   }
-                case DefType.Enum(_, _) =>
+                case DefType.Enum(_, _, _) =>
                   add(new StringField(fieldName, j.asString, storeField))
-                case DefType.Opt(d2) =>
+                case DefType.Opt(d2, _) =>
                   addJson(j, d2)
-                case DefType.Json | DefType.Obj(_, _) | DefType.Poly(_, _) =>
+                case DefType.Json | DefType.Obj(_, _, _) | DefType.Poly(_, _, _) =>
                   add(new StringField(fieldName, JsonFormatter.Compact(j), storeField))
                 case _ if j == fabric.Null =>
-                case DefType.Arr(d2) =>
+                case DefType.Arr(d2, _) =>
                   val v = j.asVector
                   if v.isEmpty then add(new StringField(fieldName, "[]", storeField))
                   else v.foreach(x => addJson(x, d2))

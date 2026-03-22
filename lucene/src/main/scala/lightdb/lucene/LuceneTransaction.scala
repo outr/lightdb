@@ -308,8 +308,8 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       // We only support distinct on fields that have a corresponding docvalues sort field (`<name>Sort`), i.e.:
       // Str/Enum/Int/Dec and Option variants. (Arrays/objects don't have a single docvalues term.)
       def supported(defType: DefType): Boolean = defType match {
-        case DefType.Str | DefType.Enum(_, _) | DefType.Int | DefType.Dec => true
-        case DefType.Opt(d) => supported(d)
+        case DefType.Str | DefType.Enum(_, _, _) | DefType.Int | DefType.Dec => true
+        case DefType.Opt(d, _) => supported(d)
         case _ => false
       }
       if !supported(field.rw.definition) then {
@@ -367,7 +367,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                   val values0 = groups.groups.iterator.map(_.group).toList
                   // Drop missing values (matches OpenSearch composite agg semantics).
                   val values = field.rw.definition match {
-                    case DefType.Opt(_) => values0.filterNot(_ == None)
+                    case DefType.Opt(_, _) => values0.filterNot(_ == None)
                     case _ => values0
                   }
                   currentPull = rapid.Pull.fromList(values)
@@ -537,11 +537,11 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                 case Null => add(new StringField(field.name, Field.NullString, fs))
                 case _ => add(new StringField(field.name, json.asString, fs))
               }
-              case DefType.Enum(_, _) => add(new StringField(field.name, json.asString, fs))
-              case DefType.Opt(d) => addJson(json, d)
-              case DefType.Json | DefType.Obj(_, _) | DefType.Poly(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+              case DefType.Enum(_, _, _) => add(new StringField(field.name, json.asString, fs))
+              case DefType.Opt(d, _) => addJson(json, d)
+              case DefType.Json | DefType.Obj(_, _, _) | DefType.Poly(_, _, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
               case _ if json == Null => // Ignore null values
-              case DefType.Arr(d) =>
+              case DefType.Arr(d, _) =>
                 val v = json.asVector
                 if v.isEmpty then {
                   add(new StringField(field.name, "[]", fs))

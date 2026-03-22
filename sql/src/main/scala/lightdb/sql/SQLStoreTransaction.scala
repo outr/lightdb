@@ -1113,10 +1113,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case null => Null
     case s: String => rw.definition match {
       case DefType.Str => str(s)
-      case DefType.Opt(DefType.Str) => str(s)
-      case DefType.Opt(DefType.Enum(_, _)) => str(s)
+      case DefType.Opt(DefType.Str, _) => str(s)
+      case DefType.Opt(DefType.Enum(_, _, _), _) => str(s)
       case DefType.Json => JsonParser(s)
-      case DefType.Enum(_, _) => str(s)
+      case DefType.Enum(_, _, _) => str(s)
       case _ => try {
         JsonParser(s)
       } catch {

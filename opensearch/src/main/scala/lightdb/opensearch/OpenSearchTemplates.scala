@@ -231,11 +231,11 @@ object OpenSearchTemplates {
   }
 
   private def inferNestedDescendantPaths(path: String, definition: DefType): Set[String] = definition match {
-    case DefType.Opt(inner) =>
+    case DefType.Opt(inner, _) =>
       inferNestedDescendantPaths(path, inner)
-    case DefType.Arr(inner) =>
+    case DefType.Arr(inner, _) =>
       inner match {
-        case DefType.Obj(map, _) =>
+        case DefType.Obj(map, _, _) =>
           val descendants = map.toList.flatMap { case (name, dt) =>
             inferNestedDescendantPaths(s"$path.$name", dt)
           }.toSet
@@ -243,7 +243,7 @@ object OpenSearchTemplates {
         case _ =>
           Set.empty
       }
-    case DefType.Obj(map, _) =>
+    case DefType.Obj(map, _, _) =>
       map.toList.flatMap { case (name, dt) =>
         inferNestedDescendantPaths(s"$path.$name", dt)
       }.toSet
@@ -315,7 +315,7 @@ object OpenSearchTemplates {
   }
 
   private def mappingForField[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = field.rw.definition match {
-    case DefType.Str | DefType.Enum(_, _) =>
+    case DefType.Str | DefType.Enum(_, _, _) =>
       stringMapping(field, config)
     case DefType.Bool =>
       obj("type" -> str("boolean"))
@@ -323,11 +323,11 @@ object OpenSearchTemplates {
       obj("type" -> str("long"))
     case DefType.Dec =>
       obj("type" -> str("double"))
-    case DefType.Opt(d) =>
+    case DefType.Opt(d, _) =>
       mappingForDefType(field, d, config)
-    case DefType.Arr(d) =>
+    case DefType.Arr(d, _) =>
       mappingForDefType(field, d, config)
-    case DefType.Obj(_, _) | DefType.Poly(_, _) =>
+    case DefType.Obj(_, _, _) | DefType.Poly(_, _, _) =>
       // Store structured JSON for materialization/conversion parity.
       obj("type" -> str("object"), "dynamic" -> bool(true))
     case DefType.Json =>
@@ -371,30 +371,30 @@ object OpenSearchTemplates {
   }
 
   private def mappingForDefType[Doc <: Document[Doc]](field: Field[Doc, _], d: DefType, config: OpenSearchConfig): Json = d match {
-    case DefType.Str | DefType.Enum(_, _) => stringMapping(field, config)
+    case DefType.Str | DefType.Enum(_, _, _) => stringMapping(field, config)
     case DefType.Bool => obj("type" -> str("boolean"))
     case DefType.Int => obj("type" -> str("long"))
     case DefType.Dec => obj("type" -> str("double"))
-    case DefType.Opt(inner) => mappingForDefType(field, inner, config)
-    case DefType.Arr(inner) => mappingForDefType(field, inner, config)
-    case DefType.Obj(_, _) | DefType.Poly(_, _) => obj("type" -> str("object"), "dynamic" -> bool(true))
+    case DefType.Opt(inner, _) => mappingForDefType(field, inner, config)
+    case DefType.Arr(inner, _) => mappingForDefType(field, inner, config)
+    case DefType.Obj(_, _, _) | DefType.Poly(_, _, _) => obj("type" -> str("object"), "dynamic" -> bool(true))
     case DefType.Json => obj("type" -> str("keyword"))
     case _ => obj()
   }
 
   private def nestedLeafMappingsFromDef(path: String, definition: DefType, config: OpenSearchConfig): List[(String, Json)] = {
     def recurse(prefix: String, t: DefType): List[(String, Json)] = t match {
-      case DefType.Opt(inner) =>
+      case DefType.Opt(inner, _) =>
         recurse(prefix, inner)
-      case DefType.Arr(inner) =>
+      case DefType.Arr(inner, _) =>
         inner match {
-          case DefType.Obj(map, _) =>
+          case DefType.Obj(map, _, _) =>
             map.toList.flatMap { case (name, dt) => recurse(s"$prefix.$name", dt) }
           case other =>
             val mapping = nestedScalarMapping(other, config)
             if mapping.asObj.value.nonEmpty then List(prefix -> mapping) else Nil
         }
-      case DefType.Obj(map, _) =>
+      case DefType.Obj(map, _, _) =>
         map.toList.flatMap { case (name, dt) => recurse(s"$prefix.$name", dt) }
       case other =>
         val mapping = nestedScalarMapping(other, config)
@@ -405,7 +405,7 @@ object OpenSearchTemplates {
   }
 
   private def nestedScalarMapping(d: DefType, config: OpenSearchConfig): Json = d match {
-    case DefType.Str | DefType.Enum(_, _) =>
+    case DefType.Str | DefType.Enum(_, _, _) =>
       val keyword = if config.keywordNormalize then {
         obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))
       } else {
@@ -422,11 +422,11 @@ object OpenSearchTemplates {
       obj("type" -> str("long"))
     case DefType.Dec =>
       obj("type" -> str("double"))
-    case DefType.Opt(inner) =>
+    case DefType.Opt(inner, _) =>
       nestedScalarMapping(inner, config)
-    case DefType.Arr(inner) =>
+    case DefType.Arr(inner, _) =>
       nestedScalarMapping(inner, config)
-    case DefType.Obj(_, _) | DefType.Poly(_, _) =>
+    case DefType.Obj(_, _, _) | DefType.Poly(_, _, _) =>
       obj("type" -> str("object"), "dynamic" -> bool(true))
     case DefType.Json =>
       obj("type" -> str("keyword"))

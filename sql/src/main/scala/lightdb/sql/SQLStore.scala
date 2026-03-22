@@ -77,12 +77,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   protected def def2Type(name: String, d: DefType): String = d match {
-    case DefType.Str | DefType.Json | DefType.Obj(_, _) | DefType.Arr(_) | DefType.Poly(_, _) | DefType.Enum(_, _) =>
+    case DefType.Str | DefType.Json | DefType.Obj(_, _, _) | DefType.Arr(_, _) | DefType.Poly(_, _, _) | DefType.Enum(_, _, _) =>
       "VARCHAR"
     case DefType.Int => "BIGINT"
     case DefType.Bool => "TINYINT"
     case DefType.Dec => "DOUBLE"
-    case DefType.Opt(d) => def2Type(name, d)
+    case DefType.Opt(d, _) => def2Type(name, d)
     case d => throw new UnsupportedOperationException(s"$name has an unsupported type: $d")
   }
 
