@@ -289,7 +289,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
   private def decodeGroupValue[G](groupValue: BytesRef, field: Field[Doc, G]): G = {
     if groupValue == null then {
       field.rw.definition match {
-        case DefType.Opt(_) => None.asInstanceOf[G]
+        case DefType.Opt(_, _) => None.asInstanceOf[G]
         case _ => throw new RuntimeException(s"Missing group value for grouping field '${field.name}'")
       }
     } else {
@@ -358,16 +358,16 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           case DefType.Str => SortField.Type.STRING
           case DefType.Dec => SortField.Type.DOUBLE
           case DefType.Int => SortField.Type.LONG
-          case DefType.Opt(t) => st(t)
-          case DefType.Arr(t) => st(t)
+          case DefType.Opt(t, _) => st(t)
+          case DefType.Arr(t, _) => st(t)
           case _ => throw new RuntimeException(s"Unsupported sort type for ${field.rw.definition}")
         }
         val sortType = st(field.rw.definition)
         def sf(d: DefType): SortField = d match {
           case DefType.Int | DefType.Dec => new SortedNumericSortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Str => new SortField(fieldSortName, sortType, dir == SortDirection.Descending)
-          case DefType.Opt(t) => sf(t)
-          case DefType.Arr(t) => sf(t)
+          case DefType.Opt(t, _) => sf(t)
+          case DefType.Arr(t, _) => sf(t)
           case d => throw new RuntimeException(s"Unsupported sort definition: $d")
         }
         sf(field.rw.definition)
@@ -569,7 +569,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       }
       b.build()
     case Null => field.rw.definition match {
-      case DefType.Opt(DefType.Str) => new TermQuery(new Term(mapName(field.name), Field.NullString))
+      case DefType.Opt(DefType.Str, _) => new TermQuery(new Term(mapName(field.name), Field.NullString))
       case _ => new TermQuery(new Term(mapName(field.name), "null"))
     }
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")

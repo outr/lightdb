@@ -1336,18 +1336,18 @@ object TraversalQueryEngine {
             // Safety: Optional fields can be null and should sort before non-null in ascending (compareAny),
             // but our persisted order-by postings omit nulls. Only apply this path for non-optional numeric defs.
             def isOpt(d: DefType): Boolean = d match {
-              case DefType.Opt(_) => true
+              case DefType.Opt(_, _) => true
               case _ => false
             }
 
             def isIntDef(d: DefType): Boolean = d match {
               case DefType.Int => true
-              case DefType.Opt(inner) => isIntDef(inner)
+              case DefType.Opt(inner, _) => isIntDef(inner)
               case _ => false
             }
             def isDecDef(d: DefType): Boolean = d match {
               case DefType.Dec => true
-              case DefType.Opt(inner) => isDecDef(inner)
+              case DefType.Opt(inner, _) => isDecDef(inner)
               case _ => false
             }
             val prefix =
@@ -1397,17 +1397,17 @@ object TraversalQueryEngine {
               else None
 
             def isOptDef(d: DefType): Boolean = d match {
-              case DefType.Opt(_) => true
+              case DefType.Opt(_, _) => true
               case _ => false
             }
             def isIntDef(d: DefType): Boolean = d match {
               case DefType.Int => true
-              case DefType.Opt(inner) => isIntDef(inner)
+              case DefType.Opt(inner, _) => isIntDef(inner)
               case _ => false
             }
             def isDecDef(d: DefType): Boolean = d match {
               case DefType.Dec => true
-              case DefType.Opt(inner) => isDecDef(inner)
+              case DefType.Opt(inner, _) => isDecDef(inner)
               case _ => false
             }
 

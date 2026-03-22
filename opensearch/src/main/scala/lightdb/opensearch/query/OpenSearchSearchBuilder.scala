@@ -50,11 +50,11 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   private def inferNestedDescendantPaths(path: String, definition: DefType): Set[String] = definition match {
-    case DefType.Opt(inner) =>
+    case DefType.Opt(inner, _) =>
       inferNestedDescendantPaths(path, inner)
-    case DefType.Arr(inner) =>
+    case DefType.Arr(inner, _) =>
       inner match {
-        case DefType.Obj(map, _) =>
+        case DefType.Obj(map, _, _) =>
           val descendants = map.toList.flatMap { case (name, dt) =>
             inferNestedDescendantPaths(s"$path.$name", dt)
           }.toSet
@@ -62,7 +62,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         case _ =>
           Set.empty
       }
-    case DefType.Obj(map, _) =>
+    case DefType.Obj(map, _, _) =>
       map.toList.flatMap { case (name, dt) =>
         inferNestedDescendantPaths(s"$path.$name", dt)
       }.toSet
@@ -689,11 +689,11 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case _ if field.name == "_id" =>
       // `_id` is reserved in OpenSearch and is not present in `_source`; we store it in `__lightdb_id`.
       InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _) =>
+    case DefType.Str | DefType.Enum(_, _, _) =>
       s"${rewriteReservedIdFieldName(field.name)}.keyword"
-    case DefType.Opt(d) =>
+    case DefType.Opt(d, _) =>
       sortFieldNameFromDef(rewriteReservedIdFieldName(field.name), d)
-    case DefType.Arr(d) =>
+    case DefType.Arr(d, _) =>
       sortFieldNameFromDef(rewriteReservedIdFieldName(field.name), d)
     case _ =>
       rewriteReservedIdFieldName(field.name)
@@ -701,9 +701,9 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def sortFieldNameFromDef(fieldName: String, d: DefType): String = d match {
     case _ if fieldName == "_id" => InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _) => s"$fieldName.keyword"
-    case DefType.Opt(inner) => sortFieldNameFromDef(fieldName, inner)
-    case DefType.Arr(inner) => sortFieldNameFromDef(fieldName, inner)
+    case DefType.Str | DefType.Enum(_, _, _) => s"$fieldName.keyword"
+    case DefType.Opt(inner, _) => sortFieldNameFromDef(fieldName, inner)
+    case DefType.Arr(inner, _) => sortFieldNameFromDef(fieldName, inner)
     case _ => fieldName
   }
 
@@ -714,11 +714,11 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   private def fieldNameForExact(field: Field[Doc, _]): String = field.rw.definition match {
     case _ if field.name == "_id" =>
       InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _) if !field.isInstanceOf[Tokenized[_]] =>
+    case DefType.Str | DefType.Enum(_, _, _) if !field.isInstanceOf[Tokenized[_]] =>
       s"${rewriteReservedIdFieldName(field.name)}.keyword"
-    case DefType.Opt(d) =>
+    case DefType.Opt(d, _) =>
       fieldNameForExactFromDef(rewriteReservedIdFieldName(field.name), d, tokenized = field.isInstanceOf[Tokenized[_]])
-    case DefType.Arr(d) =>
+    case DefType.Arr(d, _) =>
       fieldNameForExactFromDef(rewriteReservedIdFieldName(field.name), d, tokenized = field.isInstanceOf[Tokenized[_]])
     case _ =>
       rewriteReservedIdFieldName(field.name)
@@ -726,9 +726,9 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def fieldNameForExactFromDef(fieldName: String, d: DefType, tokenized: Boolean): String = d match {
     case _ if fieldName == "_id" => InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _) if !tokenized => s"$fieldName.keyword"
-    case DefType.Opt(inner) => fieldNameForExactFromDef(fieldName, inner, tokenized)
-    case DefType.Arr(inner) => fieldNameForExactFromDef(fieldName, inner, tokenized)
+    case DefType.Str | DefType.Enum(_, _, _) if !tokenized => s"$fieldName.keyword"
+    case DefType.Opt(inner, _) => fieldNameForExactFromDef(fieldName, inner, tokenized)
+    case DefType.Arr(inner, _) => fieldNameForExactFromDef(fieldName, inner, tokenized)
     case _ => fieldName
   }
 
