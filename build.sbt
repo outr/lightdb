@@ -110,7 +110,7 @@ val googleHttpClientGsonVersion: String = "2.1.0"
 
 val chronicleMapVersion: String = "2026.1"
 
-val scalaTestVersion: String = "3.2.19"
+val scalaTestVersion: String = "3.2.20"
 
 val testcontainersVersion: String = "2.0.4"
 
