@@ -61,7 +61,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
             given RW[Json] = fabric.rw.valueRW
             model.addField[Json](Field[Doc, Json](fieldName, getter))
           }
-          scribe.info(s"Auto-registered ${missing.size} undeclared field(s) for $name: ${missing.mkString(", ")}")
+          scribe.debug(s"Auto-registered ${missing.size} undeclared field(s) for $name: ${missing.mkString(", ")}")
         }
       case _ => // Can't do validation without JsonConversion
     }
