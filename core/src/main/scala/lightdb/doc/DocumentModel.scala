@@ -69,6 +69,10 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
   def fields: List[Field[Doc, _]] = _fields
 
+  private[lightdb] def addField[V](field: Field[Doc, V]): Unit = synchronized {
+    _fields = _fields ::: List(field)
+  }
+
   def compositeIndexes: List[CompositeIndex[Doc]] = _compositeIndexes
 
   /**
