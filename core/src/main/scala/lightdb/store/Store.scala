@@ -1,10 +1,11 @@
 package lightdb.store
 
 import fabric.define.DefType
+import fabric.rw.RW
+import fabric.{Json, Null}
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.error.ModelMissingFieldsException
-import lightdb.field.Field
+import lightdb.field.{Field, FieldGetter}
 import lightdb.field.Field.*
 import lightdb.id.Id
 import lightdb.lock.LockManager
@@ -43,19 +44,26 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet
         val missing = jc.rw.definition match {
-          case DefType.Obj(map, _, _) => map.keys.filterNot { fieldName =>
-            fieldNames.contains(fieldName)
-          }.toList
+          case DefType.Obj(map, _, _) => map.keys.filterNot(fieldNames.contains).toList
           case DefType.Poly(values, _, _) =>
-            values.values.flatMap(_.asInstanceOf[DefType.Obj].map.keys).filterNot { fieldName =>
-              fieldNames.contains(fieldName)
-            }.toList.distinct
+            values.values.flatMap(_.asInstanceOf[DefType.Obj].map.keys).filterNot(fieldNames.contains).toList.distinct
           case _ => Nil
         }
         if missing.nonEmpty then {
-          throw ModelMissingFieldsException(name, missing)
+          val docRW = jc.rw.asInstanceOf[fabric.rw.RW[Doc]]
+          missing.foreach { fieldName =>
+            val getter = FieldGetter.func[Doc, Json] { doc =>
+              docRW.read(doc) match {
+                case o: fabric.Obj => o.value.getOrElse(fieldName, Null)
+                case _ => Null
+              }
+            }
+            given RW[Json] = fabric.rw.valueRW
+            model.addField[Json](Field[Doc, Json](fieldName, getter))
+          }
+          scribe.info(s"Auto-registered ${missing.size} undeclared field(s) for $name: ${missing.mkString(", ")}")
         }
-      case _ => // Can't do validation
+      case _ => // Can't do validation without JsonConversion
     }
 
     // Give the Model a chance to initialize
