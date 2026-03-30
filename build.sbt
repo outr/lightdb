@@ -64,7 +64,7 @@ val collectionCompatVersion: String = "2.14.0"
 
 val rapidVersion: String = "2.9.0"
 
-val profigVersion: String = "3.4.18"
+val profigVersion: String = "3.5.0"
 
 val reactifyVersion: String = "4.2.0"
 
