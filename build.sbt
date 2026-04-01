@@ -12,7 +12,7 @@ ThisBuild / organization := org
 
 ThisBuild / version := "4.27.0"
 
-ThisBuild / scalaVersion := "3.8.2"
+ThisBuild / scalaVersion := "3.8.3"
 
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 
