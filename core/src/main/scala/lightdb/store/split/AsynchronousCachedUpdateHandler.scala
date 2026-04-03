@@ -78,7 +78,9 @@ case class AsynchronousCachedUpdateHandler[
       .condition(Task(cached.get() <= 0))
       .next(failIfError)
   override def rollback: Task[Unit] = failIfError.next(add(SearchUpdateHandler.rollbackIfSupported(txn.searching)))
-  override def truncate: Task[Unit] = failIfError.next(add(txn.searching.truncate.unit))
+  override def truncate: Task[Unit] = failIfError
+    .condition(Task(cached.get() <= 0))
+    .next(txn.searching.truncate.unit)
   override def close: Task[Unit] = failIfError.next {
     Task.function {
       keepAlive = false
