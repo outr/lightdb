@@ -37,9 +37,5 @@ case class Distance(valueInMeters: Double) extends AnyVal {
 }
 
 object Distance {
-  implicit val rw: RW[Distance] = RW.from[Distance](
-    r = _.toMeters.json,
-    w = j => j.asDouble.meters,
-    d = DefType.Dec
-  )
+  implicit val rw: RW[Distance] = RW.gen
 }

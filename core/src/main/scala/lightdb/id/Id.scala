@@ -21,7 +21,7 @@ trait Id[Doc] extends Any with Ordered[Id[Doc]] {
 }
 
 object Id {
-  private lazy val _rw: RW[Id[_]] = RW.string(_.value, StringId.apply)
+  private lazy val _rw: RW[Id[_]] = RW.string(_.value, StringId.apply, className = Some("lightdb.id.Id"))
 
   implicit def rw[T]: RW[Id[T]] = _rw.asInstanceOf[RW[Id[T]]]
 

@@ -4,7 +4,7 @@ import fabric.*
 import fabric.define.DefType
 import fabric.io.JsonFormatter
 import lightdb.doc.{Document, DocumentModel, ParentChildSupport}
-import lightdb.field.Field
+import lightdb.field.{DefTypeHelper, Field}
 import lightdb.field.Field.Tokenized
 import lightdb.opensearch.client.OpenSearchConfig
 
@@ -230,7 +230,7 @@ object OpenSearchTemplates {
     declared ++ inferred
   }
 
-  private def inferNestedDescendantPaths(path: String, definition: DefType): Set[String] = definition match {
+  private def inferNestedDescendantPaths(path: String, definition: DefType): Set[String] = DefTypeHelper.unwrap(definition) match {
     case DefType.Opt(inner, _) =>
       inferNestedDescendantPaths(path, inner)
     case DefType.Arr(inner, _) =>
@@ -314,7 +314,7 @@ object OpenSearchTemplates {
     }
   }
 
-  private def mappingForField[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = field.rw.definition match {
+  private def mappingForField[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = DefTypeHelper.unwrap(field.rw.definition) match {
     case DefType.Str | DefType.Enum(_, _, _) =>
       stringMapping(field, config)
     case DefType.Bool =>
@@ -370,7 +370,7 @@ object OpenSearchTemplates {
     }
   }
 
-  private def mappingForDefType[Doc <: Document[Doc]](field: Field[Doc, _], d: DefType, config: OpenSearchConfig): Json = d match {
+  private def mappingForDefType[Doc <: Document[Doc]](field: Field[Doc, _], d: DefType, config: OpenSearchConfig): Json = DefTypeHelper.unwrap(d) match {
     case DefType.Str | DefType.Enum(_, _, _) => stringMapping(field, config)
     case DefType.Bool => obj("type" -> str("boolean"))
     case DefType.Int => obj("type" -> str("long"))
@@ -383,7 +383,7 @@ object OpenSearchTemplates {
   }
 
   private def nestedLeafMappingsFromDef(path: String, definition: DefType, config: OpenSearchConfig): List[(String, Json)] = {
-    def recurse(prefix: String, t: DefType): List[(String, Json)] = t match {
+    def recurse(prefix: String, t: DefType): List[(String, Json)] = DefTypeHelper.unwrap(t) match {
       case DefType.Opt(inner, _) =>
         recurse(prefix, inner)
       case DefType.Arr(inner, _) =>
@@ -404,7 +404,7 @@ object OpenSearchTemplates {
     recurse(path, definition)
   }
 
-  private def nestedScalarMapping(d: DefType, config: OpenSearchConfig): Json = d match {
+  private def nestedScalarMapping(d: DefType, config: OpenSearchConfig): Json = DefTypeHelper.unwrap(d) match {
     case DefType.Str | DefType.Enum(_, _, _) =>
       val keyword = if config.keywordNormalize then {
         obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))

@@ -5,7 +5,7 @@ import fabric.rw.RW
 import fabric.{Json, Null}
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
-import lightdb.field.{Field, FieldGetter}
+import lightdb.field.{DefTypeHelper, Field, FieldGetter}
 import lightdb.field.Field.*
 import lightdb.id.Id
 import lightdb.lock.LockManager
@@ -43,7 +43,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     model match {
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet
-        val missing = jc.rw.definition match {
+        val missing = DefTypeHelper.unwrap(jc.rw.definition) match {
           case DefType.Obj(map, _, _) => map.keys.filterNot(fieldNames.contains).toList
           case DefType.Poly(values, _, _) =>
             values.values.flatMap(_.asInstanceOf[DefType.Obj].map.keys).filterNot(fieldNames.contains).toList.distinct
