@@ -5,7 +5,7 @@ import fabric.define.DefType
 import fabric.io.JsonFormatter
 import fabric.rw.Asable
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field
+import lightdb.field.{DefTypeHelper, Field}
 import lightdb.field.Field.Tokenized
 import lightdb.field.IndexingState
 import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
@@ -95,7 +95,7 @@ object LuceneBlockJoinIndexer {
             if field.isSpatial then {
               if j != fabric.Null then createGeoFields(fieldName, j, add)
             } else {
-              d match {
+              DefTypeHelper.unwrap(d) match {
                 case DefType.Str =>
                   j match {
                     case fabric.Null => add(new StringField(fieldName, Field.NullString, storeField))

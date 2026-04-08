@@ -96,7 +96,7 @@ object Timestamp {
       case Str(s, _) => TimestampParser(s).getOrElse(throw new RuntimeException(s"Unable to parse Timestamp from: [$s]"))
       case j => throw new RuntimeException(s"Unsupported JSON for Timestamp: $j")
     },
-    d = DefType.Int
+    d = DefType.Int("lightdb.time.Timestamp")
   )
   implicit val numeric: Numeric[Timestamp] = Numeric[Long].map(Timestamp.apply)(_.value)
 

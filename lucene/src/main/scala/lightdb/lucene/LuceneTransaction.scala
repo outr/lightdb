@@ -8,7 +8,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.FacetComputation
 import lightdb.field.Field.{FacetField, Tokenized}
-import lightdb.field.{Field, IndexingState}
+import lightdb.field.{DefTypeHelper, Field, IndexingState}
 import lightdb.filter.{Filter, FilterPlanner, NestedQuerySupport, QueryOptimizer}
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
@@ -307,7 +307,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       //
       // We only support distinct on fields that have a corresponding docvalues sort field (`<name>Sort`), i.e.:
       // Str/Enum/Int/Dec and Option variants. (Arrays/objects don't have a single docvalues term.)
-      def supported(defType: DefType): Boolean = defType match {
+      def supported(defType: DefType): Boolean = DefTypeHelper.unwrap(defType) match {
         case DefType.Str | DefType.Enum(_, _, _) | DefType.Int | DefType.Dec => true
         case DefType.Opt(d, _) => supported(d)
         case _ => false
@@ -366,7 +366,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
                   val values0 = groups.groups.iterator.map(_.group).toList
                   // Drop missing values (matches OpenSearch composite agg semantics).
-                  val values = field.rw.definition match {
+                  val values = DefTypeHelper.unwrap(field.rw.definition) match {
                     case DefType.Opt(_, _) => values0.filterNot(_ == None)
                     case _ => values0
                   }
@@ -532,7 +532,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
               case t: Throwable => throw new RuntimeException(s"Failure to populate geo field '${store.name}.${field.name}' for $doc (json: $json, className: ${field.className})", t)
             }
           } else {
-            d match {
+            DefTypeHelper.unwrap(d) match {
               case DefType.Str => json match {
                 case Null => add(new StringField(field.name, Field.NullString, fs))
                 case _ => add(new StringField(field.name, json.asString, fs))

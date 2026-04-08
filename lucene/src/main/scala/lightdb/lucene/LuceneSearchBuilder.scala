@@ -6,7 +6,7 @@ import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str, obj}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field.Tokenized
-import lightdb.field.{Field, IndexingState}
+import lightdb.field.{DefTypeHelper, Field, IndexingState}
 import lightdb.filter.{Condition, Filter, NestedQuerySupport}
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
@@ -288,7 +288,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
 
   private def decodeGroupValue[G](groupValue: BytesRef, field: Field[Doc, G]): G = {
     if groupValue == null then {
-      field.rw.definition match {
+      DefTypeHelper.unwrap(field.rw.definition) match {
         case DefType.Opt(_, _) => None.asInstanceOf[G]
         case _ => throw new RuntimeException(s"Missing group value for grouping field '${field.name}'")
       }
@@ -354,7 +354,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case Sort.IndexOrder => SortField.FIELD_DOC
       case Sort.ByField(field, dir) =>
         val fieldSortName = s"${parentFieldName(field.name)}Sort"
-        def st(d: DefType): SortField.Type = d match {
+        def st(d: DefType): SortField.Type = DefTypeHelper.unwrap(d) match {
           case DefType.Str => SortField.Type.STRING
           case DefType.Dec => SortField.Type.DOUBLE
           case DefType.Int => SortField.Type.LONG
@@ -363,7 +363,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           case _ => throw new RuntimeException(s"Unsupported sort type for ${field.rw.definition}")
         }
         val sortType = st(field.rw.definition)
-        def sf(d: DefType): SortField = d match {
+        def sf(d: DefType): SortField = DefTypeHelper.unwrap(d) match {
           case DefType.Int | DefType.Dec => new SortedNumericSortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Str => new SortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Opt(t, _) => sf(t)
@@ -568,7 +568,7 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         b.add(q, BooleanClause.Occur.MUST)
       }
       b.build()
-    case Null => field.rw.definition match {
+    case Null => DefTypeHelper.unwrap(field.rw.definition) match {
       case DefType.Opt(DefType.Str, _) => new TermQuery(new Term(mapName(field.name), Field.NullString))
       case _ => new TermQuery(new Term(mapName(field.name), "null"))
     }
