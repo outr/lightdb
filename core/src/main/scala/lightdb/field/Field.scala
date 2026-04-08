@@ -20,13 +20,14 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
                                             val stored: Boolean) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
   implicit def rw: RW[V] = getRW()
 
-  def isArr: Boolean = rw.definition match {
+  def isArr: Boolean = DefTypeHelper.unwrap(rw.definition) match {
     case DefType.Arr(_, _) => true
     case _ => false
   }
 
   lazy val className: Option[String] = {
     def lookup(d: DefType): Option[String] = d match {
+      case DefType.Classed(d, _) => lookup(d)
       case DefType.Opt(d, _) => lookup(d)
       case DefType.Arr(d, _) => lookup(d)
       case DefType.Poly(_, cn, _) => cn
@@ -183,7 +184,7 @@ object Field {
     override def toString: String = s"FacetField(name = ${this.name}, hierarchical = ${this.hierarchical}, multiValued = ${this.multiValued}, requireDimCount = ${this.requireDimCount})"
   }
 
-  def string2Json(name: String, s: String, definition: DefType): Json = definition match {
+  def string2Json(name: String, s: String, definition: DefType): Json = DefTypeHelper.unwrap(definition) match {
     case _ if s == null | s == NullString => Null
     case DefType.Str => str(s)
     case DefType.Int => num(s.toLong)

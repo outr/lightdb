@@ -3,7 +3,7 @@ package lightdb.sql
 import fabric.define.DefType
 import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field
+import lightdb.field.{DefTypeHelper, Field}
 import lightdb.field.Field.*
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.*
@@ -76,7 +76,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     executeUpdate(s"CREATE TABLE IF NOT EXISTS $fqn($entries)", tx)
   }
 
-  protected def def2Type(name: String, d: DefType): String = d match {
+  protected def def2Type(name: String, d: DefType): String = DefTypeHelper.unwrap(d) match {
     case DefType.Str | DefType.Json | DefType.Obj(_, _, _) | DefType.Arr(_, _) | DefType.Poly(_, _, _) | DefType.Enum(_, _, _) =>
       "VARCHAR"
     case DefType.Int => "BIGINT"

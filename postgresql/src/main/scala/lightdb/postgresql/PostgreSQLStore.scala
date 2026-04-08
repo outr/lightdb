@@ -3,7 +3,7 @@ package lightdb.postgresql
 import fabric.define.DefType
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.Field
+import lightdb.field.{DefTypeHelper, Field}
 import lightdb.sql.connect.ConnectionManager
 import lightdb.sql.{SQLState, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
@@ -95,7 +95,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   override protected def field2Value(field: Field[Doc, _]): String = {
-    def lookup(definition: DefType): String = definition match {
+    def lookup(definition: DefType): String = DefTypeHelper.unwrap(definition) match {
       case DefType.Opt(dt, _) => lookup(dt)
       case DefType.Dec => "?::double precision"
       case DefType.Int => "?::bigint"

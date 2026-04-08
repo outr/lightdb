@@ -8,7 +8,7 @@ import lightdb.distance.Distance
 import lightdb.facet.{FacetQuery, FacetResult, FacetResultValue}
 import lightdb.facet.FacetValue
 import lightdb.field.Field.FacetField
-import lightdb.field.{Field, IndexingState}
+import lightdb.field.{DefTypeHelper, Field, IndexingState}
 import lightdb.filter.{Condition, Filter, FilterClause}
 import lightdb.filter.FilterPlanner
 import lightdb.id.Id
@@ -1335,17 +1335,17 @@ object TraversalQueryEngine {
           else {
             // Safety: Optional fields can be null and should sort before non-null in ascending (compareAny),
             // but our persisted order-by postings omit nulls. Only apply this path for non-optional numeric defs.
-            def isOpt(d: DefType): Boolean = d match {
+            def isOpt(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
               case DefType.Opt(_, _) => true
               case _ => false
             }
 
-            def isIntDef(d: DefType): Boolean = d match {
+            def isIntDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
               case DefType.Int => true
               case DefType.Opt(inner, _) => isIntDef(inner)
               case _ => false
             }
-            def isDecDef(d: DefType): Boolean = d match {
+            def isDecDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
               case DefType.Dec => true
               case DefType.Opt(inner, _) => isDecDef(inner)
               case _ => false
@@ -1396,16 +1396,16 @@ object TraversalQueryEngine {
                 Some(query.sort.head.asInstanceOf[Sort.ByField[Doc, _]])
               else None
 
-            def isOptDef(d: DefType): Boolean = d match {
+            def isOptDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
               case DefType.Opt(_, _) => true
               case _ => false
             }
-            def isIntDef(d: DefType): Boolean = d match {
+            def isIntDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
               case DefType.Int => true
               case DefType.Opt(inner, _) => isIntDef(inner)
               case _ => false
             }
-            def isDecDef(d: DefType): Boolean = d match {
+            def isDecDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
               case DefType.Dec => true
               case DefType.Opt(inner, _) => isDecDef(inner)
               case _ => false
