@@ -1,6 +1,6 @@
 package lightdb.id
 
-import fabric.rw.RW
+import fabric.rw.{RW, serialized}
 import rapid.Unique
 
 import java.nio.charset.StandardCharsets

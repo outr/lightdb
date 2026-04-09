@@ -304,7 +304,8 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       case None =>
         send(syncReq).flatMap(resp => parseJsonOrError(resp, s"OpenSearch $name failed"))
       case Some(threshold) =>
-        sendWithRetry(syncReq.timeout(threshold), name, retryOnFailure = t => !isTimeout(t)).attempt.flatMap {
+        // Use direct send (no retries) for the sync probe — if it times out we fall back to async.
+        syncReq.timeout(threshold).send().attempt.flatMap {
           case Success(resp) =>
             parseJsonOrError(resp, s"OpenSearch $name failed")
           case Failure(t) if isTimeout(t) =>
