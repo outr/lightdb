@@ -9,7 +9,7 @@ trait Id[Doc] extends Any with Ordered[Id[Doc]] {
   def value: String
   def bytes: Array[Byte] = {
     val b = value.getBytes(StandardCharsets.UTF_8)
-    assert(b.length <= 128, s"Must be 128 bytes or less, but was ${b.length} ($value)")
+    assert(b.length <= Id.MaxBytes, s"Must be ${Id.MaxBytes} bytes or less, but was ${b.length} ($value)")
     b
   }
 
@@ -21,6 +21,8 @@ trait Id[Doc] extends Any with Ordered[Id[Doc]] {
 }
 
 object Id {
+  var MaxBytes: Int = 128
+
   private lazy val _rw: RW[Id[_]] = RW.string(_.value, StringId.apply, className = Some("lightdb.id.Id"))
 
   implicit def rw[T]: RW[Id[T]] = _rw.asInstanceOf[RW[Id[T]]]
