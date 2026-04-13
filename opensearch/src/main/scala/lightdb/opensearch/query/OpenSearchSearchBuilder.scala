@@ -221,6 +221,13 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         }
       case f: Filter.Regex[Doc, _] =>
         val fieldName = fieldNameForPattern(f.fieldName)
+        try {
+          java.util.regex.Pattern.compile(f.expression)
+        } catch {
+          case _: java.util.regex.PatternSyntaxException =>
+            scribe.warn(s"Invalid regex expression for field $fieldName: ${f.expression}")
+            return OpenSearchDsl.matchAll() // Degrade gracefully instead of sending bad regex to OpenSearch
+        }
         OpenSearchDsl.regexp(fieldName, f.expression)
       case f: Filter.In[Doc, _] =>
         // simplest initial mapping; later we can split by type like lucene does
