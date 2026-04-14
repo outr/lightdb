@@ -104,7 +104,7 @@ val postgresqlVersion: String = "42.7.9"
 
 val googleSheetsVersion: String = "v4-rev20260213-2.0.0"
 
-val googleAuthVersion: String = "1.43.0"
+val googleAuthVersion: String = "1.45.0"
 
 val googleHttpClientGsonVersion: String = "2.1.0"
 
