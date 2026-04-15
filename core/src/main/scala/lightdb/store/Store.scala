@@ -43,10 +43,10 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     model match {
       case jc: JsonConversion[_] =>
         val fieldNames = model.fields.map(_.name).toSet
-        val missing = DefTypeHelper.unwrap(jc.rw.definition) match {
-          case DefType.Obj(map, _, _) => map.keys.filterNot(fieldNames.contains).toList
-          case DefType.Poly(values, _, _) =>
-            values.values.flatMap(_.asInstanceOf[DefType.Obj].map.keys).filterNot(fieldNames.contains).toList.distinct
+        val missing = jc.rw.definition.defType match {
+          case DefType.Obj(map) => map.keys.filterNot(fieldNames.contains).toList
+          case DefType.Poly(values) =>
+            values.values.flatMap(_.defType.asInstanceOf[DefType.Obj].map.keys).filterNot(fieldNames.contains).toList.distinct
           case _ => Nil
         }
         if missing.nonEmpty then {

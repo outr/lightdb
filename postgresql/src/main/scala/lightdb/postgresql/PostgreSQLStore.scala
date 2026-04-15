@@ -1,9 +1,9 @@
 package lightdb.postgresql
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.{DefTypeHelper, Field}
+import lightdb.field.Field
 import lightdb.sql.connect.ConnectionManager
 import lightdb.sql.{SQLState, SQLStore}
 import lightdb.store.{Store, StoreManager, StoreMode}
@@ -75,7 +75,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
-  override protected def def2Type(name: String, d: DefType): String = d match {
+  override protected def def2Type(name: String, d: Definition): String = d.defType match {
     case DefType.Dec => "DOUBLE PRECISION"
     case DefType.Bool => "BOOLEAN"
     case _ => super.def2Type(name, d)
@@ -95,8 +95,8 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   override protected def field2Value(field: Field[Doc, _]): String = {
-    def lookup(definition: DefType): String = DefTypeHelper.unwrap(definition) match {
-      case DefType.Opt(dt, _) => lookup(dt)
+    def lookup(definition: Definition): String = definition.defType match {
+      case DefType.Opt(inner) => lookup(inner)
       case DefType.Dec => "?::double precision"
       case DefType.Int => "?::bigint"
       case DefType.Bool => "?::boolean"

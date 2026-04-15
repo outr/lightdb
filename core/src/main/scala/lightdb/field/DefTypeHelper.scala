@@ -1,21 +1,37 @@
 package lightdb.field
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 
+/**
+ * Bridges the fabric Definition/DefType API for pattern matching.
+ *
+ * In fabric 1.24+, `RW.definition` returns `Definition` (which wraps `DefType` plus metadata).
+ * Composite DefType variants (Opt, Arr, Obj, Poly) reference `Definition` for inner types.
+ * This helper extracts the structural `DefType` for pattern matching.
+ */
 object DefTypeHelper {
   /**
-   * Deeply unwraps `Classed` and `Described` wrappers from a DefType tree, returning the underlying
-   * structural type with all nested wrappers removed. This ensures pattern matches against
-   * DefType.Str, DefType.Int, DefType.Opt(DefType.Str, _), etc. work correctly regardless of
-   * whether any level is wrapped with class/description metadata.
+   * Extracts the structural DefType from a Definition, suitable for pattern matching.
    */
-  def unwrap(d: DefType): DefType = d match {
-    case DefType.Classed(dt, _) => unwrap(dt)
-    case DefType.Described(dt, _) => unwrap(dt)
-    case DefType.Opt(dt, desc) => DefType.Opt(unwrap(dt), desc)
-    case DefType.Arr(dt, desc) => DefType.Arr(unwrap(dt), desc)
-    case DefType.Obj(map, cn, desc) => DefType.Obj(map.map { case (k, v) => k -> unwrap(v) }, cn, desc)
-    case DefType.Poly(map, cn, desc) => DefType.Poly(map.map { case (k, v) => k -> unwrap(v) }, cn, desc)
+  def unwrap(d: Definition): DefType = d.defType
+
+  /**
+   * Identity unwrap for DefType — allows call sites that already have a DefType
+   * to use unwrap uniformly.
+   */
+  def unwrap(d: DefType): DefType = d
+
+  /**
+   * Extracts the className from a Definition.
+   */
+  def className(d: Definition): Option[String] = d.className
+
+  /**
+   * Extracts the inner Definition from composite DefType variants, for recursive processing.
+   */
+  def inner(d: Definition): Definition = d.defType match {
+    case DefType.Opt(t) => t
+    case DefType.Arr(t) => t
     case _ => d
   }
 }

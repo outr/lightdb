@@ -51,77 +51,7 @@ object Geo {
   implicit val rw: RW[Geo] = RW.from[Geo](
     r = geo => geo.toJson,
     w = json => parse(json),
-    d = {
-      import fabric.*
-      import fabric.define.DefType
-      import fabric.define.DefType.{Arr, Dec, Enum, Json, Obj, Poly}
-
-      val position: DefType = Arr(Dec)
-      val ring: DefType = Arr(position)
-      val polygonCoords: DefType = Arr(ring)
-      val multiPointCoords: DefType = Arr(position)
-      val lineCoords: DefType = Arr(position)
-      val multiLineCoords: DefType = Arr(lineCoords)
-      val multiPolygonCoords: DefType = Arr(polygonCoords)
-
-      def typeIs(name: String): DefType =
-        Enum(values = List(str(name)), className = Some("java.lang.String"))
-
-      val pointDef: DefType =
-        Obj(className = Some("lightdb.spatial.Point"),
-          "type" -> typeIs("Point"),
-          "coordinates" -> position
-        )
-
-      val multiPointDef: DefType =
-        Obj(className = Some("lightdb.spatial.MultiPoint"),
-          "type" -> typeIs("MultiPoint"),
-          "coordinates" -> multiPointCoords
-        )
-
-      val lineStringDef: DefType =
-        Obj(className = Some("lightdb.spatial.Line"),
-          "type" -> typeIs("LineString"),
-          "coordinates" -> lineCoords
-        )
-
-      val multiLineStringDef: DefType =
-        Obj(className = Some("lightdb.spatial.MultiLine"),
-          "type" -> typeIs("MultiLineString"),
-          "coordinates" -> multiLineCoords
-        )
-
-      val polygonDef: DefType =
-        Obj(className = Some("lightdb.spatial.Polygon"),
-          "type" -> typeIs("Polygon"),
-          "coordinates" -> polygonCoords
-        )
-
-      val multiPolygonDef: DefType =
-        Obj(className = Some("lightdb.spatial.MultiPolygon"),
-          "type" -> typeIs("MultiPolygon"),
-          "coordinates" -> multiPolygonCoords
-        )
-
-      val geometryCollectionDef: DefType =
-        Obj(className = Some("lightdb.spatial.GeometryCollection"),
-          "type" -> typeIs("GeometryCollection"),
-          "geometries" -> Arr(Json)
-        )
-
-      Poly(
-        values = Map(
-          "Point" -> pointDef,
-          "MultiPoint" -> multiPointDef,
-          "LineString" -> lineStringDef,
-          "MultiLineString" -> multiLineStringDef,
-          "Polygon" -> polygonDef,
-          "MultiPolygon" -> multiPolygonDef,
-          "GeometryCollection" -> geometryCollectionDef
-        ),
-        className = Some("lightdb.spatial.Geo")
-      )
-    }
+    d = fabric.define.Definition(fabric.define.DefType.Json, className = Some("lightdb.spatial.Geo"))
   )
 
   private lazy val PointStringRegex = """(?i)^\s*POINT\s*\(\s*([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)\s*\)\s*$""".r

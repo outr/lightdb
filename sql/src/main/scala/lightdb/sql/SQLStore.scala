@@ -1,9 +1,9 @@
 package lightdb.sql
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.{DefTypeHelper, Field}
+import lightdb.field.Field
 import lightdb.field.Field.*
 import lightdb.sql.connect.ConnectionManager
 import lightdb.store.*
@@ -76,14 +76,14 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     executeUpdate(s"CREATE TABLE IF NOT EXISTS $fqn($entries)", tx)
   }
 
-  protected def def2Type(name: String, d: DefType): String = DefTypeHelper.unwrap(d) match {
-    case DefType.Str | DefType.Json | DefType.Obj(_, _, _) | DefType.Arr(_, _) | DefType.Poly(_, _, _) | DefType.Enum(_, _, _) =>
+  protected def def2Type(name: String, d: Definition): String = d.defType match {
+    case DefType.Str | DefType.Json | DefType.Obj(_) | DefType.Arr(_) | DefType.Poly(_) =>
       "VARCHAR"
     case DefType.Int => "BIGINT"
     case DefType.Bool => "TINYINT"
     case DefType.Dec => "DOUBLE"
-    case DefType.Opt(d, _) => def2Type(name, d)
-    case d => throw new UnsupportedOperationException(s"$name has an unsupported type: $d")
+    case DefType.Opt(inner) => def2Type(name, inner)
+    case dt => throw new UnsupportedOperationException(s"$name has an unsupported type: $dt")
   }
 
   protected def addColumn(field: Field[Doc, _], tx: TX): Unit = {

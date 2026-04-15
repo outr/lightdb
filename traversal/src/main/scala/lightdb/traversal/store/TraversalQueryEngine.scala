@@ -8,7 +8,7 @@ import lightdb.distance.Distance
 import lightdb.facet.{FacetQuery, FacetResult, FacetResultValue}
 import lightdb.facet.FacetValue
 import lightdb.field.Field.FacetField
-import lightdb.field.{DefTypeHelper, Field, IndexingState}
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter, FilterClause}
 import lightdb.filter.FilterPlanner
 import lightdb.id.Id
@@ -1335,27 +1335,27 @@ object TraversalQueryEngine {
           else {
             // Safety: Optional fields can be null and should sort before non-null in ascending (compareAny),
             // but our persisted order-by postings omit nulls. Only apply this path for non-optional numeric defs.
-            def isOpt(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
-              case DefType.Opt(_, _) => true
+            def isOpt(d: DefType): Boolean = d match {
+              case DefType.Opt(_) => true
               case _ => false
             }
 
-            def isIntDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
+            def isIntDef(d: DefType): Boolean = d match {
               case DefType.Int => true
-              case DefType.Opt(inner, _) => isIntDef(inner)
+              case DefType.Opt(inner) => isIntDef(inner.defType)
               case _ => false
             }
-            def isDecDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
+            def isDecDef(d: DefType): Boolean = d match {
               case DefType.Dec => true
-              case DefType.Opt(inner, _) => isDecDef(inner)
+              case DefType.Opt(inner) => isDecDef(inner.defType)
               case _ => false
             }
             val prefix =
-              if !orderByFieldPostingsEnabled || isOpt(fAny.rw.definition) then ""
-              else if isIntDef(fAny.rw.definition) then {
+              if !orderByFieldPostingsEnabled || isOpt(fAny.rw.definition.defType) then ""
+              else if isIntDef(fAny.rw.definition.defType) then {
                 if sort.direction == SortDirection.Ascending then TraversalKeys.olaPrefix(storeName, fAny.name)
                 else TraversalKeys.oldPrefix(storeName, fAny.name)
-              } else if isDecDef(fAny.rw.definition) then {
+              } else if isDecDef(fAny.rw.definition.defType) then {
                 if sort.direction == SortDirection.Ascending then TraversalKeys.odaPrefix(storeName, fAny.name)
                 else TraversalKeys.oddPrefix(storeName, fAny.name)
               } else ""
@@ -1396,24 +1396,24 @@ object TraversalQueryEngine {
                 Some(query.sort.head.asInstanceOf[Sort.ByField[Doc, _]])
               else None
 
-            def isOptDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
-              case DefType.Opt(_, _) => true
+            def isOptDef(d: DefType): Boolean = d match {
+              case DefType.Opt(_) => true
               case _ => false
             }
-            def isIntDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
+            def isIntDef(d: DefType): Boolean = d match {
               case DefType.Int => true
-              case DefType.Opt(inner, _) => isIntDef(inner)
+              case DefType.Opt(inner) => isIntDef(inner.defType)
               case _ => false
             }
-            def isDecDef(d: DefType): Boolean = DefTypeHelper.unwrap(d) match {
+            def isDecDef(d: DefType): Boolean = d match {
               case DefType.Dec => true
-              case DefType.Opt(inner, _) => isDecDef(inner)
+              case DefType.Opt(inner) => isDecDef(inner.defType)
               case _ => false
             }
 
             val byFieldNumericEligible: Boolean = byFieldSortOpt.exists { sf =>
               val fAny = sf.field.asInstanceOf[Field[Doc, Any]]
-              fAny.indexed && !isOptDef(fAny.rw.definition) && (isIntDef(fAny.rw.definition) || isDecDef(fAny.rw.definition))
+              fAny.indexed && !isOptDef(fAny.rw.definition.defType) && (isIntDef(fAny.rw.definition.defType) || isDecDef(fAny.rw.definition.defType))
             }
 
             val canStreamByField: Boolean =
