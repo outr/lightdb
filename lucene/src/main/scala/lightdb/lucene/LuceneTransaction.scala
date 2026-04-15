@@ -1,6 +1,6 @@
 package lightdb.lucene
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.io.JsonFormatter
 import fabric.rw.Asable
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str}
@@ -8,7 +8,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.facet.FacetComputation
 import lightdb.field.Field.{FacetField, Tokenized}
-import lightdb.field.{DefTypeHelper, Field, IndexingState}
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Filter, FilterPlanner, NestedQuerySupport, QueryOptimizer}
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
@@ -307,12 +307,12 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       //
       // We only support distinct on fields that have a corresponding docvalues sort field (`<name>Sort`), i.e.:
       // Str/Enum/Int/Dec and Option variants. (Arrays/objects don't have a single docvalues term.)
-      def supported(defType: DefType): Boolean = DefTypeHelper.unwrap(defType) match {
-        case DefType.Str | DefType.Enum(_, _, _) | DefType.Int | DefType.Dec => true
-        case DefType.Opt(d, _) => supported(d)
+      def supported(defType: DefType): Boolean = defType match {
+        case DefType.Str | DefType.Poly(_) | DefType.Int | DefType.Dec => true
+        case DefType.Opt(d) => supported(d.defType)
         case _ => false
       }
-      if !supported(field.rw.definition) then {
+      if !supported(field.rw.definition.defType) then {
         throw new NotImplementedError(s"distinct is not supported for field '${field.name}' (${field.rw.definition}) in Lucene")
       } else {
         rapid.Stream.force {
@@ -366,8 +366,8 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
                   val values0 = groups.groups.iterator.map(_.group).toList
                   // Drop missing values (matches OpenSearch composite agg semantics).
-                  val values = DefTypeHelper.unwrap(field.rw.definition) match {
-                    case DefType.Opt(_, _) => values0.filterNot(_ == None)
+                  val values = field.rw.definition.defType match {
+                    case DefType.Opt(_) => values0.filterNot(_ == None)
                     case _ => values0
                   }
                   currentPull = rapid.Pull.fromList(values)
@@ -532,21 +532,20 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
               case t: Throwable => throw new RuntimeException(s"Failure to populate geo field '${store.name}.${field.name}' for $doc (json: $json, className: ${field.className})", t)
             }
           } else {
-            DefTypeHelper.unwrap(d) match {
+            d match {
               case DefType.Str => json match {
                 case Null => add(new StringField(field.name, Field.NullString, fs))
                 case _ => add(new StringField(field.name, json.asString, fs))
               }
-              case DefType.Enum(_, _, _) => add(new StringField(field.name, json.asString, fs))
-              case DefType.Opt(d, _) => addJson(json, d)
-              case DefType.Json | DefType.Obj(_, _, _) | DefType.Poly(_, _, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+              case DefType.Opt(inner) => addJson(json, inner.defType)
+              case DefType.Json | DefType.Obj(_) | DefType.Poly(_) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
               case _ if json == Null => // Ignore null values
-              case DefType.Arr(d, _) =>
+              case DefType.Arr(inner) =>
                 val v = json.asVector
                 if v.isEmpty then {
                   add(new StringField(field.name, "[]", fs))
                 } else {
-                  v.foreach(json => addJson(json, d))
+                  v.foreach(json => addJson(json, inner.defType))
                 }
               case DefType.Bool => add(new IntField(field.name, if json.asBoolean then 1 else 0, fs))
               case DefType.Int => add(new LongField(field.name, json.asLong, fs))
@@ -555,7 +554,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
             }
           }
         }
-        addJson(json, field.rw.definition)
+        addJson(json, field.rw.definition.defType)
 
         val fieldSortName = s"${field.name}Sort"
         field.getJson(doc, state) match {

@@ -740,7 +740,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   private def normalizeJsonFields(source: Json): Json = source match {
     case o: Obj =>
       val jsonFieldNames = store.fields
-        .filter(f => f.rw.definition == fabric.define.DefType.Json)
+        .filter(f => f.rw.definition.defType == fabric.define.DefType.Json)
         .map(_.name)
         .toSet
       if jsonFieldNames.isEmpty then {

@@ -2,9 +2,9 @@ package lightdb.opensearch.query
 
 import fabric.Json
 import fabric.*
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.{DefTypeHelper, Field}
+import lightdb.field.Field
 import lightdb.field.Field.Tokenized
 import lightdb.filter.Filter
 import lightdb.facet.FacetQuery
@@ -49,12 +49,12 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     declared ++ inferred
   }
 
-  private def inferNestedDescendantPaths(path: String, definition: DefType): Set[String] = DefTypeHelper.unwrap(definition) match {
-    case DefType.Opt(inner, _) =>
+  private def inferNestedDescendantPaths(path: String, definition: Definition): Set[String] = definition.defType match {
+    case DefType.Opt(inner) =>
       inferNestedDescendantPaths(path, inner)
-    case DefType.Arr(inner, _) =>
-      inner match {
-        case DefType.Obj(map, _, _) =>
+    case DefType.Arr(inner) =>
+      inner.defType match {
+        case DefType.Obj(map) =>
           val descendants = map.toList.flatMap { case (name, dt) =>
             inferNestedDescendantPaths(s"$path.$name", dt)
           }.toSet
@@ -62,7 +62,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         case _ =>
           Set.empty
       }
-    case DefType.Obj(map, _, _) =>
+    case DefType.Obj(map) =>
       map.toList.flatMap { case (name, dt) =>
         inferNestedDescendantPaths(s"$path.$name", dt)
       }.toSet
@@ -573,7 +573,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val order = if s.direction == lightdb.SortDirection.Descending then "desc" else "asc"
         val field = s.field.asInstanceOf[Field[Doc, _]]
         val isIdLikeString =
-          (DefTypeHelper.unwrap(field.rw.definition) == DefType.Str || DefTypeHelper.unwrap(field.rw.definition).isInstanceOf[DefType.Enum]) &&
+          (field.rw.definition.defType == DefType.Str || field.rw.definition.defType.isInstanceOf[DefType.Poly]) &&
             !field.isTokenized &&
             field.name != "_id" &&
             field.name.endsWith("Id")
@@ -692,25 +692,25 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       "boost_mode" -> str("multiply")
     ))
 
-  private def sortFieldName(field: Field[Doc, _]): String = DefTypeHelper.unwrap(field.rw.definition) match {
+  private def sortFieldName(field: Field[Doc, _]): String = field.rw.definition.defType match {
     case _ if field.name == "_id" =>
       // `_id` is reserved in OpenSearch and is not present in `_source`; we store it in `__lightdb_id`.
       InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _, _) =>
+    case DefType.Str | DefType.Poly(_) =>
       s"${rewriteReservedIdFieldName(field.name)}.keyword"
-    case DefType.Opt(d, _) =>
+    case DefType.Opt(d) =>
       sortFieldNameFromDef(rewriteReservedIdFieldName(field.name), d)
-    case DefType.Arr(d, _) =>
+    case DefType.Arr(d) =>
       sortFieldNameFromDef(rewriteReservedIdFieldName(field.name), d)
     case _ =>
       rewriteReservedIdFieldName(field.name)
   }
 
-  private def sortFieldNameFromDef(fieldName: String, d: DefType): String = DefTypeHelper.unwrap(d) match {
+  private def sortFieldNameFromDef(fieldName: String, d: Definition): String = d.defType match {
     case _ if fieldName == "_id" => InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _, _) => s"$fieldName.keyword"
-    case DefType.Opt(inner, _) => sortFieldNameFromDef(fieldName, inner)
-    case DefType.Arr(inner, _) => sortFieldNameFromDef(fieldName, inner)
+    case DefType.Str | DefType.Poly(_) => s"$fieldName.keyword"
+    case DefType.Opt(inner) => sortFieldNameFromDef(fieldName, inner)
+    case DefType.Arr(inner) => sortFieldNameFromDef(fieldName, inner)
     case _ => fieldName
   }
 
@@ -718,24 +718,24 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   private def escapeRegexLiteral(s: String): String =
     s.flatMap(c => if regexChars.contains(c) then s"\\$c" else c.toString)
 
-  private def fieldNameForExact(field: Field[Doc, _]): String = DefTypeHelper.unwrap(field.rw.definition) match {
+  private def fieldNameForExact(field: Field[Doc, _]): String = field.rw.definition.defType match {
     case _ if field.name == "_id" =>
       InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _, _) if !field.isInstanceOf[Tokenized[_]] =>
+    case DefType.Str | DefType.Poly(_) if !field.isInstanceOf[Tokenized[_]] =>
       s"${rewriteReservedIdFieldName(field.name)}.keyword"
-    case DefType.Opt(d, _) =>
+    case DefType.Opt(d) =>
       fieldNameForExactFromDef(rewriteReservedIdFieldName(field.name), d, tokenized = field.isInstanceOf[Tokenized[_]])
-    case DefType.Arr(d, _) =>
+    case DefType.Arr(d) =>
       fieldNameForExactFromDef(rewriteReservedIdFieldName(field.name), d, tokenized = field.isInstanceOf[Tokenized[_]])
     case _ =>
       rewriteReservedIdFieldName(field.name)
   }
 
-  private def fieldNameForExactFromDef(fieldName: String, d: DefType, tokenized: Boolean): String = DefTypeHelper.unwrap(d) match {
+  private def fieldNameForExactFromDef(fieldName: String, d: Definition, tokenized: Boolean): String = d.defType match {
     case _ if fieldName == "_id" => InternalIdFieldName
-    case DefType.Str | DefType.Enum(_, _, _) if !tokenized => s"$fieldName.keyword"
-    case DefType.Opt(inner, _) => fieldNameForExactFromDef(fieldName, inner, tokenized)
-    case DefType.Arr(inner, _) => fieldNameForExactFromDef(fieldName, inner, tokenized)
+    case DefType.Str | DefType.Poly(_) if !tokenized => s"$fieldName.keyword"
+    case DefType.Opt(inner) => fieldNameForExactFromDef(fieldName, inner, tokenized)
+    case DefType.Arr(inner) => fieldNameForExactFromDef(fieldName, inner, tokenized)
     case _ => fieldName
   }
 
@@ -745,7 +745,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     } else
     model.fields.find(_.name == fieldName) match {
       case Some(f) if f.isTokenized => fieldName
-      case Some(f) if DefTypeHelper.unwrap(f.rw.definition) == DefType.Str || DefTypeHelper.unwrap(f.rw.definition).isInstanceOf[DefType.Enum] =>
+      case Some(f) if f.rw.definition.defType == DefType.Str || f.rw.definition.defType.isInstanceOf[DefType.Poly] =>
         s"$fieldName.keyword"
       case Some(f) => fieldNameForExact(f.asInstanceOf[Field[Doc, _]])
       case None => fieldName

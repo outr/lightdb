@@ -1,6 +1,6 @@
 package lightdb.sql
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str, arr, bool, num, obj, str}
@@ -11,7 +11,7 @@ import lightdb.facet.{FacetQuery, FacetResult, FacetResultValue, FacetValue}
 import lightdb.facet.FacetComputation
 import lightdb.field.Field.Tokenized
 import lightdb.field.Field.FacetField
-import lightdb.field.{DefTypeHelper, Field, FieldAndValue, IndexingState}
+import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter.{Condition, Filter, NestedQuerySupport}
 import lightdb.filter.{FilterPlanner, QueryOptimizer}
 import lightdb.*
@@ -1111,12 +1111,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   protected def toJson(value: Any, rw: RW[_]): Json = obj2Value(value) match {
     case null => Null
-    case s: String => DefTypeHelper.unwrap(rw.definition) match {
+    case s: String => rw.definition.defType match {
       case DefType.Str => str(s)
-      case DefType.Opt(DefType.Str, _) => str(s)
-      case DefType.Opt(DefType.Enum(_, _, _), _) => str(s)
+      case DefType.Opt(d) if d.defType == DefType.Str => str(s)
+      case DefType.Opt(d) if d.defType.isInstanceOf[DefType.Poly] => str(s)
       case DefType.Json => JsonParser(s)
-      case DefType.Enum(_, _, _) => str(s)
+      case _: DefType.Poly => str(s)
       case _ => try {
         JsonParser(s)
       } catch {

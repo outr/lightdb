@@ -53,8 +53,9 @@ object OpenSearchDocEncoding {
         val j = f.getJson(doc, state)
         val normalized = escapeReservedIds(j)
         val value = normalized match {
-          case _ if f.rw.definition == fabric.define.DefType.Json =>
+          case _ if f.rw.definition.defType == fabric.define.DefType.Json && !f.isSpatial =>
             // Persist Json as a compact string to avoid mapping conflicts (KeyValue backing store, etc.)
+            // Spatial fields must keep raw GeoJSON for geo_shape/geo_point indexing.
             Str(JsonFormatter.Compact(normalized))
           case other =>
             other

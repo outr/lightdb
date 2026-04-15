@@ -1,12 +1,12 @@
 package lightdb.lucene
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.rw.Asable
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str, obj}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field.Tokenized
-import lightdb.field.{DefTypeHelper, Field, IndexingState}
+import lightdb.field.{Field, IndexingState}
 import lightdb.filter.{Condition, Filter, NestedQuerySupport}
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
@@ -288,8 +288,8 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
 
   private def decodeGroupValue[G](groupValue: BytesRef, field: Field[Doc, G]): G = {
     if groupValue == null then {
-      DefTypeHelper.unwrap(field.rw.definition) match {
-        case DefType.Opt(_, _) => None.asInstanceOf[G]
+      field.rw.definition.defType match {
+        case DefType.Opt(_) => None.asInstanceOf[G]
         case _ => throw new RuntimeException(s"Missing group value for grouping field '${field.name}'")
       }
     } else {
@@ -354,23 +354,23 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case Sort.IndexOrder => SortField.FIELD_DOC
       case Sort.ByField(field, dir) =>
         val fieldSortName = s"${parentFieldName(field.name)}Sort"
-        def st(d: DefType): SortField.Type = DefTypeHelper.unwrap(d) match {
+        def st(d: DefType): SortField.Type = d match {
           case DefType.Str => SortField.Type.STRING
           case DefType.Dec => SortField.Type.DOUBLE
           case DefType.Int => SortField.Type.LONG
-          case DefType.Opt(t, _) => st(t)
-          case DefType.Arr(t, _) => st(t)
+          case DefType.Opt(t) => st(t.defType)
+          case DefType.Arr(t) => st(t.defType)
           case _ => throw new RuntimeException(s"Unsupported sort type for ${field.rw.definition}")
         }
-        val sortType = st(field.rw.definition)
-        def sf(d: DefType): SortField = DefTypeHelper.unwrap(d) match {
+        val sortType = st(field.rw.definition.defType)
+        def sf(d: DefType): SortField = d match {
           case DefType.Int | DefType.Dec => new SortedNumericSortField(fieldSortName, sortType, dir == SortDirection.Descending)
           case DefType.Str => new SortField(fieldSortName, sortType, dir == SortDirection.Descending)
-          case DefType.Opt(t, _) => sf(t)
-          case DefType.Arr(t, _) => sf(t)
+          case DefType.Opt(t) => sf(t.defType)
+          case DefType.Arr(t) => sf(t.defType)
           case d => throw new RuntimeException(s"Unsupported sort definition: $d")
         }
-        sf(field.rw.definition)
+        sf(field.rw.definition.defType)
       case Sort.ByDistance(field, from, _) =>
         val fieldSortName = s"${parentFieldName(field.name)}Sort"
         LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
@@ -568,8 +568,8 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         b.add(q, BooleanClause.Occur.MUST)
       }
       b.build()
-    case Null => DefTypeHelper.unwrap(field.rw.definition) match {
-      case DefType.Opt(DefType.Str, _) => new TermQuery(new Term(mapName(field.name), Field.NullString))
+    case Null => field.rw.definition.defType match {
+      case DefType.Opt(d) if d.defType == DefType.Str => new TermQuery(new Term(mapName(field.name), Field.NullString))
       case _ => new TermQuery(new Term(mapName(field.name), "null"))
     }
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")

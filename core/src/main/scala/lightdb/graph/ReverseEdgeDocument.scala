@@ -1,7 +1,7 @@
 package lightdb.graph
 
 import fabric.*
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.rw.*
 import lightdb.doc.Document
 import lightdb.id.{EdgeId, Id}
@@ -30,12 +30,14 @@ object ReverseEdgeDocument {
       _to = json("_to").as[Id[F]],
       _id = json("_id").as[EdgeId[ReverseEdgeDocument[E, F, T], T, F]]
     ),
-    d = DefType.Obj(
-      className = Some("lightdb.graph.ReverseEdgeDocument"),
-      "edge" -> erw.definition,
-      "_from" -> DefType.Str,
-      "_to" -> DefType.Str,
-      "_id" -> DefType.Str
+    d = Definition(
+      DefType.Obj(Map(
+        "edge" -> erw.definition,
+        "_from" -> Definition(DefType.Str),
+        "_to" -> Definition(DefType.Str),
+        "_id" -> Definition(DefType.Str)
+      )),
+      className = Some("lightdb.graph.ReverseEdgeDocument")
     )
   )
 
