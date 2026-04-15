@@ -1,6 +1,6 @@
 package lightdb.field
 
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.io.JsonParser
 import fabric.rw.*
 import fabric.{Json, Null, arr, bool, num, str}
@@ -20,19 +20,18 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
                                             val stored: Boolean) extends FilterSupport[V, Doc, Filter[Doc]] with AggregateSupport[Doc, V] with Materializable[Doc, V] {
   implicit def rw: RW[V] = getRW()
 
-  def isArr: Boolean = DefTypeHelper.unwrap(rw.definition) match {
-    case DefType.Arr(_, _) => true
+  def isArr: Boolean = rw.definition.defType match {
+    case DefType.Arr(_) => true
     case _ => false
   }
 
   lazy val className: Option[String] = {
-    def lookup(d: DefType): Option[String] = d match {
-      case DefType.Classed(d, _) => lookup(d)
-      case DefType.Opt(d, _) => lookup(d)
-      case DefType.Arr(d, _) => lookup(d)
-      case DefType.Poly(_, cn, _) => cn
-      case DefType.Obj(_, cn, _) => cn
-      case _ => None
+    def lookup(d: Definition): Option[String] = d.className.orElse {
+      d.defType match {
+        case DefType.Opt(inner) => lookup(inner)
+        case DefType.Arr(inner) => lookup(inner)
+        case _ => None
+      }
     }
     lookup(rw.definition)
   }
@@ -184,7 +183,7 @@ object Field {
     override def toString: String = s"FacetField(name = ${this.name}, hierarchical = ${this.hierarchical}, multiValued = ${this.multiValued}, requireDimCount = ${this.requireDimCount})"
   }
 
-  def string2Json(name: String, s: String, definition: DefType): Json = DefTypeHelper.unwrap(definition) match {
+  def string2Json(name: String, s: String, definition: Definition): Json = definition.defType match {
     case _ if s == null | s == NullString => Null
     case DefType.Str => str(s)
     case DefType.Int => num(s.toLong)
@@ -193,9 +192,9 @@ object Field {
       case "1" | "true" => true
       case _ => false
     })
-    case DefType.Opt(d, _) => string2Json(name, s, d)
-    case DefType.Enum(_, _, _) => str(s)
-    case DefType.Arr(d, _) if !s.startsWith("[") => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
+    case DefType.Opt(d) => string2Json(name, s, d)
+    case DefType.Poly(_) => str(s)
+    case DefType.Arr(d) if !s.startsWith("[") => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
     case _ => try {
       JsonParser(s)
     } catch {

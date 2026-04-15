@@ -1,11 +1,11 @@
 package lightdb.lucene.blockjoin
 
 import fabric.Json
-import fabric.define.DefType
+import fabric.define.{DefType, Definition}
 import fabric.io.JsonFormatter
 import fabric.rw.Asable
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.field.{DefTypeHelper, Field}
+import lightdb.field.Field
 import lightdb.field.Field.Tokenized
 import lightdb.field.IndexingState
 import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
@@ -95,23 +95,21 @@ object LuceneBlockJoinIndexer {
             if field.isSpatial then {
               if j != fabric.Null then createGeoFields(fieldName, j, add)
             } else {
-              DefTypeHelper.unwrap(d) match {
+              d match {
                 case DefType.Str =>
                   j match {
                     case fabric.Null => add(new StringField(fieldName, Field.NullString, storeField))
                     case _ => add(new StringField(fieldName, j.asString, storeField))
                   }
-                case DefType.Enum(_, _, _) =>
-                  add(new StringField(fieldName, j.asString, storeField))
-                case DefType.Opt(d2, _) =>
-                  addJson(j, d2)
-                case DefType.Json | DefType.Obj(_, _, _) | DefType.Poly(_, _, _) =>
+                case DefType.Opt(d2) =>
+                  addJson(j, d2.defType)
+                case DefType.Json | DefType.Obj(_) | DefType.Poly(_) =>
                   add(new StringField(fieldName, JsonFormatter.Compact(j), storeField))
                 case _ if j == fabric.Null =>
-                case DefType.Arr(d2, _) =>
+                case DefType.Arr(d2) =>
                   val v = j.asVector
                   if v.isEmpty then add(new StringField(fieldName, "[]", storeField))
-                  else v.foreach(x => addJson(x, d2))
+                  else v.foreach(x => addJson(x, d2.defType))
                 case DefType.Bool =>
                   add(new IntField(fieldName, if j.asBoolean then 1 else 0, storeField))
                 case DefType.Int =>
@@ -124,7 +122,7 @@ object LuceneBlockJoinIndexer {
             }
           }
 
-          addJson(json, field.rw.definition)
+          addJson(json, field.rw.definition.defType)
 
           json match {
             case fabric.Str(s, _) =>
