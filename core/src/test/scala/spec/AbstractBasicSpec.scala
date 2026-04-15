@@ -233,8 +233,12 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     }
     "delete some records" in {
       db.people.transaction { transaction =>
-        transaction.delete(linda._id).and(transaction.delete(yuri._id)).map { t =>
-          t should be(true -> true)
+        for {
+          r1 <- transaction.delete(linda._id)
+          r2 <- transaction.delete(yuri._id)
+        } yield {
+          r1 should be(true)
+          r2 should be(true)
         }
       }
     }
