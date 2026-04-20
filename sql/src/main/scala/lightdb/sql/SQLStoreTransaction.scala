@@ -1089,7 +1089,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
 
     conversion match {
-      case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
+      case Conversion.Value(field) => toJson(rs.getObject(field.name.toLowerCase), field.rw).as[V](field.rw)
       case Conversion.Doc() => getDoc(rs).asInstanceOf[V]
       case Conversion.Converted(c) => c(getDoc(rs))
       case Conversion.Materialized(fields) =>
@@ -1111,17 +1111,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   protected def toJson(value: Any, rw: RW[_]): Json = obj2Value(value) match {
     case null => Null
-    case s: String => rw.definition.defType match {
-      case DefType.Str => str(s)
-      case DefType.Opt(d) if d.defType == DefType.Str => str(s)
-      case DefType.Opt(d) if d.defType.isInstanceOf[DefType.Poly] => str(s)
-      case DefType.Json => JsonParser(s)
-      case _: DefType.Poly => str(s)
-      case _ => try {
-        JsonParser(s)
-      } catch {
-        case t: Throwable => throw new RuntimeException(s"Unable to parse: [$s] as JSON for ${rw.definition}", t)
-      }
+    case s: String => try {
+      JsonParser(s)
+    } catch {
+      case _: Throwable => str(s)
     }
     case b: Boolean => bool(b)
     case i: Int => num(i)
@@ -1155,14 +1148,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case c: JsonConversion[Doc] =>
       val values = store.fields.map { field =>
         try {
+          val columnName = field.name.toLowerCase
           val json = field match {
             case _: Tokenized[_] =>
-              val list = Option(rs.getString(field.name)) match {
+              val list = Option(rs.getString(columnName)) match {
                 case Some(s) => s.split(" ").toList.map(str)
                 case None => Nil
               }
               arr(list: _*)
-            case _ => toJson(rs.getObject(field.name), field.rw)
+            case _ => toJson(rs.getObject(columnName), field.rw)
           }
           field.name -> json
         } catch {
@@ -1174,7 +1168,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       c.convertFromJson(obj(values: _*))
     case _ =>
       val map = store.fields.map { field =>
-        field.name -> obj2Value(rs.getObject(field.name))
+        field.name -> obj2Value(rs.getObject(field.name.toLowerCase))
       }.toMap
       store.model.map2Doc(map)
   }
