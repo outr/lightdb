@@ -10,7 +10,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 
-ThisBuild / version := "4.30.0"
+ThisBuild / version := "4.31.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "3.8.3"
 
@@ -62,11 +62,11 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val rapidVersion: String = "2.9.2"
 
-val profigVersion: String = "3.6.0"
+val profigVersion: String = "3.6.1"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "1.6.0"
+val spiceVersion: String = "1.7.0-SNAPSHOT"
 
 val collectionCompatVersion: String = "2.14.0"
 
