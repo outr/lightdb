@@ -40,34 +40,34 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   override protected def initialize(): Task[Unit] = Task.defer {
     scribe.info(s"Initializing $name (${storeManager.name})...")
-    model match {
-      case jc: JsonConversion[_] =>
-        val fieldNames = model.fields.map(_.name).toSet
-        val missing = jc.rw.definition.defType match {
-          case DefType.Obj(map) => map.keys.filterNot(fieldNames.contains).toList
-          case DefType.Poly(values) =>
-            values.values.flatMap(_.defType.asInstanceOf[DefType.Obj].map.keys).filterNot(fieldNames.contains).toList.distinct
-          case _ => Nil
-        }
-        if missing.nonEmpty then {
-          val docRW = jc.rw.asInstanceOf[fabric.rw.RW[Doc]]
-          missing.foreach { fieldName =>
-            val getter = FieldGetter.func[Doc, Json] { doc =>
-              docRW.read(doc) match {
-                case o: fabric.Obj => o.value.getOrElse(fieldName, Null)
-                case _ => Null
-              }
-            }
-            given RW[Json] = fabric.rw.valueRW
-            model.addField[Json](Field[Doc, Json](fieldName, getter))
-          }
-          scribe.debug(s"Auto-registered ${missing.size} undeclared field(s) for $name: ${missing.mkString(", ")}")
-        }
-      case _ => // Can't do validation without JsonConversion
-    }
-
-    // Give the Model a chance to initialize
+    // Give the Model a chance to initialize first — stateful support traits like IncrementingIdSupport
+    // need to wire up their state before anything (e.g. `rw.definition`) can exercise case-class defaults.
     model.initialize(this).flatMap { _ =>
+      model match {
+        case jc: JsonConversion[_] =>
+          val fieldNames = model.fields.map(_.name).toSet
+          val missing = jc.rw.definition.defType match {
+            case DefType.Obj(map) => map.keys.filterNot(fieldNames.contains).toList
+            case DefType.Poly(values) =>
+              values.values.flatMap(_.defType.asInstanceOf[DefType.Obj].map.keys).filterNot(fieldNames.contains).toList.distinct
+            case _ => Nil
+          }
+          if missing.nonEmpty then {
+            val docRW = jc.rw.asInstanceOf[fabric.rw.RW[Doc]]
+            missing.foreach { fieldName =>
+              val getter = FieldGetter.func[Doc, Json] { doc =>
+                docRW.read(doc) match {
+                  case o: fabric.Obj => o.value.getOrElse(fieldName, Null)
+                  case _ => Null
+                }
+              }
+              given RW[Json] = fabric.rw.valueRW
+              model.addField[Json](Field[Doc, Json](fieldName, getter))
+            }
+            scribe.debug(s"Auto-registered ${missing.size} undeclared field(s) for $name: ${missing.mkString(", ")}")
+          }
+        case _ => // Can't do validation without JsonConversion
+      }
       // Verify the data is in-sync
       verify()
     }
