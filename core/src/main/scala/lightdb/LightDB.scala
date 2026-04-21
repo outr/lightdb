@@ -1,6 +1,7 @@
 package lightdb
 
 import fabric.rw.*
+import lightdb.cache.CacheConfig
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.feature.{DBFeatureKey, FeatureSupport}
 import lightdb.field.Field
@@ -157,10 +158,12 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * @param name the store's name (defaults to None meaning it will be generated based on the model name)
    */
   def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                               name: Option[String] = None): storeManager.S[Doc, Model] = {
+                                                               name: Option[String] = None,
+                                                               cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.modelName)
     val path = directory.map(_.resolve(n))
     val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
+    store.configureCache(cache)
     synchronized {
       _stores = _stores ::: List(store)
     }
@@ -178,10 +181,12 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    */
   def storeWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
                                                                        storeMode: StoreMode[Doc, Model],
-                                                                       name: Option[String] = None): storeManager.S[Doc, Model] = {
+                                                                       name: Option[String] = None,
+                                                                       cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val path = directory.map(_.resolve(n))
     val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
+    store.configureCache(cache)
     synchronized {
       _stores = _stores ::: List(store)
     }
@@ -202,10 +207,12 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    */
   def storeCustom[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
                                                                                          storeManager: SM,
-                                                                                         name: Option[String] = None): storeManager.S[Doc, Model] = {
+                                                                                         name: Option[String] = None,
+                                                                                         cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val path = directory.map(_.resolve(n))
     val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
+    store.configureCache(cache)
     synchronized {
       _stores = _stores ::: List(store)
     }
@@ -221,10 +228,12 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   def storeCustomWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
                                                                                                  storeManager: SM,
                                                                                                  storeMode: StoreMode[Doc, Model],
-                                                                                                 name: Option[String] = None): storeManager.S[Doc, Model] = {
+                                                                                                 name: Option[String] = None,
+                                                                                                 cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
     val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
     val path = directory.map(_.resolve(n))
     val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
+    store.configureCache(cache)
     synchronized {
       _stores = _stores ::: List(store)
     }
