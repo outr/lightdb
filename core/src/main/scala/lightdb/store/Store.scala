@@ -4,6 +4,7 @@ import fabric.define.DefType
 import fabric.rw.RW
 import fabric.{Json, Null}
 import lightdb.LightDB
+import lightdb.cache.{CacheConfig, CacheStats, StoreCache}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.field.{DefTypeHelper, Field, FieldGetter}
 import lightdb.field.Field.*
@@ -37,6 +38,27 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
 
   object trigger extends StoreTriggers[Doc, Model]
+
+  // -- Point-lookup cache (opt-in via LightDB.store(..., cache = ...)) -----------------------------------
+  @volatile private var _cacheConfig: CacheConfig = CacheConfig.None
+
+  /**
+   * Configure the point-lookup cache for this store. Called by `LightDB.store(..., cache = ...)` before
+   * `init()` runs. Invoking this after initialization is still valid but will not affect already-running
+   * transactions.
+   */
+  private[lightdb] def configureCache(config: CacheConfig): Unit = {
+    _cacheConfig = config
+  }
+
+  /**
+   * The configured point-lookup cache for this store, or `None` when caching is disabled. Transactions
+   * consult this on `get(id)` after checking the write buffer, and populate it on commit.
+   */
+  lazy val cache: Option[StoreCache[Doc]] = StoreCache.fromConfig[Doc](_cacheConfig)
+
+  /** Convenience accessor for the cache hit/miss/eviction counters, when caching is enabled. */
+  def cacheStats: Option[CacheStats] = cache.map(_.stats)
 
   override protected def initialize(): Task[Unit] = Task.defer {
     scribe.info(s"Initializing $name (${storeManager.name})...")
