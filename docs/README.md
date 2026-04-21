@@ -233,7 +233,7 @@ object db extends LightDB {
    
   lazy val directory: Option[Path] = Some(Path.of(s"docs/db/example"))
    
-  lazy val people: Collection[Person, Person.type] = store(Person)
+  lazy val people: Collection[Person, Person.type] = store(Person)()
 
   override def upgrades: List[DatabaseUpgrade] = Nil
 }
@@ -401,7 +401,7 @@ object luceneDb extends LightDB {
   type SM = LuceneStore.type
   val storeManager = LuceneStore
   val directory = Some(Path.of("db/lucene"))
-  val notes = store(Note)
+  val notes = store(Note)()
   def upgrades = Nil
 }
 
@@ -435,7 +435,7 @@ object spatialDb extends LightDB {
   type SM = SQLiteStore.type
   val storeManager = SQLiteStore
   val directory = Some(Path.of("db/spatial"))
-  val places = store(Place)
+  val places = store(Place)()
   def upgrades = Nil
 }
 
@@ -472,8 +472,8 @@ object graphDb extends LightDB {
   type SM = lightdb.store.hashmap.HashMapStore.type
   val storeManager = lightdb.store.hashmap.HashMapStore
   val directory = None
-  val people = store(GPerson)
-  val follows = store(Follows)
+  val people = store(GPerson)()
+  val follows = store(Follows)()
   def upgrades = Nil
 }
 
@@ -502,7 +502,7 @@ object splitDb extends LightDB {
   type SM = SplitStoreManager[lightdb.rocksdb.RocksDBStore.type, lightdb.lucene.LuceneStore.type]
   val storeManager = SplitStoreManager(RocksDBStore, LuceneStore)
   val directory = Some(Path.of("db/split"))
-  val articles = store(Article)
+  val articles = store(Article)()
   def upgrades = Nil
 }
 ```
@@ -526,9 +526,7 @@ object shardDb extends LightDB {
   val storeManager = HashMapStore
   val directory = None
   def upgrades = Nil
-  val shards = multiStore[TenantDoc, TenantDoc.type, S[TenantDoc, TenantDoc.type]#TX, S[TenantDoc, TenantDoc.type], String](TenantDoc)
-    .withKeys("tenantA", "tenantB")
-    .create()
+  val shards = store(TenantDoc).multi(List("tenantA", "tenantB"))
 }
 
 shardDb.init.sync()
@@ -574,7 +572,7 @@ object sqlDb extends LightDB {
   type SM = SQLiteStore.type
   val storeManager = SQLiteStore
   val directory = Some(Path.of("db/sqlite-example"))
-  val rows = store(Row)
+  val rows = store(Row)()
   def upgrades = Nil
 }
 
