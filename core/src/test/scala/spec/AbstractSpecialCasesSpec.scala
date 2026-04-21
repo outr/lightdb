@@ -77,7 +77,7 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val specialOne: Collection[SpecialOne, SpecialOne.type] = store(SpecialOne)
+    val specialOne: Collection[SpecialOne, SpecialOne.type] = store(SpecialOne)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

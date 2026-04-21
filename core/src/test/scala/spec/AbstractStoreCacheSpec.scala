@@ -47,7 +47,7 @@ abstract class AbstractStoreCacheSpec extends AsyncWordSpec with AsyncTaskSpec w
     override type SM = CollectionManager
     override val storeManager: CollectionManager = spec.storeManager
     override lazy val directory: Option[Path] = Some(dbPath.resolve(java.util.UUID.randomUUID().toString))
-    val items: Collection[Item, Item.type] = store(Item, cache = cacheConfig)
+    val items: Collection[Item, Item.type] = store(Item).withCache(cacheConfig)()
     override protected def truncateOnInit: Boolean = true
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

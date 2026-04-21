@@ -25,7 +25,7 @@ class JsonDocumentSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
     override type SM = StoreManager
     override val storeManager: StoreManager = HashMapStore
     lazy val directory: Option[Path] = None
-    val users: Store[JsonDocument, JsonDocumentModel] = store(usersModel)
+    val users: Store[JsonDocument, JsonDocumentModel] = store(usersModel)()
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
 
@@ -64,7 +64,7 @@ class JsonDocumentSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         .withField[String]("description")
         .withIndex[Double]("price")
 
-      val products = db.store(productsModel)
+      val products = db.store(productsModel)()
 
       products.transaction { tx =>
         val doc = JsonDocument(json = obj(
@@ -86,7 +86,7 @@ class JsonDocumentSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
         .withIndex[String]("type")
         .withIndex[Long]("timestamp")
 
-      val events = db.store(eventsModel)
+      val events = db.store(eventsModel)()
 
       for {
         _ <- events.transaction { tx =>

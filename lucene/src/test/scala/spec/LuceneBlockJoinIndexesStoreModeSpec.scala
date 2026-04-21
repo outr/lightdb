@@ -81,11 +81,11 @@ class LuceneBlockJoinIndexesStoreModeSpec extends AsyncWordSpec with AsyncTaskSp
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     val parentsStorage: HashMapStore[Parent, Parent.type] =
-      store[Parent, Parent.type](Parent).asInstanceOf[HashMapStore[Parent, Parent.type]]
+      store[Parent, Parent.type](Parent)().asInstanceOf[HashMapStore[Parent, Parent.type]]
 
     // Child store is model-only (ParentChildSupport requires a Collection). We don't use it for searching here.
     val childrenStoreForModelOnly: Collection[Child, Child.type] =
-      storeCustom[Child, Child.type, lightdb.store.CollectionManager](Child, LuceneStore, name = Some("childrenModelOnly"))
+      store(Child).withStoreManager(LuceneStore).withName("childrenModelOnly")()
 
     val entitySearch: LuceneBlockJoinStore[Parent, Child, Child.type, Parent.type] =
       this.blockJoinCollection[Parent, Child, Child.type, Parent.type](

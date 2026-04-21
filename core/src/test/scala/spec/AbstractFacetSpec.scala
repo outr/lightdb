@@ -299,7 +299,7 @@ abstract class AbstractFacetSpec extends AsyncWordSpec with AsyncTaskSpec with M
     override def name: String = specName
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val entries: Collection[Entry, Entry.type] = store(Entry)
+    val entries: Collection[Entry, Entry.type] = store(Entry)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

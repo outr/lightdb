@@ -69,8 +69,8 @@ class OpenSearchJoinDomainInferenceSpec extends AsyncWordSpec with AsyncTaskSpec
     override def name: String = "OpenSearchJoinDomainInferenceSpec"
     override lazy val directory: Option[Path] = Some(Path.of("db/OpenSearchJoinDomainInferenceSpec"))
 
-    val parents: Collection[ParentInfer, ParentInfer.type] = store(ParentInfer)
-    val children: Collection[ChildInfer, ChildInfer.type] = store(ChildInfer)
+    val parents: Collection[ParentInfer, ParentInfer.type] = store(ParentInfer)()
+    val children: Collection[ChildInfer, ChildInfer.type] = store(ChildInfer)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

@@ -40,8 +40,8 @@ class OpenSearchJoinDomainRebuildFromStoresSpec extends AsyncWordSpec with Async
     override val storeManager: HashMapStore.type = HashMapStore
     override def directory = None
     override def upgrades = Nil
-    lazy val parents = store[Parent, Parent.type](Parent, name = Some("parents_src"))
-    lazy val children = store[Child, Child.type](Child, name = Some("children_src"))
+    lazy val parents = store[Parent, Parent.type](Parent).withName("parents_src")()
+    lazy val children = store[Child, Child.type](Child).withName("children_src")()
   }
 
   "OpenSearchRebuild (join-domain from stores)" should {

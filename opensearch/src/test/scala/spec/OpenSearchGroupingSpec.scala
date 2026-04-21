@@ -41,7 +41,7 @@ class OpenSearchGroupingSpec extends AsyncWordSpec with AsyncTaskSpec with Match
     override lazy val directory: Option[java.nio.file.Path] = Some(java.nio.file.Path.of("db/OpenSearchGroupingSpec"))
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val grouped: lightdb.store.Collection[GroupedRecord, GroupedRecord.type] = store(GroupedRecord)
+    val grouped: lightdb.store.Collection[GroupedRecord, GroupedRecord.type] = store(GroupedRecord)()
   }
 
   "OpenSearch grouping" should {

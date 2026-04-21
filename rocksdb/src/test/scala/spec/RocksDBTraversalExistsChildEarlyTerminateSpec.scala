@@ -47,8 +47,8 @@ class RocksDBTraversalExistsChildEarlyTerminateSpec
     override def name: String = specName
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val parents: S[Parent, Parent.type] = store(Parent)
-    val children: S[Child, Child.type] = store(Child)
+    val parents: S[Parent, Parent.type] = store(Parent)()
+    val children: S[Child, Child.type] = store(Child)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

@@ -27,7 +27,7 @@ class OpenSearchMappingHashAutoMigrateSpec extends AsyncWordSpec with AsyncTaskS
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs: OpenSearchStore[AutoMigrateDoc, AutoMigrateDoc.type] = store(AutoMigrateDoc)
+    val docs: OpenSearchStore[AutoMigrateDoc, AutoMigrateDoc.type] = store(AutoMigrateDoc)()
   }
 
   "OpenSearch mapping hash auto-migrate" should {

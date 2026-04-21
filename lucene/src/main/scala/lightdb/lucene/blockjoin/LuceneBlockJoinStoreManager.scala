@@ -10,8 +10,8 @@ import java.nio.file.Path
 /**
  * Typed CollectionManager for creating a single LuceneBlockJoinStore for a specific Parent/Child relationship.
  *
- * This is intended to be used via `db.storeCustom(...)` / `db.storeCustomWithMode(...)` so we don't need to infer
- * child types dynamically.
+ * This is intended to be used via `db.store(model).withStoreManager(...)` so we don't need to infer child
+ * types dynamically.
  */
 case class LuceneBlockJoinStoreManager[
   Parent <: Document[Parent],

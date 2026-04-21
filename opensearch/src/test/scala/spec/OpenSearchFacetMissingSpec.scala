@@ -46,7 +46,7 @@ class OpenSearchFacetMissingSpec extends AsyncWordSpec with AsyncTaskSpec with M
     // Enable missing-bucket behavior only for this store/model.
     Profig("lightdb.opensearch.Doc.facets.includeMissing").store("true")
 
-    val docs = store[Doc, Doc.type](Doc)
+    val docs = store[Doc, Doc.type](Doc)()
   }
 
   "OpenSearch facets" should {

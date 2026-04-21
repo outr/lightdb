@@ -100,16 +100,16 @@ abstract class AbstractDeliveryPathSpec extends AsyncWordSpec with AsyncTaskSpec
 
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val warehouses: S[Warehouse, WarehouseModel.type] = store[Warehouse, WarehouseModel.type](WarehouseModel)
-    val trucks: S[Truck, TruckModel.type] = store[Truck, TruckModel.type](TruckModel)
-    val depots: S[Depot, DepotModel.type] = store[Depot, DepotModel.type](DepotModel)
-    val drones: S[Drone, DroneModel.type] = store[Drone, DroneModel.type](DroneModel)
-    val customers: S[Customer, CustomerModel.type] = store[Customer, CustomerModel.type](CustomerModel)
+    val warehouses: S[Warehouse, WarehouseModel.type] = store(WarehouseModel)()
+    val trucks: S[Truck, TruckModel.type] = store(TruckModel)()
+    val depots: S[Depot, DepotModel.type] = store(DepotModel)()
+    val drones: S[Drone, DroneModel.type] = store(DroneModel)()
+    val customers: S[Customer, CustomerModel.type] = store(CustomerModel)()
 
-    val shipsTo: S[ShipsTo, ShipsTo.type] = store[ShipsTo, ShipsTo.type](ShipsTo)
-    val deliversToDepot: S[DeliversToDepot, DeliversToDepot.type] = store[DeliversToDepot, DeliversToDepot.type](DeliversToDepot)
-    val loadsTo: S[LoadsTo, LoadsTo.type] = store[LoadsTo, LoadsTo.type](LoadsTo)
-    val deliversToCustomer: S[DeliversToCustomer, DeliversToCustomer.type] = store[DeliversToCustomer, DeliversToCustomer.type](DeliversToCustomer)
+    val shipsTo: S[ShipsTo, ShipsTo.type] = store(ShipsTo)()
+    val deliversToDepot: S[DeliversToDepot, DeliversToDepot.type] = store(DeliversToDepot)()
+    val loadsTo: S[LoadsTo, LoadsTo.type] = store(LoadsTo)()
+    val deliversToCustomer: S[DeliversToCustomer, DeliversToCustomer.type] = store(DeliversToCustomer)()
   }
 }
 

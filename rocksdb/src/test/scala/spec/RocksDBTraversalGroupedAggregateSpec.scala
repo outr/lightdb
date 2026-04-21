@@ -33,7 +33,7 @@ class RocksDBTraversalGroupedAggregateSpec
     override def name: String = specName
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val sales: S[Sale, Sale.type] = store(Sale)
+    val sales: S[Sale, Sale.type] = store(Sale)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

@@ -40,8 +40,8 @@ class OpenSearchJoinDomainCoordinatorCustomNamesSpec extends AsyncWordSpec with 
     override def name: String = "OpenSearchJoinDomainCoordinatorCustomNamesSpec"
 
     // custom store names (not equal to model names)
-    val parents: OpenSearchStore[Parent, Parent.type] = store(Parent, name = Some("ParentsCustom"))
-    val children: OpenSearchStore[Child, Child.type] = store(Child, name = Some("ChildrenCustom"))
+    val parents: OpenSearchStore[Parent, Parent.type] = store(Parent).withName("ParentsCustom")()
+    val children: OpenSearchStore[Child, Child.type] = store(Child).withName("ChildrenCustom")()
   }
 
   private lazy val db = new DB

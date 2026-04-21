@@ -123,7 +123,7 @@ object FileStorage {
   def apply[DB <: LightDB { type SM <: PrefixScanningStoreManager }](db: DB,
                                                                      storeName: String = "_files"): FileStorage[PrefixScanningStore[KeyValue, KeyValue.type]] = {
     val store: PrefixScanningStore[KeyValue, KeyValue.type] =
-      db.storeCustom[KeyValue, KeyValue.type, db.SM](KeyValue, db.storeManager, Some(storeName))
+      db.store(KeyValue).withName(storeName)()
     new FileStorage(store)
   }
 }

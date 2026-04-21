@@ -129,8 +129,8 @@ class OpenSearchJoinDomainPartialRebuildSpec extends AsyncWordSpec with AsyncTas
     override def name: String = "OpenSearchJoinDomainPartialRebuildSpec"
     override lazy val directory: Option[Path] = Some(Path.of("db/OpenSearchJoinDomainPartialRebuildSpec"))
 
-    val parents: Collection[Parent, Parent.type] = store(Parent)
-    val children: Collection[Child, Child.type] = store(Child)
+    val parents: Collection[Parent, Parent.type] = store(Parent)()
+    val children: Collection[Child, Child.type] = store(Child)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

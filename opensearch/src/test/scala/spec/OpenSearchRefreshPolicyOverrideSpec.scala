@@ -40,7 +40,7 @@ class OpenSearchRefreshPolicyOverrideSpec extends AsyncWordSpec with AsyncTaskSp
         override def directory = None
         override def upgrades: List[DatabaseUpgrade] = Nil
 
-        val docs = store[Doc, Doc.type](Doc)
+        val docs = store[Doc, Doc.type](Doc)()
       }
 
       val db = new DB

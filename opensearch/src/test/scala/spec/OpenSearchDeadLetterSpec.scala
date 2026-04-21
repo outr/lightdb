@@ -37,7 +37,7 @@ class OpenSearchDeadLetterSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         override def directory = None
         override def upgrades: List[DatabaseUpgrade] = Nil
 
-        val docs = store[Doc, Doc.type](Doc)
+        val docs = store[Doc, Doc.type](Doc)()
       }
 
       val db = new DB

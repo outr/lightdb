@@ -50,8 +50,8 @@ class OpenSearchJoinDomainSplitTruncateIsolationSpec
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val parents = store[Parent, Parent.type](Parent, name = Some("SplitParent"))
-    val children = store[Child, Child.type](Child, name = Some("SplitChild"))
+    val parents = store[Parent, Parent.type](Parent).withName("SplitParent")()
+    val children = store[Child, Child.type](Child).withName("SplitChild")()
   }
 
   "OpenSearchTransaction.truncate (SplitCollection join-domain)" should {

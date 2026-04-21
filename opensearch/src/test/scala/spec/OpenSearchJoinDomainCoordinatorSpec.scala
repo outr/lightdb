@@ -38,8 +38,8 @@ class OpenSearchJoinDomainCoordinatorSpec extends AsyncWordSpec with AsyncTaskSp
     override def upgrades: List[DatabaseUpgrade] = Nil
 
     // critical: lazy so we can apply Profig config before store creation
-    lazy val parents: OpenSearchStore[Parent, Parent.type] = store(Parent, name = Some("Parent"))
-    lazy val children: OpenSearchStore[Child, Child.type] = store(Child, name = Some("Child"))
+    lazy val parents: OpenSearchStore[Parent, Parent.type] = store(Parent).withName("Parent")()
+    lazy val children: OpenSearchStore[Child, Child.type] = store(Child).withName("Child")()
   }
 
   private lazy val db = new DB

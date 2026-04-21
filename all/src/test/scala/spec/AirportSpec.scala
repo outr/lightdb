@@ -245,8 +245,8 @@ class AirportSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
 
     override lazy val directory: Option[Path] = Some(Path.of("db/AirportSpec"))
 
-    val airports: S[Airport, Airport.type] = store(Airport)
-    val flights: S[Flight, Flight.type] = store(Flight)
+    val airports: S[Airport, Airport.type] = store(Airport)()
+    val flights: S[Flight, Flight.type] = store(Flight)()
 
     override def upgrades: List[DatabaseUpgrade] = List(DataImportUpgrade)
   }
