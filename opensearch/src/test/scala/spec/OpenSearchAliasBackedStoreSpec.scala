@@ -28,7 +28,7 @@ class OpenSearchAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
     override def upgrades: List[DatabaseUpgrade] = Nil
     override def name: String = "OpenSearchAliasBackedStoreSpec"
 
-    val docs: lightdb.store.Collection[AliasDoc, AliasDoc.type] = store[AliasDoc, AliasDoc.type](AliasDoc)
+    val docs: lightdb.store.Collection[AliasDoc, AliasDoc.type] = store[AliasDoc, AliasDoc.type](AliasDoc)()
   }
 
   "OpenSearch alias-backed store" should {

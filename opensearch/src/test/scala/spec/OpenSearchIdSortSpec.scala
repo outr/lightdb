@@ -24,7 +24,7 @@ class OpenSearchIdSortSpec extends AsyncWordSpec with AsyncTaskSpec with Matcher
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs: OpenSearchStore[IdSortDoc, IdSortDoc.type] = store(IdSortDoc)
+    val docs: OpenSearchStore[IdSortDoc, IdSortDoc.type] = store(IdSortDoc)()
   }
 
   "OpenSearch sort-by-_id" should {

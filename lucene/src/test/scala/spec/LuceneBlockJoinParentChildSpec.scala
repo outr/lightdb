@@ -37,7 +37,7 @@ class LuceneBlockJoinParentChildSpec extends AbstractParentChildSpec {
         parentModel = Parent,
         name = Some("entitySearch")
       )
-    val childrenStoreForModelOnly: Collection[Child, Child.type] = store(Child)
+    val childrenStoreForModelOnly: Collection[Child, Child.type] = store(Child)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

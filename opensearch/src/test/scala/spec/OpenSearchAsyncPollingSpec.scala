@@ -34,7 +34,7 @@ class OpenSearchAsyncPollingSpec extends AsyncWordSpec with AsyncTaskSpec with M
     override def directory = None
     override def upgrades = Nil
 
-    val docs: Collection[Doc, Doc.type] = store(Doc)
+    val docs: Collection[Doc, Doc.type] = store(Doc)()
   }
 
   "OpenSearch async polling" should {

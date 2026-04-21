@@ -450,9 +450,9 @@ abstract class AbstractImdbPerformanceSpec extends AsyncWordSpec with AsyncTaskS
     override lazy val directory: Option[Path] = Some(tempDir)
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val aka: Collection[PerfTitleAka, PerfTitleAka.type] = store(PerfTitleAka, name = Some("aka"))
-    val basics: Collection[PerfTitleBasics, PerfTitleBasics.type] = store(PerfTitleBasics, name = Some("basics"))
-    val links: Collection[PerfTitleLink, PerfTitleLink.type] = store(PerfTitleLink, name = Some("links"))
+    val aka: Collection[PerfTitleAka, PerfTitleAka.type] = store(PerfTitleAka).withName("aka")()
+    val basics: Collection[PerfTitleBasics, PerfTitleBasics.type] = store(PerfTitleBasics).withName("basics")()
+    val links: Collection[PerfTitleLink, PerfTitleLink.type] = store(PerfTitleLink).withName("links")()
   }
 }
 

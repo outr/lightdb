@@ -168,7 +168,7 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
 
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people: Collection[Person, Person.type] = store(Person)
+    val people: Collection[Person, Person.type] = store(Person)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

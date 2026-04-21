@@ -85,8 +85,8 @@ class OpenSearchNativeExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec w
     override def name: String = "OpenSearchNativeExistsChildSpec"
     override lazy val directory: Option[Path] = Some(Path.of("db/OpenSearchNativeExistsChildSpec"))
 
-    val parents: Collection[Parent, Parent.type] = store(Parent)
-    val children: Collection[Child, Child.type] = store(Child)
+    val parents: Collection[Parent, Parent.type] = store(Parent)()
+    val children: Collection[Child, Child.type] = store(Child)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

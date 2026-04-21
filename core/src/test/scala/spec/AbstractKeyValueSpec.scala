@@ -214,8 +214,8 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val users: Store[User, User.type] = store(User)
-    val addresses: Store[Address, Address.type] = store(Address)
+    val users: Store[User, User.type] = store(User)()
+    val addresses: Store[Address, Address.type] = store(Address)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

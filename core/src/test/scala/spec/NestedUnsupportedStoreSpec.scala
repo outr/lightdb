@@ -88,7 +88,7 @@ class NestedUnsupportedStoreSpec extends AnyWordSpec with Matchers {
     override val storeManager: DummyStore.type = DummyStore
     override def directory: Option[Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
-    lazy val entries: DummyCollection[Entry, Entry.type] = store(Entry)
+    lazy val entries: DummyCollection[Entry, Entry.type] = store(Entry)()
   }
 
   "Nested queries on unsupported stores" should {

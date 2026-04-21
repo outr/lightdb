@@ -30,7 +30,7 @@ class OpenSearchBulkConcurrencySpec extends AsyncWordSpec with AsyncTaskSpec wit
     override lazy val directory: Option[Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs = store[Doc, Doc.type](Doc)
+    val docs = store[Doc, Doc.type](Doc)()
   }
 
   "OpenSearch bulk commits" should {

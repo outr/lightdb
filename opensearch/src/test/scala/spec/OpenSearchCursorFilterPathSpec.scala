@@ -32,7 +32,7 @@ class OpenSearchCursorFilterPathSpec extends AsyncWordSpec with AsyncTaskSpec wi
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs: OpenSearchStore[CursorDoc, CursorDoc.type] = store(CursorDoc)
+    val docs: OpenSearchStore[CursorDoc, CursorDoc.type] = store(CursorDoc)()
   }
 
   "OpenSearch cursor pagination" should {

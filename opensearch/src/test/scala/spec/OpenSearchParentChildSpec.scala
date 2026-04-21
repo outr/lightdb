@@ -29,8 +29,8 @@ class OpenSearchParentChildSpec extends AbstractParentChildSpec with OpenSearchT
     override def name: String = getClass.getSimpleName
     override lazy val directory: Option[Path] = Some(Path.of(s"db/${getClass.getSimpleName}"))
 
-    val parents: Collection[Parent, Parent.type] = store(Parent)
-    val children: Collection[Child, Child.type] = store(Child)
+    val parents: Collection[Parent, Parent.type] = store(Parent)()
+    val children: Collection[Child, Child.type] = store(Child)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

@@ -33,7 +33,7 @@ class LuceneAutoFieldSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
     override type SM = CollectionManager
     override val storeManager: CollectionManager = LuceneStore
     override lazy val directory: Option[Path] = Some(Path.of("db/LuceneAutoFieldSpec"))
-    val widgets: Collection[Widget, Widget.type] = store(Widget)
+    val widgets: Collection[Widget, Widget.type] = store(Widget)()
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
 

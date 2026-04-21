@@ -40,7 +40,7 @@ class OpenSearchFacetChildCountSpec extends AsyncWordSpec with AsyncTaskSpec wit
     override lazy val directory: Option[Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs = store[Doc, Doc.type](Doc)
+    val docs = store[Doc, Doc.type](Doc)()
   }
 
   private lazy val db = new DB

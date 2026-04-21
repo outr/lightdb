@@ -28,7 +28,7 @@ class RocksDBTraversalMetricsSpec
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs: S[Doc, Doc.type] = store(Doc)
+    val docs: S[Doc, Doc.type] = store(Doc)()
   }
 
   specName should {

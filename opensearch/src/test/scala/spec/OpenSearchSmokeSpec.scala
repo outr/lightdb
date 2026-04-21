@@ -39,7 +39,7 @@ class OpenSearchSmokeSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers
     override lazy val directory: Option[java.nio.file.Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs = store[TestDoc, TestDoc.type](TestDoc)
+    val docs = store[TestDoc, TestDoc.type](TestDoc)()
     scribe.info("OpenSearchSmokeSpec: store created")
   }
 

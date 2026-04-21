@@ -29,8 +29,8 @@ class OpenSearchAutoJoinDomainFromParentChildSupportSpec
     override def upgrades: List[DatabaseUpgrade] = Nil
 
     // Parent is defined first, but child is still created before init begins (store vals are evaluated during DB construction).
-    val parents: Collection[Parent, Parent.type] = store(Parent, name = Some("AutoParent"))
-    val children: Collection[Child, Child.type] = store(Child, name = Some("AutoChild"))
+    val parents: Collection[Parent, Parent.type] = store(Parent).withName("AutoParent")()
+    val children: Collection[Child, Child.type] = store(Child).withName("AutoChild")()
   }
 
   case class Parent(name: String,

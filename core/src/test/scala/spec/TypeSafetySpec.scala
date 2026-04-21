@@ -23,7 +23,7 @@ class TypeSafetySpec extends AnyWordSpec with Matchers {
         override val storeManager: HashMapStore.type = HashMapStore
         override def upgrades: List[DatabaseUpgrade] = Nil
 
-        lazy val people: HashMapStore[Person, Person.type] = store[Person, Person.type](Person)
+        lazy val people: HashMapStore[Person, Person.type] = store[Person, Person.type](Person)()
       }
 
       TestDB.init.sync()

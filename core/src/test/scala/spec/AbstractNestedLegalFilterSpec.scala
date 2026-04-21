@@ -56,7 +56,7 @@ abstract class AbstractNestedLegalFilterSpec extends AsyncWordSpec with AsyncTas
     override def name: String = specName
     override lazy val directory: Option[Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val entries: Collection[Entry, Entry.type] = store(Entry)
+    val entries: Collection[Entry, Entry.type] = store(Entry)()
   }
 
   def storeManager: CollectionManager

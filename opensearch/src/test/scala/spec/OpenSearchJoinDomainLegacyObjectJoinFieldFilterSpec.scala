@@ -45,7 +45,7 @@ class OpenSearchJoinDomainLegacyObjectJoinFieldFilterSpec
     override def upgrades: List[DatabaseUpgrade] = Nil
 
     val children: lightdb.store.Collection[Child, Child.type] =
-      store[Child, Child.type](Child, name = Some(ChildStoreName))
+      store[Child, Child.type](Child).withName(ChildStoreName)()
   }
 
   case class Child(parentId: String,

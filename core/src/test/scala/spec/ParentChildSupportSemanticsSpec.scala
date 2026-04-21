@@ -103,8 +103,8 @@ class ParentChildSupportSemanticsSpec extends AnyWordSpec with Matchers {
     override def directory: Option[Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    lazy val parents: DummyCollection[Parent, Parent.type] = store(Parent)
-    lazy val children: DummyCollection[Child, Child.type] = store(Child)
+    lazy val parents: DummyCollection[Parent, Parent.type] = store(Parent)()
+    lazy val children: DummyCollection[Child, Child.type] = store(Child)()
   }
 
   "ParentChildSupport helper APIs" should {

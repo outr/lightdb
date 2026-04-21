@@ -8,8 +8,7 @@ import lightdb.field.Field
 import lightdb.graph.{EdgeDocument, EdgeModel, ReverseEdgeDocument}
 import lightdb.id.Id
 import lightdb.progress.ProgressManager
-import lightdb.store.multi.MultiStore
-import lightdb.store.{Store, StoreManager, StoreMode}
+import lightdb.store.{Store, StoreBuilder, StoreManager, StoreMode}
 import lightdb.transaction.{Transaction, TransactionManager}
 import lightdb.trigger.StoreTrigger
 import lightdb.upgrade.DatabaseUpgrade
@@ -116,7 +115,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   /**
    * Backing key/value store used for persistent internal settings, StoredValues, and general key/value storage.
    */
-  lazy val backingStore: S[KeyValue, KeyValue.type] = store(KeyValue, name = Some("_backingStore"))
+  lazy val backingStore: S[KeyValue, KeyValue.type] = store(KeyValue).withName("_backingStore")()
 
   lazy val transactions: TransactionManager = new TransactionManager
 
@@ -150,98 +149,23 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   yield ()
 
   /**
-   * Create a new store and associate it with this database. It is preferable that all stores be created
-   * before the database is initialized, but stores that are added after init will automatically be initialized
-   * during this method call.
+   * Begin building a store for `model`. Returns a [[StoreBuilder]] — chain `.withName / .withMode /
+   * .withCache / .withStoreManager` as needed and terminate with `apply()` for a single store or
+   * `multi(keys, namePrefix?)` for a `MultiStore`.
    *
-   * @param model the model to use for this store
-   * @param name the store's name (defaults to None meaning it will be generated based on the model name)
-   */
-  def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                               name: Option[String] = None,
-                                                               cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
-    val n = name.getOrElse(model.modelName)
-    val path = directory.map(_.resolve(n))
-    val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
-    store.configureCache(cache)
-    synchronized {
-      _stores = _stores ::: List(store)
-    }
-    if isInitialized then { // Already initialized database, init store immediately
-      store.init.sync()
-    }
-    store
-  }
-
-  /**
-   * Create a new store with an explicit StoreMode (advanced).
+   * Examples:
+   * {{{
+   *   val items   = db.store(Item)()
+   *   val cached  = db.store(Item).withCache(CacheConfig.lru(1000))()
+   *   val split   = db.store(Item).withMode(StoreMode.Indexes(storage))()
+   *   val custom  = db.store(Item).withStoreManager(SQLiteStore)()
+   *   val shards  = db.store(Item).multi(List("a", "b", "c"))
+   * }}}
    *
-   * This is useful for "search index + storage store" compositions where the searching store should be
-   * `StoreMode.Indexes(storage)` so that doc materialization happens from storage.
+   * Stores added after the database is initialized are initialized immediately on the terminator call.
    */
-  def storeWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model,
-                                                                       storeMode: StoreMode[Doc, Model],
-                                                                       name: Option[String] = None,
-                                                                       cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
-    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val path = directory.map(_.resolve(n))
-    val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
-    store.configureCache(cache)
-    synchronized {
-      _stores = _stores ::: List(store)
-    }
-    if isInitialized then { // Already initialized database, init store immediately
-      store.init.sync()
-    }
-    store
-  }
-
-  /**
-   * Create a new store and associate it with this database. It is preferable that all stores be created
-   * before the database is initialized, but stores that are added after init will automatically be initialized
-   * during this method call.
-   *
-   * @param model the model to use for this store
-   * @param name the store's name (defaults to None meaning it will be generated based on the model name)
-   * @param storeManager specify the StoreManager
-   */
-  def storeCustom[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
-                                                                                         storeManager: SM,
-                                                                                         name: Option[String] = None,
-                                                                                         cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
-    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val path = directory.map(_.resolve(n))
-    val store = storeManager.create[Doc, Model](this, model, n, path, StoreMode.All())
-    store.configureCache(cache)
-    synchronized {
-      _stores = _stores ::: List(store)
-    }
-    if isInitialized then { // Already initialized database, init store immediately
-      store.init.sync()
-    }
-    store
-  }
-
-  /**
-   * Create a new store with a specific StoreManager and explicit StoreMode (advanced).
-   */
-  def storeCustomWithMode[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <: StoreManager](model: Model,
-                                                                                                 storeManager: SM,
-                                                                                                 storeMode: StoreMode[Doc, Model],
-                                                                                                 name: Option[String] = None,
-                                                                                                 cache: CacheConfig = CacheConfig.None): storeManager.S[Doc, Model] = {
-    val n = name.getOrElse(model.getClass.getSimpleName.replace("$", ""))
-    val path = directory.map(_.resolve(n))
-    val store = storeManager.create[Doc, Model](this, model, n, path, storeMode)
-    store.configureCache(cache)
-    synchronized {
-      _stores = _stores ::: List(store)
-    }
-    if isInitialized then { // Already initialized database, init store immediately
-      store.init.sync()
-    }
-    store
-  }
+  def store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](model: Model): StoreBuilder[Doc, Model, storeManager.type] =
+    new StoreBuilder[Doc, Model, storeManager.type](this, model, storeManager)
 
   /**
    * Registers a pre-constructed store with this database.
@@ -261,52 +185,6 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     store
   }
 
-  case class MultiStoreBuilder[
-    Doc <: Document[Doc],
-    Model <: DocumentModel[Doc],
-    Txn <: Transaction[Doc, Model],
-    S <: Store[Doc, Model] { type TX = Txn },
-    SM <: StoreManager,
-    Key
-  ](model: Model,
-    keys: List[Key],
-    storeManager: SM,
-    namePrefix: String,
-    key2Name: Key => String
-   ) {
-    def withKeys(keys: Key*): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
-      copy(keys = (this.keys ::: keys.toList).distinct)
-    def withNamePrefix(prefix: String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
-      copy(namePrefix = prefix)
-    def create(): MultiStore[Doc, Model, Txn, S, Key] = {
-      val stores: Map[Key, S] = keys.map { key =>
-        val storeName = s"${namePrefix}_${key2Name(key)}"
-        val s = storeCustom[Doc, Model, SM](model, storeManager, name = Some(storeName)).asInstanceOf[S]
-        key -> s
-      }.toMap
-      new MultiStore[Doc, Model, Txn, S, Key](stores)
-    }
-  }
-
-  def multiStore[
-    Doc <: Document[Doc],
-    Model <: DocumentModel[Doc],
-    Txn <: Transaction[Doc, Model],
-    S <: Store[Doc, Model] { type TX = Txn },
-    Key
-  ](model: Model)(implicit key2Name: Key => String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
-    MultiStoreBuilder[Doc, Model, Txn, S, SM, Key](model, Nil, storeManager, model.modelName, key2Name)
-
-  def multiStore[
-    Doc <: Document[Doc],
-    Model <: DocumentModel[Doc],
-    Txn <: Transaction[Doc, Model],
-    S <: Store[Doc, Model] { type TX = Txn },
-    SM <: StoreManager,
-    Key
-  ](model: Model, storeManager: SM)(implicit key2Name: Key => String): MultiStoreBuilder[Doc, Model, Txn, S, SM, Key] =
-    MultiStoreBuilder[Doc, Model, Txn, S, SM, Key](model, Nil, storeManager, model.modelName, key2Name)
-
   def reverseStore[
     E <: EdgeDocument[E, F, T],
     F <: Document[F],
@@ -314,7 +192,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     M <: DocumentModel[E],
     RM <: EdgeModel[ReverseEdgeDocument[E, F, T], T, F]](model: RM,
                                                          forward: S[E, M]): S[ReverseEdgeDocument[E, F, T], RM] = {
-    val reverse = store[ReverseEdgeDocument[E, F, T], RM](model)
+    val reverse = store[ReverseEdgeDocument[E, F, T], RM](model)()
     forward.trigger += new StoreTrigger[E, M] {
       private val map = new ConcurrentHashMap[Transaction[E, M], reverse.TX]
 
