@@ -21,7 +21,7 @@ class RocksDBKeyValueDisjointSetSpec extends AsyncWordSpec with AsyncTaskSpec wi
     override lazy val directory: Option[Path] = Some(dir)
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val kv: S[KeyValue, KeyValue.type] = store(KeyValue, name = Some("KeyValue"))
+    val kv: S[KeyValue, KeyValue.type] = store(KeyValue).withName("KeyValue")()
   }
 
   "KeyValueDisjointSet" should {

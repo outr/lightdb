@@ -35,7 +35,7 @@ class LuceneIncrementingIdSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     override type SM = CollectionManager
     override val storeManager: CollectionManager = LuceneStore
     override lazy val directory: Option[Path] = Some(Path.of("db/LuceneIncrementingIdSpec"))
-    val widgets: Collection[Widget, Widget.type] = store(Widget)
+    val widgets: Collection[Widget, Widget.type] = store(Widget)()
     override protected def truncateOnInit: Boolean = true
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
@@ -98,7 +98,7 @@ class LuceneIncrementingIdSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     override type SM = CollectionManager
     override val storeManager: CollectionManager = LuceneStore
     override lazy val directory: Option[Path] = Some(Path.of("db/LuceneIncrementingIdSpec-crash"))
-    val gadgets: Collection[Gadget, Gadget.type] = store(Gadget)
+    val gadgets: Collection[Gadget, Gadget.type] = store(Gadget)()
     override protected def truncateOnInit: Boolean = true
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
@@ -125,7 +125,7 @@ class LuceneIncrementingIdSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         override val storeManager: CollectionManager = LuceneStore
         override lazy val directory: Option[Path] = Some(Path.of("db/LuceneIncrementingIdSpec-crash"))
         override protected def truncateOnInit: Boolean = false
-        val gadgets: Collection[Gadget, Gadget.type] = store(Gadget)
+        val gadgets: Collection[Gadget, Gadget.type] = store(Gadget)()
         override def upgrades: List[DatabaseUpgrade] = Nil
       }
       for {

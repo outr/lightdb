@@ -33,7 +33,7 @@ abstract class AbstractTraversalPersistedIndexBuildSpec
     override lazy val directory: Option[Path] = Some(Files.createTempDirectory("lightdb-traversal-persisted-index-build-"))
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val entries: S[Entry, Entry.type] = store(Entry, name = Some("entries"))
+    val entries: S[Entry, Entry.type] = store(Entry).withName("entries")()
   }
 
   specName should {

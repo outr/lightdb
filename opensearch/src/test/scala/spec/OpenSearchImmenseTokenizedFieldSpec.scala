@@ -25,7 +25,7 @@ class OpenSearchImmenseTokenizedFieldSpec extends AsyncWordSpec with AsyncTaskSp
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs: OpenSearchStore[HugeTextDoc, HugeTextDoc.type] = store(HugeTextDoc)
+    val docs: OpenSearchStore[HugeTextDoc, HugeTextDoc.type] = store(HugeTextDoc)()
   }
 
   "OpenSearch immense tokenized field" should {

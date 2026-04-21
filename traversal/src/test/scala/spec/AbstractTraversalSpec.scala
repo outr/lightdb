@@ -89,8 +89,8 @@ abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec wi
 
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val nodes: S[Node, Node.type] = store[Node, Node.type](Node)
-    val edges: S[SimpleEdge, SimpleEdge.type] = store[SimpleEdge, SimpleEdge.type](SimpleEdge)
+    val nodes: S[Node, Node.type] = store(Node)()
+    val edges: S[SimpleEdge, SimpleEdge.type] = store(SimpleEdge)()
   }
 }
 

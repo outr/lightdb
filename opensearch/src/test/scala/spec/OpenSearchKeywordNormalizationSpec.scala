@@ -28,7 +28,7 @@ class OpenSearchKeywordNormalizationSpec extends AsyncWordSpec with AsyncTaskSpe
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs: OpenSearchStore[Doc, Doc.type] = store(Doc)
+    val docs: OpenSearchStore[Doc, Doc.type] = store(Doc)()
   }
 
   "OpenSearch keyword normalization" should {

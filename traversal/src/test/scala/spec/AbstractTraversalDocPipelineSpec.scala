@@ -37,9 +37,9 @@ abstract class AbstractTraversalDocPipelineSpec
     override lazy val directory: Option[Path] = Some(Files.createTempDirectory("lightdb-traversal-doc-pipeline-"))
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val people: S[P, P.type] = store(P, name = Some("people"))
-    val pets: S[Pet, Pet.type] = store(Pet, name = Some("pets"))
-    val friendships: S[Friendship, Friendship.type] = store(Friendship, name = Some("friendships"))
+    val people: S[P, P.type] = store(P).withName("people")()
+    val pets: S[Pet, Pet.type] = store(Pet).withName("pets")()
+    val friendships: S[Friendship, Friendship.type] = store(Friendship).withName("friendships")()
   }
 
   specName should {

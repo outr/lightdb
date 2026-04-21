@@ -41,8 +41,8 @@ class OpenSearchJoinChildrenDefaultSpec extends AsyncWordSpec with AsyncTaskSpec
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val parents: OpenSearchStore[Parent, Parent.type] = store(Parent)
-    val children: OpenSearchStore[Child, Child.type] = store(Child)
+    val parents: OpenSearchStore[Parent, Parent.type] = store(Parent)()
+    val children: OpenSearchStore[Child, Child.type] = store(Child)()
   }
 
   private lazy val db = new DB

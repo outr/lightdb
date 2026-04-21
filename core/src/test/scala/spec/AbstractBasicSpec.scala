@@ -732,8 +732,8 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
 
     val startTime: StoredValue[Long] = stored[Long]("startTime", -1L)
 
-    val people: Collection[Person, Person.type] = store(Person)
-    val ageLinks: Collection[AgeLinks, AgeLinks.type] = store(AgeLinks)
+    val people: Collection[Person, Person.type] = store(Person)()
+    val ageLinks: Collection[AgeLinks, AgeLinks.type] = store(AgeLinks)()
 
     override def upgrades: List[DatabaseUpgrade] = List(InitialSetupUpgrade)
   }

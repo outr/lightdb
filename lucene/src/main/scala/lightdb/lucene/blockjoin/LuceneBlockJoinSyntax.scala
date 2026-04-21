@@ -114,13 +114,10 @@ object LuceneBlockJoinSyntax {
         optimizeAfterRebuild = optimizeAfterRebuild
       )
 
-      val base =
-        db.storeCustomWithMode[Parent, ParentModel, LuceneBlockJoinDerivedStoreManager[Parent, Child, ChildModel, ParentModel, ParentModel]](
-          model = parent.model,
-          storeManager = manager,
-          storeMode = storeMode,
-          name = name
-        )
+      val builder = db.store(parent.model)
+        .withStoreManager(manager)
+        .withMode(storeMode)
+      val base = name.fold(builder)(builder.withName).apply()
 
       base.asInstanceOf[JoinedCollection[Parent, Child, ParentModel, ChildModel]]
     }

@@ -41,7 +41,7 @@ class LuceneGroupingSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers 
     override lazy val directory: Option[java.nio.file.Path] = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val grouped: lightdb.store.Collection[GroupedRecord, GroupedRecord.type] = store(GroupedRecord)
+    val grouped: lightdb.store.Collection[GroupedRecord, GroupedRecord.type] = store(GroupedRecord)()
   }
 
   "Lucene grouping" should {

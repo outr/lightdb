@@ -26,7 +26,7 @@ class OpenSearchDistinctSpec extends AsyncWordSpec with AsyncTaskSpec with Match
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val docs: OpenSearchStore[DistinctDoc, DistinctDoc.type] = store(DistinctDoc)
+    val docs: OpenSearchStore[DistinctDoc, DistinctDoc.type] = store(DistinctDoc)()
   }
 
   "OpenSearch distinct" should {

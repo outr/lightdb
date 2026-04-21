@@ -28,7 +28,7 @@ class OpenSearchRebuildFromStoreSpec extends AsyncWordSpec with AsyncTaskSpec wi
     override val storeManager: HashMapStore.type = HashMapStore
     override def directory = None
     override def upgrades = Nil
-    lazy val docs = store[Doc, Doc.type](Doc, name = Some("source_docs"))
+    lazy val docs = store[Doc, Doc.type](Doc).withName("source_docs")()
   }
 
   "OpenSearchRebuild (from store)" should {

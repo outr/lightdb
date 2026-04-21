@@ -27,7 +27,7 @@ class OpenSearchWriteAliasBackedStoreSpec extends AsyncWordSpec with AsyncTaskSp
     override def name: String = "OpenSearchWriteAliasBackedStoreSpec"
 
     val docs: lightdb.store.Collection[WriteAliasDoc, WriteAliasDoc.type] =
-      store[WriteAliasDoc, WriteAliasDoc.type](WriteAliasDoc)
+      store[WriteAliasDoc, WriteAliasDoc.type](WriteAliasDoc)()
   }
 
   "OpenSearch write-alias backed store" should {

@@ -149,7 +149,7 @@ class LuceneBlockJoinExistsChildSpec extends AsyncWordSpec with AsyncTaskSpec wi
         parentModel = Parent,
         name = Some("entitySearch")
       )
-    val childrenStoreForModelOnly: Collection[Child, Child.type] = store(Child) // not used for searching; just provides model+fields
+    val childrenStoreForModelOnly: Collection[Child, Child.type] = store(Child)() // not used for searching; just provides model+fields
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }

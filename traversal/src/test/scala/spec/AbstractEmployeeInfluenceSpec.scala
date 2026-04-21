@@ -98,9 +98,9 @@ abstract class AbstractEmployeeInfluenceSpec extends AsyncWordSpec with AsyncTas
 
     lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val employees: S[Employee, Employee.type] = store[Employee, Employee.type](Employee)
-    val reportsTo: S[ReportsTo, ReportsTo.type] = store[ReportsTo, ReportsTo.type](ReportsTo)
-    val collaboratesWith: S[CollaboratesWith, CollaboratesWith.type] = store[CollaboratesWith, CollaboratesWith.type](CollaboratesWith)
+    val employees: S[Employee, Employee.type] = store(Employee)()
+    val reportsTo: S[ReportsTo, ReportsTo.type] = store(ReportsTo)()
+    val collaboratesWith: S[CollaboratesWith, CollaboratesWith.type] = store(CollaboratesWith)()
 
     val subordinatesModel: EdgeModel[ReverseEdgeDocument[ReportsTo, Employee, Employee], Employee, Employee] =
       ReverseEdgeDocument.createModel[ReportsTo, Employee, Employee]("subordinates")

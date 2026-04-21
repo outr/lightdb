@@ -68,8 +68,8 @@ class LuceneBlockJoinDerivedIndexSpec extends AsyncWordSpec with AsyncTaskSpec w
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
     // Two existing indexes:
-    lazy val parentsIndex: Collection[Parent, Parent.type] = storeCustom(Parent, LuceneStore, name = Some("parentsIndex"))
-    lazy val childrenIndex: Collection[Child, Child.type] = storeCustom(Child, LuceneStore, name = Some("childrenIndex"))
+    lazy val parentsIndex: Collection[Parent, Parent.type] = store(Parent).withStoreManager(LuceneStore).withName("parentsIndex")()
+    lazy val childrenIndex: Collection[Child, Child.type] = store(Child).withStoreManager(LuceneStore).withName("childrenIndex")()
 
     // The third joined index:
     lazy val joined: JoinedCollection[Parent, Child, Parent.type, Child.type] = this.joinedCollection(

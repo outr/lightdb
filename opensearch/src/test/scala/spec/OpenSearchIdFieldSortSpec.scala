@@ -31,7 +31,7 @@ class OpenSearchIdFieldSortSpec extends AsyncWordSpec with AsyncTaskSpec with Ma
     override def directory = None
     override def upgrades: List[DatabaseUpgrade] = Nil
 
-    val children: OpenSearchStore[IdFieldSortChild, IdFieldSortChild.type] = store(IdFieldSortChild)
+    val children: OpenSearchStore[IdFieldSortChild, IdFieldSortChild.type] = store(IdFieldSortChild)()
   }
 
   "OpenSearch sort-by-Id-field" should {

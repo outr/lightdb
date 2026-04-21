@@ -46,7 +46,7 @@ class RocksDBTraversalTokenizedSpec
     override def name: String = specName
     override lazy val directory: Option[Path] = Some(Path.of(s"db/$specName"))
 
-    val people: S[Person, Person.type] = store(Person)
+    val people: S[Person, Person.type] = store(Person)()
 
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
