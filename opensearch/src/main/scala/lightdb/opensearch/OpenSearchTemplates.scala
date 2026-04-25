@@ -378,7 +378,9 @@ object OpenSearchTemplates {
     case DefType.Opt(inner) => mappingForDefType(field, inner, config)
     case DefType.Arr(inner) => mappingForDefType(field, inner, config)
     case DefType.Obj(_) => obj("type" -> str("object"), "dynamic" -> bool(true))
-    case DefType.Json => obj("type" -> str("keyword"))
+    // Inner Json (e.g. List[Geo]) — see `nestedScalarMapping` for rationale;
+    // keyword mapping rejects the structured payload the encoder emits.
+    case DefType.Json => obj("type" -> str("object"), "dynamic" -> bool(true))
     case _ => obj()
   }
 
@@ -429,7 +431,14 @@ object OpenSearchTemplates {
     case DefType.Obj(_) =>
       obj("type" -> str("object"), "dynamic" -> bool(true))
     case DefType.Json =>
-      obj("type" -> str("keyword"))
+      // Json fields under nested paths can carry arbitrary structured data
+      // (e.g. GeoJSON Polygon/MultiPolygon objects). Mapping them as
+      // `keyword` here would force string-coercion at index time and reject
+      // the structured payload that the doc encoder actually emits — top-
+      // level Json fields stringify in `OpenSearchDocEncoding`, but nested
+      // ones pass through verbatim. Map as a dynamic object so OpenSearch
+      // accepts whatever shape arrives.
+      obj("type" -> str("object"), "dynamic" -> bool(true))
     case _ =>
       obj()
   }
