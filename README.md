@@ -33,22 +33,22 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.31.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.31.1"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.31.0"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.31.1"
 ```
 
 For graph traversal utilities:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-traversal" % "4.31.0"
+libraryDependencies += "com.outr" %% "lightdb-traversal" % "4.31.1"
 ```
 
 For OpenSearch:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-opensearch" % "4.31.0"
+libraryDependencies += "com.outr" %% "lightdb-opensearch" % "4.31.1"
 ```
 
 ---
@@ -88,7 +88,7 @@ db.people.transaction { tx =>
 // res0: Task[List[Option[City]]] = FlatMap(
 //   input = FlatMap(
 //     input = Suspend(
-//       f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000004f9b2b68@74b7ce8e,
+//       f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000003c9f3858@789b58ad,
 //       trace = SourcecodeTrace(
 //         file = File(
 //           "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
@@ -98,7 +98,7 @@ db.people.transaction { tx =>
 //         kind = "apply"
 //       )
 //     ),
-//     f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000004f9b8580@7a0e05a6,
+//     f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000003c9f5270@2607797f,
 //     trace = SourcecodeTrace(
 //       file = File(
 //         "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
@@ -108,7 +108,7 @@ db.people.transaction { tx =>
 //       kind = "flatMap"
 //     )
 //   ),
-//   f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000004f9b9128@2f2e3eba,
+//   f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000003c9f5e18@6f27f5d4,
 //   trace = SourcecodeTrace(
 //     file = File(
 //       "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
@@ -204,7 +204,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.31.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.31.1"
 ```
 
 ---
@@ -296,7 +296,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di")
+//   _id = StringId("xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak")
 // )
 db.people.transaction { implicit txn =>
   txn.insert(adam)
@@ -307,7 +307,7 @@ db.people.transaction { implicit txn =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di")
+//   _id = StringId("xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak")
 // )
 ```
 
@@ -321,7 +321,7 @@ db.people.transaction { txn =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)), Person(Adam,21,None,Set(),List(),StringId(xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak)))
 ```
 
 ---
@@ -361,7 +361,7 @@ db.people.transaction { txn =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 966},repl.MdocSession$MdocApp$Person$@72fc81e2))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 987},repl.MdocSession$MdocApp$Person$@1e03c772))
 ```
 
 ### Grouping
@@ -372,7 +372,7 @@ db.people.transaction { txn =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)), Person(Adam,21,None,Set(),List(),StringId(xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak)))))
 ```
 
 ---
@@ -386,14 +386,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
-// res6: Int = 47
+// res6: Int = 48
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res7: Int = 47
+// res7: Int = 48
 ```
 
 ---
@@ -463,7 +463,7 @@ luceneDb.init.sync()
 luceneDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
 // res9: Note = Note(
 //   text = "the quick brown fox",
-//   _id = StringId("wKnD7msWIzmiPCh97cy1MsZC3E7ux6dr")
+//   _id = StringId("bRg1jcsHiQyESidRfeiEgXQiMXupGXUy")
 // )
 val hits = luceneDb.notes.transaction { txn =>
   txn.query.search.flatMap(_.list)
@@ -476,6 +476,10 @@ val hits = luceneDb.notes.transaction { txn =>
 //   Note(
 //     text = "the quick brown fox",
 //     _id = StringId("wKnD7msWIzmiPCh97cy1MsZC3E7ux6dr")
+//   ),
+//   Note(
+//     text = "the quick brown fox",
+//     _id = StringId("bRg1jcsHiQyESidRfeiEgXQiMXupGXUy")
 //   )
 // )
 ```
@@ -512,7 +516,7 @@ spatialDb.places.transaction(_.insert(Place("NYC", Point(40.7142, -74.0119)))).s
 // res11: Place = Place(
 //   name = "NYC",
 //   loc = Point(latitude = 40.7142, longitude = -74.0119),
-//   _id = StringId("YC8shHtpe5tBbVFugbHn7p7dfLOiYjHY")
+//   _id = StringId("tU0og4OPhRXUBVUBghfssIjdZC2psyWU")
 // )
 // Distance filters are supported on spatial-capable backends; example filter:
 val nycFilter = Place.loc.distance(Point(40.7, -74.0), 5_000.meters)
@@ -609,11 +613,11 @@ object shardDb extends LightDB {
 
 shardDb.init.sync()
 val tenantA = shardDb.shards("tenantA")
-// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@56e34e67
+// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@4474f7a0
 tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
 // res14: TenantDoc = TenantDoc(
 //   value = "hello",
-//   _id = StringId("sRQk6kIz33oq5T7R6qh46sjZeSfGN1Uk")
+//   _id = StringId("3CgFMAGULExMRcc4x5Z1s5FZNzQIF4cU")
 // )
 ```
 
@@ -634,8 +638,8 @@ cfgDb.init.sync()
 val featureFlag = cfgDb.stored[Boolean]("featureX", default = false)
 // featureFlag: StoredValue[Boolean] = StoredValue(
 //   key = "featureX",
-//   store = lightdb.store.hashmap.HashMapStore@61326bc4,
-//   default = repl.MdocSession$MdocApp$$Lambda/0x000000004fbcba60@71bd4536,
+//   store = lightdb.store.hashmap.HashMapStore@2c2f6ba2,
+//   default = repl.MdocSession$MdocApp$$Lambda/0x000000003cc12c68@6bda0a7e,
 //   persistence = Stored
 // )
 featureFlag.set(true).sync()
@@ -670,7 +674,7 @@ sqlDb.init.sync()
 sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
 // res18: Row = Row(
 //   value = "hi sql",
-//   _id = StringId("Y9kCUBSjHMub0BdXqCpbO1Zo5f26gCSO")
+//   _id = StringId("PfQrzlp54H9yx4UK8jk4iDdbR04eur59")
 // )
 ```
 
