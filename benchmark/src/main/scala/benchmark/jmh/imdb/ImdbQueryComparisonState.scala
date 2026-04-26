@@ -289,8 +289,8 @@ private object ImdbQueryDb {
     override val storeManager: SMParam = sm
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
-    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
+    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka).withName("aka")()
+    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics).withName("basics")()
   }
 
   private class SplitDb(sm: SplitStoreManager[RocksDBStore.type, LuceneStore.type], dir: Option[Path])
@@ -299,8 +299,8 @@ private object ImdbQueryDb {
     override val storeManager: SM = sm
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
-    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
+    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka).withName("aka")()
+    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics).withName("basics")()
   }
 
   private class TraversalDb(dir: Option[Path]) extends ImdbQueryDb[CollectionManager] {
@@ -333,7 +333,7 @@ private object ImdbQueryDb {
     }
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
-    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
+    val aka: Collection[TitleAka, TitleAka.type] = store(TitleAka).withName("aka")()
+    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics).withName("basics")()
   }
 }

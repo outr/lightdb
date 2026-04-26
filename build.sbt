@@ -10,7 +10,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 
-ThisBuild / version := "4.31.2-SNAPSHOT"
+ThisBuild / version := "4.32.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "3.8.3"
 
@@ -67,6 +67,8 @@ val profigVersion: String = "3.7.0"
 val reactifyVersion: String = "4.2.0"
 
 val spiceVersion: String = "1.7.1"
+
+val scantivyVersion: String = "1.0.0"
 
 val collectionCompatVersion: String = "2.14.0"
 
@@ -235,6 +237,18 @@ lazy val lucene = project.in(file("lucene"))
 		)
 	)
 
+lazy val tantivy = project.in(file("tantivy"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-tantivy",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"com.outr" %% "scantivy" % scantivyVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val opensearch = project.in(file("opensearch"))
 	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
 	.settings(
@@ -338,7 +352,7 @@ lazy val redis = project.in(file("redis"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
