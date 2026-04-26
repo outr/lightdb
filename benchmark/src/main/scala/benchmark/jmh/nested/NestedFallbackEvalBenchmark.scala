@@ -57,7 +57,7 @@ object Attr {
   implicit val rw: RW[Attr] = RW.gen
 }
 
-case class Entry(title: String, attrs: List[Attr]) extends Document[Entry]
+case class Entry(title: String, attrs: List[Attr], _id: lightdb.id.Id[Entry] = Entry.id()) extends Document[Entry]
 object Entry extends DocumentModel[Entry] with JsonConversion[Entry] {
   override implicit val rw: RW[Entry] = RW.gen
 

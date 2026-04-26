@@ -10,6 +10,7 @@ import lightdb.lmdb.LMDBStore
 import lightdb.h2.H2Store
 import lightdb.sql.SQLiteStore
 import lightdb.duckdb.DuckDBStore
+import lightdb.halodb.HaloDBStore
 import lightdb.store.hashmap.HashMapStore
 import lightdb.store.split.SplitStoreManager
 import lightdb.store.{Collection, CollectionManager, Store, StoreManager}
@@ -215,7 +216,7 @@ private object ImdbDb {
     case "sqlite"  => new SqlDb(SQLiteStore, dir)
     case "duckdb"  => new SqlDb(DuckDBStore, dir)
     case "h2"      => new SqlDb(H2Store, dir)
-    case "halodb"  => new SqlDb(HaloDBStore, dir)
+    case "halodb"  => new Rocks(dir, HaloDBStore)
     case "hashmap" => new Rocks(None, HashMapStore)
     case "rocksdb-lucene" =>
       new SplitDb(SplitStoreManager(RocksDBStore, LuceneStore), dir)
@@ -227,8 +228,8 @@ private object ImdbDb {
     override val storeManager: SMParam = sm
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
-    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
+    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka).withName("aka")()
+    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics).withName("basics")()
   }
 
   private class SqlDb[SMParam <: CollectionManager](val sm: SMParam, dir: Option[Path]) extends ImdbDb[SMParam] {
@@ -236,8 +237,8 @@ private object ImdbDb {
     override val storeManager: SMParam = sm
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
-    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
+    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka).withName("aka")()
+    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics).withName("basics")()
   }
 
   private class SplitDb(sm: SplitStoreManager[RocksDBStore.type, LuceneStore.type], dir: Option[Path]) extends ImdbDb[SplitStoreManager[RocksDBStore.type, LuceneStore.type]] {
@@ -245,8 +246,8 @@ private object ImdbDb {
     override val storeManager: SM = sm
     override val directory: Option[Path] = dir
     override def upgrades: List[DatabaseUpgrade] = Nil
-    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka, name = Some("aka"))
-    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics, name = Some("basics"))
+    val aka: Store[TitleAka, TitleAka.type] = store(TitleAka).withName("aka")()
+    val basics: Store[TitleBasics, TitleBasics.type] = store(TitleBasics).withName("basics")()
   }
 }
 

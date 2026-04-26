@@ -12,7 +12,8 @@ Computationally focused database using pluggable stores
 | [MapDB (B-Tree)](https://mapdb.org)                                   | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | ✅        | Uses BTreeMap for ordered/prefix scans|
 | [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅        | High-performance LSM tree             |
 | [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌        | Popular in-memory data structure store|
-| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine |
+| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine; native block-join + spatial |
+| [Tantivy](https://github.com/quickwit-oss/tantivy) (via [Scantivy](https://github.com/outr/scantivy)) | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅✅      | ✅           | ❌              | ✅✅✅           | ❌        | Rust-based; FFM (JEP 442) bridge over a Tantivy lib. No native geo or block-join (use Lucene for those) |
 | [OpenSearch](https://opensearch.org)                                  | Search Server      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | ✅✅✅           | ❌        | Distributed search, joins, aggregations |
 | [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | 🟡        | Lightweight embedded SQL              |
 | [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
@@ -26,9 +27,6 @@ Computationally focused database using pluggable stores
 - 🟡: Limited or trade-offs
 - ❌: Not supported
 
-## In-Progress
-- Tantivy (https://github.com/quickwit-oss/tantivy) - Working on creating a wrapper around Rust's extremely fast alternative to Apache Lucene (See https://github.com/outr/scantivy)
-
 ## SBT Configuration
 
 To add all modules:
@@ -39,6 +37,11 @@ libraryDependencies += "com.outr" %% "lightdb-all" % "@VERSION@"
 For a specific implementation like Lucene:
 ```scala
 libraryDependencies += "com.outr" %% "lightdb-lucene" % "@VERSION@"
+```
+
+For Tantivy (Rust-backed; bundles native libs for linux-x86_64, linux-aarch64, macos-aarch64, windows-x86_64; requires JDK 22+ for the FFM API):
+```scala
+libraryDependencies += "com.outr" %% "lightdb-tantivy" % "@VERSION@"
 ```
 
 For graph traversal utilities:
@@ -381,7 +384,13 @@ fs.delete(meta.fileId).sync()
 
 ---
 
-## Full-Text Search (Lucene)
+## Full-Text Search
+
+LightDB's full-text-capable backends are pluggable: **Lucene** (`LuceneStore`) and **Tantivy**
+(`TantivyStore`, Rust-backed via Scantivy) implement the same `Collection` contract, so swapping
+them is a one-line change. The example below uses `LuceneStore`; replace with
+`import lightdb.tantivy.TantivyStore` + `val storeManager = TantivyStore` to switch backends —
+the rest of the code is identical.
 
 ```scala mdoc
 import lightdb._
@@ -397,20 +406,34 @@ object Note extends DocumentModel[Note] with JsonConversion[Note] {
   val text = field.tokenized("text", _.text)
 }
 
-object luceneDb extends LightDB {
+object ftsDb extends LightDB {
   type SM = LuceneStore.type
   val storeManager = LuceneStore
-  val directory = Some(Path.of("db/lucene"))
+  val directory = Some(Path.of("db/fts"))
   val notes = store(Note)()
   def upgrades = Nil
 }
 
-luceneDb.init.sync()
-luceneDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
-val hits = luceneDb.notes.transaction { txn =>
+ftsDb.init.sync()
+ftsDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
+val hits = ftsDb.notes.transaction { txn =>
   txn.query.search.flatMap(_.list)
 }.sync()
 ```
+
+**When to pick which:**
+- **Lucene** — mature, native block-join (`Filter.ExistsChild`, `Filter.Nested`) and native
+  spatial (`Filter.Distance`, polygon containment, etc.). Best when you need those features.
+  Pure Java — no native dependency.
+- **Tantivy** — Rust core wrapped via Scantivy with the FFM API (JDK 22+); native libs ship in
+  the published JAR for `linux-x86_64` / `linux-aarch64` / `macos-aarch64` / `windows-x86_64`.
+  Lacks native geo and block-join — `Filter.Nested` falls back to an in-memory post-filter
+  (well-bounded only when other clauses narrow the candidate set); spatial filters and
+  `Sort.ByDistance` throw `UnsupportedOperationException` rather than emulate.
+
+For workload-specific perf comparisons, run the benchmark suite at
+`benchmark/run-complete.sh` — it executes both backends head-to-head across read / write /
+query / concurrency workloads.
 
 ## Spatial Queries
 
