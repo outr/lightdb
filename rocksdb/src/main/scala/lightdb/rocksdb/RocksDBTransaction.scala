@@ -191,16 +191,27 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   override protected def _close: Task[Unit] = Task.unit
 
   override def truncate: Task[Int] = Task.defer {
-    truncateManual
-    // TODO: Revisit column family dropping - it's causing issues right now
-    /*store.handle match {
-      case Some(h) => count.map { size =>
+    // Fast path: drop the entire column family and recreate it. O(1) in the
+    // store size — vs `truncateManual` which iterates every key. For stores
+    // with millions of entries (e.g. `entityRelationshipTraversal` after a
+    // dedup run) this is the difference between minutes and milliseconds.
+    //
+    // Requires the handle-cache eviction in `RocksDBSharedStore` so the
+    // recreate sees a fresh CF instead of resurrecting the dead handle.
+    val handleOpt = store.handle
+    val sharedOpt = store.sharedStore
+    if (handleOpt.isDefined && sharedOpt.isDefined) {
+      val h = handleOpt.get
+      val ss = sharedOpt.get
+      count.map { size =>
         store.rocksDB.dropColumnFamily(h)
+        ss.store.evictHandle(ss.handle)
         store.resetHandle()
         size
       }
-      case None => truncateManual
-    }*/
+    } else {
+      truncateManual
+    }
   }
 
   private def truncateManual: Task[Int] = Task {
