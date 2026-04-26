@@ -214,26 +214,56 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
   }
 
+  /** Per-key delete fallback used when the column-family fast path can't be
+   * taken (no shared store / no handle). Deletes are accumulated into bounded
+   * `WriteBatch` chunks and flushed periodically rather than into a single
+   * unbounded batch — that prior shape caused tens-of-GB heap + native-buffer
+   * peaks on large stores (and a real-world OOM-kill on a `~tens-of-millions`
+   * key truncate).
+   *
+   * Chunk size is conservative: 50k keys → roughly low-MB per batch even
+   * with long keys. Tunable via `lightdb.rocksdb.truncate.batchSize` profig
+   * if a workload needs different bounds.
+   */
   private def truncateManual: Task[Int] = Task {
+    val batchSize = profig.Profig("lightdb.rocksdb.truncate.batchSize")
+      .opt[Int].filter(_ > 0).getOrElse(50_000)
     val iter = store.handle match {
       case Some(h) => store.rocksDB.newIterator(h)
       case None => store.rocksDB.newIterator()
     }
-    val batch = new WriteBatch()
+    var batch = new WriteBatch()
     var count = 0
+    var inBatch = 0
 
     val delete = store.handle match {
       case Some(h) => (key: Array[Byte]) => batch.delete(h, key)
       case None => (key: Array[Byte]) => batch.delete(key)
     }
 
-    iter.seekToFirst()
-    while iter.isValid do {
-      delete(iter.key())
-      count += 1
-      iter.next()
+    def flush(): Unit = {
+      if (inBatch > 0) {
+        store.rocksDB.write(writeOptions, batch)
+        batch.close()
+        batch = new WriteBatch()
+        inBatch = 0
+      }
     }
-    store.rocksDB.write(writeOptions, batch)
+
+    try {
+      iter.seekToFirst()
+      while iter.isValid do {
+        delete(iter.key())
+        count += 1
+        inBatch += 1
+        if (inBatch >= batchSize) flush()
+        iter.next()
+      }
+      flush()
+    } finally {
+      try iter.close() catch { case _: Throwable => () }
+      try batch.close() catch { case _: Throwable => () }
+    }
     count
   }
 
