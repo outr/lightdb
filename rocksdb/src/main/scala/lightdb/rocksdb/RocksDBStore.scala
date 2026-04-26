@@ -22,7 +22,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       path: Option[Path],
                                                                       model: Model,
                                                                       private[rocksdb] val rocksDB: RocksDB,
-                                                                      sharedStore: Option[RocksDBSharedStoreInstance],
+                                                                      private[rocksdb] val sharedStore: Option[RocksDBSharedStoreInstance],
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       lightDB: LightDB,
                                                                       storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
@@ -52,9 +52,13 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
       case Some(handle) => handle
       case None =>
         // Ensure new column families use the same table config (block cache, bloom filters, etc.)
-        rocksDB.createColumnFamily(
+        val fresh = rocksDB.createColumnFamily(
           new ColumnFamilyDescriptor(ss.handle.getBytes(StandardCharsets.UTF_8), RocksDBStore.sharedColumnFamilyOptions)
         )
+        // Register so subsequent lookups (e.g. peer stores, or this store
+        // after another truncate) see the live handle, not None.
+        ss.store.registerHandle(ss.handle, fresh)
+        fresh
     }
   }
 

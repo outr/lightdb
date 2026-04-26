@@ -16,9 +16,27 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager {
 
   val (rocksDB: RocksDB, existingHandles: List[ColumnFamilyHandle]) = RocksDBStore.createRocksDB(directory)
 
-  val existingHandlesMap: Map[String, ColumnFamilyHandle] = existingHandles.map { h =>
-    new String(h.getName, StandardCharsets.UTF_8) -> h
-  }.toMap
+  // Mutable so the fast-truncate path (drop column family + recreate) can
+  // evict the dropped handle. Otherwise `RocksDBStore.resetHandle()` would
+  // re-attach the dead handle from this map and every subsequent op would
+  // fail. `TrieMap` is thread-safe; truncate is rare but reads happen often.
+  private val handlesMap: scala.collection.concurrent.TrieMap[String, ColumnFamilyHandle] =
+    scala.collection.concurrent.TrieMap.from(existingHandles.map { h =>
+      new String(h.getName, StandardCharsets.UTF_8) -> h
+    })
+
+  def existingHandlesMap: scala.collection.Map[String, ColumnFamilyHandle] = handlesMap
+
+  /** Remove a handle from the cache (called by the fast-truncate path after
+   * `dropColumnFamily`). Subsequent `resetHandle()` calls will create a fresh
+   * column family of the same name. */
+  private[rocksdb] def evictHandle(name: String): Unit = { handlesMap.remove(name); () }
+
+  /** Register a freshly-created handle so other stores looking up the same
+   * shared name see it. */
+  private[rocksdb] def registerHandle(name: String, handle: ColumnFamilyHandle): Unit = {
+    handlesMap.update(name, handle); ()
+  }
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
