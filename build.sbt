@@ -66,7 +66,7 @@ val profigVersion: String = "3.7.0"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "1.7.0"
+val spiceVersion: String = "1.7.1"
 
 val collectionCompatVersion: String = "2.14.0"
 
