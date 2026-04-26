@@ -102,6 +102,6 @@ private class KVDb[SM0 <: StoreManager](sm: SM0, dir: Option[Path]) extends Ligh
   override val storeManager: SM = sm
   override val directory: Option[Path] = dir
   override def upgrades: List[DatabaseUpgrade] = Nil
-  val kv: storeManager.S[KeyValue, KeyValue.type] = store(KeyValue, name = Some("kv"))
+  val kv: storeManager.S[KeyValue, KeyValue.type] = store(KeyValue).withName("kv")()
 }
 
