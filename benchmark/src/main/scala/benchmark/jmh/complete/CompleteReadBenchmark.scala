@@ -4,6 +4,7 @@ import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 
 import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.DurationInt
 
 /** Read-side throughput. One trial per `(backend, recordCount)` pair; each benchmark method
  *  measures ops/sec on a hot index.
@@ -16,13 +17,16 @@ class CompleteReadBenchmark {
   @OutputTimeUnit(TimeUnit.SECONDS)
   def get(state: CompleteKvState, bh: Blackhole): Unit = {
     val id = state.randomId
-    val doc = state.db.store.transaction(_.get(id)).sync()
+    val doc = state.db.store.transaction.shared("CompleteReadBenchmark.get", 5.seconds)(_.get(id)).sync()
     bh.consume(doc)
   }
 
   /** Full collection scan (single-shot). Heavy operation — tells you how fast each backend can
    *  emit every doc in `recordCount`. Watch out: with `recordCount=100k`, this dominates wall
    *  time vs the throughput-mode benchmarks.
+   *
+   *  Uses a shared transaction so we measure the scan cost rather than tx-open + tx-commit
+   *  setup (matters most for splits, which otherwise pay the cost on both sides).
    */
   @Benchmark
   @BenchmarkMode(Array(Mode.SingleShotTime))
@@ -30,7 +34,7 @@ class CompleteReadBenchmark {
   @Warmup(iterations = 1)
   @Measurement(iterations = 3)
   def fullScan(state: CompleteKvState, bh: Blackhole): Unit = {
-    val n = state.db.store.transaction(_.stream.count).sync()
+    val n = state.db.store.transaction.shared("CompleteReadBenchmark.fullScan", 5.seconds)(_.stream.count).sync()
     bh.consume(n)
   }
 }

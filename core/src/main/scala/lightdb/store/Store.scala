@@ -205,10 +205,21 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
     def release(transaction: TX): Task[Unit] = for
       _ <- trigger.transactionEnd(transaction)
-      _ <- releaseTransaction(transaction)
-      _ <- transaction.close
+      // Always run `close` (releases native handles, drops sets) even if commit fails — otherwise
+      // a commit-time error (e.g. a buffered DuplicateIdException surfacing at flush) would leak
+      // backend resources like LMDB read txns and corrupt subsequent transactions on the same
+      // store. Surface the commit error after close completes.
+      commitResult <- releaseTransaction(transaction).attempt
+      _ <- transaction.close.handleError { t =>
+        scribe.warn(s"close failed for transaction on $name: ${t.getMessage}")
+        Task.unit
+      }
       _ = set.remove(transaction)
       _ <- logger.info(s"Released Transaction for $name").when(Store.LogTransactions)
+      _ <- commitResult match {
+        case scala.util.Success(_) => Task.unit
+        case scala.util.Failure(t) => Task.error(t)
+      }
     yield ()
 
     def releaseAll(): Task[Int] = Task.defer {

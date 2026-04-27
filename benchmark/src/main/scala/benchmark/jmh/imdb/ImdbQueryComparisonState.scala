@@ -78,11 +78,13 @@ class ImdbQueryComparisonState {
   }
 
   private def ingest(akas: Seq[(String, String, TitleAka)], basics: Seq[TitleBasics]): Unit = {
+    // `upsert` here — bulk dataset ids are unique by construction; skip the strict-insert
+    // existence check that would otherwise dominate ingest time.
     basics.grouped(batchSize).foreach { chunk =>
-      db.basics.transaction(_.insert(chunk)).sync()
+      db.basics.transaction(_.upsert(chunk)).sync()
     }
     akas.grouped(batchSize).foreach { chunk =>
-      db.aka.transaction(_.insert(chunk.map(_._3))).sync()
+      db.aka.transaction(_.upsert(chunk.map(_._3))).sync()
     }
   }
 

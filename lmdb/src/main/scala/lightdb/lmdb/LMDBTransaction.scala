@@ -4,6 +4,7 @@ import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.{Asable, Convertible}
 import fabric.{Json, Null}
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.error.DuplicateIdException
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.store.write.WriteOp
@@ -41,7 +42,10 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     store.instance.withWrite { txn =>
       Task {
         ops.foreach {
-          case WriteOp.Insert(doc) => instance.put(txn, doc._id.bytes, d2b(doc), overwrite = false)
+          case WriteOp.Insert(doc) =>
+            // `MDB_NOOVERWRITE` returns false on duplicate (does NOT throw — see LMDBInstance.put).
+            if !instance.put(txn, doc._id.bytes, d2b(doc), overwrite = false) then
+              throw DuplicateIdException(store.name, doc._id)
           case WriteOp.Upsert(doc) => instance.put(txn, doc._id.bytes, d2b(doc), overwrite = true)
           case WriteOp.Delete(id) => instance.delete(txn, id.bytes)
         }

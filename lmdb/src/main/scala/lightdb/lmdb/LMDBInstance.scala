@@ -22,17 +22,22 @@ case class LMDBInstance(env: Env[ByteBuffer], val dbi: Dbi[ByteBuffer]) {
     result
   }
 
-  def put(txn: Txn[ByteBuffer], key: Array[Byte], value: Array[Byte], overwrite: Boolean): Unit = {
+  /**
+   * Returns `true` if the put succeeded. With `overwrite=false`, returns `false` when the key
+   * already exists (LMDB's `MDB_NOOVERWRITE` semantics — the underlying call returns false
+   * rather than throwing).
+   */
+  def put(txn: Txn[ByteBuffer], key: Array[Byte], value: Array[Byte], overwrite: Boolean): Boolean = {
     val keyBuf = keyPool.get(key.length)
     val valBuf = valuePool.get(value.length)
     keyBuf.clear(); keyBuf.put(key).flip()
     valBuf.clear(); valBuf.put(value).flip()
-    if overwrite then
-      dbi.put(txn, keyBuf, valBuf)
-    else
-      dbi.put(txn, keyBuf, valBuf, PutFlags.MDB_NOOVERWRITE)
+    val ok =
+      if overwrite then dbi.put(txn, keyBuf, valBuf)
+      else dbi.put(txn, keyBuf, valBuf, PutFlags.MDB_NOOVERWRITE)
     keyPool.release(keyBuf)
     valuePool.release(valBuf)
+    ok
   }
 
   def delete(txn: Txn[ByteBuffer], key: Array[Byte]): Boolean = {

@@ -13,7 +13,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.AsyncTaskSpec
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
+import java.util.Comparator
 
 @EmbeddedTest
 class RocksDBTraversalGroupedAggregateSpec
@@ -23,6 +24,12 @@ class RocksDBTraversalGroupedAggregateSpec
     with TraversalRocksDBWrappedManager {
 
   private lazy val specName: String = getClass.getSimpleName
+
+  // Strict-insert contract requires a clean slate per run.
+  private val dbPath: Path = Path.of(s"db/$specName")
+  if Files.exists(dbPath) then {
+    Files.walk(dbPath).sorted(Comparator.reverseOrder()).forEach(Files.delete(_))
+  }
 
   override def traversalStoreManager: TraversalManager = super.traversalStoreManager
 

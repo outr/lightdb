@@ -57,7 +57,8 @@ class ThroughputState {
         }
       })
 
-      db.kv.transaction.withBatch(batchConfig).apply(_.insert(docs)).sync()
+      // `upsert` here — keys are unique by construction; avoids the strict-insert exists check.
+      db.kv.transaction.withBatch(batchConfig).apply(_.upsert(docs)).sync()
       db.kv.transaction.withBatch(batchConfig).apply(_.stream.drain).sync()
       db.kv.transaction.withBatch(batchConfig).apply { tx =>
         tx.stream.evalMap(kv => tx.delete(kv._id)).drain

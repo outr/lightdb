@@ -50,6 +50,15 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     doSearch[Doc](query).flatMap(_.list).map(_.headOption)
   }
 
+  // NOTE: Lucene's `addDocument` does not enforce `_id` uniqueness — it just appends. The
+  // strict-insert contract (insert errors on duplicate) is therefore best-effort here:
+  // we'd need an NRT existence probe before each write, but every form of probe (cached
+  // SearcherManager refresh, `DirectoryReader.open(IndexWriter)`) perturbs the writer's
+  // segment composition or the cached scoring searcher's stats — observable as result-order
+  // shifts in scoring/relevance tests. For now, Lucene preserves its pre-existing behavior
+  // (duplicates are silently allowed; callers should `upsert` when they want create-or-replace).
+  // This deviation from the cross-backend contract is documented; KV/SQL/LMDB/Tantivy enforce
+  // strictly.
   override protected def _insert(doc: Doc): Task[Doc] = addDoc(doc, upsert = false)
 
   override protected def _upsert(doc: Doc): Task[Doc] = addDoc(doc, upsert = true)

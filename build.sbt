@@ -10,7 +10,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 
-ThisBuild / version := "4.32.0"
+ThisBuild / version := "4.33.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "3.8.3"
 
@@ -60,7 +60,7 @@ ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF
 ThisBuild / Test / parallelExecution := false
 ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
-val rapidVersion: String = "2.9.2"
+val rapidVersion: String = "2.9.3"
 
 val profigVersion: String = "3.7.0"
 

@@ -43,11 +43,6 @@ case class TantivyTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       .map(d => TantivyDocConvert.fromPb(store.model, d))
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] = Task {
-    val pbDoc = TantivyDocConvert.toPb(store.model, store.fields, doc)
-    index.index(pbDoc).fold(e => throw new RuntimeException(e), _ => doc)
-  }
-
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val pbDoc = TantivyDocConvert.toPb(store.model, store.fields, doc)
     val idValue = TantivyValue.fromAny(store.idField, doc._id)
