@@ -12,10 +12,17 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import rapid.*
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
+import java.util.Comparator
 
 abstract class AbstractTraversalSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   protected lazy val specName: String = getClass.getSimpleName
+  // Strict-insert contract requires a clean slate per run — leftover data from a previous run
+  // would make the first `insert` of a known id error with DuplicateIdException.
+  private lazy val dbPath: Path = Path.of(s"db/$specName")
+  if Files.exists(dbPath) then {
+    Files.walk(dbPath).sorted(Comparator.reverseOrder()).forEach(Files.delete(_))
+  }
   protected lazy val db: DB = new DB
 
   specName should {

@@ -80,13 +80,13 @@ class ImdbState {
   }
 
   private def ingest(akas: Seq[(String, String, TitleAka)], basics: Seq[TitleBasics]): Unit = {
-    // insert basics
+    // `upsert` for the bulk load — IMDB tsv ids are unique within a dataset, so the strict-insert
+    // exists check would just add overhead with no semantic benefit here.
     basics.grouped(batchSize).foreach { chunk =>
-      db.basics.transaction(_.insert(chunk)).sync()
+      db.basics.transaction(_.upsert(chunk)).sync()
     }
-    // insert akas
     akas.grouped(batchSize).foreach { chunk =>
-      db.aka.transaction(_.insert(chunk.map(_._3))).sync()
+      db.aka.transaction(_.upsert(chunk.map(_._3))).sync()
     }
   }
 

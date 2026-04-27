@@ -30,8 +30,6 @@ case class RedisTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] = _upsert(doc)
-
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     jedis.hset(store.name, doc._id.value, toString(doc))
     doc

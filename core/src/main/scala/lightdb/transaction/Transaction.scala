@@ -4,7 +4,7 @@ import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.error.DocNotFoundException
+import lightdb.error.{DocNotFoundException, DuplicateIdException}
 import lightdb.field.Field.UniqueIndex
 import lightdb.id.Id
 import lightdb.store.Store
@@ -30,6 +30,14 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   private[lightdb] lazy val cachePending: ConcurrentHashMap[Id[Doc], Option[Doc]] =
     new ConcurrentHashMap[Id[Doc], Option[Doc]]()
 
+  /**
+   * Strict insert: fails with [[lightdb.error.DuplicateIdException]] if `doc._id` already
+   * exists. Use [[upsert]] for create-or-replace semantics.
+   *
+   * With a buffered/queued/async write handler the duplicate is detected at flush time rather
+   * than at the call site — wrap in `.next(transaction.flush)` if the caller needs the error
+   * to surface synchronously.
+   */
   final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this)
     .next(writeHandler.write(WriteOp.Insert(doc)))
     .map(_ => doc)
@@ -145,7 +153,20 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
     if (store.cache.isDefined) cachePending.put(id, doc)
 
   protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
-  protected def _insert(doc: Doc): Task[Doc]
+
+  /**
+   * Insert a new document, failing if `doc._id` already exists.
+   *
+   * Default implementation calls `_exists` and then `_upsert`, which adds an extra read per
+   * insert on backends without a native "insert if absent" primitive. Backends that have one
+   * (LMDB via `MDB_NOOVERWRITE`, SQL via PK constraints, ChronicleMap via `putIfAbsent`)
+   * override this with the cheaper native path. When duplicate-detection is unwanted —
+   * for example bulk loads where ids are known unique — call `upsert` instead.
+   */
+  protected def _insert(doc: Doc): Task[Doc] = _exists(doc._id).flatMap {
+    case true => Task.error(DuplicateIdException(store.name, doc._id))
+    case false => _upsert(doc)
+  }
   protected def _upsert(doc: Doc): Task[Doc]
   protected def _delete(id: Id[Doc]): Task[Boolean]
   protected def _exists(id: Id[Doc]): Task[Boolean]

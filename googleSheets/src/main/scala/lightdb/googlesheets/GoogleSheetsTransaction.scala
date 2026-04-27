@@ -26,8 +26,6 @@ case class GoogleSheetsTransaction[Doc <: Document[Doc], Model <: DocumentModel[
     }
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] = _upsert(doc)
-
   override protected def _upsert(doc: Doc): Task[Doc] = Task.defer {
     val json = doc.json(store.model.rw)
     instance.put(doc._id.value, json).map(_ => doc)

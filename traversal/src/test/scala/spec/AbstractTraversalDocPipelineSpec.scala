@@ -66,11 +66,13 @@ abstract class AbstractTraversalDocPipelineSpec
       DB.people.transaction { people =>
         DB.pets.transaction { pets =>
           for
-            _ <- pets.insert(List(
+            // `upsert` here — these ids may already exist from the prior test step. Strict
+            // insert would (correctly) reject the redo.
+            _ <- pets.upsert(List(
               Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
               Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
             ))
-            _ <- people.insert(List(
+            _ <- people.upsert(List(
               P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
               P("Bob", 20, bestPetId = None, _id = Id("b"))
             ))
@@ -93,12 +95,13 @@ abstract class AbstractTraversalDocPipelineSpec
       DB.people.transaction { people =>
         DB.pets.transaction { pets =>
           for
-            _ <- pets.insert(List(
+            // Same caveat as "lookupOpt": ids may already be populated from prior test steps.
+            _ <- pets.upsert(List(
               Pet(ownerId = Id[P]("a"), name = "Fluffy", _id = Id[Pet]("p1")),
               Pet(ownerId = Id[P]("a"), name = "Mittens", _id = Id[Pet]("p3")),
               Pet(ownerId = Id[P]("b"), name = "Rex", _id = Id[Pet]("p2"))
             ))
-            _ <- people.insert(List(
+            _ <- people.upsert(List(
               P("Alice", 10, bestPetId = Some(Id[Pet]("p1")), _id = Id("a")),
               P("Bob", 20, bestPetId = None, _id = Id("b"))
             ))

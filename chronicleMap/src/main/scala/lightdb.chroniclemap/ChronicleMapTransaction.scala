@@ -2,6 +2,7 @@ package lightdb.chroniclemap
 
 import fabric.Json
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.error.DuplicateIdException
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.transaction.Transaction
@@ -35,7 +36,7 @@ case class ChronicleMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[
 
   override protected def _insert(doc: Doc): Task[Doc] = Task {
     if db.putIfAbsent(doc._id.value, toString(doc)) != null then {
-      throw new RuntimeException(s"${doc._id.value} already exists")
+      throw DuplicateIdException(store.name, doc._id)
     }
     doc
   }
