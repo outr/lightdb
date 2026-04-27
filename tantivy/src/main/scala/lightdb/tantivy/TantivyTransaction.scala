@@ -182,6 +182,10 @@ case class TantivyTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       lightdb.materialized.MaterializedAndDoc[Doc, Model](obj(pairs*), store.model, doc)
     case _: Conversion.Distance[Doc, _] =>
       throw new UnsupportedOperationException("Tantivy backend does not support Conversion.Distance — no native geo support.")
+    case _: Conversion.DocWithInnerHits[_, _] =>
+      // Tantivy has no parent/child join primitive — return the doc with empty inner-hit and
+      // highlight payloads so the conversion is portable.
+      lightdb.query.DocWithInnerHits[Doc, Model](doc = doc)
   }).asInstanceOf[V]
 
   /** Run a broad query (with nested constraints stripped), then post-filter results in-memory

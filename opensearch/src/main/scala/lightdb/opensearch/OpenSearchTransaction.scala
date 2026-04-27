@@ -8,7 +8,7 @@ import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.{FacetQuery, FacetValue}
-import lightdb.filter.{FilterPlanner, NestedQuerySupport, QueryOptimizer}
+import lightdb.filter.{Filter, FilterPlanner, NestedQuerySupport, ParentChildRelation, QueryOptimizer}
 import lightdb.field.Field.FacetField
 import lightdb.field.Field.UniqueIndex
 import lightdb.field.FieldAndValue
@@ -16,6 +16,7 @@ import lightdb.field.IndexingState
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.opensearch.util.OpenSearchCursor
+import lightdb.query.{Highlights, InnerHit, DocWithInnerHits => DocWithInnerHitsResult}
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.opensearch.query.{OpenSearchDsl, OpenSearchSearchBuilder}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
@@ -271,7 +272,8 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       facetAggMaxBuckets = config.facetAggMaxBuckets,
       facetChildCountMode = config.facetChildCountMode,
       facetChildCountPrecisionThreshold = config.facetChildCountPrecisionThreshold,
-      facetChildCountPageSize = config.facetChildCountPageSize
+      facetChildCountPageSize = config.facetChildCountPageSize,
+      innerHitsByRelation = q.innerHits
     )
 
   private lazy val nestedFallbackAllowed: Boolean =
@@ -382,6 +384,150 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
         val distances = geos.map(g => Spatial.distance(d.from, g))
         DistanceAndDoc(doc, distances).asInstanceOf[V]
       }
+    case _: Conversion.DocWithInnerHits[_, _] =>
+      // Handled by `materializeHit` (needs the full hit JSON, not just the source).
+      throw new IllegalStateException("Conversion.DocWithInnerHits must go through materializeHit")
+  }
+
+  /**
+   * Hit-level entry point. Defaults to `materialize` for the existing conversions; takes the
+   * `DocWithInnerHits` path for the new variant since it needs `_source` plus the hit's
+   * `inner_hits` and `highlight` blocks.
+   */
+  private def materializeHit[V](query: Query[Doc, Model, V],
+                                 hit: Json,
+                                 id: Id[Doc],
+                                 hydratedSource: Json): Task[V] = query.conversion match {
+    case _: Conversion.DocWithInnerHits[Doc @unchecked, Model @unchecked] =>
+      materializeDocWithInnerHits(query, hit, id, hydratedSource).asInstanceOf[Task[V]]
+    case other =>
+      materialize(other, id, hydratedSource)
+  }
+
+  /**
+   * Build a [[DocWithInnerHitsResult]] for one hit:
+   *  - decode the parent doc
+   *  - extract per-field highlight fragments from the hit's `highlight` block
+   *  - for every relation that's both (a) registered in `query.innerHits` and (b) present in
+   *    the response's `inner_hits` block, decode each inner-hit doc using that relation's
+   *    `childStore.model.rw`
+   *
+   * Backends that don't return `inner_hits` (or where the user never opted in) yield an
+   * empty inner-hits map.
+   */
+  private def materializeDocWithInnerHits(query: Query[Doc, Model, _],
+                                           hit: Json,
+                                           id: Id[Doc],
+                                           hydratedSource: Json): Task[DocWithInnerHitsResult[Doc, Model]] = {
+    val highlights = parseHighlights(hit)
+    val innerHits = parseInnerHits(query, hit)
+    loadDoc(id, hydratedSource).map { doc =>
+      DocWithInnerHitsResult[Doc, Model](doc = doc, highlights = highlights, innerHits = innerHits)
+    }
+  }
+
+  /** Parse a hit's `highlight` block (`{ field: [frag1, frag2] }`) into a [[Highlights]]. */
+  private def parseHighlights(hit: Json): Highlights = hit.asObj.get("highlight") match {
+    case Some(o: Obj) =>
+      val byField = o.value.iterator.map { case (field, frags) =>
+        val list = frags match {
+          case a: Arr => a.value.iterator.collect { case Str(s, _) => s }.toList
+          case _ => Nil
+        }
+        field -> list
+      }.toMap
+      Highlights(byField)
+    case _ => Highlights.empty
+  }
+
+  /**
+   * Parse a hit's `inner_hits` block. For each relation key present in both the response and
+   * `query.innerHits`, decode the listed child docs via the relation's child-store RW.
+   */
+  private def parseInnerHits(query: Query[Doc, Model, _],
+                              hit: Json): Map[String, List[InnerHit[Any]]] = {
+    val ihObj = hit.asObj.get("inner_hits") match {
+      case Some(o: Obj) => o.value
+      case _ => return Map.empty
+    }
+    val relations = relationsByName(query.filter)
+    ihObj.iterator.flatMap { case (key, payload) =>
+      // OpenSearch may name the inner_hits block by the spec's `name`; default is the join
+      // type (= child store name). If a spec used a custom name, resolve back to the
+      // relation name (= child store name) for consumer-side lookup.
+      val resolvedRelationName = resolveRelationName(query, key)
+      relations.get(resolvedRelationName).map { relation =>
+        val hits = (payload.asObj.get("hits") match {
+          case Some(o: Obj) => o.value.get("hits") match {
+            case Some(a: Arr) => a.value.toList
+            case _ => Nil
+          }
+          case _ => Nil
+        }).flatMap(decodeInnerHit(_, relation))
+        resolvedRelationName -> hits
+      }
+    }.toMap
+  }
+
+  /**
+   * Resolve an inner-hits key from the response back to a relation name. If a registered
+   * `InnerHitsSpec` used a custom `name`, OpenSearch echoes that name in the response — map
+   * it back to the relation it was registered for (= the child store name).
+   */
+  private def resolveRelationName(query: Query[Doc, Model, _], responseKey: String): String =
+    query.innerHits.iterator.collectFirst {
+      case (relationName, spec) if spec.name.contains(responseKey) => relationName
+    }.getOrElse(responseKey)
+
+  /** Walk the filter tree to collect all parent-child relations keyed by child-store name. */
+  private def relationsByName(filter: Option[Filter[Doc]]): Map[String, ParentChildRelation[_]] = {
+    val acc = scala.collection.mutable.Map.empty[String, ParentChildRelation[_]]
+    def visit(f: Filter[_]): Unit = f match {
+      case cc: Filter.ChildConstraints[_] =>
+        acc.put(cc.relation.childStore.name, cc.relation)
+      case ec: Filter.ExistsChild[_] =>
+        acc.put(ec.relation.childStore.name, ec.relation)
+      case combined: Filter.Multi[_] =>
+        combined.filters.asInstanceOf[List[lightdb.filter.FilterClause[_ <: lightdb.doc.Document[_]]]]
+          .foreach(c => visit(c.filter))
+      case _ => ()
+    }
+    filter.foreach(visit)
+    acc.toMap
+  }
+
+  /**
+   * Decode one inner-hit JSON entry into an `InnerHit` carrying the typed child doc, using
+   * the relation's child store RW. Returns `None` if the entry doesn't have the expected
+   * shape (defensive against unexpected OpenSearch responses).
+   *
+   * The child type is erased to `Any` here — F-bounded `Document[Doc <: Document[Doc]]`
+   * prevents a single existential representation, and consumers recover types via
+   * `DocWithInnerHits.innerHitsFor[ChildDoc]` at the call site.
+   */
+  private def decodeInnerHit(entry: Json,
+                              relation: ParentChildRelation[_]): Option[InnerHit[Any]] = {
+    val obj = entry match {
+      case o: Obj => o.value
+      case _ => return None
+    }
+    val source = obj.getOrElse("_source", fabric.obj()).asObj
+    val idStr = obj.get("_id").map(_.asString)
+    // Re-attach `_id` in the doc shape Document.rw expects.
+    val withId = idStr match {
+      case Some(s) =>
+        if source.value.contains("_id") then source else fabric.obj((source.value.toSeq :+ ("_id" -> Str(s))): _*)
+      case None => source
+    }
+    val score = obj.get("_score") match {
+      case Some(Null) | None => 0.0
+      case Some(j) => j.asDouble
+    }
+    val highlights = parseHighlights(entry)
+    val rw = relation.childStore.model.rw
+    Try(withId.as(rw)).toOption.map { d =>
+      InnerHit[Any](doc = d, score = score, highlights = highlights)
+    }
   }
 
   private def applyTrackTotalHits[V](q: Query[Doc, Model, V], body: Json): Json = {
@@ -553,7 +699,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
               }
               val source = h.get("_source").getOrElse(obj())
               val hydratedSource = stripInternalFields(sourceWithId(source, id))
-              materialize(query.conversion, id, hydratedSource).map(v => (v, score))
+              materializeHit(query, h, id, hydratedSource).map(v => (v, score))
             }
 
             sequence(resultTasks).map(results => OpenSearchGroupedResult(groupKey.asInstanceOf[G], results, docCount))
@@ -697,7 +843,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
               }
               val source = h.get("_source").getOrElse(obj())
               val hydratedSource = stripInternalFields(sourceWithId(source, id))
-              materialize(query.conversion, id, hydratedSource).map(v => (v, score))
+              materializeHit(query, h, id, hydratedSource).map(v => (v, score))
             }
 
             sequence(resultTasks).map(results => OpenSearchGroupedResult(groupKey.asInstanceOf[G], results, docCount))
@@ -1539,7 +1685,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                 }
                 val source = h.get("_source").getOrElse(obj())
                 val hydratedSource = stripInternalFields(sourceWithId(source, id))
-                materialize(q.conversion, id, hydratedSource).map(v => (v, score))
+                materializeHit(q, h, id, hydratedSource).map(v => (v, score))
               }
 
             facetResultsT.map { facetResults =>
@@ -1879,7 +2025,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
             }
             val source = h.get("_source").getOrElse(obj())
             val hydratedSource = stripInternalFields(sourceWithId(source, id))
-            materialize(q.conversion, id, hydratedSource).map(v => (v, score))
+            materializeHit(q, h.asInstanceOf[Json], id, hydratedSource).map(v => (v, score))
           }
         val results = SearchResults(
           model = store.model,

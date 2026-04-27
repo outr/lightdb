@@ -501,6 +501,10 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val state = new IndexingState
       val distance = field.get(doc, field, state).map(g => lightdb.spatial.Spatial.distance(from, g))
       lightdb.spatial.DistanceAndDoc(doc, distance).asInstanceOf[V]
+    case _: Conversion.DocWithInnerHits[_, _] =>
+      // Lucene doesn't support inner_hits or highlights at this layer — return the doc with
+      // empty inner-hit/highlight payloads so the conversion is portable.
+      lightdb.query.DocWithInnerHits[Doc, Model](doc = doc).asInstanceOf[V]
   }
 
   private def createLuceneFields(field: Field[Doc, _], doc: Doc, state: IndexingState): List[LuceneField] = {
