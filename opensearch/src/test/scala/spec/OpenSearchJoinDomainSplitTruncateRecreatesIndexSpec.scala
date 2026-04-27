@@ -76,8 +76,11 @@ class OpenSearchJoinDomainSplitTruncateIsolationSpec
         parentsAfterParentTruncate <- DB.parents.searching.transaction(_.count)
         childrenAfterParentTruncate <- DB.children.searching.transaction(_.count)
 
-        // Re-insert parents so we can validate child truncate isolation too.
-        _ <- DB.parents.transaction(_.insert(List(p1, p2)))
+        // Re-index parents into the search side. We use `upsert` because only the searching
+        // side was truncated above — the storage side still has p1/p2, so a strict `insert`
+        // would (correctly) reject as a duplicate. Upsert matches the test's intent: "make
+        // parents searchable again".
+        _ <- DB.parents.transaction(_.upsert(List(p1, p2)))
 
         // Truncate children type only: parents should remain.
         _ <- DB.children.searching.transaction(_.truncate)
