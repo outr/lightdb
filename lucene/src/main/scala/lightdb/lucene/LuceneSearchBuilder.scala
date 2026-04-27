@@ -209,6 +209,11 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           val distance = field.get(doc, field, state).map(d => Spatial.distance(from, d))
           DistanceAndDoc(doc, distance) -> score
       }
+      case _: Conversion.DocWithInnerHits[_, _] =>
+        // Lucene has no inner_hits / highlight primitive at this layer — yield empty payloads.
+        docIterator().map { case (doc, score) =>
+          lightdb.query.DocWithInnerHits[Doc, Model](doc = doc).asInstanceOf[V] -> score
+        }
     }
   }
 

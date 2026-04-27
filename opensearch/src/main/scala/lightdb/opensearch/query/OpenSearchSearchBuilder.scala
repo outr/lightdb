@@ -8,6 +8,7 @@ import lightdb.field.Field
 import lightdb.field.Field.Tokenized
 import lightdb.filter.Filter
 import lightdb.facet.FacetQuery
+import lightdb.query.{HighlightSpec, InnerHitsSpec}
 import lightdb.store.Conversion
 import lightdb.{Query, Sort}
 
@@ -23,7 +24,9 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
                                                                                 facetAggMaxBuckets: Int = 65_536,
                                                                                 facetChildCountMode: String = "cardinality",
                                                                                 facetChildCountPrecisionThreshold: Option[Int] = None,
-                                                                                facetChildCountPageSize: Int = 1000) {
+                                                                                facetChildCountPageSize: Int = 1000,
+                                                                                /** Inner-hits config keyed by relation name (= child store name). Empty means none. */
+                                                                                innerHitsByRelation: Map[String, InnerHitsSpec] = Map.empty) {
   private val InternalIdFieldName: String = lightdb.opensearch.OpenSearchTemplates.InternalIdField
 
   private def rewriteReservedIdFieldName(fieldName: String): String =
@@ -73,6 +76,35 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   def filterToDsl(filter: Filter[Doc]): Json = filter2Dsl(filter)
 
   def sortsToDsl(sorts: List[Sort]): List[Json] = sorts2Dsl(sorts)
+
+  /**
+   * Build the `inner_hits` block JSON for the given relation, if a spec was registered for
+   * its name (the child store's `name`). Returns `None` when the caller never opted in. The
+   * `childBuilder` is used to compile the spec's sorts in the child schema's vocabulary.
+   */
+  private def innerHitsJsonFor(relationName: String,
+                                childBuilder: OpenSearchSearchBuilder[_, _]): Option[Json] =
+    innerHitsByRelation.get(relationName).map { spec =>
+      val sortJson = childBuilder.sortsToDsl(spec.sort)
+      val highlightJson = spec.highlight.map(buildHighlightJson)
+      OpenSearchDsl.innerHits(
+        name = spec.name,
+        size = spec.size,
+        sorts = sortJson,
+        sourceIncludes = spec.sourceIncludes,
+        highlight = highlightJson
+      )
+    }
+
+  /** Compile a [[HighlightSpec]] into the OpenSearch `highlight` JSON block. */
+  def buildHighlightJson(spec: HighlightSpec): Json = OpenSearchDsl.highlight(
+    fields = spec.fields,
+    preTag = spec.preTag,
+    postTag = spec.postTag,
+    fragmentSize = spec.fragmentSize,
+    numberOfFragments = spec.numberOfFragments,
+    requireFieldMatch = spec.requireFieldMatch
+  )
 
   def exactFieldName(field: Field[Doc, _]): String = fieldNameForExact(field)
 
@@ -138,10 +170,19 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           }
       }
     }
+    val withHighlight = query.highlight match {
+      case Some(spec) =>
+        sourceFiltered match {
+          case o: Obj =>
+            obj((o.value.toSeq :+ ("highlight" -> buildHighlightJson(spec))): _*)
+          case other => other
+        }
+      case None => sourceFiltered
+    }
     if query.facets.nonEmpty then {
-      addFacetAggs(sourceFiltered, query.facets)
+      addFacetAggs(withHighlight, query.facets)
     } else {
-      sourceFiltered
+      withHighlight
     }
   }
 
@@ -169,16 +210,19 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           facetChildCountPrecisionThreshold = facetChildCountPrecisionThreshold,
           facetChildCountPageSize = facetChildCountPageSize
         )
+        val innerHitsJson = innerHitsJsonFor(relation.childStore.name, childBuilder)
         f.semantics match {
           case Filter.ChildSemantics.SameChildAll =>
             val childMust = f.builds.map(b => childBuilder.filterToDsl(b(childModel)))
             val childQuery = OpenSearchDsl.boolQuery(must = if childMust.isEmpty then List(OpenSearchDsl.matchAll()) else childMust)
-            OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode)
+            OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode, innerHits = innerHitsJson)
           case Filter.ChildSemantics.CollectiveAll =>
-            // AND of has_child clauses (each constraint can match a different child)
+            // AND of has_child clauses (each constraint can match a different child).
+            // The inner-hits spec applies to each clause — OpenSearch returns inner_hits per
+            // outer clause, so duplicate emission is correct.
             val must = f.builds.map { b =>
               val cq = childBuilder.filterToDsl(b(childModel))
-              OpenSearchDsl.hasChild(relation.childStore.name, cq, scoreMode = joinScoreMode)
+              OpenSearchDsl.hasChild(relation.childStore.name, cq, scoreMode = joinScoreMode, innerHits = innerHitsJson)
             }
             if must.isEmpty then OpenSearchDsl.matchAll() else OpenSearchDsl.boolQuery(must = must)
         }
@@ -196,7 +240,8 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           facetChildCountPageSize = facetChildCountPageSize
         )
         val childQuery = childBuilder.filterToDsl(childFilter)
-        OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode)
+        val innerHitsJson = innerHitsJsonFor(relation.childStore.name, childBuilder)
+        OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode, innerHits = innerHitsJson)
       case f: Filter.Equals[Doc, _] =>
         val field = f.field(model)
         val json = f.getJson(model)

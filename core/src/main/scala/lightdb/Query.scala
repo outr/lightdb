@@ -11,6 +11,7 @@ import lightdb.field.{Field, FieldAndValue, IndexingState}
 import lightdb.filter.*
 import lightdb.id.Id
 import lightdb.materialized.{MaterializedAndDoc, MaterializedIndex}
+import lightdb.query.{DocWithInnerHits => DocWithInnerHitsResult, HighlightSpec, InnerHitsSpec}
 import lightdb.spatial.{DistanceAndDoc, Geo, Point}
 import lightdb.store.{Collection, Conversion}
 import lightdb.transaction.CollectionTransaction
@@ -28,7 +29,9 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
                                                                        scoreDocs: Boolean = false,
                                                                        minDocScore: Option[Double] = None,
                                                                        facets: List[FacetQuery[Doc]] = Nil,
-                                                                       optimize: Boolean = false) { query =>
+                                                                       optimize: Boolean = false,
+                                                                       innerHits: Map[String, InnerHitsSpec] = Map.empty,
+                                                                       highlight: Option[HighlightSpec] = None) { query =>
   def collection: Collection[Doc, Model] = transaction.store
   def model: Model = collection.model
 
@@ -142,6 +145,27 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
     q
   }
 
+  /**
+   * Configure inner-hits for a join relation (keyed by the child store's name — same key
+   * OpenSearch uses as the join `type`). Multiple calls combine; later calls overwrite an
+   * existing spec for the same relation.
+   *
+   * Currently only OpenSearch surfaces inner-hits results; other backends accept the spec
+   * and return empty inner-hit lists.
+   */
+  def withInnerHits(relationName: String, spec: InnerHitsSpec): Q =
+    copy(innerHits = innerHits + (relationName -> spec))
+
+  /**
+   * Convenience overload that infers the relation key from a child collection. Equivalent to
+   * `withInnerHits(childCollection.name, spec)`.
+   */
+  def withInnerHits(childCollection: Collection[_, _], spec: InnerHitsSpec): Q =
+    withInnerHits(childCollection.name, spec)
+
+  /** Configure highlights on the outer hit. Only OpenSearch wires this through today. */
+  def withHighlight(spec: HighlightSpec): Q = copy(highlight = Some(spec))
+
   def docs: Query[Doc, Model, Doc] = conversion(Conversion.Doc())
   def value[F](f: Model => Field[Doc, F]): Query[Doc, Model, F] = conversion(Conversion.Value(f(model)))
   def id: Query[Doc, Model, Id[Doc]] = value(_._id)
@@ -152,6 +176,12 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
     conversion(Conversion.Materialized(f(model)))
   def indexes: Query[Doc, Model, MaterializedIndex[Doc, Model]] = materialized()
   def docAndIndexes: Query[Doc, Model, MaterializedAndDoc[Doc, Model]] = conversion(Conversion.DocAndIndexes())
+
+  /** Switch to the inner-hits + highlights conversion. Pair with `.withInnerHits(...)` and/or
+   *  `.withHighlight(...)` to actually populate the result wrapper.
+   */
+  def docWithInnerHits: Query[Doc, Model, DocWithInnerHitsResult[Doc, Model]] =
+    conversion(Conversion.DocWithInnerHits[Doc, Model]())
   def distance[G <: Geo](f: Model => Field[Doc, List[G]],
                          from: Point,
                          sort: Boolean = true,
