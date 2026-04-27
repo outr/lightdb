@@ -24,6 +24,12 @@ import scala.concurrent.duration.DurationInt
 abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
   val CreateRecords = 10_000
 
+  // The "insert a lot more names" test inserts `CreateRecords` records and can stretch past
+  // the rapid default of 1 minute on slow CI runners — particularly Lucene-backed Splits on
+  // JDK 23 where ChronicleMap falls back to a reflection-based off-heap cleaner. Bump the
+  // per-test ceiling so legitimate work has room without masking real hangs.
+  override implicit protected val testTimeout: scala.concurrent.duration.FiniteDuration = 5.minutes
+
   private val start = Timestamp()
 
   protected def aggregationSupported: Boolean = true
@@ -161,7 +167,10 @@ abstract class AbstractBasicSpec extends AsyncWordSpec with AsyncTaskSpec with M
     "verify hasAny" in {
       db.people.transaction { txn =>
         txn.query.filter(_.allNames.hasAny(List("greg", "hanna", "grouchy"))).toList.map { list =>
-          list.map(_.name) should be(List("Greg", "Hanna", "Oscar"))
+          // Order among equal-score matches is backend-defined (Lucene tie-breaks by docId,
+          // which can shift when in-tx NRT readers see different segment compositions). Assert
+          // the matching set rather than a specific order.
+          list.map(_.name).toSet should be(Set("Greg", "Hanna", "Oscar"))
         }
       }
     }

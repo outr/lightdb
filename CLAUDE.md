@@ -52,16 +52,19 @@ want duplicate detection.
 Backends honor strict-insert through native primitives where possible (LMDB
 `MDB_NOOVERWRITE`, SQL PK constraints, ChronicleMap `putIfAbsent`, OpenSearch `op_type=create`).
 Backends without one (RocksDB, HaloDB, MapDB, Redis, GoogleSheets, Tantivy) fall back to an
-`_exists`-then-`_upsert` default — adds one extra read per insert. With a buffered/queued/async
-write handler, the duplicate is detected at flush time rather than at the call site, so error
-locality differs by `BatchConfig`.
+`_exists`-then-`_upsert` default — adds one extra read per insert. Lucene uses a per-tx NRT
+reader opened against the IndexWriter once at first need, plus an in-memory `txInsertedIds`
+set, so the existence probe is cheap (one cached searcher count per insert) and doesn't
+perturb the cached scoring searcher's stats.
 
-Lucene is the one exception: `addDocument` has no native uniqueness primitive and every
-existence-probe approach (NRT searcher refresh, `DirectoryReader.open(IndexWriter)`) perturbs
-TF/IDF stats or segment composition. `_insert` on Lucene preserves its pre-existing behavior
-(silently appends another doc with the same `_id`) — callers needing strict semantics should
-use `upsert`, or pair Lucene with a KV storage backend via `SplitStoreManager` (the storage
-side enforces uniqueness).
+With a buffered/queued/async write handler, the duplicate is detected at flush time rather
+than at the call site, so error locality differs by `BatchConfig`.
+
+Backend caveat: Lucene's tie-break for equal-score search results is internal docId, which
+is implementation-defined and can shift when the strict-insert NRT probe sees a different
+segment composition. Specs that assert exact ordering on tied scores should override
+`scoredResultsOrderingSupported = false` (already done for `LuceneSpec` and the
+Lucene-backed Split specs).
 
 ### StoreMode
 

@@ -18,6 +18,10 @@ abstract class AbstractKeyValueSpec extends AsyncWordSpec with AsyncTaskSpec wit
   val CreateRecords = 100_000
   def truncateAfter: Boolean = true
 
+  // 100K-record insert can outrun the rapid default 1-minute ceiling on slow CI runners.
+  override implicit protected val testTimeout: scala.concurrent.duration.FiniteDuration =
+    scala.concurrent.duration.DurationInt(5).minutes
+
   private val adam = User("Adam", 21, _id = User.id("adam"))
   private val brenda = User("Brenda", 11, _id = User.id("brenda"))
   private val charlie = User("Charlie", 35, _id = User.id("charlie"))

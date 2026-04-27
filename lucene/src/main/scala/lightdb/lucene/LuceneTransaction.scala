@@ -6,6 +6,7 @@ import fabric.rw.Asable
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str}
 import lightdb.aggregate.AggregateQuery
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.error.DuplicateIdException
 import lightdb.facet.FacetComputation
 import lightdb.field.Field.{FacetField, Tokenized}
 import lightdb.field.{Field, IndexingState}
@@ -50,16 +51,38 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     doSearch[Doc](query).flatMap(_.list).map(_.headOption)
   }
 
-  // NOTE: Lucene's `addDocument` does not enforce `_id` uniqueness — it just appends. The
-  // strict-insert contract (insert errors on duplicate) is therefore best-effort here:
-  // we'd need an NRT existence probe before each write, but every form of probe (cached
-  // SearcherManager refresh, `DirectoryReader.open(IndexWriter)`) perturbs the writer's
-  // segment composition or the cached scoring searcher's stats — observable as result-order
-  // shifts in scoring/relevance tests. For now, Lucene preserves its pre-existing behavior
-  // (duplicates are silently allowed; callers should `upsert` when they want create-or-replace).
-  // This deviation from the cross-backend contract is documented; KV/SQL/LMDB/Tantivy enforce
-  // strictly.
-  override protected def _insert(doc: Doc): Task[Doc] = addDoc(doc, upsert = false)
+  // Strict-insert support. Lucene's `addDocument` doesn't enforce `_id` uniqueness on its
+  // own. Two pieces:
+  //
+  //   1. `txInsertedIds` — in-memory set of ids inserted in THIS tx. Catches the "insert
+  //      twice in one tx" case in O(1) without touching Lucene.
+  //   2. `_strictInsertReader` — a private NRT reader opened against the IndexWriter once on
+  //      first need. Reused for every existence probe in the tx so we don't pay reader
+  //      open/close per insert. It's a snapshot at open-time of committed state — perfect
+  //      for "did this id already exist before this tx?". Bypasses the SearcherManager so
+  //      the cached scoring searcher's TF/IDF stats don't shift mid-tx (which would
+  //      otherwise reorder equal-score search results).
+  //
+  // Closed during `_close`.
+  private val txInsertedIds = new java.util.concurrent.ConcurrentHashMap[String, java.lang.Boolean]
+  private var _strictInsertReader: org.apache.lucene.index.DirectoryReader = _
+  private def strictInsertSearcher: org.apache.lucene.search.IndexSearcher = synchronized {
+    if _strictInsertReader == null then {
+      _strictInsertReader = org.apache.lucene.index.DirectoryReader.open(store.index.indexWriter, true, false)
+    }
+    new org.apache.lucene.search.IndexSearcher(_strictInsertReader)
+  }
+
+  override protected def _insert(doc: Doc): Task[Doc] = Task.defer {
+    val idValue = doc._id.value
+    if (txInsertedIds.putIfAbsent(idValue, java.lang.Boolean.TRUE) != null) {
+      Task.error(DuplicateIdException(store.name, doc._id))
+    } else {
+      val existsCommitted = strictInsertSearcher.count(new TermQuery(new Term("_id", idValue))) > 0
+      if (existsCommitted) Task.error(DuplicateIdException(store.name, doc._id))
+      else addDoc(doc, upsert = false)
+    }
+  }
 
   override protected def _upsert(doc: Doc): Task[Doc] = addDoc(doc, upsert = true)
 
@@ -110,7 +133,14 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       Task.unit
     }
 
-    releaseParent.next(state.close)
+    val closeStrictInsertReader: Task[Unit] = Task {
+      if _strictInsertReader != null then {
+        try _strictInsertReader.close()
+        catch { case _: Throwable => () }
+      }
+    }
+
+    releaseParent.next(closeStrictInsertReader).next(state.close)
   }
 
   def groupBy[G, V](query: Query[Doc, Model, V],
