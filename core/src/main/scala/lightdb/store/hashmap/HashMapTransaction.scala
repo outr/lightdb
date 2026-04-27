@@ -25,14 +25,12 @@ case class HashMapTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] = Task {
+  override protected def _upsert(doc: Doc): Task[Doc] = Task {
     store.synchronized {
       store._map += doc._id -> doc
     }
     doc
   }
-
-  override protected def _upsert(doc: Doc): Task[Doc] = _insert(doc)
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = Task(store.map.contains(id))
 
