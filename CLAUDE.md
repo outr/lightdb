@@ -42,6 +42,27 @@ Follow the HaloDB pattern — three files:
 2. **`FooStore`** — `case class extends StoreManager` with `create()` factory. Also contains a private `Store` subclass.
 3. **`FooTransaction`** — `case class extends Transaction`, delegates everything to the instance.
 
+### Insert vs Upsert contract
+
+`Transaction.insert(doc)` is strict: if `doc._id` already exists, the call fails with
+`lightdb.error.DuplicateIdException`. `Transaction.upsert(doc)` is create-or-replace and never
+errors on existing ids — use it for idempotent setup, bulk loads, or anywhere the caller doesn't
+want duplicate detection.
+
+Backends honor strict-insert through native primitives where possible (LMDB
+`MDB_NOOVERWRITE`, SQL PK constraints, ChronicleMap `putIfAbsent`, OpenSearch `op_type=create`).
+Backends without one (RocksDB, HaloDB, MapDB, Redis, GoogleSheets, Tantivy) fall back to an
+`_exists`-then-`_upsert` default — adds one extra read per insert. With a buffered/queued/async
+write handler, the duplicate is detected at flush time rather than at the call site, so error
+locality differs by `BatchConfig`.
+
+Lucene is the one exception: `addDocument` has no native uniqueness primitive and every
+existence-probe approach (NRT searcher refresh, `DirectoryReader.open(IndexWriter)`) perturbs
+TF/IDF stats or segment composition. `_insert` on Lucene preserves its pre-existing behavior
+(silently appends another doc with the same `_id`) — callers needing strict semantics should
+use `upsert`, or pair Lucene with a KV storage backend via `SplitStoreManager` (the storage
+side enforces uniqueness).
+
 ### StoreMode
 
 - `StoreMode.All()` (default) — store holds complete documents.

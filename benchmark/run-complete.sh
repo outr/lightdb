@@ -11,10 +11,12 @@
 #          count (1 / 4 / 16) for the concurrency suite. Plan on 6–14 hours depending on disk
 #          speed.
 #
-# Output (per pass; the script makes 2 sub-runs and merges nothing — one JSON per state class):
-#   benchmark/target/jmh-results-<mode>-<timestamp>-kv.json     # all-backends pass
-#   benchmark/target/jmh-results-<mode>-<timestamp>-coll.json   # collection-only pass
-#   benchmark/target/jmh-results-<mode>-<timestamp>.log         # combined console log
+# Output (one directory per run, named `benchmark/results/<lightdb-version>-<timestamp>/`):
+#   benchmark/results/<version>-<timestamp>/<mode>.log              # combined console log
+#   benchmark/results/<version>-<timestamp>/jmh-results-kv.json     # all-backends pass
+#   benchmark/results/<version>-<timestamp>/jmh-results-coll.json   # collection-only pass
+#   benchmark/results/<version>-<timestamp>/report.md               # rendered Markdown
+#   benchmark/results/<version>-<timestamp>/*.svg                   # one chart per benchmark
 #
 # Usage:
 #   ./benchmark/run-complete.sh fast
@@ -39,15 +41,36 @@ esac
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")"/.. && pwd)"
 cd "$REPO_ROOT"
 
-mkdir -p benchmark/target
+# Extract the project version from build.sbt's `ThisBuild / version := "x.y.z"` line so the
+# output directory makes it obvious which build of LightDB the numbers came from.
+VERSION=$(grep -E '^ThisBuild / version :=' build.sbt | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+if [[ -z "$VERSION" ]]; then
+  echo "could not parse LightDB version from build.sbt" >&2; exit 2
+fi
+
 TS="$(date +%Y%m%d-%H%M%S)"
+RESULT_DIR="$REPO_ROOT/benchmark/results/${VERSION}-${TS}"
+mkdir -p "$RESULT_DIR"
+
 # JMH resolves the result file relative to its forked process cwd, which sbt sets unpredictably
 # — always pass an absolute path so the file lands where we expect.
-RESULT_KV="$REPO_ROOT/benchmark/target/jmh-results-${MODE}-${TS}-kv.json"
-RESULT_COLL="$REPO_ROOT/benchmark/target/jmh-results-${MODE}-${TS}-coll.json"
-LOG_FILE="$REPO_ROOT/benchmark/target/jmh-results-${MODE}-${TS}.log"
+RESULT_KV="$RESULT_DIR/jmh-results-kv.json"
+RESULT_COLL="$RESULT_DIR/jmh-results-coll.json"
+LOG_FILE="$RESULT_DIR/${MODE}.log"
 
 # --- mode-specific knobs --------------------------------------------------------------------
+
+#
+# Note: `hashmap` is intentionally excluded from both modes' default backend lists. As a pure
+# in-memory store its ops are 50–500× faster than any persistent backend, which compresses every
+# real backend into a single near-zero-pixel bar on the rendered SVG charts. Pass `-p
+# backend=hashmap` explicitly if you want to include it.
+#
+# `fast` and `full` cover the SAME backends — fast just dials down recordCount, iter count, fork
+# count, and concurrency levels so the suite finishes in ~30 minutes instead of overnight while
+# still touching every backend at least once for shape validation + smoke-test the SVG output.
+BACKENDS_KV='mapdb,lmdb,rocksdb,halodb,chroniclemap,sqlite,h2,duckdb,lucene,tantivy,rocksdb+lucene,rocksdb+tantivy,lmdb+lucene,lmdb+tantivy,halodb+lucene,halodb+tantivy'
+BACKENDS_COLL='sqlite,h2,duckdb,lucene,tantivy,rocksdb+lucene,rocksdb+tantivy,lmdb+lucene,lmdb+tantivy,halodb+lucene,halodb+tantivy'
 
 if [[ "$MODE" == "fast" ]]; then
   WARMUP_ITERS=1
@@ -55,8 +78,6 @@ if [[ "$MODE" == "fast" ]]; then
   ITER_TIME=3s
   RECORDS=5000
   FORKS=1
-  BACKENDS_KV='hashmap,rocksdb,sqlite,lucene,tantivy,rocksdb+tantivy'
-  BACKENDS_COLL='sqlite,lucene,tantivy,rocksdb+tantivy'
   BATCH='buffered'
   THREADS_LIST=(1 4)
 else
@@ -65,8 +86,6 @@ else
   ITER_TIME=10s
   RECORDS=100000
   FORKS=2
-  BACKENDS_KV='hashmap,mapdb,lmdb,rocksdb,halodb,chroniclemap,sqlite,h2,duckdb,lucene,tantivy,rocksdb+lucene,rocksdb+tantivy,lmdb+lucene,lmdb+tantivy,halodb+lucene,halodb+tantivy'
-  BACKENDS_COLL='sqlite,h2,duckdb,lucene,tantivy,rocksdb+lucene,rocksdb+tantivy,lmdb+lucene,lmdb+tantivy,halodb+lucene,halodb+tantivy'
   BATCH='buffered,async'
   THREADS_LIST=(1 4 16)
 fi
@@ -104,13 +123,11 @@ COLL_INCLUDES=('benchmark.jmh.complete.CompleteQueryBenchmark')
 KV_REGEX="^($(IFS='|'; echo "${KV_INCLUDES[*]}"))\\."
 COLL_REGEX="^($(IFS='|'; echo "${COLL_INCLUDES[*]}"))\\."
 
-echo "[run-complete.sh] mode=$MODE records=$RECORDS warmup=$WARMUP_ITERS meas=$MEAS_ITERS iter=$ITER_TIME forks=$FORKS"
+echo "[run-complete.sh] lightdb $VERSION · mode=$MODE records=$RECORDS warmup=$WARMUP_ITERS meas=$MEAS_ITERS iter=$ITER_TIME forks=$FORKS"
 echo "[run-complete.sh] kv backends:    $BACKENDS_KV"
 echo "[run-complete.sh] coll backends:  $BACKENDS_COLL"
 echo "[run-complete.sh] threads:        ${THREADS_LIST[*]}"
-echo "[run-complete.sh] kv  results →   $RESULT_KV"
-echo "[run-complete.sh] coll results →  $RESULT_COLL"
-echo "[run-complete.sh] log →           $LOG_FILE"
+echo "[run-complete.sh] output dir:     $RESULT_DIR"
 echo
 
 # Pass 1: all-backends (KV state) — read, write, concurrency
@@ -146,15 +163,13 @@ COLL_ARGS=(
 
   echo
   echo "===== render: markdown + SVG charts ====="
-  REPORT_DIR="$REPO_ROOT/benchmark/target/report-${MODE}-${TS}"
-  TITLE="LightDB Benchmarks — ${MODE} (${TS})"
+  TITLE="LightDB ${VERSION} — ${MODE} (${TS})"
   sbt -Dsbt.log.noformat=true \
-      "benchmark/runMain benchmark.jmh.complete.RenderResults --out $REPORT_DIR --title \"$TITLE\" $RESULT_KV $RESULT_COLL" \
+      "benchmark/runMain benchmark.jmh.complete.RenderResults --out $RESULT_DIR --title \"$TITLE\" $RESULT_KV $RESULT_COLL" \
     </dev/null
 } 2>&1 | tee "$LOG_FILE"
 
 echo
 echo "[run-complete.sh] done"
-echo "[run-complete.sh]   kv  results:  $RESULT_KV"
-echo "[run-complete.sh]   coll results: $RESULT_COLL"
-echo "[run-complete.sh]   report:       $REPO_ROOT/benchmark/target/report-${MODE}-${TS}/report.md"
+echo "[run-complete.sh]   results dir:  $RESULT_DIR"
+echo "[run-complete.sh]   report:       $RESULT_DIR/report.md"

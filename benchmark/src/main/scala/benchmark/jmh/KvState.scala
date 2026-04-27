@@ -62,7 +62,8 @@ class KvState {
     val docs = preKeys.map { k =>
       KeyValue(Id[KeyValue](k), obj("v" -> value))
     }
-    db.kv.transaction(_.insert(docs)).sync()
+    // Seed via `upsert` — keys are unique by construction. Avoids the strict-insert exists check.
+    db.kv.transaction(_.upsert(docs)).sync()
     upsertCounter.set(preLoad)
   }
 

@@ -4,6 +4,7 @@ import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.error.DuplicateIdException
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.rocksdb.RocksDBTransaction.writeOptions
@@ -76,14 +77,6 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     })
   })
 
-  override protected def _insert(doc: Doc): Task[Doc] = _upsert(doc)
-
-  override def insert(stream: rapid.Stream[Doc]): Task[Int] = Task.defer {
-    batchUpsert(stream.evalTap { doc =>
-      store.trigger.insert(doc, this)
-    })
-  }
-
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val json = doc.json(store.model.rw)
     val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
@@ -126,6 +119,20 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   def flushOps(ops: Seq[WriteOp[Doc]]): Task[Unit] = Task {
+    // Honor the insert contract: every WriteOp.Insert must error if the id already exists.
+    // RocksDB's underlying `put` is upsert-style, so we pre-check existence via `keyExists`
+    // before adding inserts to the batch. multiGet would be cheaper for very large batches
+    // but adds a value-materialization cost — keyExists is bloom-filter-fast and fits the
+    // common case (small inserts batched alongside upserts/deletes).
+    val inserts = ops.iterator.collect { case WriteOp.Insert(d) => d }
+    inserts.foreach { doc =>
+      val exists = store.handle match {
+        case Some(h) => store.rocksDB.keyExists(h, doc._id.bytes)
+        case None => store.rocksDB.keyExists(doc._id.bytes)
+      }
+      if (exists) throw DuplicateIdException(store.name, doc._id)
+    }
+
     val batch = new WriteBatch
     try {
       ops.foreach {
@@ -198,16 +205,27 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     //
     // Requires the handle-cache eviction in `RocksDBSharedStore` so the
     // recreate sees a fresh CF instead of resurrecting the dead handle.
+    //
+    // For the row-count return value, use RocksDB's `rocksdb.estimate-num-keys`
+    // property — an O(1) approximation built from SST metadata. We
+    // intentionally do NOT call `count`, which iterates every key and would
+    // negate the entire point of the fast path. Truncate's return is
+    // informational; an estimate is sufficient.
     val handleOpt = store.handle
     val sharedOpt = store.sharedStore
     if (handleOpt.isDefined && sharedOpt.isDefined) {
       val h = handleOpt.get
       val ss = sharedOpt.get
-      count.map { size =>
+      Task {
+        val estimate = try {
+          val raw = store.rocksDB.getProperty(h, "rocksdb.estimate-num-keys")
+          if (raw == null || raw.isEmpty) 0
+          else raw.toLong.min(Int.MaxValue.toLong).toInt
+        } catch { case _: Throwable => 0 }
         store.rocksDB.dropColumnFamily(h)
         ss.store.evictHandle(ss.handle)
         store.resetHandle()
-        size
+        estimate
       }
     } else {
       truncateManual

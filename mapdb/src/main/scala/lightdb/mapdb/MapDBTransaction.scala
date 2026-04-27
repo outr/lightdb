@@ -36,8 +36,6 @@ case class MapDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] = _upsert(doc)
-
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     store.map.put(doc._id.value, toString(doc))
     doc

@@ -882,9 +882,6 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     }
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] =
-    flushOps(Seq(WriteOp.Insert(doc))).map(_ => doc)
-
   override protected def _upsert(doc: Doc): Task[Doc] =
     flushOps(Seq(WriteOp.Upsert(doc))).map(_ => doc)
 
@@ -959,7 +956,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       var currentBytes = 0
 
       def estimateBytes(op: OpenSearchBulkOp): Int = op match {
-        case OpenSearchBulkOpIndex(index, id, source, routing) =>
+        case OpenSearchBulkOpIndex(index, id, source, routing, _) =>
           val routingPart = routing.map(r => s""","routing":"$r"""").getOrElse("")
           val meta = s"""{"index":{"_index":"$index","_id":"$id"$routingPart}}"""
           val src = JsonFormatter.Compact(source)
@@ -990,8 +987,11 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       Task(ops.toList).flatMap { ops =>
         val indexOps: List[OpenSearchBulkOp] = ops.flatMap {
           case WriteOp.Insert(doc) =>
+            // `op_type=create` so the server rejects on duplicate `_id` (strict-insert contract).
+            // The version-conflict error is detected in the bulk response handler below and
+            // converted to `DuplicateIdException`.
             val prepared = prepareForIndexing(doc)
-            Some(OpenSearchBulkOp.index(store.writeIndexName, doc._id.value, prepared.source, prepared.routing))
+            Some(OpenSearchBulkOp.create(store.writeIndexName, doc._id.value, prepared.source, prepared.routing))
           case WriteOp.Upsert(doc) =>
             val prepared = prepareForIndexing(doc)
             Some(OpenSearchBulkOp.index(store.writeIndexName, doc._id.value, prepared.source, prepared.routing))
@@ -1017,7 +1017,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
             // Track a recent indexed document id so commit can validate searchability post-refresh.
             // (Only meaningful for index/upsert, not pure deletes.)
             indexOps.lastOption match {
-              case Some(OpenSearchBulkOpIndex(_, id, _, _)) =>
+              case Some(OpenSearchBulkOpIndex(_, id, _, _, _)) =>
                 lastIndexedIdForSearchBarrier = Some(id)
               case _ => // ignore
             }
@@ -1053,17 +1053,36 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                   // Dead letters are only meaningful for index/upsert failures; deletes are best-effort.
                   val indexChunk = chunk.collect { case i: OpenSearchBulkOpIndex => i }
                   captureBulkDeadLetters(indexChunk, json).attempt.unit.next {
-                    val firstError = json.asObj
+                    // Strict-insert (`op_type=create`) duplicates surface as a per-item
+                    // `version_conflict_engine_exception`. Translate to DuplicateIdException
+                    // with the offending id so callers see the same error type as KV/SQL backends.
+                    val items = json.asObj
                       .get("items")
                       .map(_.asArr.value.toList)
                       .getOrElse(Nil)
-                      .iterator
-                      .flatMap(j => j.asObj.value.valuesIterator.flatMap(_.asObj.get("error")).toList)
-                      .take(1)
-                      .toList
-                      .headOption
-                    val msg = firstError.map(e => s" firstError=${JsonFormatter.Compact(e)}").getOrElse("")
-                    Task.error(new RuntimeException(s"OpenSearch bulk request reported errors=true.$msg"))
+                    val dupIdOpt = items.iterator.flatMap { item =>
+                      item.asObj.get("create").flatMap { createResp =>
+                        val obj = createResp.asObj
+                        obj.get("error").flatMap { err =>
+                          val errType = err.asObj.get("type").map(_.asString).getOrElse("")
+                          if errType == "version_conflict_engine_exception" then
+                            obj.get("_id").map(_.asString)
+                          else None
+                        }
+                      }
+                    }.toList.headOption
+                    dupIdOpt match {
+                      case Some(id) =>
+                        Task.error(lightdb.error.DuplicateIdException(store.name, lightdb.id.Id(id)))
+                      case None =>
+                        val firstError = items.iterator
+                          .flatMap(j => j.asObj.value.valuesIterator.flatMap(_.asObj.get("error")).toList)
+                          .take(1)
+                          .toList
+                          .headOption
+                        val msg = firstError.map(e => s" firstError=${JsonFormatter.Compact(e)}").getOrElse("")
+                        Task.error(new RuntimeException(s"OpenSearch bulk request reported errors=true.$msg"))
+                    }
                   }
                 }
               }
@@ -1979,21 +1998,30 @@ sealed trait OpenSearchBulkOp
 
 object OpenSearchBulkOp {
   def index(index: String, id: String, source: Json, routing: Option[String] = None): OpenSearchBulkOp =
-    OpenSearchBulkOpIndex(index, id, source, routing)
+    OpenSearchBulkOpIndex(index, id, source, routing, create = false)
+
+  /**
+   * `op_type=create` variant: server-side rejects if the doc already exists, surfacing as a
+   * `version_conflict_engine_exception` per item in the bulk response. Used for the strict-insert
+   * contract where a duplicate `_id` must error rather than silently overwrite.
+   */
+  def create(index: String, id: String, source: Json, routing: Option[String] = None): OpenSearchBulkOp =
+    OpenSearchBulkOpIndex(index, id, source, routing, create = true)
 
   def delete(index: String, id: String, routing: Option[String] = None): OpenSearchBulkOp =
     OpenSearchBulkOpDelete(index, id, routing)
 }
 
-case class OpenSearchBulkOpIndex(index: String, id: String, source: Json, routing: Option[String]) extends OpenSearchBulkOp
+case class OpenSearchBulkOpIndex(index: String, id: String, source: Json, routing: Option[String], create: Boolean) extends OpenSearchBulkOp
 
 case class OpenSearchBulkOpDelete(index: String, id: String, routing: Option[String]) extends OpenSearchBulkOp
 
 case class OpenSearchBulkRequest(ops: List[OpenSearchBulkOp]) {
   def toBulkNdjson: String = ops.map {
-    case OpenSearchBulkOpIndex(index, id, source, routing) =>
+    case OpenSearchBulkOpIndex(index, id, source, routing, create) =>
       val routingPart = routing.map(r => s""","routing":"${escapeJson(r)}"""").getOrElse("")
-      val meta = s"""{"index":{"_index":"$index","_id":"${escapeJson(id)}"$routingPart}}"""
+      val action = if create then "create" else "index"
+      val meta = s"""{"$action":{"_index":"$index","_id":"${escapeJson(id)}"$routingPart}}"""
       val src = JsonFormatter.Compact(source)
       s"$meta\n$src\n"
     case OpenSearchBulkOpDelete(index, id, routing) =>

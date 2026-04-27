@@ -5,6 +5,7 @@ import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 
 import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.DurationInt
 
 /** Query throughput against the indexes. Restricted to backends that implement the `Query` DSL
  *  (every Collection + every Split combination) — KV-only backends would just throw
@@ -15,6 +16,11 @@ import java.util.concurrent.TimeUnit
  *  `core/src/test/scala/spec/AbstractBasicSpec.scala`: term equality, range filter, sort +
  *  page, and full-text. Full-text only counts results to keep the comparison fair across
  *  backends with very different doc-materialization costs.
+ *
+ *  All four use a shared transaction (per-benchmark, per-backend pool) so the measurement
+ *  isolates the actual query cost — for splits especially, opening a fresh tx on every
+ *  iteration means opening one on the storage side AND the search side, which dominates the
+ *  measurement and obscures real per-query differences.
  */
 class CompleteQueryBenchmark {
 
@@ -27,7 +33,9 @@ class CompleteQueryBenchmark {
   def termFilter(state: CompleteCollectionState, bh: Blackhole): Unit = {
     val coll = state.db.asCollection.get
     val name = state.randomName()
-    val n = coll.transaction(_.query.filter(_.name === name).count).sync()
+    val n = coll.transaction.shared("CompleteQueryBenchmark.termFilter", 5.seconds) { tx =>
+      tx.query.filter(_.name === name).count
+    }.sync()
     bh.consume(n)
   }
 
@@ -38,7 +46,9 @@ class CompleteQueryBenchmark {
   def rangeFilter(state: CompleteCollectionState, bh: Blackhole): Unit = {
     val coll = state.db.asCollection.get
     val (lo, hi) = state.randomAgeRange()
-    val n = coll.transaction(_.query.filter(_.age BETWEEN (lo, hi)).count).sync()
+    val n = coll.transaction.shared("CompleteQueryBenchmark.rangeFilter", 5.seconds) { tx =>
+      tx.query.filter(_.age BETWEEN (lo, hi)).count
+    }.sync()
     bh.consume(n)
   }
 
@@ -51,7 +61,7 @@ class CompleteQueryBenchmark {
   def filterSortPaginate(state: CompleteCollectionState, bh: Blackhole): Unit = {
     val coll = state.db.asCollection.get
     val (lo, hi) = state.randomAgeRange()
-    val first = coll.transaction { tx =>
+    val first = coll.transaction.shared("CompleteQueryBenchmark.filterSortPaginate", 5.seconds) { tx =>
       tx.query
         .filter(_.age BETWEEN (lo, hi))
         .sort(Sort.ByField(BenchDoc.name))
@@ -71,7 +81,9 @@ class CompleteQueryBenchmark {
   def fullText(state: CompleteCollectionState, bh: Blackhole): Unit = {
     val coll = state.db.asCollection.get
     val term = state.randomBioTerm()
-    val n = coll.transaction(_.query.filter(_.bio.contains(term)).count).sync()
+    val n = coll.transaction.shared("CompleteQueryBenchmark.fullText", 5.seconds) { tx =>
+      tx.query.filter(_.bio.contains(term)).count
+    }.sync()
     bh.consume(n)
   }
 }

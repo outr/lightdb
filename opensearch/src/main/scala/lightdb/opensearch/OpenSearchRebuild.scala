@@ -476,7 +476,7 @@ object OpenSearchRebuild {
     var currentBytes = 0
 
     def estimateBytes(op: OpenSearchBulkOp): Int = op match {
-      case OpenSearchBulkOpIndex(index, id, source, routing) =>
+      case OpenSearchBulkOpIndex(index, id, source, routing, _) =>
         val routingPart = routing.map(r => s""","routing":"$r"""").getOrElse("")
         val meta = s"""{"index":{"_index":"$index","_id":"$id"$routingPart}}"""
         val src = JsonFormatter.Compact(source)

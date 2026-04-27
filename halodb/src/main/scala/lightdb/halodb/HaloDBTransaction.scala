@@ -26,8 +26,6 @@ case class HaloDBTransaction[Doc <: Document [Doc], Model <: DocumentModel[Doc]]
     }
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] = _upsert(doc)
-
   override protected def _upsert(doc: Doc): Task[Doc] = Task.defer {
     val json = doc.json(store.model.rw)
     instance.put(doc._id, json).map(_ => doc)

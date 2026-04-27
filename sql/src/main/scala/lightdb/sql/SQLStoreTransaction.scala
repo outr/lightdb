@@ -7,6 +7,7 @@ import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str, arr, bool, num, 
 import lightdb.aggregate.{AggregateFilter, AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.distance.Distance
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
+import lightdb.error.DuplicateIdException
 import lightdb.facet.{FacetQuery, FacetResult, FacetResultValue, FacetValue}
 import lightdb.facet.FacetComputation
 import lightdb.field.Field.Tokenized
@@ -162,9 +163,17 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       }
       ps.addBatch()
       state.batchInsert.incrementAndGet()
-      if state.batchInsert.get() >= Store.MaxInsertBatch then {
+      // Flush immediately so PK-violation surfaces as a DuplicateIdException at the call site.
+      // For high-throughput inserts use the buffered/queued/async write handler — it batches via
+      // `flushOps` below where a constraint violation also translates correctly (per-batch, not
+      // per-doc).
+      try {
         ps.executeBatch()
         state.batchInsert.set(0)
+      } catch {
+        case e: SQLException if SQLStoreTransaction.isUniqueViolation(e) =>
+          state.batchInsert.set(0)
+          throw DuplicateIdException(store.name, doc._id)
       }
     }
     doc
@@ -221,7 +230,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           }
           ps.addBatch()
         }
-        ps.executeBatch()
+        try ps.executeBatch()
+        catch {
+          case e: SQLException if SQLStoreTransaction.isUniqueViolation(e) =>
+            state.batchInsert.set(0)
+            throw DuplicateIdException(store.name, SQLStoreTransaction.failedInsertId(e, inserts.toList))
+        }
         state.batchInsert.set(0)
       }
     }
@@ -1149,15 +1163,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       val values = store.fields.map { field =>
         try {
           val columnName = field.name.toLowerCase
-          val json = field match {
-            case _: Tokenized[_] =>
-              val list = Option(rs.getString(columnName)) match {
-                case Some(s) => s.split(" ").toList.map(str)
-                case None => Nil
-              }
-              arr(list: _*)
-            case _ => toJson(rs.getObject(columnName), field.rw)
-          }
+          // Tokenized fields are STORED as a plain String in the base table; tokenization is a
+          // query-time concern handled by the search side (e.g. SQLite's FTS5 virtual table).
+          // Read the column verbatim so the value round-trips back into the case class's
+          // `String` field — the previous "split on space → Arr" path broke fabric decode for
+          // any caller that hit `get(_id)` / `stream` against a Tokenized field.
+          val json = toJson(rs.getObject(columnName), field.rw)
           field.name -> json
         } catch {
           case t: Throwable =>
@@ -1406,4 +1417,43 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 object SQLStoreTransaction {
   var LogQueries: Boolean = false
   var FetchSize: Int = 1_000
+
+  /**
+   * SQLState class `23` is "integrity constraint violation" per ANSI SQL — covers PK/UNIQUE
+   * violations across SQLite (23000), H2 (23505), DuckDB (23000/23505), PostgreSQL (23505), etc.
+   * `BatchUpdateException` chains the underlying cause, so check the chained `getNextException`
+   * too.
+   */
+  private[sql] def isUniqueViolation(e: SQLException): Boolean = {
+    def matches(ex: SQLException): Boolean =
+      ex.isInstanceOf[java.sql.SQLIntegrityConstraintViolationException] ||
+        Option(ex.getSQLState).exists(_.startsWith("23"))
+
+    var cur: SQLException = e
+    while (cur != null) {
+      if (matches(cur)) return true
+      cur = cur match {
+        case b: java.sql.BatchUpdateException => b.getNextException
+        case other => other.getNextException
+      }
+    }
+    false
+  }
+
+  /**
+   * Best-effort: when a batch insert fails with a unique-violation, walk the JDBC update counts
+   * (Statement.EXECUTE_FAILED = -3) to identify the offending row's _id. Falls back to the
+   * first doc in the batch when the driver doesn't report row-level statuses.
+   */
+  private[sql] def failedInsertId[Doc <: Document[Doc]](e: SQLException, docs: List[Doc]): Id[Doc] = {
+    val counts: Option[Array[Int]] = e match {
+      case b: java.sql.BatchUpdateException => Option(b.getUpdateCounts)
+      case _ => None
+    }
+    val idx = counts.flatMap { arr =>
+      val i = arr.indexWhere(_ == java.sql.Statement.EXECUTE_FAILED)
+      if (i >= 0 && i < docs.length) Some(i) else None
+    }
+    docs(idx.getOrElse(0))._id
+  }
 }
