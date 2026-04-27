@@ -11,19 +11,75 @@ object OpenSearchDsl {
   def prefix(field: String, value: String): Json =
     obj("prefix" -> obj(field -> obj("value" -> str(value))))
 
-  def hasChild(childType: String, query: Json, scoreMode: String = "none"): Json =
-    obj("has_child" -> obj(
-      "type" -> str(childType),
-      "query" -> query,
-      "score_mode" -> str(scoreMode)
-    ))
+  def hasChild(childType: String,
+               query: Json,
+               scoreMode: String = "none",
+               innerHits: Option[Json] = None): Json = {
+    val parts = Vector(
+      Some("type" -> str(childType)),
+      Some("query" -> query),
+      Some("score_mode" -> str(scoreMode)),
+      innerHits.map(ih => "inner_hits" -> ih)
+    ).flatten
+    obj("has_child" -> obj(parts: _*))
+  }
 
-  def nested(path: String, query: Json, scoreMode: String = "none"): Json =
-    obj("nested" -> obj(
-      "path" -> str(path),
-      "query" -> query,
-      "score_mode" -> str(scoreMode)
-    ))
+  def nested(path: String,
+             query: Json,
+             scoreMode: String = "none",
+             innerHits: Option[Json] = None): Json = {
+    val parts = Vector(
+      Some("path" -> str(path)),
+      Some("query" -> query),
+      Some("score_mode" -> str(scoreMode)),
+      innerHits.map(ih => "inner_hits" -> ih)
+    ).flatten
+    obj("nested" -> obj(parts: _*))
+  }
+
+  /**
+   * Build the `inner_hits` JSON sub-object for use inside a `has_child` / `has_parent` /
+   * `nested` clause. Sorts and source filtering are passed in pre-rendered.
+   */
+  def innerHits(name: Option[String],
+                size: Int,
+                sorts: List[Json],
+                sourceIncludes: List[String],
+                highlight: Option[Json]): Json = {
+    val parts = Vector(
+      name.map(n => "name" -> str(n)),
+      Some("size" -> num(size)),
+      if sorts.nonEmpty then Some("sort" -> arr(sorts: _*)) else None,
+      if sourceIncludes.nonEmpty then
+        Some("_source" -> obj("includes" -> arr(sourceIncludes.map(str): _*)))
+      else None,
+      highlight.map(h => "highlight" -> h)
+    ).flatten
+    obj(parts: _*)
+  }
+
+  /**
+   * Build a `highlight` JSON block. When `fields` is empty, highlight `*` (every text-typed
+   * field in the matched doc).
+   */
+  def highlight(fields: List[String],
+                preTag: String,
+                postTag: String,
+                fragmentSize: Option[Int],
+                numberOfFragments: Option[Int],
+                requireFieldMatch: Boolean): Json = {
+    val fieldNames = if fields.isEmpty then List("*") else fields
+    val fieldsObj = obj(fieldNames.map(name => name -> obj()): _*)
+    val parts = Vector(
+      Some("pre_tags" -> arr(str(preTag))),
+      Some("post_tags" -> arr(str(postTag))),
+      Some("require_field_match" -> fabric.bool(requireFieldMatch)),
+      fragmentSize.map(s => "fragment_size" -> num(s)),
+      numberOfFragments.map(n => "number_of_fragments" -> num(n)),
+      Some("fields" -> fieldsObj)
+    ).flatten
+    obj(parts: _*)
+  }
 
   def exists(field: String): Json =
     obj("exists" -> obj("field" -> str(field)))

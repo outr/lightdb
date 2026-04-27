@@ -502,6 +502,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case d: Conversion.Distance[Doc, _] =>
         extraFields = extraFields ::: extraFieldsForDistance(d)
         store.fields
+      case _: Conversion.DocWithInnerHits[_, _] =>
+        // SQL backends have no inner_hits / highlight primitive — load the full doc; the row
+        // converter wraps it in an empty DocWithInnerHits below.
+        store.fields
     }
 
     val bestMatchDirectionOpt: Option[SortDirection] = query.sort.collectFirst {
@@ -1120,6 +1124,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val distances = JsonParser(rs.getString(fieldName)).as[List[Double]].map(d => Distance(d))
         val doc = getDoc(rs)
         DistanceAndDoc(doc, distances).asInstanceOf[V]
+      case _: Conversion.DocWithInnerHits[_, _] =>
+        // SQL has no inner_hits / highlight primitive — return the doc with empty payloads.
+        val doc = getDoc(rs)
+        lightdb.query.DocWithInnerHits[Doc, Model](doc = doc).asInstanceOf[V]
     }
   }
 
@@ -1353,6 +1361,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       val state = new IndexingState
       val distance = field.get(doc, field, state).map(g => lightdb.spatial.Spatial.distance(from, g))
       DistanceAndDoc(doc, distance).asInstanceOf[V]
+    case _: Conversion.DocWithInnerHits[_, _] =>
+      lightdb.query.DocWithInnerHits[Doc, Model](doc = doc).asInstanceOf[V]
   }
 
   private def rewriteFilterFieldsForNestedPath[C <: Document[C]](path: String, filter: Filter[C]): Filter[C] = {
