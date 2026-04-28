@@ -10,7 +10,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 
-ThisBuild / version := "4.33.0"
+ThisBuild / version := "4.33.1"
 
 ThisBuild / scalaVersion := "3.8.3"
 
@@ -117,7 +117,7 @@ val scalaTestVersion: String = "3.2.20"
 val testcontainersVersion: String = "2.0.5"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -384,7 +384,44 @@ lazy val benchmark = project.in(file("benchmark"))
 			"io.quickchart" % "QuickChart" % "1.2.0",
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"com.outr" %%% "rapid-test" % rapidVersion % Test
-		)
+		),
+		// Fat-JAR setup so JMH can run via `java -jar` instead of `sbt benchmark/Jmh/run`. Going
+		// through sbt for forks > 1 is fragile (sbt's stream cleanup wipes the per-fork classpath
+		// argfile, so the second forked JVM fails with `ClassNotFoundException: ForkedMain`).
+		// `java -jar` against a fat JAR avoids the whole sbt/JMH classloader interaction.
+		assembly / mainClass := Some("org.openjdk.jmh.Main"),
+		assembly / assemblyJarName := "lightdb-benchmarks.jar",
+		// JMH discovers benchmarks by scanning `META-INF/BenchmarkList` and `META-INF/CompilerHints`
+		// across every jar on the classpath — these need to be CONCATENATED across jars, not
+		// last-wins (the default). Discard signed-jar manifests since combining signed artifacts
+		// invalidates the signatures anyway.
+		assembly / assemblyMergeStrategy := {
+			// JMH discovery files MUST be concatenated across jars.
+			case PathList("META-INF", "BenchmarkList") => MergeStrategy.concat
+			case PathList("META-INF", "CompilerHints") => MergeStrategy.concat
+			// Service registrations: keep all of them.
+			case PathList("META-INF", "services", _*) => MergeStrategy.concat
+			case "reference.conf" => MergeStrategy.concat
+			// Signed-jar metadata: re-bundling invalidates signatures, just drop.
+			case PathList("META-INF", xs @ _*) if xs.lastOption.exists(s =>
+				s.endsWith(".SF") || s.endsWith(".DSA") || s.endsWith(".RSA")) => MergeStrategy.discard
+			case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+			// GraalVM native-image hints aren't relevant for a fat JAR run on the JVM.
+			case PathList("META-INF", "native-image", _*) => MergeStrategy.discard
+			case PathList("META-INF", "proguard", _*) => MergeStrategy.discard
+			// Per-vendor build metadata: pick the first, no semantic content.
+			case PathList("META-INF", "io.netty.versions.properties") => MergeStrategy.first
+			case PathList("META-INF", "DEPENDENCIES") => MergeStrategy.discard
+			case PathList("META-INF", "NOTICE", _*) => MergeStrategy.discard
+			case PathList("META-INF", "LICENSE", _*) => MergeStrategy.discard
+			case PathList("META-INF", "NOTICE.txt") => MergeStrategy.discard
+			case PathList("META-INF", "LICENSE.txt") => MergeStrategy.discard
+			case PathList("META-INF", "versions", _, "module-info.class") => MergeStrategy.discard
+			case "module-info.class" => MergeStrategy.discard
+			case other =>
+				val old = (assembly / assemblyMergeStrategy).value
+				old(other)
+		}
 	)
 
 lazy val docs = project
