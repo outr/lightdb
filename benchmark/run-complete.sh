@@ -149,17 +149,53 @@ COLL_ARGS=(
   "${EXTRA_ARGS[@]}"
 )
 
+BENCHMARK_JAR="$REPO_ROOT/benchmark/target/scala-3.8.3/lightdb-benchmarks.jar"
+
+# JVM flags must match build.sbt's `ThisBuild / javaOptions` so the benchmark JVMs see the same
+# native-access exports the application code requires (Lucene MMap, ChronicleMap off-heap, etc.).
+# Each line corresponds to one entry in build.sbt — keep in sync.
+JMH_JVM_FLAGS=(
+  --enable-native-access=ALL-UNNAMED
+  --add-opens=java.base/java.nio=ALL-UNNAMED
+  --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+  --add-modules=jdk.incubator.vector
+  --add-exports=java.base/jdk.internal.ref=ALL-UNNAMED
+  --add-exports=java.base/sun.nio.ch=ALL-UNNAMED
+  --add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED
+  --add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED
+  --add-opens=jdk.compiler/com.sun.tools.javac=ALL-UNNAMED
+  --add-opens=java.base/java.lang=ALL-UNNAMED
+  --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+  --add-opens=java.base/java.io=ALL-UNNAMED
+  --add-opens=java.base/java.util=ALL-UNNAMED
+)
+
+# Pass `-jvmArgs` so JMH propagates the flags to its forked benchmark JVMs.
+JMH_JVM_ARGS_STR="${JMH_JVM_FLAGS[*]}"
+
 {
+  echo "===== build: assembly fat JAR ====="
+  # Build once up-front so both passes use the same artifact. JMH-via-sbt was unreliable for
+  # forks > 1 (sbt's stream cleanup wiped the per-fork classpath argfile, surfacing as
+  # `ClassNotFoundException: org.openjdk.jmh.runner.ForkedMain` after the first fork). Running
+  # `java -jar` against a fat JAR sidesteps the whole sbt/JMH classloader interaction.
+  sbt -Dsbt.log.noformat=true "benchmark/assembly" </dev/null
+  if [[ ! -f "$BENCHMARK_JAR" ]]; then
+    echo "[run-complete.sh] expected fat JAR at $BENCHMARK_JAR but it doesn't exist" >&2
+    exit 2
+  fi
+
+  echo
   echo "===== pass 1/2: KV + write + concurrency ====="
-  sbt -Dsbt.log.noformat=true \
-      "benchmark/Jmh/run ${KV_ARGS[*]}" \
-    </dev/null
+  java "${JMH_JVM_FLAGS[@]}" -jar "$BENCHMARK_JAR" \
+    -jvmArgs "$JMH_JVM_ARGS_STR" \
+    "${KV_ARGS[@]}"
 
   echo
   echo "===== pass 2/2: collection queries ====="
-  sbt -Dsbt.log.noformat=true \
-      "benchmark/Jmh/run ${COLL_ARGS[*]}" \
-    </dev/null
+  java "${JMH_JVM_FLAGS[@]}" -jar "$BENCHMARK_JAR" \
+    -jvmArgs "$JMH_JVM_ARGS_STR" \
+    "${COLL_ARGS[@]}"
 
   echo
   echo "===== render: markdown + SVG charts ====="
