@@ -131,12 +131,16 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
       db.people.transaction { transaction =>
         Task {
           val txn = transaction
+          // Identifiers are always-quoted now (`"name"`, `"Person"`, etc.) so reserved-word
+          // column names don't collide. Assert the exact quoted form. The `\S+Person\S*`
+          // pattern strips both `mySchema.` prefix AND the trailing `"` of `"Person"` so the
+          // assertion is portable across schema-supporting / non-supporting backends.
           val sql = txn
             .toSQL(txn.query.clearPageSize).query.query
             .replaceAll("\\s+", " ")
-            .replaceAll("\\S+Person", "Person")
+            .replaceAll("\\S+Person\\S*", "Person")
             .trim
-          sql should be("SELECT _id, created, modified, name, organDonor, age, gender, city, nicknames, friends, allNames, search, doc, ageDouble FROM Person")
+          sql should be("""SELECT "_id", "created", "modified", "name", "organDonor", "age", "gender", "city", "nicknames", "friends", "allNames", "search", "doc", "ageDouble" FROM Person""")
         }
       }
     }
@@ -147,9 +151,9 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
           val sql = txn
             .toSQL(txn.query.clearPageSize.filter(p => p.name === "Adam" && p.age === 21 && p.city === Some(City("Somewhere")))).query.queryLiteral
             .replaceAll("\\s+", " ")
-            .replaceAll("\\S+Person", "Person")
+            .replaceAll("\\S+Person\\S*", "Person")
             .trim
-          sql should be("""SELECT _id, created, modified, name, organDonor, age, gender, city, nicknames, friends, allNames, search, doc, ageDouble FROM Person WHERE name = 'Adam' AND age = 21 AND city = '{\"name\":\"Somewhere\"}'""")
+          sql should be("""SELECT "_id", "created", "modified", "name", "organDonor", "age", "gender", "city", "nicknames", "friends", "allNames", "search", "doc", "ageDouble" FROM Person WHERE "name" = 'Adam' AND "age" = 21 AND "city" = '{\"name\":\"Somewhere\"}'""")
         }
       }
     }

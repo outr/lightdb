@@ -70,19 +70,20 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
   def updateQuery(fields: List[FieldAndValue[Doc, _]]): SQLQuery = {
     require(fields.nonEmpty, "Update requires at least one field to update")
 
+    val idCol = SqlIdent.quote("_id")
     val b = copy(
       sort = Nil,
-      fields = List(SQLPart.Fragment("_id"))
+      fields = List(SQLPart.Fragment(idCol))
     )
-    
+
     val assignments: List[SQLPart] = if fields.length == 1 then {
       // Single field - no need for comma separators
       val fv = fields.head
-      List(SQLPart.Fragment(s"${fv.field.name} = "), SQLPart.Arg(fv.json))
+      List(SQLPart.Fragment(s"${SqlIdent.quote(fv.field.name)} = "), SQLPart.Arg(fv.json))
     } else {
       // Multiple fields - need comma separators between them
       fields.flatMap { fv =>
-        List(SQLPart.Fragment(s"${fv.field.name} = "), SQLPart.Arg(fv.json))
+        List(SQLPart.Fragment(s"${SqlIdent.quote(fv.field.name)} = "), SQLPart.Arg(fv.json))
       }.intersperse(SQLPart.Fragment(", "))
     }
 
@@ -91,8 +92,8 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
         List(SQLPart.Fragment(s"UPDATE ${store.fqn}\n")),
         SQLPart.Fragment("SET ") :: assignments,
         List(
-          SQLPart.Fragment("\nWHERE _id IN ("),
-          SQLPart.Fragment("\n\tSELECT s._id"),
+          SQLPart.Fragment(s"\nWHERE $idCol IN ("),
+          SQLPart.Fragment(s"\n\tSELECT s.$idCol"),
           SQLPart.Fragment("\n\tFROM (\n\t")
         ),
         b.parts,
@@ -105,15 +106,16 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
   }
 
   lazy val deleteQuery: SQLQuery = {
+    val idCol = SqlIdent.quote("_id")
     val b = copy(
       sort = Nil,
-      fields = List(SQLPart.Fragment("_id"))
+      fields = List(SQLPart.Fragment(idCol))
     )
     SQLQuery(
       parts = List(
         SQLPart.Fragment(s"DELETE FROM ${store.fqn}\n"),
-        SQLPart.Fragment("WHERE _id IN (\n"),
-        SQLPart.Fragment("\tSELECT s._id\n"),
+        SQLPart.Fragment(s"WHERE $idCol IN (\n"),
+        SQLPart.Fragment(s"\tSELECT s.$idCol\n"),
         SQLPart.Fragment("\tFROM (\n\t\t")
       ) ::: b.parts ::: List(
         SQLPart.Fragment("\n\t) AS s\n"),

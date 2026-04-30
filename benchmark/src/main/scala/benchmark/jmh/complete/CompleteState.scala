@@ -13,8 +13,26 @@ import scala.jdk.CollectionConverters.*
  *  class duplicates its own `@Param` declarations and delegates the heavy lifting here.
  */
 private[complete] object BenchSetup {
+  /**
+   * Root directory for all benchmark data files. Defaults to `~/.cache/lightdb-bench`, which
+   * lives on real disk on every distro we care about. `/tmp` (the JDK default for
+   * `Files.createTempDirectory`) is tmpfs/RAM-backed on most Linux distros — fine for a `fast`
+   * run, fatal for `full` (100k records × 16 backends × buffered/async batch fills the page
+   * cache and JMH starts dying with `IOException: No space left on device`). Override with
+   * env var `LIGHTDB_BENCH_DIR` if the default location is also constrained.
+   */
+  private val benchDataRoot: Path = {
+    val configured = sys.env.get("LIGHTDB_BENCH_DIR").filter(_.nonEmpty)
+    val root = configured match {
+      case Some(p) => Path.of(p)
+      case None => Path.of(sys.props.getOrElse("user.home", "/tmp"), ".cache", "lightdb-bench")
+    }
+    Files.createDirectories(root)
+    root
+  }
+
   def init(spec: BackendCatalog.Spec, recordCount: Int, preLoad: Boolean): (BenchDb, Path, Array[Id[BenchDoc]], AtomicLong) = {
-    val dir = Files.createTempDirectory(s"lightdb-bench-${spec.name.replace('+', '-')}-")
+    val dir = Files.createTempDirectory(benchDataRoot, s"lightdb-bench-${spec.name.replace('+', '-')}-")
     val bench = spec.build(Some(dir))
     bench.db.init.sync()
     val (ids, counter) =

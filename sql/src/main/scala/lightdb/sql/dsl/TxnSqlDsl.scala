@@ -5,7 +5,7 @@ import lightdb.ListExtras
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.filter.Filter
-import lightdb.sql.SQLStoreTransaction
+import lightdb.sql.{SQLStoreTransaction, SqlIdent}
 import lightdb.sql.query.{SQLPart, SQLQuery}
 import rapid.Task
 
@@ -56,7 +56,7 @@ object TxnSqlDsl {
     def toSQLQuery: SQLQuery = {
       val fieldParts: List[SQLPart] =
         if selected.isEmpty then List(SQLPart.Fragment("*"))
-        else selected.map(f => SQLPart.Fragment(f.name)).intersperse(SQLPart.Fragment(", "))
+        else selected.map(f => SQLPart.Fragment(SqlIdent.quote(f.name))).intersperse(SQLPart.Fragment(", "))
 
       val whereParts: List[SQLPart] =
         if filters.isEmpty then Nil

@@ -2,6 +2,7 @@ package lightdb.h2
 
 import fabric.io.JsonParser
 import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str}
+import lightdb.sql.SqlIdent
 import org.h2.api.Trigger
 
 import java.sql.{Connection, PreparedStatement}
@@ -84,7 +85,9 @@ class H2MultiValueTrigger extends Trigger {
   }
 
   private def deleteOwner(conn: Connection, ownerId: String): Unit = {
-    val ps = conn.prepareStatement(s"DELETE FROM $mvTable WHERE owner_id = ?")
+    val mvQ = SqlIdent.quote(mvTable)
+    val ownerCol = SqlIdent.quote("owner_id")
+    val ps = conn.prepareStatement(s"DELETE FROM $mvQ WHERE $ownerCol = ?")
     try {
       ps.setString(1, ownerId)
       ps.executeUpdate()
@@ -94,7 +97,10 @@ class H2MultiValueTrigger extends Trigger {
   }
 
   private def insertValue(conn: Connection, ownerId: String, value: String): Unit = {
-    val ps: PreparedStatement = conn.prepareStatement(s"INSERT INTO $mvTable(owner_id, value) VALUES(?, ?)")
+    val mvQ = SqlIdent.quote(mvTable)
+    val ownerCol = SqlIdent.quote("owner_id")
+    val valueCol = SqlIdent.quote("value")
+    val ps: PreparedStatement = conn.prepareStatement(s"INSERT INTO $mvQ($ownerCol, $valueCol) VALUES(?, ?)")
     try {
       ps.setString(1, ownerId)
       ps.setString(2, value)

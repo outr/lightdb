@@ -3,7 +3,7 @@ package lightdb.sql.dsl
 import lightdb.ListExtras
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
-import lightdb.sql.SQLStore
+import lightdb.sql.{SQLStore, SqlIdent}
 import lightdb.store.{Collection, Store}
 import lightdb.sql.query.{SQLPart, SQLQuery}
 
@@ -23,19 +23,36 @@ object SQLDsl {
   }
 
   object Ident {
-    final case class Table(name: String, alias: Option[String] = None) extends Ident {
-      override def value: String = alias match {
-        case Some(a) => s"$name $a"
-        case None => name
+    /**
+     * Table reference. `name` is the raw (unquoted) table name, `schema` an optional raw
+     * schema name. Both get ANSI-quoted at render time via [[SqlIdent]] so identifiers like
+     * `order` or `user` don't collide with reserved words. `alias`, when present, is rendered
+     * after a space (`"users" u`) and is the canonical [[ref]] used as a column qualifier.
+     */
+    final case class Table(name: String, schema: Option[String] = None, alias: Option[String] = None) extends Ident {
+      override def value: String = {
+        val tableRef = schema match {
+          case Some(s) => SqlIdent.qualified(s, name)
+          case None => SqlIdent.quote(name)
+        }
+        alias match {
+          case Some(a) => s"$tableRef ${SqlIdent.quote(a)}"
+          case None => tableRef
+        }
       }
       def as(a: String): Table = copy(alias = Some(a))
+      /** Raw qualifier used in column references — alias if set, else the unqualified name. */
       def ref: String = alias.getOrElse(name)
     }
 
+    /**
+     * Column reference. `name` and (optional) `qualifier` are raw, ANSI-quoted at render time.
+     * `qualifier` is typically a [[Table.ref]] (alias or raw table name).
+     */
     final case class Column(name: String, qualifier: Option[String] = None) extends Ident {
       override def value: String = qualifier match {
-        case Some(q) => s"$q.$name"
-        case None => name
+        case Some(q) => SqlIdent.qualified(q, name)
+        case None => SqlIdent.quote(name)
       }
     }
 
@@ -325,8 +342,10 @@ object SQLDsl {
 
   def table(name: String): Ident.Table = Ident.table(name)
   def table(store: Store[?, ?]): Ident.Table = store match {
-    case sql: SQLStore[?, ?] => Ident.table(sql.fqn)
-    case other => Ident.table(other.name)
+    case sql: SQLStore[?, ?] =>
+      val schema = if sql.supportsSchemas then Some(sql.lightDB.name) else None
+      Ident.Table(name = sql.name, schema = schema)
+    case other => Ident.Table(other.name)
   }
   def table(collection: Collection[?, ?]): Ident.Table = table(collection.asInstanceOf[Store[?, ?]])
 
