@@ -65,21 +65,28 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   /**
    * Hook for backends to provide an optimized tokenized (full-text-like) equality predicate.
    * Default behavior falls back to token-by-token LIKE matching.
+   *
+   * Receives `fieldName` as a raw (unquoted) column name — implementations that emit it into
+   * SQL should route through [[SqlIdent.quote]].
    */
   protected def tokenizedEqualsPart(fieldName: String, value: String): SQLPart = {
+    val q = SqlIdent.quote(fieldName)
     val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
-    val parts = tokens.map(t => likePart(fieldName, s"%$t%"))
+    val parts = tokens.map(t => likePart(q, s"%$t%"))
     if parts.isEmpty then SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
   }
 
   /**
    * Hook for backends to provide an optimized tokenized inequality predicate.
    * Default behavior is NOT(all tokens present).
+   *
+   * Receives `fieldName` as a raw (unquoted) column name — see [[tokenizedEqualsPart]].
    */
   protected def tokenizedNotEqualsPart(fieldName: String, value: String): SQLPart = {
+    val q = SqlIdent.quote(fieldName)
     val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
     val inner = if tokens.isEmpty then SQLPart.Fragment("1=1") else {
-      val parts = tokens.map(t => likePart(fieldName, s"%$t%"))
+      val parts = tokens.map(t => likePart(q, s"%$t%"))
       SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
     }
     SQLQuery(List(SQLPart.Fragment("NOT("), inner, SQLPart.Fragment(")")))
@@ -111,7 +118,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     val connection = state.connectionManager.getConnection(state)
-    val ps = connection.prepareStatement(s"SELECT * FROM ${store.fqn} WHERE ${store.model._id.name} LIKE ? ORDER BY ${store.model._id.name}")
+    val idCol = SqlIdent.quote(store.model._id.name)
+    val ps = connection.prepareStatement(s"SELECT * FROM ${store.fqn} WHERE $idCol LIKE ? ORDER BY $idCol")
     state.register(ps)
     ps.setString(1, s"$prefix%")
     val rs = ps.executeQuery()
@@ -133,7 +141,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val b = new SQLQueryBuilder[Doc, Model](
       store = store,
       state = state,
-      fields = store.fields.map(f => SQLPart.Fragment(f.name)),
+      fields = store.fields.map(f => SQLPart.Fragment(SqlIdent.quote(f.name))),
       filters = List(filter2Part(index === value)),
       group = Nil,
       having = Nil,
@@ -257,7 +265,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
     if deletes.nonEmpty then {
       val connection = state.connectionManager.getConnection(state)
-      val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${store.model._id.name} = ?")
+      val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${SqlIdent.quote(store.model._id.name)} = ?")
       val ps = connection.prepareStatement(sql.query)
       try {
         deletes.foreach { id =>
@@ -273,7 +281,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
     val connection = state.connectionManager.getConnection(state)
-    val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${index.name} = ?")
+    val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${SqlIdent.quote(index.name)} = ?")
     val ps = connection.prepareStatement(sql.query)
     try {
       sql.fillPlaceholder(index.rw.read(value)).populate(ps, this)
@@ -515,7 +523,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
     val baseFieldParts: List[SQLPart] = if bestMatch.nonEmpty then {
       // When joining auxiliary tables (e.g., FTS), disambiguate base-table columns and keep stable column labels.
-      fields.map(f => SQLPart.Fragment(s"${store.fqn}.${f.name} AS ${f.name}"))
+      fields.map { f =>
+        val q = SqlIdent.quote(f.name)
+        SQLPart.Fragment(s"${store.fqn}.$q AS $q")
+      }
     } else {
       fields.map(f => fieldPart(f))
     }
@@ -531,7 +542,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         case Sort.BestMatch(_) => bestMatch.toList.map(_.sortPart)
         case Sort.ByField(index, direction) =>
           val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
-          List(SQLPart.Fragment(s"${index.name} $dir"))
+          List(SQLPart.Fragment(s"${SqlIdent.quote(index.name)} $dir"))
         case Sort.ByDistance(field, _, direction) => List(sortByDistance(field, direction))
         case _ => Nil
       },
@@ -732,14 +743,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
                 val b0 = toSQL(qPage)
 
                 // Replace SELECT list with DISTINCT(field) and add NOT NULL constraint.
-                val distinctField = SQLPart.Fragment(s"DISTINCT ${field.name} AS ${field.name}")
-                val notNull = SQLPart.Fragment(s"${field.name} IS NOT NULL")
+                val q = SqlIdent.quote(field.name)
+                val distinctField = SQLPart.Fragment(s"DISTINCT $q AS $q")
+                val notNull = SQLPart.Fragment(s"$q IS NOT NULL")
 
                 val b = b0.copy(
                   fields = List(distinctField),
                   filters = b0.filters ::: List(notNull),
                   // Stable paging order.
-                  sort = List(SQLPart.Fragment(s"${field.name} ASC")),
+                  sort = List(SQLPart.Fragment(s"$q ASC")),
                   limit = Some(pageSize),
                   offset = offset
                 )
@@ -832,7 +844,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     } else {
       // Build a "no paging" query that only selects the facet columns.
       val facetSelect = base.copy(
-        fields = facetFields.map(ff => SQLPart.Fragment(ff.name)),
+        fields = facetFields.map(ff => SQLPart.Fragment(SqlIdent.quote(ff.name))),
         // IMPORTANT:
         // Lucene tie-breaks facet values (when counts are equal) by taxonomy ord, which corresponds closely to
         // "first seen while indexing". For SQL we approximate this by using the database's natural scan order.
@@ -1004,21 +1016,22 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             case AggregateType.Concat => ", ';;'"
             case _ => ""
           }
-          s"$s($pre${f.field.name}$post)"
-        case None => f.field.name
+          s"$s($pre${SqlIdent.quote(f.field.name)}$post)"
+        case None => SqlIdent.quote(f.field.name)
       }
-      SQLPart.Fragment(s"$fieldName AS ${f.name}")
+      SQLPart.Fragment(s"$fieldName AS ${SqlIdent.quote(f.name)}")
     }
     val filters = query.query.filter.map(filter2Part).toList
-    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct.map(s => SQLPart.Fragment(s))
+    val group = query.functions.filter(_.`type` == AggregateType.Group).map(_.name).distinct
+      .map(s => SQLPart.Fragment(SqlIdent.quote(s)))
     val having = query.filter.map(af2Part).toList
     val sort = (query.sort ::: query.query.sort).map {
       case Sort.ByField(field, direction) =>
         val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
-        SQLPart.Fragment(s"${field.name} $dir")
+        SQLPart.Fragment(s"${SqlIdent.quote(field.name)} $dir")
       case (AggregateFunction(name, _, _), direction: SortDirection) =>
         val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
-        SQLPart.Fragment(s"$name $dir")
+        SQLPart.Fragment(s"${SqlIdent.quote(name)} $dir")
       case t => throw new UnsupportedOperationException(s"Unsupported sort: $t")
     }
     SQLQueryBuilder(
@@ -1050,6 +1063,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
   }
 
+  // The `*Part` helpers below take `name` as **already-rendered SQL** (a quoted column
+  // identifier or a function call like `LOWER("table"."col")`). Callers that have a raw
+  // column name should route through [[SqlIdent.quote]] before invoking these.
+
   protected def regexpPart(name: String, expression: String): SQLPart = SQLQuery(List(
     SQLPart.Fragment(s"$name REGEXP "), SQLPart.Arg(expression.json)
   ))
@@ -1061,39 +1078,42 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     SQLPart(s"$name NOT LIKE ?", pattern.json)
 
   private def af2Part(f: AggregateFilter[Doc]): SQLPart = f match {
-    case f: AggregateFilter.Equals[Doc, _] => SQLQuery(List(
-      SQLPart.Fragment(s"${f.name} = "), SQLPart.Arg(f.field.rw.read(f.value))
-    ))
+    case f: AggregateFilter.Equals[Doc, _] =>
+      val q = SqlIdent.quote(f.name)
+      SQLQuery(List(SQLPart.Fragment(s"$q = "), SQLPart.Arg(f.field.rw.read(f.value))))
     case f: AggregateFilter.NotEquals[Doc, _] =>
-      SQLQuery(List(
-        SQLPart.Fragment(s"${f.name} != "), SQLPart.Arg(f.field.rw.read(f.value))
-      ))
-    case f: AggregateFilter.Regex[Doc, _] => regexpPart(f.name, f.expression)
+      val q = SqlIdent.quote(f.name)
+      SQLQuery(List(SQLPart.Fragment(s"$q != "), SQLPart.Arg(f.field.rw.read(f.value))))
+    case f: AggregateFilter.Regex[Doc, _] => regexpPart(SqlIdent.quote(f.name), f.expression)
     case f: AggregateFilter.In[Doc, _] =>
       SQLQuery(
-        SQLPart.Fragment(s"${f.name} IN (") ::
+        SQLPart.Fragment(s"${SqlIdent.quote(f.name)} IN (") ::
           f.values.toList.map[SQLPart](v => SQLPart.Arg(f.field.rw.read(v))).intersperse(SQLPart.Fragment(", ")) :::
           List(SQLPart.Fragment(")"))
       )
     case f: AggregateFilter.Combined[Doc] =>
       val parts = f.filters.map(f => af2Part(f))
       SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
-    case f: AggregateFilter.RangeLong[Doc] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", from.json, to.json)
-      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", to.json)
-      case (Some(from), None) => SQLPart(s"${f.name} >= ?", from.json)
-      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
-    }
-    case f: AggregateFilter.RangeDouble[_] => (f.from, f.to) match {
-      case (Some(from), Some(to)) => SQLPart(s"${f.name} BETWEEN ? AND ?", from.json, to.json)
-      case (None, Some(to)) => SQLPart(s"${f.name} <= ?", to.json)
-      case (Some(from), None) => SQLPart(s"${f.name} >= ?", from.json)
-      case _ => throw new UnsupportedOperationException(s"Invalid: $f")
-    }
-    case AggregateFilter.StartsWith(name, _, query) => SQLPart(s"$name LIKE ?", s"$query%".json)
-    case AggregateFilter.EndsWith(name, _, query) => SQLPart(s"$name LIKE ?", s"%$query".json)
-    case AggregateFilter.Contains(name, _, query) => SQLPart(s"$name LIKE ?", s"%$query%".json)
-    case AggregateFilter.Exact(name, _, query) => SQLPart(s"$name LIKE ?", query.json)
+    case f: AggregateFilter.RangeLong[Doc] =>
+      val q = SqlIdent.quote(f.name)
+      (f.from, f.to) match {
+        case (Some(from), Some(to)) => SQLPart(s"$q BETWEEN ? AND ?", from.json, to.json)
+        case (None, Some(to)) => SQLPart(s"$q <= ?", to.json)
+        case (Some(from), None) => SQLPart(s"$q >= ?", from.json)
+        case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+      }
+    case f: AggregateFilter.RangeDouble[_] =>
+      val q = SqlIdent.quote(f.name)
+      (f.from, f.to) match {
+        case (Some(from), Some(to)) => SQLPart(s"$q BETWEEN ? AND ?", from.json, to.json)
+        case (None, Some(to)) => SQLPart(s"$q <= ?", to.json)
+        case (Some(from), None) => SQLPart(s"$q >= ?", from.json)
+        case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+      }
+    case AggregateFilter.StartsWith(name, _, query) => SQLPart(s"${SqlIdent.quote(name)} LIKE ?", s"$query%".json)
+    case AggregateFilter.EndsWith(name, _, query) => SQLPart(s"${SqlIdent.quote(name)} LIKE ?", s"%$query".json)
+    case AggregateFilter.Contains(name, _, query) => SQLPart(s"${SqlIdent.quote(name)} LIKE ?", s"%$query%".json)
+    case AggregateFilter.Exact(name, _, query) => SQLPart(s"${SqlIdent.quote(name)} LIKE ?", query.json)
     case f: AggregateFilter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
   }
 
@@ -1107,7 +1127,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
 
     conversion match {
-      case Conversion.Value(field) => toJson(rs.getObject(field.name.toLowerCase), field.rw).as[V](field.rw)
+      case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
       case Conversion.Doc() => getDoc(rs).asInstanceOf[V]
       case Conversion.Converted(c) => c(getDoc(rs))
       case Conversion.Materialized(fields) =>
@@ -1170,13 +1190,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case c: JsonConversion[Doc] =>
       val values = store.fields.map { field =>
         try {
-          val columnName = field.name.toLowerCase
           // Tokenized fields are STORED as a plain String in the base table; tokenization is a
           // query-time concern handled by the search side (e.g. SQLite's FTS5 virtual table).
           // Read the column verbatim so the value round-trips back into the case class's
           // `String` field — the previous "split on space → Arr" path broke fabric decode for
           // any caller that hit `get(_id)` / `stream` against a Tokenized field.
-          val json = toJson(rs.getObject(columnName), field.rw)
+          val json = toJson(rs.getObject(field.name), field.rw)
           field.name -> json
         } catch {
           case t: Throwable =>
@@ -1187,7 +1206,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       c.convertFromJson(obj(values: _*))
     case _ =>
       val map = store.fields.map { field =>
-        field.name -> obj2Value(rs.getObject(field.name.toLowerCase))
+        field.name -> obj2Value(rs.getObject(field.name))
       }.toMap
       store.model.map2Doc(map)
   }
@@ -1219,16 +1238,17 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         // We implement drill-down by matching the "path" JSON substring.
         // - showOnlyThisLevel: require exact path array match (no deeper segments)
         // - otherwise: prefix match
+        val q = SqlIdent.quote(f.fieldName)
         val pathJson = JsonFormatter.Compact(f.path.json)
         if f.showOnlyThisLevel then {
-          likePart(f.fieldName, s"%\"path\":$pathJson%")
+          likePart(q, s"%\"path\":$pathJson%")
         } else if f.path.isEmpty then {
           // Drill down to "any value in this dimension" - best effort
-          likePart(f.fieldName, s"%\"path\":%")
+          likePart(q, s"%\"path\":%")
         } else {
           // Prefix match: drop trailing ']' to avoid matching only exact
           val prefix = pathJson.stripSuffix("]")
-          likePart(f.fieldName, s"%\"path\":$prefix%")
+          likePart(q, s"%\"path\":$prefix%")
         }
       // Tokenized fields: equality is interpreted as matching all whitespace-separated tokens (AND semantics)
       case f: Filter.Equals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
@@ -1238,16 +1258,17 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           case _ => throw new UnsupportedOperationException(s"Unsupported tokenized equality value for ${f.fieldName}")
         }
       case f: Filter.Equals[C, _] if f.field(targetStore.model).isArr =>
+        val q = SqlIdent.quote(f.fieldName)
         val values = f.getJson(targetStore.model).asVector
         arrayContainsAllParts(f.fieldName, values.toList).getOrElse {
           val parts = values.toList.map { json =>
             val jsonString = JsonFormatter.Compact(json)
-            likePart(f.fieldName, s"%$jsonString%")
+            likePart(q, s"%$jsonString%")
           }
           SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
         }
-      case f: Filter.Equals[C, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NULL")
-      case f: Filter.Equals[C, _] => SQLPart(s"${f.fieldName} = ?", f.field(targetStore.model).rw.read(f.value))
+      case f: Filter.Equals[C, _] if f.value == null | f.value == None => SQLPart(s"${SqlIdent.quote(f.fieldName)} IS NULL")
+      case f: Filter.Equals[C, _] => SQLPart(s"${SqlIdent.quote(f.fieldName)} = ?", f.field(targetStore.model).rw.read(f.value))
       // Tokenized fields: not equals is interpreted as NOT(all tokens present)
       case f: Filter.NotEquals[C, _] if f.value != null && f.value != None && f.field(targetStore.model).isTokenized =>
         f.getJson(targetStore.model) match {
@@ -1256,38 +1277,43 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           case _ => throw new UnsupportedOperationException(s"Unsupported tokenized inequality value for ${f.fieldName}")
         }
       case f: Filter.NotEquals[C, _] if f.field(targetStore.model).isArr =>
+        val q = SqlIdent.quote(f.fieldName)
         val values = f.getJson(targetStore.model).asVector
         arrayNotContainsAllParts(f.fieldName, values.toList).getOrElse {
           val parts = values.toList.map { json =>
             val jsonString = JsonFormatter.Compact(json)
-            notLikePart(f.fieldName, s"%$jsonString%")
+            notLikePart(q, s"%$jsonString%")
           }
           SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
         }
-      case f: Filter.NotEquals[C, _] if f.value == null | f.value == None => SQLPart(s"${f.fieldName} IS NOT NULL")
-      case f: Filter.NotEquals[C, _] => SQLPart(s"${f.fieldName} != ?", f.field(targetStore.model).rw.read(f.value))
-      case f: Filter.Regex[C, _] => regexpPart(f.fieldName, f.expression)
+      case f: Filter.NotEquals[C, _] if f.value == null | f.value == None => SQLPart(s"${SqlIdent.quote(f.fieldName)} IS NOT NULL")
+      case f: Filter.NotEquals[C, _] => SQLPart(s"${SqlIdent.quote(f.fieldName)} != ?", f.field(targetStore.model).rw.read(f.value))
+      case f: Filter.Regex[C, _] => regexpPart(SqlIdent.quote(f.fieldName), f.expression)
       // TODO: Support fieldName = ANY (?::text[])
-      case f: Filter.In[C, _] => SQLPart(s"${f.fieldName} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => f.field(targetStore.model).rw.read(v)): _*)
-      case f: Filter.RangeLong[C] => (f.from, f.to) match {
-        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", from.json, to.json)
-        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", to.json)
-        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", from.json)
-        case _ => throw new UnsupportedOperationException(s"Invalid: $f")
-      }
-      case f: Filter.RangeDouble[C] => (f.from, f.to) match {
-        case (Some(from), Some(to)) => SQLPart(s"${f.fieldName} BETWEEN ? AND ?", from.json, to.json)
-        case (None, Some(to)) => SQLPart(s"${f.fieldName} <= ?", to.json)
-        case (Some(from), None) => SQLPart(s"${f.fieldName} >= ?", from.json)
-        case _ => throw new UnsupportedOperationException(s"Invalid: $f")
-      }
-      case Filter.StartsWith(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%\"$query%")
-      case Filter.StartsWith(fieldName, query) => likePart(fieldName, s"$query%")
-      case Filter.EndsWith(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%$query\"%")
-      case Filter.EndsWith(fieldName, query) => likePart(fieldName, s"%$query")
-      case Filter.Contains(fieldName, query) => likePart(fieldName, s"%$query%")
-      case Filter.Exact(fieldName, query) if fields.head.isArr => likePart(fieldName, s"%\"$query\"%")
-      case Filter.Exact(fieldName, query) => likePart(fieldName, s"$query")
+      case f: Filter.In[C, _] => SQLPart(s"${SqlIdent.quote(f.fieldName)} IN (${f.values.map(_ => "?").mkString(", ")})", f.values.toList.map(v => f.field(targetStore.model).rw.read(v)): _*)
+      case f: Filter.RangeLong[C] =>
+        val q = SqlIdent.quote(f.fieldName)
+        (f.from, f.to) match {
+          case (Some(from), Some(to)) => SQLPart(s"$q BETWEEN ? AND ?", from.json, to.json)
+          case (None, Some(to)) => SQLPart(s"$q <= ?", to.json)
+          case (Some(from), None) => SQLPart(s"$q >= ?", from.json)
+          case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+        }
+      case f: Filter.RangeDouble[C] =>
+        val q = SqlIdent.quote(f.fieldName)
+        (f.from, f.to) match {
+          case (Some(from), Some(to)) => SQLPart(s"$q BETWEEN ? AND ?", from.json, to.json)
+          case (None, Some(to)) => SQLPart(s"$q <= ?", to.json)
+          case (Some(from), None) => SQLPart(s"$q >= ?", from.json)
+          case _ => throw new UnsupportedOperationException(s"Invalid: $f")
+        }
+      case Filter.StartsWith(fieldName, query) if fields.head.isArr => likePart(SqlIdent.quote(fieldName), s"%\"$query%")
+      case Filter.StartsWith(fieldName, query) => likePart(SqlIdent.quote(fieldName), s"$query%")
+      case Filter.EndsWith(fieldName, query) if fields.head.isArr => likePart(SqlIdent.quote(fieldName), s"%$query\"%")
+      case Filter.EndsWith(fieldName, query) => likePart(SqlIdent.quote(fieldName), s"%$query")
+      case Filter.Contains(fieldName, query) => likePart(SqlIdent.quote(fieldName), s"%$query%")
+      case Filter.Exact(fieldName, query) if fields.head.isArr => likePart(SqlIdent.quote(fieldName), s"%\"$query\"%")
+      case Filter.Exact(fieldName, query) => likePart(SqlIdent.quote(fieldName), s"$query")
       case f: Filter.Distance[C] =>
         if targetStore eq store then {
           distanceFilter(f.asInstanceOf[Filter.Distance[Doc]])
@@ -1404,10 +1430,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
     val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
-    SQLPart.Fragment(s"${field.name}Distance $dir")
+    // Distance pseudo-columns are emitted as bare identifiers in the SELECT list (see
+    // dialect-specific extraFieldsForDistance / GEO_DISTANCE_*); quote consistently here.
+    SQLPart.Fragment(s"${SqlIdent.quote(s"${field.name}Distance")} $dir")
   }
 
-  protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart.Fragment(field.name)
+  protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart.Fragment(SqlIdent.quote(field.name))
 
   protected def concatPrefix: String = "GROUP_CONCAT"
 

@@ -45,10 +45,15 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   def supportsSchemas: Boolean = false
 
+  /**
+   * Quoted, fully-qualified table reference, e.g. `"my_schema"."Users"` or `"Users"`. Always
+   * quoted so user-provided table names that collide with SQL reserved words (`order`, `user`,
+   * etc.) parse correctly. See [[SqlIdent]] for the rationale.
+   */
   lazy val fqn: String = if supportsSchemas then {
-    s"${lightDB.name}.$name"
+    SqlIdent.qualified(lightDB.name, name)
   } else {
-    name
+    SqlIdent.quote(name)
   }
 
   protected def connectionManager: ConnectionManager
@@ -60,17 +65,17 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   override protected def maximumConcurrency: Int = 1
 
   protected def createSchema(tx: TX): Unit = {
-    executeUpdate(s"CREATE SCHEMA IF NOT EXISTS ${lightDB.name}", tx)
+    executeUpdate(s"CREATE SCHEMA IF NOT EXISTS ${SqlIdent.quote(lightDB.name)}", tx)
   }
 
   protected def createTable(tx: TX): Unit = {
     val entries = fields.collect {
       case field if !field.rw.definition.className.contains("lightdb.spatial.GeoPoint") =>
         if field == model._id then {
-          "_id VARCHAR NOT NULL PRIMARY KEY"
+          s"${SqlIdent.quote("_id")} VARCHAR NOT NULL PRIMARY KEY"
         } else {
           val t = def2Type(field.name, field.rw.definition)
-          s"${field.name} $t"
+          s"${SqlIdent.quote(field.name)} $t"
         }
     }.mkString(", ")
     executeUpdate(s"CREATE TABLE IF NOT EXISTS $fqn($entries)", tx)
@@ -88,7 +93,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def addColumn(field: Field[Doc, _], tx: TX): Unit = {
     scribe.info(s"Adding column $fqn.${field.name}")
-    executeUpdate(s"ALTER TABLE $fqn ADD COLUMN ${field.name} ${def2Type(field.name, field.rw.definition)}", tx)
+    executeUpdate(s"ALTER TABLE $fqn ADD COLUMN ${SqlIdent.quote(field.name)} ${def2Type(field.name, field.rw.definition)}", tx)
   }
 
   protected def initConnection(connection: Connection): Unit = {}
@@ -107,19 +112,26 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
     val fieldNames = fields.map(_.name.toLowerCase).toSet
 
-    // Remove bad indexes
+    // Remove LightDB-generated indexes that no longer correspond to a model field. The naming
+    // convention is `${storeName}_${columnName}_idx` (or just `${columnName}_idx` for some
+    // older entries). Anything that doesn't match either pattern is left alone — those are
+    // backend-managed indexes (H2's `primary_key_*`, SQLite's `sqlite_autoindex_*`, etc.) and
+    // dropping them would break the schema.
     val CN1 = """.+_(.+)_idx""".r
     val CN2 = """(.+)_idx""".r
     val existingIndexes = indexes(connection)
     existingIndexes.filterNot(_.contains("autoindex")).foreach { name =>
-      val columnName = name match {
-        case CN1(n) => n
-        case CN2(n) => n
+      val columnNameOpt: Option[String] = name match {
+        case CN1(n) => Some(n)
+        case CN2(n) => Some(n)
+        case _ => None
       }
-      val exists = fieldNames.contains(columnName)
-      if !exists then {
-        scribe.info(s"Removing unused index: $name")
-        executeUpdate(s"DROP INDEX IF EXISTS $name", tx)
+      columnNameOpt.foreach { columnName =>
+        val exists = fieldNames.contains(columnName)
+        if !exists then {
+          scribe.info(s"Removing unused index: $name")
+          executeUpdate(s"DROP INDEX IF EXISTS $name", tx)
+        }
       }
     }
     connection.commit()
@@ -130,7 +142,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     existingColumns.foreach { name =>
       if !fieldNames.contains(name.toLowerCase) then {
         scribe.info(s"Removing column $fqn.$name (existing: ${existingColumns.mkString(", ")}, expected: ${fieldNames.mkString(", ")}).")
-        executeUpdate(s"ALTER TABLE $fqn DROP COLUMN $name", tx)
+        executeUpdate(s"ALTER TABLE $fqn DROP COLUMN ${SqlIdent.quote(name)}", tx)
       }
     }
     // Add columns
@@ -156,17 +168,17 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   protected def createUniqueIndexSQL(index: UniqueIndex[Doc, _]): String =
-    s"CREATE UNIQUE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn(${index.name})"
+    s"CREATE UNIQUE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${index.name}_idx")} ON $fqn(${SqlIdent.quote(index.name)})"
 
   protected def createIndexSQL(index: Indexed[Doc, _]): String =
-    s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn(${index.name})"
+    s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${index.name}_idx")} ON $fqn(${SqlIdent.quote(index.name)})"
 
   protected def createCompositeIndexSQL(compositeIndex: CompositeIndex[Doc]): String = {
     val include = compositeIndex.include match {
       case Nil => ""
-      case list => s" INCLUDE(${list.map(_.name).mkString(", ")})"
+      case list => s" INCLUDE(${list.map(f => SqlIdent.quote(f.name)).mkString(", ")})"
     }
-    s"CREATE INDEX IF NOT EXISTS ${name}_${compositeIndex.name}_idx ON $fqn(${compositeIndex.fields.map(_.name).mkString(", ")})$include"
+    s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${compositeIndex.name}_idx")} ON $fqn(${compositeIndex.fields.map(f => SqlIdent.quote(f.name)).mkString(", ")})$include"
   }
 
   protected def tables(connection: Connection): Set[String]
@@ -216,12 +228,12 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def createInsertSQL(): String = {
     val values = fields.map(field2Value)
-    s"$insertPrefix INTO $fqn(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+    s"$insertPrefix INTO $fqn(${fields.map(f => SqlIdent.quote(f.name)).mkString(", ")}) VALUES(${values.mkString(", ")})"
   }
 
   protected def createUpsertSQL(): String = {
     val values = fields.map(field2Value)
-    s"$upsertPrefix INTO $fqn(${fields.map(_.name).mkString(", ")}) VALUES(${values.mkString(", ")})"
+    s"$upsertPrefix INTO $fqn(${fields.map(f => SqlIdent.quote(f.name)).mkString(", ")}) VALUES(${values.mkString(", ")})"
   }
 
   private[sql] lazy val insertSQL: String = createInsertSQL()

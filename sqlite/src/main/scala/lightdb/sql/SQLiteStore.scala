@@ -69,30 +69,34 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     val tokenized = fields.collect { case t: lightdb.field.Field.Tokenized[Doc] => t }
     if tokenized.isEmpty then ()
     else {
-      val ftsTable = s"${this.name}__fts"
+      val ftsTableName = s"${this.name}__fts"
+      val ftsQ = SqlIdent.quote(ftsTableName)
+      val baseQ = SqlIdent.quote(this.name)
+      val idCol = SqlIdent.quote("_id")
       val cols = tokenized.map(_.name)
-      // contentless fts: we manage inserts via triggers
-      val colSql = (List("_id UNINDEXED") ::: cols).mkString(", ")
-      executeUpdate(s"CREATE VIRTUAL TABLE IF NOT EXISTS $ftsTable USING fts5($colSql)", tx)
+      val colsQ = cols.map(SqlIdent.quote)
+      // contentless fts5: identifiers quoted; `UNINDEXED` is an FTS5 keyword and stays bare.
+      val colSql = (List(s"$idCol UNINDEXED") ::: colsQ).mkString(", ")
+      executeUpdate(s"CREATE VIRTUAL TABLE IF NOT EXISTS $ftsQ USING fts5($colSql)", tx)
 
       // Keep FTS table in sync with base table.
-      val insertCols = ("_id" :: cols).mkString(", ")
-      val newCols = ("new._id" :: cols.map(c => s"new.$c")).mkString(", ")
+      val insertCols = (idCol :: colsQ).mkString(", ")
+      val newCols = (s"new.$idCol" :: colsQ.map(c => s"new.$c")).mkString(", ")
 
       executeUpdate(
-        s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ai AFTER INSERT ON ${this.name} BEGIN
-           |  INSERT INTO $ftsTable($insertCols) VALUES($newCols);
+        s"""CREATE TRIGGER IF NOT EXISTS ${SqlIdent.quote(s"${this.name}__fts_ai")} AFTER INSERT ON $baseQ BEGIN
+           |  INSERT INTO $ftsQ($insertCols) VALUES($newCols);
            |END;""".stripMargin, tx
       )
       executeUpdate(
-        s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_ad AFTER DELETE ON ${this.name} BEGIN
-           |  DELETE FROM $ftsTable WHERE _id = old._id;
-         |END;""".stripMargin, tx
-    )
-    executeUpdate(
-      s"""CREATE TRIGGER IF NOT EXISTS ${this.name}__fts_au AFTER UPDATE ON ${this.name} BEGIN
-         |  DELETE FROM $ftsTable WHERE _id = old._id;
-         |  INSERT INTO $ftsTable($insertCols) VALUES($newCols);
+        s"""CREATE TRIGGER IF NOT EXISTS ${SqlIdent.quote(s"${this.name}__fts_ad")} AFTER DELETE ON $baseQ BEGIN
+           |  DELETE FROM $ftsQ WHERE $idCol = old.$idCol;
+           |END;""".stripMargin, tx
+      )
+      executeUpdate(
+        s"""CREATE TRIGGER IF NOT EXISTS ${SqlIdent.quote(s"${this.name}__fts_au")} AFTER UPDATE ON $baseQ BEGIN
+           |  DELETE FROM $ftsQ WHERE $idCol = old.$idCol;
+           |  INSERT INTO $ftsQ($insertCols) VALUES($newCols);
            |END;""".stripMargin, tx
       )
     }
@@ -105,28 +109,37 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     }
     arrayIndexed.foreach { f =>
       val mvTable = s"${this.name}__mv__${f.name}"
-      executeUpdate(s"CREATE TABLE IF NOT EXISTS $mvTable(owner_id TEXT NOT NULL, value TEXT NOT NULL)", tx)
-      executeUpdate(s"CREATE INDEX IF NOT EXISTS ${mvTable}__value_idx ON $mvTable(value)", tx)
-      executeUpdate(s"CREATE INDEX IF NOT EXISTS ${mvTable}__owner_value_idx ON $mvTable(owner_id, value)", tx)
+      val mvQ = SqlIdent.quote(mvTable)
+      val ownerCol = SqlIdent.quote("owner_id")
+      val valueCol = SqlIdent.quote("value")
+      val baseTable = SqlIdent.quote(this.name)
+      val idCol = SqlIdent.quote("_id")
+      val fieldCol = SqlIdent.quote(f.name)
+      executeUpdate(s"CREATE TABLE IF NOT EXISTS $mvQ($ownerCol TEXT NOT NULL, $valueCol TEXT NOT NULL)", tx)
+      executeUpdate(s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${mvTable}__value_idx")} ON $mvQ($valueCol)", tx)
+      executeUpdate(s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${mvTable}__owner_value_idx")} ON $mvQ($ownerCol, $valueCol)", tx)
 
-      // Sync table via triggers using json_each(new.<field>).
+      // Sync table via triggers using json_each(new.<field>). The trigger body references
+      // the OLD/NEW row values via SQLite's `new` / `old` aliases — those are SQLite keywords,
+      // not user identifiers, so they're left unquoted; the column names after the dot ARE
+      // identifiers, so quote them.
       executeUpdate(
-        s"""CREATE TRIGGER IF NOT EXISTS ${mvTable}__ai AFTER INSERT ON ${this.name} BEGIN
-           |  DELETE FROM $mvTable WHERE owner_id = new._id;
-           |  INSERT INTO $mvTable(owner_id, value)
-           |    SELECT new._id, CAST(value AS TEXT) FROM json_each(new.${f.name});
+        s"""CREATE TRIGGER IF NOT EXISTS ${SqlIdent.quote(s"${mvTable}__ai")} AFTER INSERT ON $baseTable BEGIN
+           |  DELETE FROM $mvQ WHERE $ownerCol = new.$idCol;
+           |  INSERT INTO $mvQ($ownerCol, $valueCol)
+           |    SELECT new.$idCol, CAST($valueCol AS TEXT) FROM json_each(new.$fieldCol);
            |END;""".stripMargin, tx
       )
       executeUpdate(
-        s"""CREATE TRIGGER IF NOT EXISTS ${mvTable}__au AFTER UPDATE ON ${this.name} BEGIN
-           |  DELETE FROM $mvTable WHERE owner_id = new._id;
-           |  INSERT INTO $mvTable(owner_id, value)
-           |    SELECT new._id, CAST(value AS TEXT) FROM json_each(new.${f.name});
+        s"""CREATE TRIGGER IF NOT EXISTS ${SqlIdent.quote(s"${mvTable}__au")} AFTER UPDATE ON $baseTable BEGIN
+           |  DELETE FROM $mvQ WHERE $ownerCol = new.$idCol;
+           |  INSERT INTO $mvQ($ownerCol, $valueCol)
+           |    SELECT new.$idCol, CAST($valueCol AS TEXT) FROM json_each(new.$fieldCol);
            |END;""".stripMargin, tx
       )
       executeUpdate(
-        s"""CREATE TRIGGER IF NOT EXISTS ${mvTable}__ad AFTER DELETE ON ${this.name} BEGIN
-           |  DELETE FROM $mvTable WHERE owner_id = old._id;
+        s"""CREATE TRIGGER IF NOT EXISTS ${SqlIdent.quote(s"${mvTable}__ad")} AFTER DELETE ON $baseTable BEGIN
+           |  DELETE FROM $mvQ WHERE $ownerCol = old.$idCol;
            |END;""".stripMargin, tx
       )
     }

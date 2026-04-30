@@ -3,7 +3,7 @@ package lightdb.duckdb
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.connect.{ConnectionManager, DBCPConnectionManager, SQLConfig}
-import lightdb.sql.{SQLDatabase, SQLState, SQLStore}
+import lightdb.sql.{SQLDatabase, SQLState, SQLStore, SqlIdent}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.transaction.batch.BatchConfig
@@ -22,11 +22,15 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
   override type TX = DuckDBTransaction[Doc, Model]
 
   override protected def createUpsertSQL(): String = {
-    val cols = fields.map(_.name)
+    val cols = fields.map(f => SqlIdent.quote(f.name))
     val values = cols.map(_ => "?")
-    val assignments = fields.filterNot(_ == model._id).map(f => s"${f.name}=excluded.${f.name}")
-    val update = if assignments.nonEmpty then assignments.mkString(", ") else s"${model._id.name}=${model._id.name}"
-    s"INSERT INTO $fqn(${cols.mkString(", ")}) VALUES(${values.mkString(", ")}) ON CONFLICT(${model._id.name}) DO UPDATE SET $update"
+    val assignments = fields.filterNot(_ == model._id).map { f =>
+      val q = SqlIdent.quote(f.name)
+      s"$q=excluded.$q"
+    }
+    val idCol = SqlIdent.quote(model._id.name)
+    val update = if assignments.nonEmpty then assignments.mkString(", ") else s"$idCol=$idCol"
+    s"INSERT INTO $fqn(${cols.mkString(", ")}) VALUES(${values.mkString(", ")}) ON CONFLICT($idCol) DO UPDATE SET $update"
   }
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
