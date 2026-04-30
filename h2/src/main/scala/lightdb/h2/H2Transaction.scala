@@ -7,7 +7,7 @@ import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.Geo
 import lightdb.sql.query.SQLPart
-import lightdb.sql.{SQLState, SQLStoreTransaction}
+import lightdb.sql.{SQLState, SQLStoreTransaction, SqlIdent}
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import fabric.{Bool, Json, NumDec, NumInt, Str}
@@ -42,8 +42,12 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val extracted = values.flatMap(jsonToMVValue)
       if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
       else {
+        val mv = SqlIdent.quote(mvTable(fieldName))
+        val ownerCol = SqlIdent.quote("owner_id")
+        val valueCol = SqlIdent.quote("value")
+        val idCol = SqlIdent.quote("_id")
         val parts = extracted.map { v =>
-          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+          SQLPart(s"EXISTS (SELECT 1 FROM $mv WHERE $ownerCol = $idCol AND $valueCol = ?)", v.json)
         }
         Some(SQLQuery(parts.intersperse(SQLPart.Fragment(" AND "))))
       }
@@ -56,8 +60,12 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val extracted = values.flatMap(jsonToMVValue)
       if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
       else {
+        val mv = SqlIdent.quote(mvTable(fieldName))
+        val ownerCol = SqlIdent.quote("owner_id")
+        val valueCol = SqlIdent.quote("value")
+        val idCol = SqlIdent.quote("_id")
         val inner = extracted.map { v =>
-          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+          SQLPart(s"EXISTS (SELECT 1 FROM $mv WHERE $ownerCol = $idCol AND $valueCol = ?)", v.json)
         }
         Some(SQLQuery(List(SQLPart.Fragment("NOT("), SQLQuery(inner.intersperse(SQLPart.Fragment(" AND "))), SQLPart.Fragment(")"))))
       }
@@ -88,8 +96,8 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val tokens = tokenize(raw)
       if tokens.isEmpty then None
       else {
-        val scoreColumn = "__score"
-        val qualified = s"LOWER(${store.fqn}.${fieldName})"
+        val scoreColumn = SqlIdent.quote("__score")
+        val qualified = s"LOWER(${store.fqn}.${SqlIdent.quote(fieldName)})"
         val cond = tokens.map(_ => s"CASE WHEN $qualified LIKE ? THEN 1 ELSE 0 END").mkString(" + ")
         val scoreField = SQLPart(s"($cond) AS $scoreColumn", tokens.map(t => s"%$t%".json): _*)
         val dir = direction match {
@@ -102,22 +110,27 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
   }
 
-  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = List(
-    SQLPart(s"GEO_DISTANCE_JSON(${d.field.name}, ?) AS ${d.field.name}Distance", d.from.json),
-    SQLPart(s"GEO_DISTANCE_MIN(${d.field.name}, ?) AS ${d.field.name}DistanceMin", d.from.json)
-  )
+  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = {
+    val col = SqlIdent.quote(d.field.name)
+    val aliasJson = SqlIdent.quote(s"${d.field.name}Distance")
+    val aliasMin = SqlIdent.quote(s"${d.field.name}DistanceMin")
+    List(
+      SQLPart(s"GEO_DISTANCE_JSON($col, ?) AS $aliasJson", d.from.json),
+      SQLPart(s"GEO_DISTANCE_MIN($col, ?) AS $aliasMin", d.from.json)
+    )
+  }
 
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
-    SQLPart(s"GEO_DISTANCE_MIN(${f.fieldName}, ?) <= ?", f.from.json, f.radius.valueInMeters.json)
+    SQLPart(s"GEO_DISTANCE_MIN(${SqlIdent.quote(f.fieldName)}, ?) <= ?", f.from.json, f.radius.valueInMeters.json)
 
   override protected def spatialContainsFilter(f: Filter.SpatialContains[Doc]): SQLPart =
-    SQLPart(s"GEO_SPATIAL_CONTAINS(${f.fieldName}, ?) = 1", f.geo.toJson)
+    SQLPart(s"GEO_SPATIAL_CONTAINS(${SqlIdent.quote(f.fieldName)}, ?) = 1", f.geo.toJson)
 
   override protected def spatialIntersectsFilter(f: Filter.SpatialIntersects[Doc]): SQLPart =
-    SQLPart(s"GEO_SPATIAL_INTERSECTS(${f.fieldName}, ?) = 1", f.geo.toJson)
+    SQLPart(s"GEO_SPATIAL_INTERSECTS(${SqlIdent.quote(f.fieldName)}, ?) = 1", f.geo.toJson)
 
   override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
     val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
-    SQLPart.Fragment(s"${field.name}DistanceMin $dir")
+    SQLPart.Fragment(s"${SqlIdent.quote(s"${field.name}DistanceMin")} $dir")
   }
 }

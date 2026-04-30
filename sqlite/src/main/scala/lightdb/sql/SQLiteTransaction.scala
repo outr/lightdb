@@ -6,6 +6,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.Geo
+import lightdb.sql.SqlIdent
 import lightdb.sql.query.SQLPart
 import lightdb.sql.query.SQLQuery
 import lightdb.store.Conversion
@@ -23,7 +24,7 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
 
   private def ftsTableName: String = s"${store.name}__fts"
-  private def scoreColumn: String = "__score"
+  private def scoreColumn: String = SqlIdent.quote("__score")
 
   private def tokenizeQuery(value: String): String = {
     val tokens = value.split("\\s+").toList.map(_.trim).filter(_.nonEmpty)
@@ -51,10 +52,12 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     else {
       findFirstTokenizedEquals(filter).map { raw =>
         val q = tokenizeQuery(raw)
-        // Use USING(_id) to avoid ambiguous column name errors when selecting "_id" from the base table + fts table.
-        val join = List(SQLPart.Fragment(s" JOIN $ftsTableName USING(_id)"))
-        val matchFilter = SQLPart(s"$ftsTableName MATCH ?", q.json)
-        val scoreField = SQLPart.Fragment(s"(-bm25($ftsTableName)) AS $scoreColumn")
+        val fts = SqlIdent.quote(ftsTableName)
+        val idCol = SqlIdent.quote("_id")
+        // USING("_id") avoids ambiguous column name errors when selecting `_id` from base+fts.
+        val join = List(SQLPart.Fragment(s" JOIN $fts USING($idCol)"))
+        val matchFilter = SQLPart(s"$fts MATCH ?", q.json)
+        val scoreField = SQLPart.Fragment(s"(-bm25($fts)) AS $scoreColumn")
         val dir = direction match {
           case SortDirection.Descending => "DESC"
           case SortDirection.Ascending => "ASC"
@@ -70,8 +73,10 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     if !SQLiteStore.EnableFTS then super.tokenizedEqualsPart(fieldName, value)
     else {
       val query = tokenizeQuery(value)
+      val idCol = SqlIdent.quote("_id")
+      val fts = SqlIdent.quote(ftsTableName)
       // contentless fts table stores _id and tokenized columns
-      SQLPart(s"_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?)", query.json)
+      SQLPart(s"$idCol IN (SELECT $idCol FROM $fts WHERE $fts MATCH ?)", query.json)
     }
   }
 
@@ -79,7 +84,9 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     if !SQLiteStore.EnableFTS then super.tokenizedNotEqualsPart(fieldName, value)
     else {
       val query = tokenizeQuery(value)
-      SQLPart(s"NOT(_id IN (SELECT _id FROM $ftsTableName WHERE $ftsTableName MATCH ?))", query.json)
+      val idCol = SqlIdent.quote("_id")
+      val fts = SqlIdent.quote(ftsTableName)
+      SQLPart(s"NOT($idCol IN (SELECT $idCol FROM $fts WHERE $fts MATCH ?))", query.json)
     }
   }
 
@@ -100,8 +107,12 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val extracted = values.flatMap(jsonToMVValue)
       if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
       else {
+        val mv = SqlIdent.quote(mvTable(fieldName))
+        val ownerCol = SqlIdent.quote("owner_id")
+        val valueCol = SqlIdent.quote("value")
+        val idCol = SqlIdent.quote("_id")
         val parts = extracted.map { v =>
-          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+          SQLPart(s"EXISTS (SELECT 1 FROM $mv WHERE $ownerCol = $idCol AND $valueCol = ?)", v.json)
         }
         Some(SQLQuery(parts.intersperse(SQLPart.Fragment(" AND "))))
       }
@@ -114,28 +125,38 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val extracted = values.flatMap(jsonToMVValue)
       if extracted.isEmpty then Some(SQLPart.Fragment("1=1"))
       else {
+        val mv = SqlIdent.quote(mvTable(fieldName))
+        val ownerCol = SqlIdent.quote("owner_id")
+        val valueCol = SqlIdent.quote("value")
+        val idCol = SqlIdent.quote("_id")
         val inner = extracted.map { v =>
-          SQLPart(s"EXISTS (SELECT 1 FROM ${mvTable(fieldName)} WHERE owner_id = _id AND value = ?)", v.json)
+          SQLPart(s"EXISTS (SELECT 1 FROM $mv WHERE $ownerCol = $idCol AND $valueCol = ?)", v.json)
         }
         Some(SQLQuery(List(SQLPart.Fragment("NOT("), SQLQuery(inner.intersperse(SQLPart.Fragment(" AND "))), SQLPart.Fragment(")"))))
       }
     }
   }
 
-  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] =
-    List(SQLPart(s"DISTANCE(${d.field.name}, ?) AS ${d.field.name}Distance", d.from.json))
+  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = {
+    val col = SqlIdent.quote(d.field.name)
+    val alias = SqlIdent.quote(s"${d.field.name}Distance")
+    List(SQLPart(s"DISTANCE($col, ?) AS $alias", d.from.json))
+  }
 
   override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
-    SQLPart(s"DISTANCE_LESS_THAN(${f.fieldName}Distance, ?)", f.radius.valueInMeters.json)
+    SQLPart(s"DISTANCE_LESS_THAN(${SqlIdent.quote(s"${f.fieldName}Distance")}, ?)", f.radius.valueInMeters.json)
 
   override protected def spatialContainsFilter(f: Filter.SpatialContains[Doc]): SQLPart =
-    SQLPart(s"SPATIAL_CONTAINS(${f.fieldName}, ?) = 1", f.geo.toJson)
+    SQLPart(s"SPATIAL_CONTAINS(${SqlIdent.quote(f.fieldName)}, ?) = 1", f.geo.toJson)
 
   override protected def spatialIntersectsFilter(f: Filter.SpatialIntersects[Doc]): SQLPart =
-    SQLPart(s"SPATIAL_INTERSECTS(${f.fieldName}, ?) = 1", f.geo.toJson)
+    SQLPart(s"SPATIAL_INTERSECTS(${SqlIdent.quote(f.fieldName)}, ?) = 1", f.geo.toJson)
 
-  override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = direction match {
-    case SortDirection.Ascending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_ASCENDING")
-    case SortDirection.Descending => SQLPart(s"${field.name}Distance COLLATE DISTANCE_SORT_DESCENDING")
+  override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
+    val col = SqlIdent.quote(s"${field.name}Distance")
+    direction match {
+      case SortDirection.Ascending => SQLPart(s"$col COLLATE DISTANCE_SORT_ASCENDING")
+      case SortDirection.Descending => SQLPart(s"$col COLLATE DISTANCE_SORT_DESCENDING")
+    }
   }
 }

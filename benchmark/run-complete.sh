@@ -58,6 +58,38 @@ RESULT_KV="$RESULT_DIR/jmh-results-kv.json"
 RESULT_COLL="$RESULT_DIR/jmh-results-coll.json"
 LOG_FILE="$RESULT_DIR/${MODE}.log"
 
+# Benchmark data root. Default to a project-local cache so it's NOT under /tmp (tmpfs on most
+# Linux distros, ~few GB max — fills up fast under `full` with recordCount=100k × all backends ×
+# buffered/async batch). Override with `LIGHTDB_BENCH_DIR=/some/big/disk ./run-complete.sh full`.
+# We export it so the JMH child JVMs see it.
+: "${LIGHTDB_BENCH_DIR:=$HOME/.cache/lightdb-bench}"
+export LIGHTDB_BENCH_DIR
+mkdir -p "$LIGHTDB_BENCH_DIR"
+
+# Helper: wipe leaked per-trial dirs in $LIGHTDB_BENCH_DIR (the per-trial cleanup in @TearDown
+# can be skipped when @Setup itself crashes, leaking 100s of MB of backend state per failure —
+# left to accumulate, this is exactly what filled the disk on the overnight run).
+sweep_bench_dir() {
+  if [[ -d "$LIGHTDB_BENCH_DIR" ]]; then
+    find "$LIGHTDB_BENCH_DIR" -maxdepth 1 -mindepth 1 -name 'lightdb-bench-*' -exec rm -rf {} + || true
+  fi
+}
+
+# Free-space probe so a known-too-small disk fails the run early instead of after 2 hours of
+# cycling through failing benchmark configs.
+report_disk() {
+  local label="$1"
+  local avail_kb
+  avail_kb=$(df -P "$LIGHTDB_BENCH_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
+  if [[ -n "$avail_kb" ]]; then
+    local avail_gb=$(( avail_kb / 1024 / 1024 ))
+    echo "[run-complete.sh] $label: $LIGHTDB_BENCH_DIR has ${avail_gb}G free"
+    if (( avail_gb < 5 )); then
+      echo "[run-complete.sh] WARNING: <5G free at bench data root; full mode typically needs ~10G headroom" >&2
+    fi
+  fi
+}
+
 # --- mode-specific knobs --------------------------------------------------------------------
 
 #
@@ -128,6 +160,8 @@ echo "[run-complete.sh] kv backends:    $BACKENDS_KV"
 echo "[run-complete.sh] coll backends:  $BACKENDS_COLL"
 echo "[run-complete.sh] threads:        ${THREADS_LIST[*]}"
 echo "[run-complete.sh] output dir:     $RESULT_DIR"
+echo "[run-complete.sh] bench data dir: $LIGHTDB_BENCH_DIR"
+report_disk "before run"
 echo
 
 # Pass 1: all-backends (KV state) — read, write, concurrency
@@ -186,16 +220,31 @@ JMH_JVM_ARGS_STR="${JMH_JVM_FLAGS[*]}"
   fi
 
   echo
+  echo "===== sweep: clear leftover bench data ====="
+  sweep_bench_dir
+  report_disk "after pre-run sweep"
+
+  echo
   echo "===== pass 1/2: KV + write + concurrency ====="
   java "${JMH_JVM_FLAGS[@]}" -jar "$BENCHMARK_JAR" \
     -jvmArgs "$JMH_JVM_ARGS_STR" \
     "${KV_ARGS[@]}"
 
   echo
+  echo "===== sweep: clear leaked per-trial dirs between passes ====="
+  sweep_bench_dir
+  report_disk "after pass 1"
+
+  echo
   echo "===== pass 2/2: collection queries ====="
   java "${JMH_JVM_FLAGS[@]}" -jar "$BENCHMARK_JAR" \
     -jvmArgs "$JMH_JVM_ARGS_STR" \
     "${COLL_ARGS[@]}"
+
+  echo
+  echo "===== sweep: final cleanup ====="
+  sweep_bench_dir
+  report_disk "after run"
 
   echo
   echo "===== render: markdown + SVG charts ====="

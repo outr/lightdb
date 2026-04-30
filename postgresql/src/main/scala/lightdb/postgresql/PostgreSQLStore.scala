@@ -5,7 +5,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.sql.connect.ConnectionManager
-import lightdb.sql.{SQLState, SQLStore}
+import lightdb.sql.{SQLState, SQLStore, SqlIdent}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.transaction.batch.BatchConfig
@@ -38,13 +38,14 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   override protected def createIndexSQL(index: Field.Indexed[Doc, _]): String = {
+    val col = SqlIdent.quote(index.name)
     index match {
       case _: Field.Tokenized[Doc @unchecked] =>
         // Use trigram GIN index for tokenized fields to accelerate ILIKE/LIKE searches
-        s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_trgm_idx ON $fqn USING gin (${index.name} gin_trgm_ops)"
+        s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${index.name}_trgm_idx")} ON $fqn USING gin ($col gin_trgm_ops)"
       case _ if index.isArr =>
         // Use pg_trgm gin for arrays
-        s"CREATE INDEX IF NOT EXISTS ${name}_${index.name}_idx ON $fqn USING gin (${index.name} gin_trgm_ops)"
+        s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${index.name}_idx")} ON $fqn USING gin ($col gin_trgm_ops)"
       case _ => super.createIndexSQL(index)
     }
   }
@@ -82,15 +83,18 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   override protected def createUpsertSQL(): String = {
-    val fieldNames = fields.map(_.name)
+    val fieldNames = fields.map(f => SqlIdent.quote(f.name))
     val values = fields.map(field2Value)
-    s"""MERGE INTO $fqn target
-       |USING (VALUES (${values.mkString(", ")})) AS source (${fieldNames.mkString(", ")})
-       |ON target._id = source._id
+    val target = SqlIdent.quote("target")
+    val source = SqlIdent.quote("source")
+    val idCol = SqlIdent.quote("_id")
+    s"""MERGE INTO $fqn $target
+       |USING (VALUES (${values.mkString(", ")})) AS $source (${fieldNames.mkString(", ")})
+       |ON $target.$idCol = $source.$idCol
        |WHEN MATCHED THEN
-       |    UPDATE SET ${fieldNames.map(f => s"$f = source.$f").mkString(", ")}
+       |    UPDATE SET ${fieldNames.map(f => s"$f = $source.$f").mkString(", ")}
        |WHEN NOT MATCHED THEN
-       |    INSERT (${fieldNames.mkString(", ")}) VALUES (${fieldNames.map(f => s"source.$f").mkString(", ")});
+       |    INSERT (${fieldNames.mkString(", ")}) VALUES (${fieldNames.map(f => s"$source.$f").mkString(", ")});
        |""".stripMargin
   }
 
