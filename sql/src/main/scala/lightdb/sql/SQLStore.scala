@@ -82,7 +82,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   protected def def2Type(name: String, d: Definition): String = d.defType match {
-    case DefType.Str | DefType.Json | DefType.Obj(_) | DefType.Arr(_) | DefType.Poly(_) =>
+    case DefType.Str | DefType.Json | DefType.Obj(_) | DefType.Arr(_) | DefType.Poly(_, _) =>
       "VARCHAR"
     case DefType.Int => "BIGINT"
     case DefType.Bool => "TINYINT"

@@ -741,7 +741,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case _ if field.name == "_id" =>
       // `_id` is reserved in OpenSearch and is not present in `_source`; we store it in `__lightdb_id`.
       InternalIdFieldName
-    case DefType.Str | DefType.Poly(_) =>
+    case DefType.Str | DefType.Poly(_, _) =>
       s"${rewriteReservedIdFieldName(field.name)}.keyword"
     case DefType.Opt(d) =>
       sortFieldNameFromDef(rewriteReservedIdFieldName(field.name), d)
@@ -753,7 +753,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def sortFieldNameFromDef(fieldName: String, d: Definition): String = d.defType match {
     case _ if fieldName == "_id" => InternalIdFieldName
-    case DefType.Str | DefType.Poly(_) => s"$fieldName.keyword"
+    case DefType.Str | DefType.Poly(_, _) => s"$fieldName.keyword"
     case DefType.Opt(inner) => sortFieldNameFromDef(fieldName, inner)
     case DefType.Arr(inner) => sortFieldNameFromDef(fieldName, inner)
     case _ => fieldName
@@ -766,7 +766,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   private def fieldNameForExact(field: Field[Doc, _]): String = field.rw.definition.defType match {
     case _ if field.name == "_id" =>
       InternalIdFieldName
-    case DefType.Str | DefType.Poly(_) if !field.isInstanceOf[Tokenized[_]] =>
+    case DefType.Str | DefType.Poly(_, _) if !field.isInstanceOf[Tokenized[_]] =>
       s"${rewriteReservedIdFieldName(field.name)}.keyword"
     case DefType.Opt(d) =>
       fieldNameForExactFromDef(rewriteReservedIdFieldName(field.name), d, tokenized = field.isInstanceOf[Tokenized[_]])
@@ -778,7 +778,7 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def fieldNameForExactFromDef(fieldName: String, d: Definition, tokenized: Boolean): String = d.defType match {
     case _ if fieldName == "_id" => InternalIdFieldName
-    case DefType.Str | DefType.Poly(_) if !tokenized => s"$fieldName.keyword"
+    case DefType.Str | DefType.Poly(_, _) if !tokenized => s"$fieldName.keyword"
     case DefType.Opt(inner) => fieldNameForExactFromDef(fieldName, inner, tokenized)
     case DefType.Arr(inner) => fieldNameForExactFromDef(fieldName, inner, tokenized)
     case _ => fieldName

@@ -315,7 +315,7 @@ object OpenSearchTemplates {
   }
 
   private def mappingForField[Doc <: Document[Doc]](field: Field[Doc, _], config: OpenSearchConfig): Json = field.rw.definition.defType match {
-    case DefType.Str | DefType.Poly(_) =>
+    case DefType.Str | DefType.Poly(_, _) =>
       stringMapping(field, config)
     case DefType.Bool =>
       obj("type" -> str("boolean"))
@@ -371,7 +371,7 @@ object OpenSearchTemplates {
   }
 
   private def mappingForDefType[Doc <: Document[Doc]](field: Field[Doc, _], d: Definition, config: OpenSearchConfig): Json = d.defType match {
-    case DefType.Str | DefType.Poly(_) => stringMapping(field, config)
+    case DefType.Str | DefType.Poly(_, _) => stringMapping(field, config)
     case DefType.Bool => obj("type" -> str("boolean"))
     case DefType.Int => obj("type" -> str("long"))
     case DefType.Dec => obj("type" -> str("double"))
@@ -407,7 +407,7 @@ object OpenSearchTemplates {
   }
 
   private def nestedScalarMapping(d: Definition, config: OpenSearchConfig): Json = d.defType match {
-    case DefType.Str | DefType.Poly(_) =>
+    case DefType.Str | DefType.Poly(_, _) =>
       val keyword = if config.keywordNormalize then {
         obj("type" -> str("keyword"), "normalizer" -> str(KeywordNormalizerName))
       } else {

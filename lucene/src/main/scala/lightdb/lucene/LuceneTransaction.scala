@@ -347,7 +347,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       // We only support distinct on fields that have a corresponding docvalues sort field (`<name>Sort`), i.e.:
       // Str/Enum/Int/Dec and Option variants. (Arrays/objects don't have a single docvalues term.)
       def supported(defType: DefType): Boolean = defType match {
-        case DefType.Str | DefType.Poly(_) | DefType.Int | DefType.Dec => true
+        case DefType.Str | DefType.Poly(_, _) | DefType.Int | DefType.Dec => true
         case DefType.Opt(d) => supported(d.defType)
         case _ => false
       }
@@ -581,7 +581,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                 case _ => add(new StringField(field.name, json.asString, fs))
               }
               case DefType.Opt(inner) => addJson(json, inner.defType)
-              case DefType.Json | DefType.Obj(_) | DefType.Poly(_) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
+              case DefType.Json | DefType.Obj(_) | DefType.Poly(_, _) => add(new StringField(field.name, JsonFormatter.Compact(json), fs))
               case _ if json == Null => // Ignore null values
               case DefType.Arr(inner) =>
                 val v = json.asVector

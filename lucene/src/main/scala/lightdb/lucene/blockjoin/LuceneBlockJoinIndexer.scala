@@ -103,7 +103,7 @@ object LuceneBlockJoinIndexer {
                   }
                 case DefType.Opt(d2) =>
                   addJson(j, d2.defType)
-                case DefType.Json | DefType.Obj(_) | DefType.Poly(_) =>
+                case DefType.Json | DefType.Obj(_) | DefType.Poly(_, _) =>
                   add(new StringField(fieldName, JsonFormatter.Compact(j), storeField))
                 case _ if j == fabric.Null =>
                 case DefType.Arr(d2) =>
