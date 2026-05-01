@@ -62,11 +62,11 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val rapidVersion: String = "2.9.3"
 
-val profigVersion: String = "3.7.0"
+val profigVersion: String = "3.7.1"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "1.8.2"
+val spiceVersion: String = "1.8.3"
 
 val scantivyVersion: String = "1.0.0"
 
