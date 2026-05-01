@@ -102,7 +102,7 @@ val duckdbVersion: String = "1.5.2.1"
 
 val h2Version: String = "2.4.240"
 
-val postgresqlVersion: String = "42.7.9"
+val postgresqlVersion: String = "42.7.11"
 
 val googleSheetsVersion: String = "v4-rev20260213-2.0.0"
 
