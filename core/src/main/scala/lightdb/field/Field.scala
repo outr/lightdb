@@ -193,7 +193,9 @@ object Field {
       case _ => false
     })
     case DefType.Opt(d) => string2Json(name, s, d)
-    case DefType.Poly(_) => str(s)
+    // Fabric 1.27 added a `commonFields` map to Poly (intersection across subtypes); we don't
+    // need it here — string-encoded poly values still round-trip as raw strings.
+    case DefType.Poly(_, _) => str(s)
     case DefType.Arr(d) if !s.startsWith("[") => arr(s.split(";;").toList.map(string2Json(name, _, d)): _*)
     case _ => try {
       JsonParser(s)
