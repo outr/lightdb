@@ -70,7 +70,10 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
           val fieldNames = model.fields.map(_.name).toSet
           val missing = jc.rw.definition.defType match {
             case DefType.Obj(map) => map.keys.filterNot(fieldNames.contains).toList
-            case DefType.Poly(values) =>
+            case DefType.Poly(values, _) =>
+              // Fabric 1.27 added `commonFields` (intersection across subtypes). It's a subset
+              // of any subtype's fields, so iterating `values` already covers it — no need to
+              // merge separately.
               values.values.flatMap(_.defType.asInstanceOf[DefType.Obj].map.keys).filterNot(fieldNames.contains).toList.distinct
             case _ => Nil
           }

@@ -93,7 +93,7 @@ object TantivySchema {
     // Store JSON-typed fields as opaque STRING blobs. Tantivy's native JSON_FIELD requires an
     // object root and supports JSON-path queries we don't expose via LightDB; opaque strings
     // round-trip cleanly for any JSON shape (primitive, array, object).
-    case DefType.Json | DefType.Obj(_) | DefType.Poly(_) =>
+    case DefType.Json | DefType.Obj(_) | DefType.Poly(_, _) =>
       (pb.FieldKind.STRING, false)
     case DefType.Null      => (pb.FieldKind.STRING, false)
     case _                 => (pb.FieldKind.STRING, false)
