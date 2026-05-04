@@ -4,7 +4,7 @@ import fabric.*
 import fabric.io.JsonFormatter
 import fabric.io.JsonParser
 import fabric.rw.*
-import lightdb.aggregate.AggregateQuery
+import lightdb.aggregate.{AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.NonIndexedFieldException
 import lightdb.facet.{FacetQuery, FacetValue}
@@ -18,7 +18,7 @@ import lightdb.materialized.MaterializedAggregate
 import lightdb.opensearch.util.OpenSearchCursor
 import lightdb.query.{Highlights, InnerHit, DocWithInnerHits => DocWithInnerHitsResult}
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
-import lightdb.opensearch.query.{OpenSearchDsl, OpenSearchSearchBuilder}
+import lightdb.opensearch.query.{OpenSearchAggTranslator, OpenSearchDsl, OpenSearchSearchBuilder}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
 import lightdb.transaction.{CollectionTransaction, NestedQueryTransaction, PrefixScanningTransaction, RollbackSupport, Transaction}
 import lightdb.store.{Conversion, StoreMode}
@@ -2046,11 +2046,70 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     }
   }
 
-  override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    Aggregator(query, store.model)
+  /**
+   * Native OpenSearch aggregation when the request shape is translatable; falls back to the
+   * generic in-memory [[Aggregator]] otherwise.
+   *
+   * Translatable shapes (recursive — sub-aggregates follow the same rules):
+   *   - At each level, at most ONE [[AggregateType.Group]] function (becomes a `terms` agg).
+   *     Multiple Groups at the same level (composite key) are not native; falls back.
+   *   - Metric siblings (`Sum`/`Max`/`Min`/`Avg`/`Count`/`CountDistinct`) — translated to the
+   *     corresponding OpenSearch metric agg; nested under the level's `terms` agg if there is
+   *     one, top-level otherwise.
+   *   - `Concat` / `ConcatDistinct` — no direct OS agg; falls back.
+   *
+   * `query.limit` is pushed down as `size:` on the top-level `terms` agg. `query.sort` is
+   * applied client-side after the response (terms-agg ordering is already by `_count desc`
+   * by default; richer sort isn't guaranteed translatable).
+   */
+  override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = {
+    rapid.Stream.force {
+      nativeAggregate(query).map {
+        case Some(results) => rapid.Stream.fromIterator(Task(results.iterator))
+        case None => Aggregator(query, store.model)
+      }
+    }
+  }
 
-  override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] =
-    aggregate(query).count
+  override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] = {
+    nativeAggregate(query).flatMap {
+      case Some(results) => Task.pure(results.length)
+      case None => Aggregator(query, store.model).count
+    }
+  }
+
+  /** Returns `Some(results)` if the request was successfully translated and executed natively,
+   * `None` if the shape isn't translatable (caller should fall back). */
+  private def nativeAggregate(query: AggregateQuery[Doc, Model]): Task[Option[List[MaterializedAggregate[Doc, Model]]]] = Task.defer {
+    if (!OpenSearchAggTranslator.isTranslatable(query.functions)) Task.pure(None)
+    else {
+      val sb = searchBuilderFor(query.query)
+      val baseFilter = query.query.filter.getOrElse(lightdb.filter.Filter.Multi[Doc](minShould = 0))
+      val qDsl0 = sb.filterToDsl(baseFilter)
+      val qDsl = if (config.joinDomain.nonEmpty && config.joinRole.nonEmpty) {
+        OpenSearchDsl.boolQuery(must = List(qDsl0), filter = List(joinTypeFilterDsl))
+      } else qDsl0
+      val aggsJson = OpenSearchAggTranslator.buildAggsJson(sb, query.functions, query.limit)
+      val body = obj(
+        "query" -> qDsl,
+        "from" -> num(0),
+        "size" -> num(0),
+        "track_total_hits" -> bool(false),
+        "aggregations" -> aggsJson
+      )
+      client.search(store.readIndexName, body).map { json =>
+        val aggsObj: Map[String, Json] =
+          json.asObj.value.get("aggregations").map(_.asObj.value).getOrElse(Map.empty)
+        var results = OpenSearchAggTranslator.parseResults(aggsObj, query.functions, store.model)
+        // Client-side sort if requested (terms-agg defaults to _count desc).
+        query.sort.reverse.foreach { case (f, direction) =>
+          import lightdb.SortDirection.Ascending
+          results = results.sortBy(_.json(f.name))(if direction == Ascending then Json.JsonOrdering else Json.JsonOrdering.reverse)
+        }
+        Some(results)
+      }
+    }
+  }
 
   override def distinct[F](query: Query[Doc, Model, _],
                            field: lightdb.field.Field[Doc, F],

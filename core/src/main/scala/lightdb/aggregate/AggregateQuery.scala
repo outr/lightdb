@@ -8,7 +8,17 @@ import rapid.Task
 case class AggregateQuery[Doc <: Document[Doc], Model <: DocumentModel[Doc]](query: Query[Doc, Model, _],
                                                                              functions: List[AggregateFunction[_, _, Doc]],
                                                                              filter: Option[AggregateFilter[Doc]] = None,
-                                                                             sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil) {
+                                                                             sort: List[(AggregateFunction[_, _, Doc], SortDirection)] = Nil,
+                                                                             /**
+                                                                              * Maximum outer-bucket count to return. Backends that support native top-N
+                                                                              * (OpenSearch terms `size`, SQL `LIMIT`) push it down. The fallback
+                                                                              * [[lightdb.util.Aggregator]] honors it after sorting client-side.
+                                                                              * `None` returns every bucket.
+                                                                              */
+                                                                             limit: Option[Int] = None) {
+  /** Cap the number of outer buckets returned. */
+  def limit(n: Int): AggregateQuery[Doc, Model] = copy(limit = Some(n))
+
   def filter(f: Model => AggregateFilter[Doc], and: Boolean = false): AggregateQuery[Doc, Model] = {
     val filter = f(query.model)
     if and && this.filter.nonEmpty then {
