@@ -3,13 +3,14 @@ package lightdb.rocksdb
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{StoreManager, StoreMode}
+import lightdb.util.Disposable
 import org.rocksdb.{ColumnFamilyHandle, RocksDB}
 import rapid.Task
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 
-case class RocksDBSharedStore(directory: Path) extends StoreManager {
+case class RocksDBSharedStore(directory: Path) extends StoreManager with Disposable {
   RocksDB.loadLibrary()
 
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = RocksDBStore[Doc, Model]
@@ -54,5 +55,15 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager {
       storeManager = this
     )
 
-  def dispose(): Task[Unit] = Task(rocksDB.closeE())
+  /**
+   * Close the underlying native RocksDB instance.
+   *
+   * Wired into the standard dispose chain via `Disposable` so `LightDB.doDispose` reaches it
+   * (per-store `doDispose`s only flush their own column family handle and do NOT close the
+   * shared RocksDB). Without this, native compaction/WAL/flush threads stay alive past test
+   * exit and try to call back into Java during JVM shutdown — at which point the system
+   * classloader is closed and any unloaded class (e.g. `FlushOptions`) throws
+   * `NoClassDefFoundError`.
+   */
+  override protected def doDispose(): Task[Unit] = Task(rocksDB.closeE())
 }

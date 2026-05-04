@@ -1,7 +1,6 @@
 package spec
 
 import lightdb.rocksdb.RocksDBSharedStore
-import rapid.Task
 
 import java.nio.file.Path
 
@@ -9,5 +8,6 @@ import java.nio.file.Path
 class RocksDBSharedSpec extends AbstractKeyValueSpec {
   override lazy val storeManager: RocksDBSharedStore = RocksDBSharedStore(Path.of("db/RocksDBSharedSpec"))
 
-  override def dispose(): Task[Unit] = storeManager.dispose()
+  // No need to override `dispose` — `LightDB.doDispose` now disposes the storeManager
+  // automatically when it's a `Disposable` (RocksDBSharedStore extends it).
 }
