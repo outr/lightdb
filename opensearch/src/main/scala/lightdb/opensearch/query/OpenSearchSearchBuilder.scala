@@ -29,6 +29,21 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
                                                                                 innerHitsByRelation: Map[String, InnerHitsSpec] = Map.empty) {
   private val InternalIdFieldName: String = lightdb.opensearch.OpenSearchTemplates.InternalIdField
 
+  /**
+   * Per-query record of which inner_hits keys have already been emitted into the
+   * generated DSL. OpenSearch rejects a search whose request body contains more than
+   * one `inner_hits` block sharing the same key — even if the blocks are siblings
+   * across different `has_child` clauses (e.g. an AND-of-`has_child` produced by
+   * [[Filter.ChildSemantics.CollectiveAll]], or a top-level `has_child` plus a
+   * sibling `has_child` introduced by a separate filter group).
+   *
+   * The effective key is `spec.name.getOrElse(relationName)`; the first emission
+   * for that key wins, subsequent emissions yield `None` so the wrapping
+   * `has_child` clause goes out without an `inner_hits` block. Inner-hit results
+   * are still returned for the relation via the surviving emission.
+   */
+  private val emittedInnerHitKeys = scala.collection.mutable.Set.empty[String]
+
   private def rewriteReservedIdFieldName(fieldName: String): String =
     if fieldName == "_id" then InternalIdFieldName else fieldName
 
@@ -79,21 +94,29 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   /**
    * Build the `inner_hits` block JSON for the given relation, if a spec was registered for
-   * its name (the child store's `name`). Returns `None` when the caller never opted in. The
-   * `childBuilder` is used to compile the spec's sorts in the child schema's vocabulary.
+   * its name (the child store's `name`) AND that key hasn't been emitted yet for this query.
+   * Returns `None` when the caller never opted in, or when an earlier emission in the same
+   * query already claimed the key — see [[emittedInnerHitKeys]] for why we dedupe.
+   * The `childBuilder` is used to compile the spec's sorts in the child schema's vocabulary.
    */
   private def innerHitsJsonFor(relationName: String,
                                 childBuilder: OpenSearchSearchBuilder[_, _]): Option[Json] =
-    innerHitsByRelation.get(relationName).map { spec =>
-      val sortJson = childBuilder.sortsToDsl(spec.sort)
-      val highlightJson = spec.highlight.map(buildHighlightJson)
-      OpenSearchDsl.innerHits(
-        name = spec.name,
-        size = spec.size,
-        sorts = sortJson,
-        sourceIncludes = spec.sourceIncludes,
-        highlight = highlightJson
-      )
+    innerHitsByRelation.get(relationName).flatMap { spec =>
+      val effectiveKey = spec.name.getOrElse(relationName)
+      if (emittedInnerHitKeys.contains(effectiveKey)) {
+        None
+      } else {
+        emittedInnerHitKeys += effectiveKey
+        val sortJson = childBuilder.sortsToDsl(spec.sort)
+        val highlightJson = spec.highlight.map(buildHighlightJson)
+        Some(OpenSearchDsl.innerHits(
+          name = spec.name,
+          size = spec.size,
+          sorts = sortJson,
+          sourceIncludes = spec.sourceIncludes,
+          highlight = highlightJson
+        ))
+      }
     }
 
   /** Compile a [[HighlightSpec]] into the OpenSearch `highlight` JSON block. */
@@ -210,19 +233,26 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           facetChildCountPrecisionThreshold = facetChildCountPrecisionThreshold,
           facetChildCountPageSize = facetChildCountPageSize
         )
-        val innerHitsJson = innerHitsJsonFor(relation.childStore.name, childBuilder)
         f.semantics match {
           case Filter.ChildSemantics.SameChildAll =>
+            // Single has_child clause; safe to attach the inner_hits unconditionally
+            // (any later same-key emission elsewhere will be deduped by
+            // [[innerHitsJsonFor]] / [[emittedInnerHitKeys]]).
+            val innerHitsJson = innerHitsJsonFor(relation.childStore.name, childBuilder)
             val childMust = f.builds.map(b => childBuilder.filterToDsl(b(childModel)))
             val childQuery = OpenSearchDsl.boolQuery(must = if childMust.isEmpty then List(OpenSearchDsl.matchAll()) else childMust)
             OpenSearchDsl.hasChild(relation.childStore.name, childQuery, scoreMode = joinScoreMode, innerHits = innerHitsJson)
           case Filter.ChildSemantics.CollectiveAll =>
             // AND of has_child clauses (each constraint can match a different child).
-            // The inner-hits spec applies to each clause — OpenSearch returns inner_hits per
-            // outer clause, so duplicate emission is correct.
+            // OpenSearch rejects when more than one `has_child` clause registers
+            // an `inner_hits` block under the same key, so we let the first clause
+            // claim the inner_hits (via [[innerHitsJsonFor]]'s dedupe), and
+            // subsequent clauses re-resolve to `None`. Inner-hit payloads still
+            // return for the relation under the single surviving block.
             val must = f.builds.map { b =>
               val cq = childBuilder.filterToDsl(b(childModel))
-              OpenSearchDsl.hasChild(relation.childStore.name, cq, scoreMode = joinScoreMode, innerHits = innerHitsJson)
+              val ih = innerHitsJsonFor(relation.childStore.name, childBuilder)
+              OpenSearchDsl.hasChild(relation.childStore.name, cq, scoreMode = joinScoreMode, innerHits = ih)
             }
             if must.isEmpty then OpenSearchDsl.matchAll() else OpenSearchDsl.boolQuery(must = must)
         }
