@@ -1029,7 +1029,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case Sort.ByField(field, direction) =>
         val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
         SQLPart.Fragment(s"${SqlIdent.quote(field.name)} $dir")
-      case (AggregateFunction(name, _, _), direction: SortDirection) =>
+      case (AggregateFunction(name, _, _, _), direction: SortDirection) =>
         val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
         SQLPart.Fragment(s"${SqlIdent.quote(name)} $dir")
       case t => throw new UnsupportedOperationException(s"Unsupported sort: $t")

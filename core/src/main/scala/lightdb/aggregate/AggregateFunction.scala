@@ -8,9 +8,30 @@ import lightdb.filter.{Condition, Filter, FilterClause, FilterSupport}
 import lightdb.materialized.Materializable
 import lightdb.spatial.{Geo, Point}
 
-case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String, field: Field[Doc, V], `type`: AggregateType)
+case class AggregateFunction[T, V, Doc <: Document[Doc]](name: String,
+                                                         field: Field[Doc, V],
+                                                         `type`: AggregateType,
+                                                         /**
+                                                          * Functions evaluated *within each outer bucket* produced by this
+                                                          * function. Only meaningful when [[`type`]] is [[AggregateType.Group]];
+                                                          * backends ignore the value otherwise. Recursive: a sub-aggregate may
+                                                          * itself be a `Group` whose sub-aggregates produce a third level.
+                                                          *
+                                                          * Result shape — each entry in [[subAggregates]] yields one entry in
+                                                          * the per-outer-bucket [[lightdb.materialized.MaterializedAggregate.subResults]] map,
+                                                          * keyed by [[AggregateFunction.name]].
+                                                          */
+                                                         subAggregates: List[AggregateFunction[_, _, Doc]] = Nil)
                                        (implicit val tRW: RW[T]) extends FilterSupport[V, Doc, AggregateFilter[Doc]] with Materializable[Doc, V] {
   def rename(name: String): AggregateFunction[T, V, Doc] = copy(name = name)
+
+  /**
+   * Attach inner aggregations to be computed within each bucket produced by this `Group`
+   * function. Calling this on a non-Group function is allowed (the value is preserved) but
+   * backends will ignore it. Multiple calls accumulate.
+   */
+  def withSubAggregates(funcs: AggregateFunction[_, _, Doc]*): AggregateFunction[T, V, Doc] =
+    copy(subAggregates = subAggregates ::: funcs.toList)
 
   override implicit def rw: RW[V] = field.rw
 
