@@ -305,6 +305,16 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
         case d: Disposable => d.dispose
         case _ => Task.unit // Ignore
       }.tasks
+    }.next {
+      // Some StoreManagers own native resources that outlive the per-store dispose chain
+      // (e.g. RocksDBSharedStore owns the underlying RocksDB instance shared across all CFs;
+      // each store's doDispose only flushes its own column-family handle). Dispose the
+      // manager last so its resources are released cleanly before any JVM shutdown hook
+      // would otherwise see still-running native threads.
+      storeManager match {
+        case d: Disposable => d.dispose
+        case _ => Task.unit
+      }
     }.unit
   } else {
     Task.unit

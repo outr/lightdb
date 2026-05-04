@@ -44,6 +44,14 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   private[rocksdb] val iteratorThreadPool: RocksDBIteratorThreadPool =
     new RocksDBIteratorThreadPool(namePrefix = s"rocksdb-$name", size = iteratorThreads)
 
+  // Allocated at construction time so the `FlushOptions` class is loaded into the system
+  // classloader BEFORE any JVM shutdown hook runs. Otherwise, if no flush ever happened
+  // during normal execution, `new FlushOptions` first triggers class-loading inside the
+  // shutdown-hook dispose path — when the classloader is already in shutdown mode and refuses
+  // to load new classes, surfacing as `NoClassDefFoundError: org/rocksdb/FlushOptions`.
+  // Reused by `doDispose`; the native handle is closed there.
+  private val flushOptions: FlushOptions = new FlushOptions
+
   private[rocksdb] var handle: Option[ColumnFamilyHandle] = None
   resetHandle()
 
@@ -72,13 +80,20 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     super.doDispose()
       .next(iteratorThreadPool.dispose())
       .next(Task {
-        val o = new FlushOptions
-        handle match {
-          case Some(h) =>
-            rocksDB.flush(o, h)
-          case None =>
-            rocksDB.flush(o)
-            rocksDB.closeE()
+        // Reuse the pre-loaded `flushOptions` (see field comment for why allocating here
+        // would be unsafe under the shutdown-hook dispose path). When no `handle` is set we
+        // also `closeE()` the RocksDB instance — that's the per-store-owned (non-shared)
+        // path. Shared-RocksDB stores leave `closeE()` to `RocksDBSharedStore.doDispose`.
+        try {
+          handle match {
+            case Some(h) =>
+              rocksDB.flush(flushOptions, h)
+            case None =>
+              rocksDB.flush(flushOptions)
+              rocksDB.closeE()
+          }
+        } finally {
+          try flushOptions.close() catch { case _: Throwable => () }
         }
       })
 }
