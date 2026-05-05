@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 460" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="12">
+  <rect width="840" height="460" fill="#ffffff"/>
+  <text x="420" y="22" text-anchor="middle" font-size="14" font-weight="600">benchmark.jmh.complete.CompleteConcurrency4Benchmark.mixed</text>
+  <text x="420" y="36" text-anchor="middle" fill="#666">unit: ops/s · higher is better</text>
+  <text x="232" y="54" text-anchor="end" fill="#222">rocksdb</text>
+  <rect x="240" y="40" width="480" height="22" rx="3" fill="hsl(180, 65%, 45%)"/>
+  <text x="726" y="54" fill="#222">759,321</text>
+  <text x="232" y="84" text-anchor="end" fill="#222">halodb</text>
+  <rect x="240" y="70" width="450" height="22" rx="3" fill="hsl(358, 65%, 45%)"/>
+  <text x="696" y="84" fill="#222">713,439</text>
+  <text x="232" y="114" text-anchor="end" fill="#222">rocksdb+tantivy</text>
+  <rect x="240" y="100" width="376" height="22" rx="3" fill="hsl(262, 65%, 45%)"/>
+  <text x="622" y="114" fill="#222">596,066</text>
+  <text x="232" y="144" text-anchor="end" fill="#222">rocksdb+lucene</text>
+  <rect x="240" y="130" width="367" height="22" rx="3" fill="hsl(201, 65%, 45%)"/>
+  <text x="613" y="144" fill="#222">581,629</text>
+  <text x="232" y="174" text-anchor="end" fill="#222">halodb+lucene</text>
+  <rect x="240" y="160" width="355" height="22" rx="3" fill="hsl(261, 65%, 45%)"/>
+  <text x="601" y="174" fill="#222">561,634</text>
+  <text x="232" y="204" text-anchor="end" fill="#222">halodb+tantivy</text>
+  <rect x="240" y="190" width="350" height="22" rx="3" fill="hsl(264, 65%, 45%)"/>
+  <text x="596" y="204" fill="#222">555,004</text>
+  <text x="232" y="234" text-anchor="end" fill="#222">lucene</text>
+  <rect x="240" y="220" width="89" height="22" rx="3" fill="hsl(70, 65%, 45%)"/>
+  <text x="335" y="234" fill="#222">141,483</text>
+  <text x="232" y="264" text-anchor="end" fill="#222">h2</text>
+  <rect x="240" y="250" width="36" height="22" rx="3" fill="hsl(34, 65%, 45%)"/>
+  <text x="282" y="264" fill="#222">56,960</text>
+  <text x="232" y="294" text-anchor="end" fill="#222">mapdb</text>
+  <rect x="240" y="280" width="28" height="22" rx="3" fill="hsl(186, 65%, 45%)"/>
+  <text x="274" y="294" fill="#222">44,353</text>
+  <text x="232" y="324" text-anchor="end" fill="#222">sqlite</text>
+  <rect x="240" y="310" width="27" height="22" rx="3" fill="hsl(228, 65%, 45%)"/>
+  <text x="273" y="324" fill="#222">43,258</text>
+  <text x="232" y="354" text-anchor="end" fill="#222">tantivy</text>
+  <rect x="240" y="340" width="23" height="22" rx="3" fill="hsl(247, 65%, 45%)"/>
+  <text x="269" y="354" fill="#222">37,107</text>
+  <text x="232" y="384" text-anchor="end" fill="#222">duckdb</text>
+  <rect x="240" y="370" width="1" height="22" rx="3" fill="hsl(145, 65%, 45%)"/>
+  <text x="247" y="384" fill="#222">2,934</text>
+  <text x="232" y="414" text-anchor="end" fill="#222">lmdb+lucene</text>
+  <rect x="240" y="400" width="1" height="22" rx="3" fill="hsl(110, 65%, 45%)"/>
+  <text x="247" y="414" fill="#222">1,260</text>
+</svg>
