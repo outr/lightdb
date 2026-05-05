@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 1030" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="12">
+  <rect width="840" height="1030" fill="#ffffff"/>
+  <text x="420" y="22" text-anchor="middle" font-size="14" font-weight="600">benchmark.jmh.complete.CompleteWriteBenchmark.bulkInsert</text>
+  <text x="420" y="36" text-anchor="middle" fill="#666">unit: ms/op · lower is better</text>
+  <text x="232" y="54" text-anchor="end" fill="#222">rocksdb [ batch=buffered]</text>
+  <rect x="240" y="40" width="1" height="22" rx="3" fill="hsl(180, 65%, 45%)"/>
+  <text x="247" y="54" fill="#222">352.0</text>
+  <text x="232" y="84" text-anchor="end" fill="#222">lmdb [ batch=buffered]</text>
+  <rect x="240" y="70" width="2" height="22" rx="3" fill="hsl(55, 65%, 45%)"/>
+  <text x="248" y="84" fill="#222">468.6</text>
+  <text x="232" y="114" text-anchor="end" fill="#222">chroniclemap [ batch=buffered]</text>
+  <rect x="240" y="100" width="2" height="22" rx="3" fill="hsl(27, 65%, 45%)"/>
+  <text x="248" y="114" fill="#222">572.8</text>
+  <text x="232" y="144" text-anchor="end" fill="#222">halodb [ batch=buffered]</text>
+  <rect x="240" y="130" width="2" height="22" rx="3" fill="hsl(358, 65%, 45%)"/>
+  <text x="248" y="144" fill="#222">599.1</text>
+  <text x="232" y="174" text-anchor="end" fill="#222">rocksdb [ batch=async]</text>
+  <rect x="240" y="160" width="2" height="22" rx="3" fill="hsl(180, 65%, 45%)"/>
+  <text x="248" y="174" fill="#222">603.7</text>
+  <text x="232" y="204" text-anchor="end" fill="#222">tantivy [ batch=buffered]</text>
+  <rect x="240" y="190" width="2" height="22" rx="3" fill="hsl(247, 65%, 45%)"/>
+  <text x="248" y="204" fill="#222">667.7</text>
+  <text x="232" y="234" text-anchor="end" fill="#222">lmdb [ batch=async]</text>
+  <rect x="240" y="220" width="3" height="22" rx="3" fill="hsl(55, 65%, 45%)"/>
+  <text x="249" y="234" fill="#222">692.8</text>
+  <text x="232" y="264" text-anchor="end" fill="#222">halodb [ batch=async]</text>
+  <rect x="240" y="250" width="3" height="22" rx="3" fill="hsl(358, 65%, 45%)"/>
+  <text x="249" y="264" fill="#222">717.0</text>
+  <text x="232" y="294" text-anchor="end" fill="#222">lucene [ batch=buffered]</text>
+  <rect x="240" y="280" width="3" height="22" rx="3" fill="hsl(70, 65%, 45%)"/>
+  <text x="249" y="294" fill="#222">834.0</text>
+  <text x="232" y="324" text-anchor="end" fill="#222">tantivy [ batch=async]</text>
+  <rect x="240" y="310" width="3" height="22" rx="3" fill="hsl(247, 65%, 45%)"/>
+  <text x="249" y="324" fill="#222">847.6</text>
+  <text x="232" y="354" text-anchor="end" fill="#222">chroniclemap [ batch=async]</text>
+  <rect x="240" y="340" width="4" height="22" rx="3" fill="hsl(27, 65%, 45%)"/>
+  <text x="250" y="354" fill="#222">968.1</text>
+  <text x="232" y="384" text-anchor="end" fill="#222">rocksdb+tantivy [ batch=buffered]</text>
+  <rect x="240" y="370" width="4" height="22" rx="3" fill="hsl(262, 65%, 45%)"/>
+  <text x="250" y="384" fill="#222">1,093</text>
+  <text x="232" y="414" text-anchor="end" fill="#222">lucene [ batch=async]</text>
+  <rect x="240" y="400" width="5" height="22" rx="3" fill="hsl(70, 65%, 45%)"/>
+  <text x="251" y="414" fill="#222">1,181</text>
+  <text x="232" y="444" text-anchor="end" fill="#222">lmdb+tantivy [ batch=buffered]</text>
+  <rect x="240" y="430" width="5" height="22" rx="3" fill="hsl(259, 65%, 45%)"/>
+  <text x="251" y="444" fill="#222">1,285</text>
+  <text x="232" y="474" text-anchor="end" fill="#222">halodb+tantivy [ batch=buffered]</text>
+  <rect x="240" y="460" width="5" height="22" rx="3" fill="hsl(264, 65%, 45%)"/>
+  <text x="251" y="474" fill="#222">1,308</text>
+  <text x="232" y="504" text-anchor="end" fill="#222">rocksdb+lucene [ batch=buffered]</text>
+  <rect x="240" y="490" width="5" height="22" rx="3" fill="hsl(201, 65%, 45%)"/>
+  <text x="251" y="504" fill="#222">1,328</text>
+  <text x="232" y="534" text-anchor="end" fill="#222">lmdb+lucene [ batch=buffered]</text>
+  <rect x="240" y="520" width="6" height="22" rx="3" fill="hsl(110, 65%, 45%)"/>
+  <text x="252" y="534" fill="#222">1,414</text>
+  <text x="232" y="564" text-anchor="end" fill="#222">halodb+lucene [ batch=buffered]</text>
+  <rect x="240" y="550" width="6" height="22" rx="3" fill="hsl(261, 65%, 45%)"/>
+  <text x="252" y="564" fill="#222">1,475</text>
+  <text x="232" y="594" text-anchor="end" fill="#222">lmdb+tantivy [ batch=async]</text>
+  <rect x="240" y="580" width="7" height="22" rx="3" fill="hsl(259, 65%, 45%)"/>
+  <text x="253" y="594" fill="#222">1,668</text>
+  <text x="232" y="624" text-anchor="end" fill="#222">halodb+tantivy [ batch=async]</text>
+  <rect x="240" y="610" width="7" height="22" rx="3" fill="hsl(264, 65%, 45%)"/>
+  <text x="253" y="624" fill="#222">1,748</text>
+  <text x="232" y="654" text-anchor="end" fill="#222">rocksdb+tantivy [ batch=async]</text>
+  <rect x="240" y="640" width="7" height="22" rx="3" fill="hsl(262, 65%, 45%)"/>
+  <text x="253" y="654" fill="#222">1,753</text>
+  <text x="232" y="684" text-anchor="end" fill="#222">mapdb [ batch=async]</text>
+  <rect x="240" y="670" width="7" height="22" rx="3" fill="hsl(186, 65%, 45%)"/>
+  <text x="253" y="684" fill="#222">1,794</text>
+  <text x="232" y="714" text-anchor="end" fill="#222">h2 [ batch=buffered]</text>
+  <rect x="240" y="700" width="7" height="22" rx="3" fill="hsl(34, 65%, 45%)"/>
+  <text x="253" y="714" fill="#222">1,811</text>
+  <text x="232" y="744" text-anchor="end" fill="#222">sqlite [ batch=buffered]</text>
+  <rect x="240" y="730" width="7" height="22" rx="3" fill="hsl(228, 65%, 45%)"/>
+  <text x="253" y="744" fill="#222">1,816</text>
+  <text x="232" y="774" text-anchor="end" fill="#222">lmdb+lucene [ batch=async]</text>
+  <rect x="240" y="760" width="8" height="22" rx="3" fill="hsl(110, 65%, 45%)"/>
+  <text x="254" y="774" fill="#222">1,859</text>
+  <text x="232" y="804" text-anchor="end" fill="#222">sqlite [ batch=async]</text>
+  <rect x="240" y="790" width="8" height="22" rx="3" fill="hsl(228, 65%, 45%)"/>
+  <text x="254" y="804" fill="#222">1,903</text>
+  <text x="232" y="834" text-anchor="end" fill="#222">h2 [ batch=async]</text>
+  <rect x="240" y="820" width="8" height="22" rx="3" fill="hsl(34, 65%, 45%)"/>
+  <text x="254" y="834" fill="#222">1,960</text>
+  <text x="232" y="864" text-anchor="end" fill="#222">rocksdb+lucene [ batch=async]</text>
+  <rect x="240" y="850" width="8" height="22" rx="3" fill="hsl(201, 65%, 45%)"/>
+  <text x="254" y="864" fill="#222">1,983</text>
+  <text x="232" y="894" text-anchor="end" fill="#222">halodb+lucene [ batch=async]</text>
+  <rect x="240" y="880" width="8" height="22" rx="3" fill="hsl(261, 65%, 45%)"/>
+  <text x="254" y="894" fill="#222">2,008</text>
+  <text x="232" y="924" text-anchor="end" fill="#222">mapdb [ batch=buffered]</text>
+  <rect x="240" y="910" width="9" height="22" rx="3" fill="hsl(186, 65%, 45%)"/>
+  <text x="255" y="924" fill="#222">2,217</text>
+  <text x="232" y="954" text-anchor="end" fill="#222">duckdb [ batch=async]</text>
+  <rect x="240" y="940" width="461" height="22" rx="3" fill="hsl(145, 65%, 45%)"/>
+  <text x="707" y="954" fill="#222">106,634</text>
+  <text x="232" y="984" text-anchor="end" fill="#222">duckdb [ batch=buffered]</text>
+  <rect x="240" y="970" width="480" height="22" rx="3" fill="hsl(145, 65%, 45%)"/>
+  <text x="726" y="984" fill="#222">110,831</text>
+</svg>
