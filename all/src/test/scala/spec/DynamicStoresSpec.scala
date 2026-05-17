@@ -14,7 +14,7 @@ import rapid.AsyncTaskSpec
 import java.nio.file.Path
 
 @EmbeddedTest
-class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
+class DynamicStoresSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with ChronicleMapAvailability {
   "Dynamic Stores" should {
     "initialize the database" in {
       DB.init.succeed

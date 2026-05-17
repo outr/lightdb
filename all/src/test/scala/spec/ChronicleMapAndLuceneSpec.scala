@@ -5,7 +5,7 @@ import lightdb.lucene.LuceneStore
 import lightdb.store.split.SplitStoreManager
 
 @EmbeddedTest
-class ChronicleMapAndLuceneSpec extends AbstractBasicSpec {
+class ChronicleMapAndLuceneSpec extends AbstractBasicSpec with ChronicleMapAvailability {
   override protected def filterBuilderSupported: Boolean = true
 
   // Tie-break ordering is implementation-defined under Lucene strict-insert NRT probing.
