@@ -1,16 +1,17 @@
 package lightdb.query
 
 /**
- * One inner-hit document returned alongside its outer hit.
+ * One inner-hit returned alongside its outer hit.
  *
- * The `doc` is fully decoded via the child store's `RW`. `score` is the inner-hit's own
- * relevance (independent of the outer hit). `highlights` is per-field fragments when the
- * inner-hits spec requested highlighting.
+ * `value` is materialized at the call site via the caller's chosen `RW` (see
+ * [[DocWithInnerHits.innerHitsFor]]). The caller picks a projection shape that fits the
+ * fields the backend actually returned — typically a small case class containing only the
+ * fields the consumer needs. This avoids the SplitStore pitfall where the backend `_source`
+ * contains only indexed fields and a full case-class decode would always fail.
  *
- * The `doc` type parameter is unbounded because the inner hits in a single result row may
- * span multiple relations with different child types. Use [[DocWithInnerHits.innerHitsFor]]
- * at the call site (where the relation's child type is known) to recover typed access.
+ * `score` is the inner-hit's own relevance (independent of the outer hit). `highlights` is
+ * per-field fragments when the inner-hits spec requested highlighting.
  */
-final case class InnerHit[+D](doc: D,
+final case class InnerHit[+V](value: V,
                               score: Double = 0.0,
                               highlights: Highlights = Highlights.empty)
