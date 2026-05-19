@@ -16,7 +16,7 @@ import lightdb.field.IndexingState
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.opensearch.util.OpenSearchCursor
-import lightdb.query.{Highlights, InnerHit, DocWithInnerHits => DocWithInnerHitsResult}
+import lightdb.query.{Highlights, RawInnerHit, DocWithInnerHits => DocWithInnerHitsResult}
 import lightdb.opensearch.client.{OpenSearchClient, OpenSearchConfig}
 import lightdb.opensearch.query.{OpenSearchAggTranslator, OpenSearchDsl, OpenSearchSearchBuilder}
 import lightdb.spatial.{DistanceAndDoc, Geo, Spatial}
@@ -441,11 +441,12 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   }
 
   /**
-   * Parse a hit's `inner_hits` block. For each relation key present in both the response and
-   * `query.innerHits`, decode the listed child docs via the relation's child-store RW.
+   * Parse a hit's `inner_hits` block into raw payloads keyed by relation name. Per-hit
+   * materialization happens at the call site via `DocWithInnerHits.innerHitsFor[V]`, where
+   * the caller supplies the projection RW that fits the backend's stored `_source`.
    */
   private def parseInnerHits(query: Query[Doc, Model, _],
-                              hit: Json): Map[String, List[InnerHit[Any]]] = {
+                              hit: Json): Map[String, List[RawInnerHit]] = {
     val ihObj = hit.asObj.get("inner_hits") match {
       case Some(o: Obj) => o.value
       case _ => return Map.empty
@@ -456,14 +457,14 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       // type (= child store name). If a spec used a custom name, resolve back to the
       // relation name (= child store name) for consumer-side lookup.
       val resolvedRelationName = resolveRelationName(query, key)
-      relations.get(resolvedRelationName).map { relation =>
+      relations.get(resolvedRelationName).map { _ =>
         val hits = (payload.asObj.get("hits") match {
           case Some(o: Obj) => o.value.get("hits") match {
             case Some(a: Arr) => a.value.toList
             case _ => Nil
           }
           case _ => Nil
-        }).flatMap(decodeInnerHit(_, relation))
+        }).flatMap(decodeInnerHit)
         resolvedRelationName -> hits
       }
     }.toMap
@@ -505,15 +506,14 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
    * prevents a single existential representation, and consumers recover types via
    * `DocWithInnerHits.innerHitsFor[ChildDoc]` at the call site.
    */
-  private def decodeInnerHit(entry: Json,
-                              relation: ParentChildRelation[_]): Option[InnerHit[Any]] = {
+  private def decodeInnerHit(entry: Json): Option[RawInnerHit] = {
     val obj = entry match {
       case o: Obj => o.value
       case _ => return None
     }
     val source = obj.getOrElse("_source", fabric.obj()).asObj
     val idStr = obj.get("_id").map(_.asString)
-    // Re-attach `_id` in the doc shape Document.rw expects.
+    // Re-attach `_id` so callers that include it in their projection RW can deserialize it.
     val withId = idStr match {
       case Some(s) =>
         if source.value.contains("_id") then source else fabric.obj((source.value.toSeq :+ ("_id" -> Str(s))): _*)
@@ -524,10 +524,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       case Some(j) => j.asDouble
     }
     val highlights = parseHighlights(entry)
-    val rw = relation.childStore.model.rw
-    Try(withId.as(rw)).toOption.map { d =>
-      InnerHit[Any](doc = d, score = score, highlights = highlights)
-    }
+    Some(RawInnerHit(source = withId, score = score, highlights = highlights))
   }
 
   private def applyTrackTotalHits[V](q: Query[Doc, Model, V], body: Json): Json = {
