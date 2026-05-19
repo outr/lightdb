@@ -111,8 +111,8 @@ class OpenSearchInnerHitsSpec extends AsyncWordSpec
             row.doc.name should be("Devon")
             val matched = row.innerHitsFor[Alias](DB.aliases.name)
             matched.size should be(1)
-            matched.head.doc.alias should be("EOG Resources Inc")
-            matched.head.doc.entityId should be(devon._id)
+            matched.head.value.alias should be("EOG Resources Inc")
+            matched.head.value.entityId should be(devon._id)
           }
       }
     }
@@ -130,7 +130,7 @@ class OpenSearchInnerHitsSpec extends AsyncWordSpec
           .map { rows =>
             rows.size should be(1)
             val row = rows.head.asInstanceOf[InnerHitsResult[Entity, Entity.type]]
-            val aliases = row.innerHitsFor[Alias](DB.aliases.name).map(_.doc.alias)
+            val aliases = row.innerHitsFor[Alias](DB.aliases.name).map(_.value.alias)
             // Descending by priority: 100, 90, 80
             aliases should be(List("Devon Energy", "EOG Resources Inc", "Devon"))
           }
@@ -151,8 +151,8 @@ class OpenSearchInnerHitsSpec extends AsyncWordSpec
             val row = rows.head.asInstanceOf[InnerHitsResult[Entity, Entity.type]]
             val hit = row.innerHitsFor[Alias](DB.aliases.name).head
             // Description omitted from `_source` → decoded as the empty default.
-            hit.doc.alias should be("Devon Energy")
-            hit.doc.description should be("")
+            hit.value.alias should be("Devon Energy")
+            hit.value.description should be("")
           }
       }
     }
@@ -168,8 +168,8 @@ class OpenSearchInnerHitsSpec extends AsyncWordSpec
             val row = rows.head.asInstanceOf[InnerHitsResult[Entity, Entity.type]]
             val hit: InnerHit[Alias] = row.innerHitsFor[Alias](DB.aliases.name).head
             // Concrete typed access — `priority` is a typed Int, not a Json value.
-            hit.doc.priority should be(100)
-            hit.doc.alias should be("Chevron Corporation")
+            hit.value.priority should be(100)
+            hit.value.alias should be("Chevron Corporation")
           }
       }
     }
