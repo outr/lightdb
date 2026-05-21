@@ -53,6 +53,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def upsert(stream: rapid.Stream[Doc]): Task[Int] =
     stream.evalMap(upsert).count.flatTap(_ => flush)
   final def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = upsert(rapid.Stream.emits(docs)).map(_ => docs)
+  def upsertJson(stream: rapid.Stream[Json]): Task[Int] = upsert(stream.map(_.as[Doc](store.model.rw)))
 
   final def exists(id: Id[Doc]): Task[Boolean] = get(id).map(_.nonEmpty)
   final def count: Task[Int] = _count
@@ -136,6 +137,16 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def stream: rapid.Stream[Doc] = jsonStream.map(_.as[Doc](store.model.rw))
   def jsonStream: rapid.Stream[Json]
   def truncate: Task[Int]
+
+  /**
+   * String-id variants of [[get]] / [[delete]] that emit/accept JSON rather than
+   * concrete `Doc` values. Useful for callers that don't know the document type
+   * statically — e.g. diagnostic API surfaces operating over `Store[_, _]`.
+   */
+  def jsonGet(idValue: String): Task[Option[Json]] =
+    get(Id[Doc](idValue)).map(_.map(_.json(store.model.rw)))
+
+  def jsonDelete(idValue: String): Task[Boolean] = delete(Id[Doc](idValue))
 
   private[lightdb] def applyWriteOps(ops: Seq[WriteOp[Doc]]): Task[Unit] =
     ops.map {
