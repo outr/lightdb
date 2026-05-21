@@ -98,7 +98,7 @@ val commonsDBCP2Version: String = "2.14.0"
 
 val sqliteVersion: String = "3.53.1.0"
 
-val duckdbVersion: String = "1.5.2.1"
+val duckdbVersion: String = "1.5.3.0"
 
 val h2Version: String = "2.4.240"
 
