@@ -10,7 +10,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 
-ThisBuild / version := "4.37.0"
+ThisBuild / version := "4.38.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "3.8.3"
 
@@ -117,7 +117,7 @@ val scalaTestVersion: String = "3.2.20"
 val testcontainersVersion: String = "2.0.5"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, api, apiSpice, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -351,8 +351,34 @@ lazy val redis = project.in(file("redis"))
 		Test / fork := true
 	)
 
+lazy val api = project.in(file("api"))
+	.dependsOn(core.jvm, core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-api",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
+lazy val apiSpice = project.in(file("api-spice"))
+	.dependsOn(api, api % "test->test", core.jvm % "test->test")
+	.settings(
+		name := s"$projectName-api-spice",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"com.outr" %% "spice-server" % spiceVersion,
+			// Undertow server impl is published one minor behind core; only needed for tests.
+			"com.outr" %% "spice-server-undertow" % "1.8.8" % Test,
+			"com.outr" %% "spice-client-netty" % spiceVersion % Test,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, api, apiSpice)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

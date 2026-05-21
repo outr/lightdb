@@ -136,8 +136,13 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
     connection.commit()
 
-    // Add/Remove columns
+    // Add/Remove columns. `existingColumns` carries the catalog's real
+    // column case — DROP/ADD statements quote their identifiers, so they
+    // must reference that exact case. Membership tests are
+    // case-insensitive (Postgres folds unquoted identifiers); they run
+    // against `existingColumnsLower`.
     val existingColumns = columns(connection)
+    val existingColumnsLower = existingColumns.map(_.toLowerCase)
     // Drop columns
     existingColumns.foreach { name =>
       if !fieldNames.contains(name.toLowerCase) then {
@@ -148,7 +153,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     // Add columns
     fields.foreach { field =>
       val name = field.name
-      if !existingColumns.contains(name.toLowerCase) then {
+      if !existingColumnsLower.contains(name.toLowerCase) then {
         addColumn(field, tx)
       }
     }
@@ -183,13 +188,20 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def tables(connection: Connection): Set[String]
 
+  /** The table's column names from the catalog, with their real case
+    * preserved. The case MUST NOT be folded here: LightDB quotes every
+    * identifier it emits (`SqlIdent.quote`), so a `DROP COLUMN` /
+    * `ADD COLUMN` built from one of these names must use the exact
+    * stored case or the quoted identifier won't match. Case-insensitive
+    * comparison (Postgres folds unquoted identifiers) is the caller's
+    * job — see `initTransaction`. */
   private def columns(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement(s"SELECT * FROM $fqn LIMIT 1")
     try {
       val rs = ps.executeQuery()
       val meta = rs.getMetaData
       (1 to meta.getColumnCount).map { index =>
-        meta.getColumnName(index).toLowerCase
+        meta.getColumnName(index)
       }.toSet
     } finally {
       ps.close()
