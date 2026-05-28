@@ -10,7 +10,7 @@ val developerURL: String = "https://matthicks.com"
 name := projectName
 ThisBuild / organization := org
 
-ThisBuild / version := "4.38.0"
+ThisBuild / version := "4.39.0"
 
 ThisBuild / scalaVersion := "3.8.3"
 
@@ -60,13 +60,13 @@ ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF
 ThisBuild / Test / parallelExecution := false
 ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
-val rapidVersion: String = "2.9.5"
+val rapidVersion: String = "2.9.6"
 
 val profigVersion: String = "3.7.1"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "1.8.11"
+val spiceVersion: String = "1.8.13"
 
 val scantivyVersion: String = "1.0.0"
 
@@ -86,7 +86,7 @@ val lmdbVersion: String = "0.9.2"
 
 val jedisVersion: String = "7.5.0"
 
-val fabricVersion: String = "1.28.0"
+val fabricVersion: String = "1.29.3"
 
 val scribeVersion: String = "3.19.0"
 
