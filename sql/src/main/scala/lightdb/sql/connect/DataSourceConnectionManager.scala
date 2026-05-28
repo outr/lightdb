@@ -20,10 +20,14 @@ trait DataSourceConnectionManager extends ConnectionManager {
   }
 
   override def getConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Connection = {
-    synchronized {
-      if state.connection == null then {
-        state.connection = openConnection()
-      }
+    // Intentionally NOT `synchronized`. `state` is per-transaction and SQL
+    // transactions are single-threaded (maximumConcurrency = 1), so the lazy
+    // init races with nobody. A monitor here was also a manager-wide lock that
+    // serialized every connection acquisition globally AND, because it wrapped
+    // the blocking `openConnection()`, pinned virtual-thread carriers on
+    // JDK < 24 — exhausting the scheduler under concurrent load.
+    if state.connection == null then {
+      state.connection = openConnection()
     }
     state.connection
   }

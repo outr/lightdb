@@ -62,6 +62,13 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   @volatile private var originalRefreshInterval: Option[String] = None
   @volatile private var refreshIntervalApplied: Boolean = false
 
+  // Maximum poll attempts for the read-after-commit searchable barrier (see
+  // awaitSearchableBarrier in _commit). Backoff starts at 10ms and doubles,
+  // capped at 1s — 20 attempts → ~14s total ceiling, enough for OpenSearch's
+  // default 1s refresh interval to drain after a heavy ingestion batch
+  // without turning the barrier into a "wait forever" hang.
+  private val CommitBarrierMaxAttempts: Int = 20
+
   /**
    * Default OpenSearch transaction semantics prioritize ingest throughput.
    *
@@ -144,12 +151,21 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
           // If the index was just recreated (common in reIndex), OpenSearch can report refresh success but still
           // not immediately return hits for the freshly written docs. We guard against that by polling a cheap
           // count query on _id until it becomes visible.
+          //
+          // Retry budget: the backoff starts at 10ms and doubles, capped at 1s.
+          // With `CommitBarrierMaxAttempts = 20` the total wait ceiling is ~14s
+          // (10+20+40+80+160+320+640 + 13×1000), enough for OpenSearch's default
+          // 1s refresh interval to catch up on the tail of a heavy ingestion batch
+          // without making the barrier a "wait forever" hang. The prior budget of
+          // 6 attempts (~1.3s ceiling) was too tight for bulk-write jobs that
+          // saturate the refresh cadence — the last batch's last doc could lag
+          // beyond the barrier's window even though the write itself succeeded.
           val query = obj("query" -> obj("ids" -> obj("values" -> arr(str(id)))))
           def loop(attempt: Int, delay: FiniteDuration): Task[Unit] = {
             client.count(store.readIndexName, query).flatMap { c =>
               if c > 0 then {
                 Task.unit
-              } else if attempt >= 6 then {
+              } else if attempt >= CommitBarrierMaxAttempts then {
                 Task.error(new RuntimeException(
                   s"OpenSearch commit barrier failed: doc not searchable after refresh (index=${store.readIndexName} id=$id)"
                 ))

@@ -15,7 +15,9 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
                                                                        caching: Boolean) {
   private var psInsert: PreparedStatement = _
   private var psUpsert: PreparedStatement = _
-  private[sql] var connection: Connection = _
+  // `@volatile`: a transaction's sequential tasks may hop carrier threads, and
+  // the connection is now published without a lock (see DataSourceConnectionManager).
+  @volatile private[sql] var connection: Connection = _
   private[sql] val batchInsert = new AtomicInteger(0)
   private[sql] val batchUpsert = new AtomicInteger(0)
   private var statements = List.empty[Statement]
