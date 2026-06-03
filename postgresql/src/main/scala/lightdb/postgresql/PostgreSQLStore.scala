@@ -82,6 +82,13 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     case _ => super.def2Type(name, d)
   }
 
+  // PostgreSQL refuses an implicit `ALTER COLUMN ... TYPE` between incompatible
+  // types (e.g. varchar -> bigint); the `USING <col>::<type>` cast is required.
+  override protected def alterColumnTypeSQL(fieldName: String, newType: String): String = {
+    val q = SqlIdent.quote(fieldName)
+    s"ALTER TABLE $fqn ALTER COLUMN $q TYPE $newType USING $q::$newType"
+  }
+
   override protected def createUpsertSQL(): String = {
     val fieldNames = fields.map(f => SqlIdent.quote(f.name))
     val values = fields.map(field2Value)
