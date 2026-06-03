@@ -27,6 +27,11 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      storeManager: StoreManager) extends SQLStore[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX = SQLiteTransaction[Doc, Model]
 
+  // SQLite is dynamically typed and does not support `ALTER COLUMN ... TYPE`
+  // (column type is just affinity; a value's stored type isn't constrained), so
+  // there is no column-type drift to migrate — skip the reconciliation entirely.
+  override protected def supportsAlterColumnType: Boolean = false
+
   override protected def initConnection(connection: Connection): Unit = {
     super.initConnection(connection)
     // SQLite requires switching journal_mode outside of an active transaction.
