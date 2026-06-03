@@ -96,6 +96,63 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     executeUpdate(s"ALTER TABLE $fqn ADD COLUMN ${SqlIdent.quote(field.name)} ${def2Type(field.name, field.rw.definition)}", tx)
   }
 
+  /** Whether this backend supports `ALTER COLUMN ... TYPE`. SQLite (dynamically
+    * typed, no column-type ALTER) overrides this to `false`. */
+  protected def supportsAlterColumnType: Boolean = true
+
+  /** SQL to change an existing column's type. Standard form; PostgreSQL overrides
+    * to append the `USING <col>::<type>` cast it requires for incompatible types. */
+  protected def alterColumnTypeSQL(fieldName: String, newType: String): String =
+    s"ALTER TABLE $fqn ALTER COLUMN ${SqlIdent.quote(fieldName)} TYPE $newType"
+
+  /** Coarse category of a JDBC type code ([[java.sql.Types]]); `None` when
+    * unknown/unhandled. Deliberately coarse so harmless variations (VARCHAR vs
+    * TEXT, BIGINT vs INTEGER) never trigger a migration — only a cross-category
+    * change (e.g. a column that was string-typed but whose field is now numeric). */
+  protected def jdbcTypeCategory(jdbcType: Int): Option[String] = jdbcType match {
+    case java.sql.Types.CHAR | java.sql.Types.VARCHAR | java.sql.Types.LONGVARCHAR |
+         java.sql.Types.NCHAR | java.sql.Types.NVARCHAR | java.sql.Types.LONGNVARCHAR |
+         java.sql.Types.CLOB | java.sql.Types.NCLOB => Some("string")
+    case java.sql.Types.SMALLINT | java.sql.Types.INTEGER | java.sql.Types.BIGINT => Some("integer")
+    case java.sql.Types.FLOAT | java.sql.Types.REAL | java.sql.Types.DOUBLE |
+         java.sql.Types.NUMERIC | java.sql.Types.DECIMAL => Some("decimal")
+    // lightdb's base `def2Type` represents Bool as TINYINT (PostgreSQL overrides to
+    // BOOLEAN), so TINYINT must categorize as boolean — never integer — to avoid a
+    // spurious migration of a fresh Bool column.
+    case java.sql.Types.TINYINT | java.sql.Types.BIT | java.sql.Types.BOOLEAN => Some("boolean")
+    case _ => None
+  }
+
+  /** Coarse category expected for a field from its serialized definition; mirrors
+    * [[def2Type]] at category granularity. `None` for types we don't migrate. */
+  protected def defTypeCategory(d: Definition): Option[String] = d.defType match {
+    case DefType.Str | DefType.Json | DefType.Obj(_) | DefType.Arr(_) | DefType.Poly(_, _) => Some("string")
+    case DefType.Int => Some("integer")
+    case DefType.Dec => Some("decimal")
+    case DefType.Bool => Some("boolean")
+    case DefType.Opt(inner) => defTypeCategory(inner)
+    case _ => None
+  }
+
+  /** Column name (real catalog case) → JDBC type code, read from the result-set
+    * metadata (portable across backends, no rows required). */
+  protected def columnTypes(connection: Connection): Map[String, Int] = {
+    val ps = connection.prepareStatement(s"SELECT * FROM $fqn LIMIT 1")
+    try {
+      val rs = ps.executeQuery()
+      val meta = rs.getMetaData
+      (1 to meta.getColumnCount).map(i => meta.getColumnName(i) -> meta.getColumnType(i)).toMap
+    } finally {
+      ps.close()
+    }
+  }
+
+  protected def migrateColumnType(field: Field[Doc, _], tx: TX): Unit = {
+    val newType = def2Type(field.name, field.rw.definition)
+    scribe.warn(s"Migrating column type $fqn.${field.name} -> $newType")
+    executeUpdate(alterColumnTypeSQL(field.name, newType), tx)
+  }
+
   protected def initConnection(connection: Connection): Unit = {}
 
   protected def initTransaction(tx: TX): Task[Unit] = Task {
@@ -156,6 +213,31 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
       if !existingColumnsLower.contains(name.toLowerCase) then {
         addColumn(field, tx)
       }
+    }
+
+    // Migrate CHANGED column types. The add/drop above reconciles columns by NAME
+    // only; a field whose serialized type changed (e.g. a timestamp that moved
+    // from a string-serialized wrapper to a numeric `Long`) keeps its original SQL
+    // column type, so typed/range queries against it fail at runtime
+    // (`operator does not exist: character varying >= bigint`). Compare the
+    // catalog's actual type category to the model's expected category for each
+    // pre-existing column and `ALTER` any cross-category mismatch.
+    if supportsAlterColumnType then {
+      val actualByLower = columnTypes(connection).map { case (n, t) => n.toLowerCase -> t }
+      fields.foreach { field =>
+        val key = field.name.toLowerCase
+        if existingColumnsLower.contains(key) then {
+          val expected = defTypeCategory(field.rw.definition)
+          val actual = actualByLower.get(key).flatMap(jdbcTypeCategory)
+          (expected, actual) match {
+            case (Some(e), Some(a)) if e != a =>
+              scribe.warn(s"Column type drift on $fqn.${field.name}: actual=$a, expected=$e — migrating")
+              migrateColumnType(field, tx)
+            case _ => // matching, or unknown on either side — leave alone
+          }
+        }
+      }
+      connection.commit()
     }
 
     // Add indexes
