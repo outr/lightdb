@@ -66,7 +66,7 @@ val profigVersion: String = "3.7.1"
 
 val reactifyVersion: String = "4.2.0"
 
-val spiceVersion: String = "1.8.13"
+val spiceVersion: String = "1.8.15"
 
 val scantivyVersion: String = "1.0.0"
 
@@ -84,7 +84,7 @@ val mapdbVersion: String = "3.1.0"
 
 val lmdbVersion: String = "0.9.2"
 
-val jedisVersion: String = "7.5.0"
+val jedisVersion: String = "7.5.2"
 
 val fabricVersion: String = "1.29.3"
 
@@ -371,7 +371,7 @@ lazy val apiSpice = project.in(file("api-spice"))
 		libraryDependencies ++= Seq(
 			"com.outr" %% "spice-server" % spiceVersion,
 			// Undertow server impl is published one minor behind core; only needed for tests.
-			"com.outr" %% "spice-server-undertow" % "1.8.11" % Test,
+			"com.outr" %% "spice-server-undertow" % "1.8.15" % Test,
 			"com.outr" %% "spice-client-netty" % spiceVersion % Test,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
