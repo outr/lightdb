@@ -14,6 +14,7 @@ db/
 backups/
 metals.sbt
 derby.log
+CLAUDE.md
 *report-*.json
 benchdb/
 benchmarks.json
