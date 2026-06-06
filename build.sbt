@@ -116,8 +116,10 @@ val scalaTestVersion: String = "3.2.20"
 
 val testcontainersVersion: String = "2.0.5"
 
+val mongoVersion: String = "5.6.2"
+
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, api, apiSpice, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, api, apiSpice, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -377,8 +379,21 @@ lazy val apiSpice = project.in(file("api-spice"))
 		)
 	)
 
+lazy val mongodb = project.in(file("mongodb"))
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
+	.settings(
+		name := s"$projectName-mongodb",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"org.mongodb" % "mongodb-driver-sync" % mongoVersion,
+			"org.testcontainers" % "testcontainers" % testcontainersVersion % Test,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, api, apiSpice)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, api, apiSpice)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
