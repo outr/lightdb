@@ -4,8 +4,6 @@ import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.id.Id
-import lightdb.postgresql.PostgreSQLStoreManager
-import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.time.Timestamp
 import lightdb.upgrade.DatabaseUpgrade
@@ -28,7 +26,7 @@ import java.nio.file.Path
   * Insert one of each subtype, list them back, assert both round-trip.
   * Pre-fix the `toList` step throws. Post-fix both subtypes survive. */
 @EmbeddedTest
-class PostgreSQLPolyRootSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers { spec =>
+class PostgreSQLPolyRootSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with PostgreSQLAvailability { spec =>
   private lazy val specName: String = "PostgreSQLPolyRootSpec"
 
   specName should {
@@ -67,11 +65,7 @@ class PostgreSQLPolyRootSpec extends AsyncWordSpec with AsyncTaskSpec with Match
     }
   }
 
-  lazy val storeManager: CollectionManager = PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
-    jdbcUrl = "jdbc:postgresql://localhost:5432/basic",
-    username = Some("postgres"),
-    password = Some("password")
-  )))
+  lazy val storeManager: CollectionManager = PostgreSQLTestSupport.storeManager
 
   object DB extends LightDB {
     override type SM = CollectionManager
