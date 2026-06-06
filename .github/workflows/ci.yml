@@ -7,36 +7,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    env:
-      DATABASE_URL: jdbc:postgresql://localhost:5432/basic
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      # Start PostgreSQL ourselves instead of via a `services:` block so a transient Docker Hub pull
-      # timeout retries rather than failing the whole job (a `services:` image pull has no retry).
-      # The configuration otherwise mirrors the previous service container.
-      - name: Start PostgreSQL
-        run: |
-          for attempt in 1 2 3 4 5; do
-            docker pull postgres:latest && break
-            echo "::warning::postgres image pull failed (attempt $attempt/5); retrying in 10s"
-            sleep 10
-          done
-          docker run -d --name postgres \
-            -e POSTGRES_DB=basic \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=password \
-            -p 5432:5432 \
-            --health-cmd="pg_isready -U postgres" \
-            --health-interval=10s --health-timeout=5s --health-retries=5 \
-            postgres:latest
-          echo "Waiting for PostgreSQL to accept connections..."
-          for i in $(seq 1 30); do
-            docker exec postgres pg_isready -U postgres >/dev/null 2>&1 && { echo "PostgreSQL is ready"; break; }
-            sleep 2
-          done
+      # PostgreSQL is provisioned by the tests themselves via Testcontainers (with a local-:5432
+      # fast path), and they cancel gracefully if Docker is unavailable — so CI no longer needs to
+      # stand up a Postgres service or container here.
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
