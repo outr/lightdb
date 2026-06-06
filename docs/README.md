@@ -20,6 +20,7 @@ Computationally focused database using pluggable stores
 | [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
 | [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | 🟡        | Columnar, ideal for analytics         |
 | [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | 🟡         | Full-featured RDBMS                   |
+| [MariaDB / MySQL](https://mariadb.org)                                | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID)     | 🟡 (REGEXP/LIKE) | 🟡         | MySQL-compatible via the MariaDB driver |
 
 ### Legend
 - ✅: Supported / Good
