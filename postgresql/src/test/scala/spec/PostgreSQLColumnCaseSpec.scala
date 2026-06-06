@@ -4,9 +4,7 @@ import fabric.rw.*
 import lightdb.LightDB
 import lightdb.doc.{JsonConversion, RecordDocument, RecordDocumentModel}
 import lightdb.id.Id
-import lightdb.postgresql.PostgreSQLStoreManager
 import lightdb.store.{Collection, CollectionManager}
-import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
 import lightdb.time.Timestamp
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.BeforeAndAfterAll
@@ -43,19 +41,13 @@ import java.sql.{Connection, DriverManager}
  * actually be gone.
  */
 @EmbeddedTest
-class PostgreSQLColumnCaseSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with BeforeAndAfterAll {
+class PostgreSQLColumnCaseSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with BeforeAndAfterAll with PostgreSQLAvailability {
   private val schema = "PostgreSQLColumnCaseSpec"
   private val table  = "schema_evolution_record"
 
-  private val jdbcUrl  = "jdbc:postgresql://localhost:5432/basic"
-  private val jdbcUser = "postgres"
-  private val jdbcPass = "password"
-
-  private def sqlConfig: SQLConfig = SQLConfig(
-    jdbcUrl  = jdbcUrl,
-    username = Some(jdbcUser),
-    password = Some(jdbcPass)
-  )
+  private def jdbcUrl: String = PostgreSQLTestSupport.jdbcUrl.get
+  private def jdbcUser: String = PostgreSQLTestSupport.username
+  private def jdbcPass: String = PostgreSQLTestSupport.password
 
   private def withJdbc[T](f: Connection => T): T = {
     val c = DriverManager.getConnection(jdbcUrl, jdbcUser, jdbcPass)
@@ -65,7 +57,8 @@ class PostgreSQLColumnCaseSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
   /** Drop the test schema so every run starts from a clean slate. */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    withJdbc { c =>
+    // `beforeAll` runs before per-test cancellation, so skip when PostgreSQL is unavailable.
+    if PostgreSQLTestSupport.jdbcUrl.isDefined then withJdbc { c =>
       val st = c.createStatement()
       try st.executeUpdate(s"""DROP SCHEMA IF EXISTS "$schema" CASCADE""")
       finally st.close()
@@ -138,7 +131,7 @@ class PostgreSQLColumnCaseSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
   /** Database "version A" — its model still has `legacyCamelField`. */
   object DBBefore extends LightDB {
     override type SM = CollectionManager
-    override val storeManager: CollectionManager = PostgreSQLStoreManager(HikariConnectionManager(sqlConfig))
+    override val storeManager: CollectionManager = PostgreSQLTestSupport.storeManager
     override def name: String = schema
     lazy val directory: Option[Path] = Some(Path.of(s"db/$schema"))
     val records: Collection[RecordWithLegacyColumn, RecordWithLegacyColumn.type] =
@@ -150,7 +143,7 @@ class PostgreSQLColumnCaseSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     * Initializing this is the schema-evolution step that crashes. */
   object DBAfter extends LightDB {
     override type SM = CollectionManager
-    override val storeManager: CollectionManager = PostgreSQLStoreManager(HikariConnectionManager(sqlConfig))
+    override val storeManager: CollectionManager = PostgreSQLTestSupport.storeManager
     override def name: String = schema
     lazy val directory: Option[Path] = Some(Path.of(s"db/$schema"))
     val records: Collection[RecordWithoutLegacyColumn, RecordWithoutLegacyColumn.type] =

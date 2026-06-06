@@ -204,6 +204,7 @@ lazy val postgresql = project.in(file("postgresql"))
 		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"org.postgresql" % "postgresql" % postgresqlVersion,
+			"org.testcontainers" % "testcontainers" % testcontainersVersion % Test,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
 	)
