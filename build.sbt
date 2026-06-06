@@ -371,7 +371,7 @@ lazy val apiSpice = project.in(file("api-spice"))
 		libraryDependencies ++= Seq(
 			"com.outr" %% "spice-server" % spiceVersion,
 			// Undertow server impl is published one minor behind core; only needed for tests.
-			"com.outr" %% "spice-server-undertow" % "1.8.15" % Test,
+			"com.outr" %% "spice-server-undertow" % "1.9.1" % Test,
 			"com.outr" %% "spice-client-netty" % spiceVersion % Test,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
