@@ -7,20 +7,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    services:
-      postgres:
-        image: postgres:latest
-        env:
-          POSTGRES_DB: basic
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       DATABASE_URL: jdbc:postgresql://localhost:5432/basic
       POSTGRES_USER: postgres
@@ -28,6 +14,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+      # Start PostgreSQL ourselves instead of via a `services:` block so a transient Docker Hub pull
+      # timeout retries rather than failing the whole job (a `services:` image pull has no retry).
+      # The configuration otherwise mirrors the previous service container.
+      - name: Start PostgreSQL
+        run: |
+          for attempt in 1 2 3 4 5; do
+            docker pull postgres:latest && break
+            echo "::warning::postgres image pull failed (attempt $attempt/5); retrying in 10s"
+            sleep 10
+          done
+          docker run -d --name postgres \
+            -e POSTGRES_DB=basic \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=password \
+            -p 5432:5432 \
+            --health-cmd="pg_isready -U postgres" \
+            --health-interval=10s --health-timeout=5s --health-retries=5 \
+            postgres:latest
+          echo "Waiting for PostgreSQL to accept connections..."
+          for i in $(seq 1 30); do
+            docker exec postgres pg_isready -U postgres >/dev/null 2>&1 && { echo "PostgreSQL is ready"; break; }
+            sleep 2
+          done
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
