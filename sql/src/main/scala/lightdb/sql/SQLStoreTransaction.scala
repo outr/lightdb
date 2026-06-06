@@ -997,28 +997,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   private def aggregate2SQLQuery(query: AggregateQuery[Doc, Model]): SQLQueryBuilder[Doc, Model] = {
     val fields = query.functions.map { f =>
-      val af = f.`type` match {
-        case AggregateType.Max => Some("MAX")
-        case AggregateType.Min => Some("MIN")
-        case AggregateType.Avg => Some("AVG")
-        case AggregateType.Sum => Some("SUM")
-        case AggregateType.Count | AggregateType.CountDistinct => Some("COUNT")
-        case AggregateType.Concat | AggregateType.ConcatDistinct => Some(concatPrefix)
-        case AggregateType.Group => None
-      }
-      val fieldName = af match {
-        case Some(s) =>
-          val pre = f.`type` match {
-            case AggregateType.CountDistinct | AggregateType.ConcatDistinct => "DISTINCT "
-            case _ => ""
-          }
-          val post = f.`type` match {
-            case AggregateType.Concat => ", ';;'"
-            case _ => ""
-          }
-          s"$s($pre${SqlIdent.quote(f.field.name)}$post)"
-        case None => SqlIdent.quote(f.field.name)
-      }
+      val fieldName = aggExpr(f.`type`, SqlIdent.quote(f.field.name))
       SQLPart.Fragment(s"$fieldName AS ${SqlIdent.quote(f.name)}")
     }
     val filters = query.query.filter.map(filter2Part).toList
@@ -1438,6 +1417,24 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   protected def fieldPart[V](field: Field[Doc, V]): SQLPart = SQLPart.Fragment(SqlIdent.quote(field.name))
 
   protected def concatPrefix: String = "GROUP_CONCAT"
+
+  /**
+   * SQL expression for an aggregate function over the given (already-quoted) column. Dialects
+   * override to adjust syntax — e.g. MySQL needs `GROUP_CONCAT(... SEPARATOR x)` and an explicit
+   * double cast for `AVG` precision. `Concat`/`ConcatDistinct` use the `;;` / `,,` separators the
+   * result parser splits on (see `aggregate`).
+   */
+  protected def aggExpr(`type`: AggregateType, column: String): String = `type` match {
+    case AggregateType.Max => s"MAX($column)"
+    case AggregateType.Min => s"MIN($column)"
+    case AggregateType.Avg => s"AVG($column)"
+    case AggregateType.Sum => s"SUM($column)"
+    case AggregateType.Count => s"COUNT($column)"
+    case AggregateType.CountDistinct => s"COUNT(DISTINCT $column)"
+    case AggregateType.Concat => s"$concatPrefix($column, ';;')"
+    case AggregateType.ConcatDistinct => s"$concatPrefix(DISTINCT $column)"
+    case AggregateType.Group => column
+  }
 
   protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
     throw new UnsupportedOperationException("Distance filtering not supported in SQL!")

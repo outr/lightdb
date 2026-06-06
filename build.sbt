@@ -104,6 +104,8 @@ val h2Version: String = "2.4.240"
 
 val postgresqlVersion: String = "42.7.11"
 
+val mariadbVersion: String = "3.5.7"
+
 val googleSheetsVersion: String = "v4-rev20260213-2.0.0"
 
 val googleAuthVersion: String = "1.47.0"
@@ -119,7 +121,7 @@ val testcontainersVersion: String = "2.0.5"
 val mongoVersion: String = "5.6.2"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, api, apiSpice, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, api, apiSpice, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -393,8 +395,21 @@ lazy val mongodb = project.in(file("mongodb"))
 		)
 	)
 
+lazy val mariadb = project.in(file("mariadb"))
+	.dependsOn(sql, sql % "test->test")
+	.settings(
+		name := s"$projectName-mariadb",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"org.mariadb.jdbc" % "mariadb-java-client" % mariadbVersion,
+			"org.testcontainers" % "testcontainers" % testcontainersVersion % Test,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, api, apiSpice)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, api, apiSpice)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
