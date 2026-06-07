@@ -7,7 +7,8 @@ import com.arangodb.util.RawJson
 import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
-import lightdb.aggregate.AggregateQuery
+import lightdb.SortDirection
+import lightdb.aggregate.{AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.DuplicateIdException
 import lightdb.facet.FacetComputation
@@ -70,14 +71,16 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     JsonFormatter.Compact(Obj(finalMap))
   }
 
-  private def toJson(raw: RawJson): Json = JsonParser(raw.get()) match {
-    // Drop ArangoDB system attributes (`_id`=coll/key, `_rev`, edge `_from`/`_to` handles); restore
-    // escaped names (e.g. `_key`->`_id`, `from_`->`_from`).
+  // Drop ArangoDB system attributes (`_id`=coll/key, `_rev`, edge `_from`/`_to` handles); restore
+  // escaped names (e.g. `_key`->`_id`, `from_`->`_from`).
+  private def mapArangoDoc(json: Json): Json = json match {
     case o: Obj => Obj(o.value.collect {
       case (k, v) if k != "_id" && k != "_rev" && k != "_from" && k != "_to" => ArangoQuery.unescapeKey(k) -> v
     })
     case other => other
   }
+
+  private def toJson(raw: RawJson): Json = mapArangoDoc(JsonParser(raw.get()))
 
   private def fromRaw(raw: RawJson): Doc = toJson(raw).as[Doc](store.model.rw)
 
@@ -131,6 +134,21 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     new Iterator[Json] {
       override def hasNext: Boolean = cursor.hasNext
       override def next(): Json = toJson(cursor.next())
+    }
+  })
+
+  override def nativeAllPaths(fromKey: String, toKey: String, maxDepth: Int): rapid.Stream[List[Json]] = rapid.Stream.fromIterator(Task {
+    val from = s"${store.vertexNamespace}/$fromKey"
+    val to = s"${store.vertexNamespace}/$toKey"
+    val max = if maxDepth == Int.MaxValue then 100 else maxDepth // K_PATHS requires a finite bound
+    val aql = s"FOR p IN 1..$max OUTBOUND K_PATHS @from TO @to @@col RETURN p.edges"
+    val cursor = store.database.query(aql, classOf[RawJson], Map[String, Any]("@col" -> store.arangoName, "from" -> from, "to" -> to).asJava)
+    new Iterator[List[Json]] {
+      override def hasNext: Boolean = cursor.hasNext
+      override def next(): List[Json] = JsonParser(cursor.next().get()) match {
+        case Arr(values, _) => values.map(mapArangoDoc).toList
+        case _ => Nil
+      }
     }
   })
 
@@ -372,11 +390,61 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     }
   }
 
-  // Aggregation is computed in-memory via the shared `Aggregator`; correct for all
-  // AggregateType/Group/sub-aggregate/Concat cases. Native AQL COLLECT pushdown is a future optimization.
+  // Native AQL COLLECT pushdown for the common shapes (Group + Max/Min/Avg/Sum/Count/CountDistinct,
+  // no sub-aggregates, no HAVING, translatable WHERE). Everything else (sub-aggregates, Concat/
+  // ConcatDistinct, HAVING, residual WHERE) falls back to the correct in-memory `Aggregator`.
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    lightdb.util.Aggregator(query, store.model)
+    if canPushdownAggregate(query) then nativeAggregate(query)
+    else lightdb.util.Aggregator(query, store.model)
 
   override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] =
     aggregate(query).count
+
+  private def canPushdownAggregate(query: AggregateQuery[Doc, Model]): Boolean =
+    query.filter.isEmpty && // HAVING
+      query.functions.nonEmpty &&
+      !query.query.filter.exists(ArangoQuery.filterHasResidual) &&
+      query.functions.forall(f => f.subAggregates.isEmpty && (f.`type` match {
+        case AggregateType.Group | AggregateType.Max | AggregateType.Min | AggregateType.Avg |
+             AggregateType.Sum | AggregateType.Count | AggregateType.CountDistinct => true
+        case _ => false // Concat / ConcatDistinct
+      }))
+
+  private def aqlAggExpr(f: AggregateFunction[_, _, Doc]): String = {
+    val field = s"d.`${ArangoQuery.escapeKey(f.field.name)}`"
+    f.`type` match {
+      case AggregateType.Max => s"MAX($field)"
+      case AggregateType.Min => s"MIN($field)"
+      case AggregateType.Avg => s"AVERAGE($field)"
+      case AggregateType.Sum => s"SUM($field)"
+      case AggregateType.Count => "COUNT_DISTINCT(d.`_key`)" // docs per group (keys are unique)
+      case AggregateType.CountDistinct => s"COUNT_DISTINCT($field)"
+      case other => throw new UnsupportedOperationException(s"Unsupported native aggregate: $other")
+    }
+  }
+
+  private def nativeAggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = rapid.Stream.fromIterator(Task {
+    val groups = query.functions.filter(_.`type` == AggregateType.Group)
+    val metrics = query.functions.filter(_.`type` != AggregateType.Group)
+    val sb = new StringBuilder("FOR d IN @@col")
+    query.query.filter.foreach(f => sb.append(s" FILTER ${ArangoQuery.translate(f, store.model)}"))
+    sb.append(" COLLECT ")
+    sb.append(groups.map(g => s"`${g.name}` = d.`${ArangoQuery.escapeKey(g.field.name)}`").mkString(", "))
+    if (metrics.nonEmpty) {
+      if (groups.nonEmpty) sb.append(" ")
+      sb.append("AGGREGATE " + metrics.map(m => s"`${m.name}` = ${aqlAggExpr(m)}").mkString(", "))
+    }
+    if (query.sort.nonEmpty) {
+      sb.append(" SORT " + query.sort.map { case (f, dir) => s"`${f.name}` ${if dir == SortDirection.Descending then "DESC" else "ASC"}" }.mkString(", "))
+    }
+    query.limit.foreach(l => sb.append(s" LIMIT $l"))
+    val ret = query.functions.map(f => s"`${f.name}`: `${f.name}`").mkString(", ")
+    sb.append(s" RETURN { $ret }")
+
+    val cursor = store.database.query(sb.toString, classOf[RawJson], Map[String, Any]("@col" -> store.arangoName).asJava)
+    new Iterator[MaterializedAggregate[Doc, Model]] {
+      override def hasNext: Boolean = cursor.hasNext
+      override def next(): MaterializedAggregate[Doc, Model] = MaterializedAggregate[Doc, Model](JsonParser(cursor.next().get()), store.model)
+    }
+  })
 }
