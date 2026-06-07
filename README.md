@@ -4,21 +4,34 @@
 Computationally focused database using pluggable stores
 
 ## Provided Stores
-| Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Prefix Scan | Notes                                 |
-|------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|-----------|---------------------------------------|
-| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅       | ✅          | ✅✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | ❌        | Fast, simple write-optimized store    |
-| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | ❌        | Ultra low-latency, off-heap storage   |
-| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅       | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | ✅        | Read-optimized, mature B+Tree engine  |
-| [MapDB (B-Tree)](https://mapdb.org)                                   | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | ✅        | Uses BTreeMap for ordered/prefix scans|
-| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅        | High-performance LSM tree             |
-| [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌        | Popular in-memory data structure store|
-| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine; native block-join + spatial |
-| [Tantivy](https://github.com/quickwit-oss/tantivy) (via [Scantivy](https://github.com/outr/scantivy)) | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅✅      | ✅           | ❌              | ✅✅✅           | ❌        | Rust-based; FFM (JEP 442) bridge over a Tantivy lib. No native geo or block-join (use Lucene for those) |
-| [OpenSearch](https://opensearch.org)                                  | Search Server      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | ✅✅✅           | ❌        | Distributed search, joins, aggregations |
-| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | 🟡        | Lightweight embedded SQL              |
-| [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
-| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | 🟡        | Columnar, ideal for analytics         |
-| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | 🟡         | Full-featured RDBMS                   |
+
+Stores are grouped by deployment model: **embedded** stores run in-process with no external service,
+while **server-based** stores connect to a database server (local or remote).
+
+### Embedded Stores
+| Store                                                                 | Type               | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Vector KNN | Prefix Scan | Notes                                 |
+|------------------------------------------------------------------------|--------------------|-------------|-----------|------------|-------------|------------------|------------------|------------|-----------|---------------------------------------|
+| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅          | ✅✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | ❌         | ❌        | Fast, simple write-optimized store    |
+| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | ❌         | ❌        | Ultra low-latency, off-heap storage   |
+| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | ❌         | ✅        | Read-optimized, mature B+Tree engine  |
+| [MapDB (B-Tree)](https://mapdb.org)                                   | Java Collections   | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | ❌         | ✅        | Uses BTreeMap for ordered/prefix scans|
+| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ❌         | ✅        | High-performance LSM tree             |
+| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ✅ (HNSW)  | ❌        | Best-in-class full-text search engine; native block-join, spatial, and vector KNN |
+| [Tantivy](https://github.com/quickwit-oss/tantivy) (via [Scantivy](https://github.com/outr/scantivy)) | Full-Text Search   | ✅          | ✅✅      | ✅✅      | ✅           | ❌              | ✅✅✅           | ❌         | ❌        | Rust-based; FFM (JEP 442) bridge over a Tantivy lib. No native geo or block-join (use Lucene for those) |
+| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | ❌         | 🟡        | Lightweight embedded SQL              |
+| [H2](https://h2database.com)                                          | Relational DB      | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | ❌         | 🟡         | Java-native SQL engine                |
+| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | ❌         | 🟡        | Columnar, ideal for analytics         |
+
+### Server-Based Stores
+| Store                                                                 | Type               | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Vector KNN | Prefix Scan | Notes                                 |
+|------------------------------------------------------------------------|--------------------|-------------|-----------|------------|-------------|------------------|------------------|------------|-----------|---------------------------------------|
+| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ✅          | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | ✅ (pgvector) | 🟡         | Full-featured RDBMS; native vector via the pgvector extension |
+| [MariaDB / MySQL](https://mariadb.org)                                | Relational DB      | ✅          | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID)     | 🟡 (REGEXP/LIKE) | ❌         | 🟡         | MySQL-compatible via the MariaDB driver |
+| [MongoDB](https://www.mongodb.com)                                    | Document DB        | ✅          | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | 🟡 (Regex)       | ❌         | ❌        | Native nested ($elemMatch), aggregation, geo, facets |
+| [ArangoDB](https://www.arangodb.com)                                  | Multi-Model (Doc/Graph) | ✅     | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | 🟡 (REGEX_TEST)  | ❌         | ✅        | AQL queries, native nested, aggregation, facets, graph traversal |
+| [OpenSearch](https://opensearch.org)                                  | Search Server      | ✅          | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | ✅✅✅           | ❌         | ❌        | Distributed search, joins, aggregations |
+| [Qdrant](https://qdrant.tech)                                         | Vector DB          | ✅          | ✅✅✅     | ✅✅      | ✅✅         | ❌              | 🟡 (Payload match) | ✅✅✅      | ❌        | Purpose-built vector DB; native HNSW KNN + payload filtering. Vector-first: not a general store (no prefix scan / traversal) |
+| [Redis](https://redis.io)                                             | In-Memory KV Store | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌         | ❌        | Popular in-memory data structure store (local or remote) |
 
 ### Legend
 - ✅: Supported / Good
@@ -31,27 +44,27 @@ Computationally focused database using pluggable stores
 
 To add all modules:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.40.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.41.0"
 ```
 
 For a specific implementation like Lucene:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.40.0"
+libraryDependencies += "com.outr" %% "lightdb-lucene" % "4.41.0"
 ```
 
 For Tantivy (Rust-backed; bundles native libs for linux-x86_64, linux-aarch64, macos-aarch64, windows-x86_64; requires JDK 22+ for the FFM API):
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-tantivy" % "4.40.0"
+libraryDependencies += "com.outr" %% "lightdb-tantivy" % "4.41.0"
 ```
 
 For graph traversal utilities:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-traversal" % "4.40.0"
+libraryDependencies += "com.outr" %% "lightdb-traversal" % "4.41.0"
 ```
 
 For OpenSearch:
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-opensearch" % "4.40.0"
+libraryDependencies += "com.outr" %% "lightdb-opensearch" % "4.41.0"
 ```
 
 ---
@@ -91,7 +104,7 @@ db.people.transaction { tx =>
 // res0: Task[List[Option[City]]] = FlatMap(
 //   input = FlatMap(
 //     input = Suspend(
-//       f = lightdb.store.Store$TransactionBuilder$$Lambda/0x0000000062a05410@7bcea12a,
+//       f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000002f96b598@1982e397,
 //       trace = SourcecodeTrace(
 //         file = File(
 //           "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
@@ -101,7 +114,7 @@ db.people.transaction { tx =>
 //         kind = "apply"
 //       )
 //     ),
-//     f = lightdb.store.Store$TransactionBuilder$$Lambda/0x0000000062a06de0@3adf3b91,
+//     f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000002f96cf68@a1489f0,
 //     trace = SourcecodeTrace(
 //       file = File(
 //         "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
@@ -111,7 +124,7 @@ db.people.transaction { tx =>
 //       kind = "flatMap"
 //     )
 //   ),
-//   f = lightdb.store.Store$TransactionBuilder$$Lambda/0x0000000062a07970@33a43e94,
+//   f = lightdb.store.Store$TransactionBuilder$$Lambda/0x000000002f96daf8@6493db68,
 //   trace = SourcecodeTrace(
 //     file = File(
 //       "/home/mhicks/projects/open/lightdb/core/src/main/scala/lightdb/store/Store.scala"
@@ -207,7 +220,7 @@ Ensure you have the following:
 Add the following dependency to your `build.sbt` file:
 
 ```scala
-libraryDependencies += "com.outr" %% "lightdb-all" % "4.40.0"
+libraryDependencies += "com.outr" %% "lightdb-all" % "4.41.0"
 ```
 
 ---
@@ -299,7 +312,7 @@ val adam = Person(name = "Adam", age = 21)
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("dnd2mSLTfKBwu0LjF2g0pUOTUbudgq1c")
+//   _id = StringId("ib3YLI7unXrSXnAqCoSH2vwFBaoQK2V9")
 // )
 db.people.transaction { implicit txn =>
   txn.insert(adam)
@@ -310,7 +323,7 @@ db.people.transaction { implicit txn =>
 //   city = None,
 //   nicknames = Set(),
 //   friends = List(),
-//   _id = StringId("dnd2mSLTfKBwu0LjF2g0pUOTUbudgq1c")
+//   _id = StringId("ib3YLI7unXrSXnAqCoSH2vwFBaoQK2V9")
 // )
 ```
 
@@ -324,7 +337,7 @@ db.people.transaction { txn =>
     println(s"People in their 20s: $peopleIn20s")
   }
 }.sync()
-// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)), Person(Adam,21,None,Set(),List(),StringId(xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak)), Person(Adam,21,None,Set(),List(),StringId(lDebTHCc6w9UKxAxStG1TBKw7Iudm5lL)), Person(Adam,21,None,Set(),List(),StringId(HZVS94X2I3BRfxr7HG7JXDvzc8lA6IgR)), Person(Adam,21,None,Set(),List(),StringId(pFnf4G5EK9mTUBkcinbdfPBHDdEKdAfz)), Person(Adam,21,None,Set(),List(),StringId(Wd9VwbOi2nn3BeeVasgrLXq8h2GPP552)), Person(Adam,21,None,Set(),List(),StringId(knNWZqRZsayvjlrRfYksOHUVlGj7phJU)), Person(Adam,21,None,Set(),List(),StringId(mj53j5CMoDLVgroCyLRQBUChkrieEHVC)), Person(Adam,21,None,Set(),List(),StringId(3U9ZWdQwj7VSBDJ35TH9mN4qcnOYvcdw)), Person(Adam,21,None,Set(),List(),StringId(iIFXqyEsDoOa3SjWnPK8U0sxkeunQVtg)), Person(Adam,21,None,Set(),List(),StringId(9EFkuRzd1cXBUtJovscvDL0rZjaVKA1F)), Person(Adam,21,None,Set(),List(),StringId(LnBM1MKVkM5TDug8WFTe6JE8IpE3xRZW)), Person(Adam,21,None,Set(),List(),StringId(CFjdQHdayo8aqudTgLW2Q5QLFNSz3I2R)), Person(Adam,21,None,Set(),List(),StringId(BRg8MOGwU0nvPC1uYNfXAUDOGQvMH4e3)), Person(Adam,21,None,Set(),List(),StringId(dnd2mSLTfKBwu0LjF2g0pUOTUbudgq1c)))
+// People in their 20s: List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)), Person(Adam,21,None,Set(),List(),StringId(xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak)), Person(Adam,21,None,Set(),List(),StringId(lDebTHCc6w9UKxAxStG1TBKw7Iudm5lL)), Person(Adam,21,None,Set(),List(),StringId(HZVS94X2I3BRfxr7HG7JXDvzc8lA6IgR)), Person(Adam,21,None,Set(),List(),StringId(pFnf4G5EK9mTUBkcinbdfPBHDdEKdAfz)), Person(Adam,21,None,Set(),List(),StringId(Wd9VwbOi2nn3BeeVasgrLXq8h2GPP552)), Person(Adam,21,None,Set(),List(),StringId(knNWZqRZsayvjlrRfYksOHUVlGj7phJU)), Person(Adam,21,None,Set(),List(),StringId(mj53j5CMoDLVgroCyLRQBUChkrieEHVC)), Person(Adam,21,None,Set(),List(),StringId(3U9ZWdQwj7VSBDJ35TH9mN4qcnOYvcdw)), Person(Adam,21,None,Set(),List(),StringId(iIFXqyEsDoOa3SjWnPK8U0sxkeunQVtg)), Person(Adam,21,None,Set(),List(),StringId(9EFkuRzd1cXBUtJovscvDL0rZjaVKA1F)), Person(Adam,21,None,Set(),List(),StringId(LnBM1MKVkM5TDug8WFTe6JE8IpE3xRZW)), Person(Adam,21,None,Set(),List(),StringId(CFjdQHdayo8aqudTgLW2Q5QLFNSz3I2R)), Person(Adam,21,None,Set(),List(),StringId(BRg8MOGwU0nvPC1uYNfXAUDOGQvMH4e3)), Person(Adam,21,None,Set(),List(),StringId(dnd2mSLTfKBwu0LjF2g0pUOTUbudgq1c)), Person(Adam,21,None,Set(),List(),StringId(ib3YLI7unXrSXnAqCoSH2vwFBaoQK2V9)))
 ```
 
 ---
@@ -364,7 +377,7 @@ db.people.transaction { txn =>
       println(s"Results: $results")
     }
 }.sync()
-// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 1260},repl.MdocSession$MdocApp$Person$@4274f344,Map()))
+// Results: List(MaterializedAggregate({"ageMin": 21, "ageMax": 21, "ageAvg": 21.0, "ageSum": 1281},repl.MdocSession$MdocApp$Person$@700bd1bd,Map()))
 ```
 
 ### Grouping
@@ -375,7 +388,7 @@ db.people.transaction { txn =>
     println(s"Grouped: $grouped")
   }
 }.sync()
-// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)), Person(Adam,21,None,Set(),List(),StringId(xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak)), Person(Adam,21,None,Set(),List(),StringId(lDebTHCc6w9UKxAxStG1TBKw7Iudm5lL)), Person(Adam,21,None,Set(),List(),StringId(HZVS94X2I3BRfxr7HG7JXDvzc8lA6IgR)), Person(Adam,21,None,Set(),List(),StringId(pFnf4G5EK9mTUBkcinbdfPBHDdEKdAfz)), Person(Adam,21,None,Set(),List(),StringId(Wd9VwbOi2nn3BeeVasgrLXq8h2GPP552)), Person(Adam,21,None,Set(),List(),StringId(knNWZqRZsayvjlrRfYksOHUVlGj7phJU)), Person(Adam,21,None,Set(),List(),StringId(mj53j5CMoDLVgroCyLRQBUChkrieEHVC)), Person(Adam,21,None,Set(),List(),StringId(3U9ZWdQwj7VSBDJ35TH9mN4qcnOYvcdw)), Person(Adam,21,None,Set(),List(),StringId(iIFXqyEsDoOa3SjWnPK8U0sxkeunQVtg)), Person(Adam,21,None,Set(),List(),StringId(9EFkuRzd1cXBUtJovscvDL0rZjaVKA1F)), Person(Adam,21,None,Set(),List(),StringId(LnBM1MKVkM5TDug8WFTe6JE8IpE3xRZW)), Person(Adam,21,None,Set(),List(),StringId(CFjdQHdayo8aqudTgLW2Q5QLFNSz3I2R)), Person(Adam,21,None,Set(),List(),StringId(BRg8MOGwU0nvPC1uYNfXAUDOGQvMH4e3)), Person(Adam,21,None,Set(),List(),StringId(dnd2mSLTfKBwu0LjF2g0pUOTUbudgq1c)))))
+// Grouped: List(Grouped(21,List(Person(Adam,21,None,Set(),List(),StringId(IDmTU51mzoBQCEyaxBuHrwtLEcmHTags)), Person(Adam,21,None,Set(),List(),StringId(KGrBn5aofL4Nr9U3rhfv3dFHFiZQLBBp)), Person(Adam,21,None,Set(),List(),StringId(zKsjLb0Oh67NU7cXuCqefzuYqEkLNYou)), Person(Adam,21,None,Set(),List(),StringId(YtDDj7Lf0ys2sVAl5KbaGwYX1cRJdV41)), Person(Adam,21,None,Set(),List(),StringId(JzoJoBINhzejipsrAYzdaUGVvlxEFW5g)), Person(Adam,21,None,Set(),List(),StringId(5o9UsGhDtjTKVOLvHZCg0Y9CYjoh5g7C)), Person(Adam,21,None,Set(),List(),StringId(SpOTvdzPy3w302cWeQXRvtuVrJFDm13Z)), Person(Adam,21,None,Set(),List(),StringId(9WD5mBb0Y5IXtF2vuDa7fi8Y0pSw0Da0)), Person(Adam,21,None,Set(),List(),StringId(1gh7JtBVdDNqjihBDogvU4NNRGPJsXkb)), Person(Adam,21,None,Set(),List(),StringId(Xa6wUoSrdhjLP2vkbKyiyUjlyWBAz4kD)), Person(Adam,21,None,Set(),List(),StringId(iT74rK8QvkrRf6DrevkvgwQcHRgFuoUE)), Person(Adam,21,None,Set(),List(),StringId(QLvnBifleraDeNmCHkKeIPqyzhnib2Eg)), Person(Adam,21,None,Set(),List(),StringId(SJAjOvPNYLRg5wQ00zxEZUOUES7tCxcP)), Person(Adam,21,None,Set(),List(),StringId(zdX8DTpGZyn3MkGJhHaKnUz1cu9ZUdrK)), Person(Adam,21,None,Set(),List(),StringId(rdsWgq0lgl2jDHbivox9Vfz20zQ9Oe9L)), Person(Adam,21,None,Set(),List(),StringId(W7eeWhwhqCkihCVVVgujwUFDkhEO3oRa)), Person(Adam,21,None,Set(),List(),StringId(cMMqWQP2BIdaQp51oCPxVenB4ulAtVWl)), Person(Adam,21,None,Set(),List(),StringId(M0icIK9ngQkZcxcHFWKNQjzGcxnKq5SV)), Person(Adam,21,None,Set(),List(),StringId(AAGmPac35fkhX4pwacUuJ6lk0syGxFvk)), Person(Adam,21,None,Set(),List(),StringId(a59ro7mat6N4fxgmSogH1lw70fIBUtdq)), Person(Adam,21,None,Set(),List(),StringId(l9J7x1oMU0Wl8jVu4RZcGNFJOXNUKMYe)), Person(Adam,21,None,Set(),List(),StringId(3IB9QsYE1QVmqLTyKEQVQLXsKiR7BP5J)), Person(Adam,21,None,Set(),List(),StringId(8r1oUXaNLT4UGU2zNpIMBCiDysIZkMPh)), Person(Adam,21,None,Set(),List(),StringId(ut0wFFNDcXo270dffWuTATGfHfo2vcNI)), Person(Adam,21,None,Set(),List(),StringId(S2SEtSkfIVqqRJhehK6kK0fwsVlXPPL0)), Person(Adam,21,None,Set(),List(),StringId(JbqVgdDWjMnrkVCfVrZ4JD4xWRh837BM)), Person(Adam,21,None,Set(),List(),StringId(Ke7bqs2cZ0jE1DFLyUzaV6hyeZe2VWfn)), Person(Adam,21,None,Set(),List(),StringId(MFm0BxSa3Pmp2y5y1akABtrgHdCCwrcJ)), Person(Adam,21,None,Set(),List(),StringId(l75uiBclVPZp6BKzir5v3NaoJnzlQA9v)), Person(Adam,21,None,Set(),List(),StringId(2ERom8mNTPS1884bY6vAHHA0AEYR0NSk)), Person(Adam,21,None,Set(),List(),StringId(mN1fBoA0tIwx1MbLNYsydMei78HwEesy)), Person(Adam,21,None,Set(),List(),StringId(8imp4NOlpBx1Wsu7woKLPJVq4Kv4AZDS)), Person(Adam,21,None,Set(),List(),StringId(5t9W5XM3pw2oWDszb28SWxRhh6LJvRoq)), Person(Adam,21,None,Set(),List(),StringId(yWg21ngYbyrEngNHmnrNWcTyndywDYo8)), Person(Adam,21,None,Set(),List(),StringId(dbiqhoV6tN1VdNWLBvCzWOlzwL8Ck8iC)), Person(Adam,21,None,Set(),List(),StringId(ygDHp6SVmD5yMqZMru3RnMS54mvvoGnI)), Person(Adam,21,None,Set(),List(),StringId(kSxSXVhD1jPH1cxQftUpJ1REMFe7EzEP)), Person(Adam,21,None,Set(),List(),StringId(IynPIbMMAsqpCoKLHQpRx0qMmehm79jw)), Person(Adam,21,None,Set(),List(),StringId(zk0CTrMh1gMfdNC7OegGqQc80sWKrgPM)), Person(Adam,21,None,Set(),List(),StringId(Tc6rz2qXAy2dMqr0RnSG6Dx6JuxDNplN)), Person(Adam,21,None,Set(),List(),StringId(tt0Vn1ttNWlw2Yr27v4uQ5HqWE5vbfMz)), Person(Adam,21,None,Set(),List(),StringId(Gi64UOAbbbHLiicqtoIYsZXxsPAKoGSk)), Person(Adam,21,None,Set(),List(),StringId(WGfNHSA2vDYSyP0sSUPP60tihQmQ5BjS)), Person(Adam,21,None,Set(),List(),StringId(LJCM5pVRwlg9KSSNK4WsmEBJycTC3WgV)), Person(Adam,21,None,Set(),List(),StringId(kRYd9tXPWCK2imPxS16m33dAvmdVwQNc)), Person(Adam,21,None,Set(),List(),StringId(jSU6HNiFhJdUITBYEZNrUTNi7YIMQ4di)), Person(Adam,21,None,Set(),List(),StringId(xcpbd3CGzhQwVGivPFsKkbhHOq2TeGak)), Person(Adam,21,None,Set(),List(),StringId(lDebTHCc6w9UKxAxStG1TBKw7Iudm5lL)), Person(Adam,21,None,Set(),List(),StringId(HZVS94X2I3BRfxr7HG7JXDvzc8lA6IgR)), Person(Adam,21,None,Set(),List(),StringId(pFnf4G5EK9mTUBkcinbdfPBHDdEKdAfz)), Person(Adam,21,None,Set(),List(),StringId(Wd9VwbOi2nn3BeeVasgrLXq8h2GPP552)), Person(Adam,21,None,Set(),List(),StringId(knNWZqRZsayvjlrRfYksOHUVlGj7phJU)), Person(Adam,21,None,Set(),List(),StringId(mj53j5CMoDLVgroCyLRQBUChkrieEHVC)), Person(Adam,21,None,Set(),List(),StringId(3U9ZWdQwj7VSBDJ35TH9mN4qcnOYvcdw)), Person(Adam,21,None,Set(),List(),StringId(iIFXqyEsDoOa3SjWnPK8U0sxkeunQVtg)), Person(Adam,21,None,Set(),List(),StringId(9EFkuRzd1cXBUtJovscvDL0rZjaVKA1F)), Person(Adam,21,None,Set(),List(),StringId(LnBM1MKVkM5TDug8WFTe6JE8IpE3xRZW)), Person(Adam,21,None,Set(),List(),StringId(CFjdQHdayo8aqudTgLW2Q5QLFNSz3I2R)), Person(Adam,21,None,Set(),List(),StringId(BRg8MOGwU0nvPC1uYNfXAUDOGQvMH4e3)), Person(Adam,21,None,Set(),List(),StringId(dnd2mSLTfKBwu0LjF2g0pUOTUbudgq1c)), Person(Adam,21,None,Set(),List(),StringId(ib3YLI7unXrSXnAqCoSH2vwFBaoQK2V9)))))
 ```
 
 ---
@@ -389,14 +402,14 @@ import lightdb.backup._
 import java.io.File
 
 DatabaseBackup.archive(db.stores, new File("backup.zip")).sync()
-// res6: Int = 61
+// res6: Int = 62
 ```
 
 Restore from a backup:
 
 ```scala
 DatabaseRestore.archive(db, new File("backup.zip")).sync()
-// res7: Int = 61
+// res7: Int = 62
 ```
 
 ---
@@ -472,7 +485,7 @@ ftsDb.init.sync()
 ftsDb.notes.transaction(_.insert(Note("the quick brown fox"))).sync()
 // res9: Note = Note(
 //   text = "the quick brown fox",
-//   _id = StringId("3lPkmGvmGdfXzkJROpQugBPWqcvobg9f")
+//   _id = StringId("noRg5sKjDpW9u20NKWu5MMmdXGeUppK4")
 // )
 val hits = ftsDb.notes.transaction { txn =>
   txn.query.search.flatMap(_.list)
@@ -575,7 +588,7 @@ spatialDb.places.transaction(_.insert(Place("NYC", Point(40.7142, -74.0119)))).s
 // res11: Place = Place(
 //   name = "NYC",
 //   loc = Point(latitude = 40.7142, longitude = -74.0119),
-//   _id = StringId("peWMueCkctvYGyz7BxOSc7hn1S6gR6IO")
+//   _id = StringId("dOJry12DVRg6jj84ZjIkqLHOcykjTrfW")
 // )
 // Distance filters are supported on spatial-capable backends; example filter:
 val nycFilter = Place.loc.distance(Point(40.7, -74.0), 5_000.meters)
@@ -672,11 +685,11 @@ object shardDb extends LightDB {
 
 shardDb.init.sync()
 val tenantA = shardDb.shards("tenantA")
-// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@66126ab8
+// tenantA: HashMapStore[TenantDoc, TenantDoc] = lightdb.store.hashmap.HashMapStore@65fb6359
 tenantA.transaction(_.insert(TenantDoc("hello"))).sync()
 // res14: TenantDoc = TenantDoc(
 //   value = "hello",
-//   _id = StringId("nUqDO01FtUxkfS6VhBJIa3VsZcXggHo8")
+//   _id = StringId("g4TigqpIqZZz3qw84gxBaCSJSrPus3zu")
 // )
 ```
 
@@ -697,8 +710,8 @@ cfgDb.init.sync()
 val featureFlag = cfgDb.stored[Boolean]("featureX", default = false)
 // featureFlag: StoredValue[Boolean] = StoredValue(
 //   key = "featureX",
-//   store = lightdb.store.hashmap.HashMapStore@74c2db08,
-//   default = repl.MdocSession$MdocApp$$Lambda/0x0000000062c28870@59b46169,
+//   store = lightdb.store.hashmap.HashMapStore@d0814c3,
+//   default = repl.MdocSession$MdocApp$$Lambda/0x000000002fbb69e8@6a2ca186,
 //   persistence = Stored
 // )
 featureFlag.set(true).sync()
@@ -733,7 +746,7 @@ sqlDb.init.sync()
 sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
 // res18: Row = Row(
 //   value = "hi sql",
-//   _id = StringId("74vyyewKuLlfbbMR3TG6e5ctJ5dkdXR3")
+//   _id = StringId("akFqmQ1iAaErjuLk3ESpd3gCX51rARu6")
 // )
 ```
 
