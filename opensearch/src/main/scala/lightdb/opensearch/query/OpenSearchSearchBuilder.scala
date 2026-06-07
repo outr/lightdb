@@ -694,6 +694,11 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           "order" -> str(order),
           "unit" -> str("m")
         ))
+      case _: Sort.ByVectorDistance[_] =>
+        throw new UnsupportedOperationException(
+          "Vector search (Sort.ByVectorDistance) is not supported by the OpenSearch backend; " +
+            "use a backend with native vector support such as PostgreSQL with pgvector."
+        )
     }
   }
 
