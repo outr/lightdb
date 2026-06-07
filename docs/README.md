@@ -4,24 +4,33 @@
 Computationally focused database using pluggable stores
 
 ## Provided Stores
-| Store                                                                 | Type               | Embedded | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Prefix Scan | Notes                                 |
-|------------------------------------------------------------------------|--------------------|----------|-------------|-----------|------------|-------------|------------------|------------------|-----------|---------------------------------------|
-| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅       | ✅          | ✅✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | ❌        | Fast, simple write-optimized store    |
-| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | ❌        | Ultra low-latency, off-heap storage   |
-| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅       | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | ✅        | Read-optimized, mature B+Tree engine  |
-| [MapDB (B-Tree)](https://mapdb.org)                                   | Java Collections   | ✅       | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | ✅        | Uses BTreeMap for ordered/prefix scans|
-| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅        | High-performance LSM tree             |
-| [Redis](https://redis.io)                                             | In-Memory KV Store | 🟡 (Optional) | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌        | Popular in-memory data structure store|
-| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine; native block-join + spatial |
-| [Tantivy](https://github.com/quickwit-oss/tantivy) (via [Scantivy](https://github.com/outr/scantivy)) | Full-Text Search   | ✅       | ✅          | ✅✅      | ✅✅      | ✅           | ❌              | ✅✅✅           | ❌        | Rust-based; FFM (JEP 442) bridge over a Tantivy lib. No native geo or block-join (use Lucene for those) |
-| [OpenSearch](https://opensearch.org)                                  | Search Server      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | ✅✅✅           | ❌        | Distributed search, joins, aggregations |
-| [MongoDB](https://www.mongodb.com)                                    | Document DB        | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | 🟡 (Regex)       | ❌        | Native nested ($elemMatch), aggregation, geo, facets |
-| [ArangoDB](https://www.arangodb.com)                                  | Multi-Model (Doc/Graph) | ❌ (Server-based) | ✅ | ✅✅✅   | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | 🟡 (REGEX_TEST)  | ✅        | AQL queries, native nested, aggregation, facets, graph traversal |
-| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅       | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | 🟡        | Lightweight embedded SQL              |
-| [H2](https://h2database.com)                                          | Relational DB      | ✅       | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
-| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅       | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | 🟡        | Columnar, ideal for analytics         |
-| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | 🟡         | Full-featured RDBMS                   |
-| [MariaDB / MySQL](https://mariadb.org)                                | Relational DB      | ❌ (Server-based) | ✅   | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID)     | 🟡 (REGEXP/LIKE) | 🟡         | MySQL-compatible via the MariaDB driver |
+
+Stores are grouped by deployment model: **embedded** stores run in-process with no external service,
+while **server-based** stores connect to a database server (local or remote).
+
+### Embedded Stores
+| Store                                                                 | Type               | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Prefix Scan | Notes                                 |
+|------------------------------------------------------------------------|--------------------|-------------|-----------|------------|-------------|------------------|------------------|-----------|---------------------------------------|
+| [HaloDB](https://github.com/yahoo/HaloDB)                              | KV Store           | ✅          | ✅✅        | ✅✅       | 🟡 (Single-threaded write) | 🟡 (Basic durability) | ❌               | ❌        | Fast, simple write-optimized store    |
+| [ChronicleMap](https://github.com/OpenHFT/Chronicle-Map)              | Off-Heap Map       | ✅ (Memory-mapped) | ✅✅     | ✅✅       | ✅✅         | ❌              | ❌               | ❌        | Ultra low-latency, off-heap storage   |
+| [LMDB](https://www.symas.com/mdb)                                      | KV Store (B+Tree)  | ✅          | ✅✅✅     | ✅        | 🟡 (Single write txn) | ✅✅ (ACID)     | ❌               | ✅        | Read-optimized, mature B+Tree engine  |
+| [MapDB (B-Tree)](https://mapdb.org)                                   | Java Collections   | ✅          | ✅        | ✅        | ✅           | ✅              | ❌               | ✅        | Uses BTreeMap for ordered/prefix scans|
+| [RocksDB](https://rocksdb.org)                                        | LSM KV Store       | ✅          | ✅✅      | ✅✅✅     | ✅           | ✅              | ❌               | ✅        | High-performance LSM tree             |
+| [Lucene](https://lucene.apache.org)                                   | Full-Text Search   | ✅          | ✅✅      | ✅        | ✅           | ❌              | ✅✅✅           | ❌        | Best-in-class full-text search engine; native block-join + spatial |
+| [Tantivy](https://github.com/quickwit-oss/tantivy) (via [Scantivy](https://github.com/outr/scantivy)) | Full-Text Search   | ✅          | ✅✅      | ✅✅      | ✅           | ❌              | ✅✅✅           | ❌        | Rust-based; FFM (JEP 442) bridge over a Tantivy lib. No native geo or block-join (use Lucene for those) |
+| [SQLite](https://www.sqlite.org)                                      | Relational DB      | ✅          | ✅        | ✅        | 🟡 (Write lock) | ✅✅ (ACID)     | ✅ (FTS5)         | 🟡        | Lightweight embedded SQL              |
+| [H2](https://h2database.com)                                          | Relational DB      | ✅          | ✅        | ✅        | ✅           | ✅✅ (ACID)     | ❌ (Basic LIKE)    | 🟡         | Java-native SQL engine                |
+| [DuckDB](https://duckdb.org)                                          | Analytical SQL     | ✅          | ✅✅✅     | ✅        | ✅           | ✅              | ❌               | 🟡        | Columnar, ideal for analytics         |
+
+### Server-Based Stores
+| Store                                                                 | Type               | Persistence | Read Perf | Write Perf | Concurrency | Transactions    | Full-Text Search | Prefix Scan | Notes                                 |
+|------------------------------------------------------------------------|--------------------|-------------|-----------|------------|-------------|------------------|------------------|-----------|---------------------------------------|
+| [PostgreSQL](https://www.postgresql.org)                              | Relational DB      | ✅          | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID, MVCC) | ✅✅ (TSVector)  | 🟡         | Full-featured RDBMS                   |
+| [MariaDB / MySQL](https://mariadb.org)                                | Relational DB      | ✅          | ✅✅✅     | ✅✅      | ✅✅         | ✅✅✅ (ACID)     | 🟡 (REGEXP/LIKE) | 🟡         | MySQL-compatible via the MariaDB driver |
+| [MongoDB](https://www.mongodb.com)                                    | Document DB        | ✅          | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | 🟡 (Regex)       | ❌        | Native nested ($elemMatch), aggregation, geo, facets |
+| [ArangoDB](https://www.arangodb.com)                                  | Multi-Model (Doc/Graph) | ✅     | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | 🟡 (REGEX_TEST)  | ✅        | AQL queries, native nested, aggregation, facets, graph traversal |
+| [OpenSearch](https://opensearch.org)                                  | Search Server      | ✅          | ✅✅✅     | ✅✅      | ✅✅         | 🟡 (Transactional batching; not ACID) | ✅✅✅           | ❌        | Distributed search, joins, aggregations |
+| [Redis](https://redis.io)                                             | In-Memory KV Store | ✅ (RDB/AOF) | ✅✅✅     | ✅✅       | ✅           | ✅              | ❌               | ❌        | Popular in-memory data structure store (local or remote) |
 
 ### Legend
 - ✅: Supported / Good
