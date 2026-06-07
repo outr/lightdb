@@ -19,10 +19,10 @@ import lightdb.transaction.{CollectionTransaction, NestedQueryTransaction, Rollb
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults, Sort}
 import lightdb.lucene.blockjoin.{LuceneBlockJoinFields, LuceneBlockJoinStore}
-import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
+import org.apache.lucene.document.{DoubleDocValuesField, DoubleField, IntField, KnnFloatVectorField, LatLonDocValuesField, LatLonPoint, LatLonShape, LongField, NumericDocValuesField, SortedDocValuesField, StoredField, StringField, TextField, Document => LuceneDocument, Field => LuceneField}
 import org.apache.lucene.facet.{FacetField => LuceneFacetField}
 import org.apache.lucene.geo.{Line => LuceneLine, Polygon => LucenePolygon}
-import org.apache.lucene.index.Term
+import org.apache.lucene.index.{Term, VectorSimilarityFunction}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, MatchAllDocsQuery, ScoreDoc, TermQuery}
 import org.apache.lucene.util.BytesRef
 import rapid.Task
@@ -266,7 +266,11 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
    * Otherwise we fall back to the default offset-based implementation.
    */
   override def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
-    if query.pageSize.nonEmpty && query.offset == 0 && !NestedQuerySupport.containsNested(query.filter) then {
+    if query.sort.exists(_.isInstanceOf[lightdb.Sort.ByVectorDistance[_]]) then {
+      // Vector KNN is inherently top-k: run the KnnFloatVectorQuery path once (see LuceneSearchBuilder),
+      // bypassing searchAfter / offset pagination which can't express a KNN query.
+      rapid.Stream.force(doSearchDirect(query).map(_.streamWithScore))
+    } else if query.pageSize.nonEmpty && query.offset == 0 && !NestedQuerySupport.containsNested(query.filter) then {
       val basePageSize = query.pageSize.getOrElse(1000)
 
       def loop(after: Option[ScoreDoc], remaining: Option[Int]): rapid.Stream[(V, Double)] =
@@ -566,6 +570,20 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       }
       case t: Tokenized[Doc] =>
         List(new LuceneField(field.name, t.get(doc, t, state), if fs == LuceneField.Store.YES then TextField.TYPE_STORED else TextField.TYPE_NOT_STORED))
+      case vi: Field.VectorIndex[Doc @unchecked] =>
+        // Native KNN: index the embedding as a HNSW float-vector field, and store the JSON so the
+        // value round-trips back into the document's List[Double].
+        if json != Null then {
+          val target = json.asVector.map(_.asDouble.toFloat).toArray
+          val similarity = vi.metric match {
+            case lightdb.vector.VectorMetric.Cosine => VectorSimilarityFunction.COSINE
+            case lightdb.vector.VectorMetric.Euclidean => VectorSimilarityFunction.EUCLIDEAN
+            case lightdb.vector.VectorMetric.DotProduct => VectorSimilarityFunction.DOT_PRODUCT
+          }
+          add(new KnnFloatVectorField(field.name, target, similarity))
+        }
+        add(new StoredField(field.name, JsonFormatter.Compact(json)))
+        fields
       case _ =>
         def addJson(json: Json, d: DefType): Unit = {
           if field.isSpatial then {
