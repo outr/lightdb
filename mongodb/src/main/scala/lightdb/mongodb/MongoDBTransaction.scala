@@ -217,6 +217,11 @@ case class MongoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             val field = bf.field.asInstanceOf[Field[Doc, Any]]
             val sorted = acc.sortBy(d => field.getJson(d, state))(jsonOrdering)
             if (bf.direction == lightdb.SortDirection.Descending) sorted.reverse else sorted
+          case _: lightdb.Sort.ByVectorDistance[_] =>
+            throw new UnsupportedOperationException(
+              "Vector search (Sort.ByVectorDistance) is not supported by the MongoDB backend; " +
+                "use a backend with native vector support such as PostgreSQL with pgvector."
+            )
           case _ => acc
         }
       }

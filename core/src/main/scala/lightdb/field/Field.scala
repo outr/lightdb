@@ -38,6 +38,15 @@ sealed class Field[Doc <: Document[Doc], V](val name: String,
 
   lazy val isSpatial: Boolean = className.exists(_.startsWith("lightdb.spatial.Geo"))
 
+  /** Declared dimension of this vector field, or `None` if this is not a vector field. */
+  def vectorDimension: Option[Int] = None
+
+  /** Default similarity metric for this vector field, or `None` if this is not a vector field. */
+  def vectorMetric: Option[lightdb.vector.VectorMetric] = None
+
+  /** True when this field holds a vector/embedding eligible for KNN search (see [[Field.vector]]). */
+  lazy val isVector: Boolean = vectorDimension.isDefined
+
   def isTokenized: Boolean = false
 
   def getJson(doc: Doc, state: IndexingState): Json = get(doc, this, state).json
@@ -148,6 +157,25 @@ object Field {
     override def toString: String = s"NestedIndex(name = ${this.name}, path = $path)"
   }
 
+  def vector[Doc <: Document[Doc]](name: String,
+                                   get: FieldGetter[Doc, List[Double]],
+                                   dimension: Int,
+                                   metric: lightdb.vector.VectorMetric): VectorIndex[Doc] = {
+    val dim = dimension
+    val mtr = metric
+    new Field[Doc, List[Double]](
+      name = name,
+      get = get,
+      getRW = () => implicitly[RW[List[Double]]],
+      indexed = true,
+      stored = true
+    ) with VectorIndex[Doc] {
+      override val dimension: Int = dim
+      override val metric: lightdb.vector.VectorMetric = mtr
+      override def toString: String = s"VectorIndex(name = ${this.name}, dimension = $dim, metric = $mtr)"
+    }
+  }
+
   def tokenized[Doc <: Document[Doc]](name: String,
                                       get: FieldGetter[Doc, String]): Tokenized[Doc] = new Field[Doc, String](
     name = name,
@@ -222,6 +250,25 @@ object Field {
   }
 
   trait UniqueIndex[Doc <: Document[Doc], V] extends Indexed[Doc, V]
+
+  /**
+   * A vector/embedding field holding a `List[Double]` of fixed `dimension`, with a default similarity
+   * `metric`. Backends with native vector support (e.g. PostgreSQL + pgvector) emit a typed,
+   * ANN-indexed column; others fall back to an in-memory brute-force scan for KNN.
+   */
+  trait VectorIndex[Doc <: Document[Doc]] extends Indexed[Doc, List[Double]] {
+    def dimension: Int
+    def metric: lightdb.vector.VectorMetric
+
+    override def vectorDimension: Option[Int] = Some(dimension)
+    override def vectorMetric: Option[lightdb.vector.VectorMetric] = Some(metric)
+
+    /** Builds a KNN sort against this field for `vector`; combine with `.limit(k)` for top-k. */
+    def knn(vector: List[Double],
+            metric: lightdb.vector.VectorMetric = this.metric,
+            direction: lightdb.SortDirection = lightdb.SortDirection.Ascending): lightdb.Sort.ByVectorDistance[Doc] =
+      lightdb.Sort.ByVectorDistance(this, vector, metric, direction)
+  }
 
   trait Tokenized[Doc <: Document[Doc]] extends Indexed[Doc, String] {
     override def isTokenized: Boolean = true
