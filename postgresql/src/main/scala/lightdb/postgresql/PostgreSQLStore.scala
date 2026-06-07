@@ -32,6 +32,11 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     try {
       // Create pg_trgm to support extremely large columns with efficient filtering
       s.executeUpdate("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+      // pgvector is required only when the model declares a vector field; enabling it lets the
+      // `vector(N)` columns and HNSW indexes below be created.
+      if (fields.exists(_.isVector)) {
+        s.executeUpdate("CREATE EXTENSION IF NOT EXISTS vector")
+      }
     } finally {
       s.close()
     }
@@ -40,6 +45,14 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   override protected def createIndexSQL(index: Field.Indexed[Doc, _]): String = {
     val col = SqlIdent.quote(index.name)
     index match {
+      case vi: Field.VectorIndex[Doc @unchecked] =>
+        // HNSW approximate-nearest-neighbor index, with the operator class matching the field's metric.
+        val ops = vi.metric match {
+          case lightdb.vector.VectorMetric.Cosine => "vector_cosine_ops"
+          case lightdb.vector.VectorMetric.Euclidean => "vector_l2_ops"
+          case lightdb.vector.VectorMetric.DotProduct => "vector_ip_ops"
+        }
+        s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${index.name}_idx")} ON $fqn USING hnsw ($col $ops)"
       case _: Field.Tokenized[Doc @unchecked] =>
         // Use trigram GIN index for tokenized fields to accelerate ILIKE/LIKE searches
         s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${index.name}_trgm_idx")} ON $fqn USING gin ($col gin_trgm_ops)"
@@ -76,6 +89,9 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
+  override protected def columnType(field: Field[Doc, _]): String =
+    if field.isVector then s"vector(${field.vectorDimension.get})" else super.columnType(field)
+
   override protected def def2Type(name: String, d: Definition): String = d.defType match {
     case DefType.Dec => "DOUBLE PRECISION"
     case DefType.Bool => "BOOLEAN"
@@ -106,6 +122,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   }
 
   override protected def field2Value(field: Field[Doc, _]): String = {
+    if (field.isVector) return "?::vector"
     def lookup(definition: Definition): String = definition.defType match {
       case DefType.Opt(inner) => lookup(inner)
       case DefType.Dec => "?::double precision"

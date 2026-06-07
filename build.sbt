@@ -122,8 +122,10 @@ val testcontainersVersion: String = "2.0.5"
 
 val mongoVersion: String = "5.6.2"
 
+val qdrantVersion: String = "1.18.1"
+
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, api, apiSpice, all)
+	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice, all)
 	.settings(
 		name := projectName,
 		publish := {},
@@ -423,8 +425,21 @@ lazy val arangodb = project.in(file("arangodb"))
 		)
 	)
 
+lazy val qdrant = project.in(file("qdrant"))
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
+	.settings(
+		name := s"$projectName-qdrant",
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"io.qdrant" % "client" % qdrantVersion,
+			"org.testcontainers" % "testcontainers" % testcontainersVersion % Test,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+		)
+	)
+
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, api, apiSpice)
+	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,

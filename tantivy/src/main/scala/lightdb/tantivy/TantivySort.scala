@@ -17,6 +17,11 @@ object TantivySort {
         "Tantivy backend does not support Sort.ByDistance — no native geo support. " +
           "Use a backend like lucene; this is deliberately not emulated."
       )
+    case _: Sort.ByVectorDistance[?] =>
+      throw new UnsupportedOperationException(
+        "Tantivy backend does not support Sort.ByVectorDistance — no native vector support. " +
+          "Use a backend with native vector support such as PostgreSQL with pgvector; this is deliberately not emulated."
+      )
   }
 
   private def direction(d: SortDirection): pb.SortDirection = d match {
