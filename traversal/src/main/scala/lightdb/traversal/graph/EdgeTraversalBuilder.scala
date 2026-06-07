@@ -105,7 +105,22 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
    * @param target The ID of the target node
    * @return A stream containing the shortest path to the target node, if any
    */
-  def findShortestPath(target: Id[T]): Stream[TraversalPath[E, F, T]] = implementPathFinding(target, findAll = false)
+  def findShortestPath(target: Id[T]): Stream[TraversalPath[E, F, T]] = tx match {
+    case native: NativeGraphTraversal if !edgeFilterSet => nativeShortestPath(native, target)
+    case _ => implementPathFinding(target, findAll = false)
+  }
+
+  private def nativeShortestPath(native: NativeGraphTraversal, target: Id[T]): Stream[TraversalPath[E, F, T]] = rapid.Stream.force {
+    val rw = tx.store.model.rw.asInstanceOf[fabric.rw.RW[E]]
+    for {
+      starts <- fromIds.toList
+      edges <- starts.headOption match {
+        case Some(start) => native.nativeShortestPathEdges(start.value, target.value).map(_.as[E](rw)).toList
+        case None => Task.pure(Nil)
+      }
+    } yield if edges.isEmpty || edges.length > maxDepth then Stream.empty[TraversalPath[E, F, T]]
+      else Stream.emit(TraversalPath[E, F, T](edges))
+  }
 
   /**
    * Execute a BFS traversal that returns a stream of edges
