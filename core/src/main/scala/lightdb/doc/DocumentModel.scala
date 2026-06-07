@@ -253,6 +253,18 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
     def unique[V: RW](get: Doc => V)(implicit name: Name): UniqueIndex[Doc, V] = unique(name.value, get)
 
+    def vector(name: String,
+               get: FieldGetter[Doc, List[Double]],
+               dimension: Int,
+               metric: lightdb.vector.VectorMetric): Field.VectorIndex[Doc] =
+      add[List[Double], Field.VectorIndex[Doc]](Field.vector(name, get, dimension, metric))
+
+    def vector(name: String,
+               get: Doc => List[Double],
+               dimension: Int,
+               metric: lightdb.vector.VectorMetric): Field.VectorIndex[Doc] =
+      add[List[Double], Field.VectorIndex[Doc]](Field.vector(name, FieldGetter.func(get), dimension, metric))
+
     def tokenized(name: String, get: FieldGetter[Doc, String]): Tokenized[Doc] =
       add[String, Tokenized[Doc]](Field.tokenized(name, get))
 

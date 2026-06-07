@@ -32,6 +32,12 @@ import scala.util.control.NonFatal
  * Over time, this engine is intended to be replaced with index-backed planning + execution.
  */
 object TraversalQueryEngine {
+  // Vector KNN is a declared, native capability — this engine has no ANN index, and a brute-force
+  // scan would mislead users into expecting performance it can't deliver. Reject it clearly instead.
+  private[traversal] val VectorSortUnsupported: String =
+    "Vector search (Sort.ByVectorDistance) is not supported by this store; use a backend with native " +
+      "vector support such as PostgreSQL with pgvector."
+
   // Shared config for bounded seed materialization.
   private lazy val MaxSeedSize: Int = {
     Profig("lightdb.traversal.persistedIndex.maxSeedSize").opt[Int].getOrElse(100_000)
@@ -681,6 +687,8 @@ object TraversalQueryEngine {
       case Sort.ByField(_, direction) => direction
       case Sort.IndexOrder => SortDirection.Ascending
       case Sort.ByDistance(_, _, direction) => direction
+      case _: Sort.ByVectorDistance[_] =>
+        throw new UnsupportedOperationException(TraversalQueryEngine.VectorSortUnsupported)
     }
 
     def distanceMin(doc: Doc, field: Field[Doc, List[Geo]], from: Point): Double = {
@@ -705,6 +713,8 @@ object TraversalQueryEngine {
           f.get(doc, f, state)
         case Sort.ByDistance(field, from, _) =>
           distanceMin(doc, field.asInstanceOf[Field[Doc, List[Geo]]], from)
+        case _: Sort.ByVectorDistance[_] =>
+          throw new UnsupportedOperationException(TraversalQueryEngine.VectorSortUnsupported)
       }
 
     def compareHits(a: Hit, b: Hit): Int = {
@@ -3261,6 +3271,8 @@ object TraversalQueryEngine {
         case Sort.ByField(_, direction) => direction
         case Sort.IndexOrder => SortDirection.Ascending
         case Sort.ByDistance(_, _, direction) => direction
+        case _: Sort.ByVectorDistance[_] =>
+          throw new UnsupportedOperationException(TraversalQueryEngine.VectorSortUnsupported)
       }
 
       def keyFor(sort: Sort, doc: Doc, score: Double): Any = sort match {
@@ -3275,6 +3287,8 @@ object TraversalQueryEngine {
             .flatMap(_.map(_.valueInMeters).minOption)
             .getOrElse(Double.PositiveInfinity)
           min
+        case _: Sort.ByVectorDistance[_] =>
+          throw new UnsupportedOperationException(TraversalQueryEngine.VectorSortUnsupported)
       }
 
       docs.sortWith { case ((d1, s1), (d2, s2)) =>

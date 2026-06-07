@@ -74,12 +74,19 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
         if field == model._id then {
           s"${SqlIdent.quote("_id")} VARCHAR NOT NULL PRIMARY KEY"
         } else {
-          val t = def2Type(field.name, field.rw.definition)
+          val t = columnType(field)
           s"${SqlIdent.quote(field.name)} $t"
         }
     }.mkString(", ")
     executeUpdate(s"CREATE TABLE IF NOT EXISTS $fqn($entries)", tx)
   }
+
+  /**
+   * SQL column type for a field. Defaults to [[def2Type]] over the field's serialized definition;
+   * dialects override to emit type that depends on field metadata rather than just its `DefType`
+   * (e.g. PostgreSQL emits `vector(N)` for a [[lightdb.field.Field.VectorIndex]]).
+   */
+  protected def columnType(field: Field[Doc, _]): String = def2Type(field.name, field.rw.definition)
 
   protected def def2Type(name: String, d: Definition): String = d.defType match {
     case DefType.Str | DefType.Json | DefType.Obj(_) | DefType.Arr(_) | DefType.Poly(_, _) =>
@@ -93,7 +100,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def addColumn(field: Field[Doc, _], tx: TX): Unit = {
     scribe.info(s"Adding column $fqn.${field.name}")
-    executeUpdate(s"ALTER TABLE $fqn ADD COLUMN ${SqlIdent.quote(field.name)} ${def2Type(field.name, field.rw.definition)}", tx)
+    executeUpdate(s"ALTER TABLE $fqn ADD COLUMN ${SqlIdent.quote(field.name)} ${columnType(field)}", tx)
   }
 
   /** Whether this backend supports `ALTER COLUMN ... TYPE`. SQLite (dynamically
@@ -148,7 +155,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
   }
 
   protected def migrateColumnType(field: Field[Doc, _], tx: TX): Unit = {
-    val newType = def2Type(field.name, field.rw.definition)
+    val newType = columnType(field)
     scribe.warn(s"Migrating column type $fqn.${field.name} -> $newType")
     executeUpdate(alterColumnTypeSQL(field.name, newType), tx)
   }
