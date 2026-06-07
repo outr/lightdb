@@ -70,14 +70,16 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     JsonFormatter.Compact(Obj(finalMap))
   }
 
-  private def toJson(raw: RawJson): Json = JsonParser(raw.get()) match {
-    // Drop ArangoDB system attributes (`_id`=coll/key, `_rev`, edge `_from`/`_to` handles); restore
-    // escaped names (e.g. `_key`->`_id`, `from_`->`_from`).
+  // Drop ArangoDB system attributes (`_id`=coll/key, `_rev`, edge `_from`/`_to` handles); restore
+  // escaped names (e.g. `_key`->`_id`, `from_`->`_from`).
+  private def mapArangoDoc(json: Json): Json = json match {
     case o: Obj => Obj(o.value.collect {
       case (k, v) if k != "_id" && k != "_rev" && k != "_from" && k != "_to" => ArangoQuery.unescapeKey(k) -> v
     })
     case other => other
   }
+
+  private def toJson(raw: RawJson): Json = mapArangoDoc(JsonParser(raw.get()))
 
   private def fromRaw(raw: RawJson): Doc = toJson(raw).as[Doc](store.model.rw)
 
@@ -131,6 +133,21 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     new Iterator[Json] {
       override def hasNext: Boolean = cursor.hasNext
       override def next(): Json = toJson(cursor.next())
+    }
+  })
+
+  override def nativeAllPaths(fromKey: String, toKey: String, maxDepth: Int): rapid.Stream[List[Json]] = rapid.Stream.fromIterator(Task {
+    val from = s"${store.vertexNamespace}/$fromKey"
+    val to = s"${store.vertexNamespace}/$toKey"
+    val max = if maxDepth == Int.MaxValue then 100 else maxDepth // K_PATHS requires a finite bound
+    val aql = s"FOR p IN 1..$max OUTBOUND K_PATHS @from TO @to @@col RETURN p.edges"
+    val cursor = store.database.query(aql, classOf[RawJson], Map[String, Any]("@col" -> store.arangoName, "from" -> from, "to" -> to).asJava)
+    new Iterator[List[Json]] {
+      override def hasNext: Boolean = cursor.hasNext
+      override def next(): List[Json] = JsonParser(cursor.next().get()) match {
+        case Arr(values, _) => values.map(mapArangoDoc).toList
+        case _ => Nil
+      }
     }
   })
 

@@ -2,7 +2,7 @@ package lightdb.arangodb
 
 import com.arangodb.{ArangoCollection, ArangoDB, ArangoDBException, ArangoDatabase}
 import com.arangodb.entity.CollectionType
-import com.arangodb.model.CollectionCreateOptions
+import com.arangodb.model.{CollectionCreateOptions, PersistentIndexOptions}
 import fabric.define.DefType
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
@@ -84,7 +84,15 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
   // HTTP round-trip per document (see ArangoDBTransaction.applyWriteOps).
   override def defaultBatchConfig: BatchConfig = BatchConfig.Buffered()
 
-  override protected def initialize(): Task[Unit] = super.initialize().next(Task(collection).unit)
+  override protected def initialize(): Task[Unit] = super.initialize().next(Task {
+    collection // force collection (and edge/vertex) creation
+    // Persistent indexes for indexed fields so AQL filters/sorts don't full-scan. `_id` is the
+    // primary index; spatial fields are evaluated in-memory; failures are non-fatal.
+    fields.filter(f => f.indexed && f.name != "_id" && !f.isSpatial).foreach { f =>
+      try collection.ensurePersistentIndex(java.util.List.of(ArangoQuery.escapeKey(f.name)), new PersistentIndexOptions())
+      catch { case t: Throwable => scribe.debug(s"Skipping ArangoDB index on $name.${f.name}: ${t.getMessage}") }
+    }
+  })
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
                                            batchConfig: BatchConfig,

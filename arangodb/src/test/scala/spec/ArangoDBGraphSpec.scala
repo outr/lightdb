@@ -56,6 +56,13 @@ class ArangoDBGraphSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers w
         }
       }
     }
+    "find all paths natively (K_PATHS)" in {
+      DB.links.transaction { tx =>
+        tx.traverse.allPaths[Link, Node](Id[Node]("A"), Id[Node]("D"), maxDepth = 5).toList.map { paths =>
+          paths.map(_.length).sorted should be(List(1, 3)) // A->D and A->B->C->D
+        }
+      }
+    }
     "dispose" in {
       DB.truncate().flatMap(_ => DB.dispose).succeed
     }
