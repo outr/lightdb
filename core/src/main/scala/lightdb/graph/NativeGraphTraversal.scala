@@ -20,4 +20,10 @@ trait NativeGraphTraversal {
    * @param breadthFirst  BFS when true, DFS when false
    */
   def nativeTraverseEdges(startKeys: List[String], maxDepth: Int, breadthFirst: Boolean): rapid.Stream[Json]
+
+  /**
+   * Edges of a shortest OUTBOUND path from `fromKey` to `toKey`, in order, as LightDB-shaped edge
+   * JSON. Empty when no path exists. (Depth bounding is applied by the caller.)
+   */
+  def nativeShortestPathEdges(fromKey: String, toKey: String): rapid.Stream[Json]
 }
