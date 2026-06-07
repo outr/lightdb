@@ -516,6 +516,14 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         store.fields
     }
 
+    // Vector KNN: inject the per-row distance expression (bound to the query vector) as an extra
+    // SELECT column so ORDER BY can reference it by alias (see sortByVectorDistance).
+    query.sort.foreach {
+      case s: Sort.ByVectorDistance[_] =>
+        extraFields = extraFields ::: extraFieldsForVectorDistance(s.asInstanceOf[Sort.ByVectorDistance[Doc]])
+      case _ => ()
+    }
+
     val bestMatchDirectionOpt: Option[SortDirection] = query.sort.collectFirst {
       case Sort.BestMatch(direction) => direction
     }
@@ -544,6 +552,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
           List(SQLPart.Fragment(s"${SqlIdent.quote(index.name)} $dir"))
         case Sort.ByDistance(field, _, direction) => List(sortByDistance(field, direction))
+        case Sort.ByVectorDistance(field, _, _, direction) => List(sortByVectorDistance(field, direction))
         case _ => Nil
       },
       limit = query.limit.orElse(query.pageSize),
@@ -1147,7 +1156,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
-  private def obj2Value(obj: Any): Any = obj match {
+  protected def obj2Value(obj: Any): Any = obj match {
     case null => null
     case s: String => s
     case b: java.lang.Boolean => b.booleanValue()
@@ -1447,6 +1456,24 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   protected def extraFieldsForDistance(conversion: Conversion.Distance[Doc, _]): List[SQLPart] =
     throw new UnsupportedOperationException("Distance conversions not supported")
+
+  /**
+   * ORDER BY part for a vector KNN sort. Orders by the distance pseudo-column emitted by
+   * [[extraFieldsForVectorDistance]] (referenced by its alias), so dialects only need to override the
+   * latter. Ascending = nearest first.
+   */
+  protected def sortByVectorDistance(field: Field[_, List[Double]], direction: SortDirection): SQLPart = {
+    val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
+    SQLPart.Fragment(s"${SqlIdent.quote(s"${field.name}VectorDistance")} $dir")
+  }
+
+  /**
+   * Extra SELECT field(s) computing the per-row vector distance for a KNN sort, bound to the query
+   * vector and aliased `${field.name}VectorDistance`. Only meaningful on backends with native vector
+   * support (e.g. PostgreSQL + pgvector); the default rejects vector sorts.
+   */
+  protected def extraFieldsForVectorDistance(sort: Sort.ByVectorDistance[Doc]): List[SQLPart] =
+    throw new UnsupportedOperationException("Vector distance sort not supported in this SQL backend")
 }
 
 object SQLStoreTransaction {

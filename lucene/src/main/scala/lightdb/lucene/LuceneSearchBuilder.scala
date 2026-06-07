@@ -379,6 +379,11 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case Sort.ByDistance(field, from, _) =>
         val fieldSortName = s"${parentFieldName(field.name)}Sort"
         LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
+      case _: Sort.ByVectorDistance[_] =>
+        throw new UnsupportedOperationException(
+          "Vector search (Sort.ByVectorDistance) is not yet supported by the Lucene backend; " +
+            "use a backend with native vector support such as PostgreSQL with pgvector."
+        )
     }
   }
 

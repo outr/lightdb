@@ -3,6 +3,7 @@ package lightdb
 import lightdb.doc.Document
 import lightdb.field.Field
 import lightdb.spatial.{Geo, Point}
+import lightdb.vector.VectorMetric
 
 trait Sort
 
@@ -33,5 +34,24 @@ object Sort {
     def asc: ByDistance[Doc, G] = direction(SortDirection.Ascending)
     def descending: ByDistance[Doc, G] = direction(SortDirection.Descending)
     def desc: ByDistance[Doc, G] = direction(SortDirection.Descending)
+  }
+
+  /**
+   * Nearest-neighbor (KNN) ordering by vector similarity. Combine with `.limit(k)` to retrieve the
+   * top-k most similar documents. Ascending (the default) returns the nearest first, since every
+   * [[VectorMetric]] is defined so that a smaller distance means more similar.
+   *
+   * Native on backends with vector support (e.g. PostgreSQL + pgvector); evaluated in-memory as a
+   * brute-force scan on backends without it.
+   */
+  case class ByVectorDistance[Doc <: Document[Doc]](field: Field[Doc, List[Double]],
+                                                    vector: List[Double],
+                                                    metric: VectorMetric,
+                                                    direction: SortDirection = SortDirection.Ascending) extends Sort {
+    def direction(direction: SortDirection): ByVectorDistance[Doc] = copy(direction = direction)
+    def ascending: ByVectorDistance[Doc] = direction(SortDirection.Ascending)
+    def asc: ByVectorDistance[Doc] = direction(SortDirection.Ascending)
+    def descending: ByVectorDistance[Doc] = direction(SortDirection.Descending)
+    def desc: ByVectorDistance[Doc] = direction(SortDirection.Descending)
   }
 }
