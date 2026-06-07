@@ -26,4 +26,10 @@ trait NativeGraphTraversal {
    * JSON. Empty when no path exists. (Depth bounding is applied by the caller.)
    */
   def nativeShortestPathEdges(fromKey: String, toKey: String): rapid.Stream[Json]
+
+  /**
+   * All OUTBOUND paths from `fromKey` to `toKey` within `maxDepth` hops. Each element is one path's
+   * edges in order, as LightDB-shaped edge JSON.
+   */
+  def nativeAllPaths(fromKey: String, toKey: String, maxDepth: Int): rapid.Stream[List[Json]]
 }
