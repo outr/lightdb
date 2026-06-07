@@ -110,7 +110,7 @@ val arangodbVersion: String = "7.26.0"
 
 val googleSheetsVersion: String = "v4-rev20260213-2.0.0"
 
-val googleAuthVersion: String = "1.47.0"
+val googleAuthVersion: String = "1.48.0"
 
 val googleHttpClientGsonVersion: String = "2.1.0"
 
