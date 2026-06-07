@@ -1,6 +1,9 @@
 package lightdb.arangodb
 
 import com.arangodb.{ArangoCollection, ArangoDB, ArangoDBException, ArangoDatabase}
+import com.arangodb.entity.CollectionType
+import com.arangodb.model.CollectionCreateOptions
+import fabric.define.DefType
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Collection, CollectionManager, NestedQueryCapability, StoreManager, StoreMode}
@@ -50,9 +53,27 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
   private[arangodb] lazy val arangoName: String =
     if name.headOption.exists(_.isLetter) then name else s"c$name"
 
+  // An EdgeDocument model has `_from`/`_to` attributes — store it in an ArangoDB EDGE collection so
+  // native AQL graph traversal (OUTBOUND) can follow it.
+  private[arangodb] lazy val isEdgeModel: Boolean = model.rw.definition.defType match {
+    case DefType.Obj(map) => map.contains("_from") && map.contains("_to")
+    case _ => false
+  }
+
+  // Shared vertex namespace for edge `_from`/`_to` document handles ("vertices/<id>"). It only needs
+  // to exist for OUTBOUND traversal to resolve handles; the actual node documents live in their own
+  // collections, so this stays empty (traversal follows edges and reads edge `_to`).
+  private[arangodb] val vertexNamespace: String = "vertices"
+
   private[arangodb] lazy val collection: ArangoCollection = {
     val c = database.collection(arangoName)
-    try if (!c.exists()) c.create() catch { case _: ArangoDBException => () }
+    try if (!c.exists()) {
+      if (isEdgeModel) c.create(new CollectionCreateOptions().`type`(CollectionType.EDGES)) else c.create()
+    } catch { case _: ArangoDBException => () }
+    if (isEdgeModel) {
+      val v = database.collection(vertexNamespace)
+      try if (!v.exists()) v.create() catch { case _: ArangoDBException => () }
+    }
     c
   }
 

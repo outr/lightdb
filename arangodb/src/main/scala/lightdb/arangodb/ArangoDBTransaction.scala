@@ -27,7 +27,9 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
   store: ArangoDBStore[Doc, Model],
   parent: Option[lightdb.transaction.Transaction[Doc, Model]],
   writeHandlerFactory: lightdb.transaction.Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
-) extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] {
+) extends CollectionTransaction[Doc, Model]
+  with PrefixScanningTransaction[Doc, Model]
+  with lightdb.graph.NativeGraphTraversal {
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
 
   private val DuplicateKeyErrorNum = 1210
@@ -54,12 +56,26 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
       } else raw
       m.updated(f.name, stored)
     }
-    JsonFormatter.Compact(Obj(merged.map { case (k, v) => ArangoQuery.escapeKey(k) -> v }))
+    val escaped: Map[String, Json] = merged.map { case (k, v) => ArangoQuery.escapeKey(k) -> v }
+    // For edge collections, set ArangoDB's system `_from`/`_to` to document handles in the shared
+    // vertex namespace so AQL OUTBOUND traversal can follow them. The LightDB values remain under the
+    // escaped `from_`/`to_` and are authoritative on read.
+    val finalMap = if store.isEdgeModel then {
+      def handle(v: Option[Json]): Json = v match {
+        case Some(Str(s, _)) => str(s"${store.vertexNamespace}/$s")
+        case _ => Null
+      }
+      escaped + ("_from" -> handle(base.get("_from"))) + ("_to" -> handle(base.get("_to")))
+    } else escaped
+    JsonFormatter.Compact(Obj(finalMap))
   }
 
   private def toJson(raw: RawJson): Json = JsonParser(raw.get()) match {
-    // Drop ArangoDB's system `_id` (coll/key) and `_rev`; restore escaped names (e.g. `_key`->`_id`).
-    case o: Obj => Obj(o.value.collect { case (k, v) if k != "_id" && k != "_rev" => ArangoQuery.unescapeKey(k) -> v })
+    // Drop ArangoDB system attributes (`_id`=coll/key, `_rev`, edge `_from`/`_to` handles); restore
+    // escaped names (e.g. `_key`->`_id`, `from_`->`_from`).
+    case o: Obj => Obj(o.value.collect {
+      case (k, v) if k != "_id" && k != "_rev" && k != "_from" && k != "_to" => ArangoQuery.unescapeKey(k) -> v
+    })
     case other => other
   }
 
@@ -86,6 +102,44 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     new Iterator[Json] {
       override def hasNext: Boolean = cursor.hasNext
       override def next(): Json = toJson(cursor.next())
+    }
+  })
+
+  // -- Native graph traversal (AQL OUTBOUND) -------------------------------------------------------
+
+  override def nativeTraverseEdges(startKeys: List[String], maxDepth: Int, breadthFirst: Boolean): rapid.Stream[Json] =
+    if startKeys.isEmpty then rapid.Stream.empty
+    else rapid.Stream.fromIterator(Task {
+      val starts = startKeys.map(k => s"${store.vertexNamespace}/$k")
+      // `uniqueVertices: 'global'` requires BFS; DFS uses path-uniqueness.
+      val options = if breadthFirst then "{bfs: true, uniqueVertices: 'global'}" else "{bfs: false, uniqueVertices: 'path'}"
+      val depth = if maxDepth == Int.MaxValue then Int.MaxValue.toLong else maxDepth.toLong
+      val aql = s"FOR s IN @starts FOR v, e IN 1..$depth OUTBOUND s @@col OPTIONS $options RETURN e"
+      val cursor = store.database.query(aql, classOf[RawJson], Map[String, Any]("@col" -> store.arangoName, "starts" -> starts.asJava).asJava)
+      new Iterator[Json] {
+        override def hasNext: Boolean = cursor.hasNext
+        override def next(): Json = toJson(cursor.next())
+      }
+    })
+
+  // -- Raw AQL ------------------------------------------------------------------------------------
+  // Parity with SQL's raw-query support. `@@col` is auto-bound to this store's collection when the
+  // query references it; the caller supplies any other bind parameters.
+
+  /** Execute a raw AQL query, returning each result row as JSON exactly as ArangoDB returns it. */
+  def aql(query: String, bindVars: Map[String, Any] = Map.empty): rapid.Stream[Json] =
+    rawAql(query, bindVars).map(r => JsonParser(r.get()))
+
+  /** Execute a raw AQL query that returns documents of this store, mapped back to `Doc`. */
+  def aqlDocs(query: String, bindVars: Map[String, Any] = Map.empty): rapid.Stream[Doc] =
+    rawAql(query, bindVars).map(fromRaw)
+
+  private def rawAql(query: String, bindVars: Map[String, Any]): rapid.Stream[RawJson] = rapid.Stream.fromIterator(Task {
+    val binds = if query.contains("@@col") then bindVars + ("@col" -> store.arangoName) else bindVars
+    val cursor = store.database.query(query, classOf[RawJson], binds.asJava)
+    new Iterator[RawJson] {
+      override def hasNext: Boolean = cursor.hasNext
+      override def next(): RawJson = cursor.next()
     }
   })
 
