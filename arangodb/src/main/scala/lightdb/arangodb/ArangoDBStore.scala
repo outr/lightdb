@@ -4,6 +4,7 @@ import com.arangodb.{ArangoCollection, ArangoDB, ArangoDBException, ArangoDataba
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{Collection, CollectionManager, NestedQueryCapability, StoreManager, StoreMode}
+import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
 import lightdb.transaction.Transaction
 import lightdb.transaction.batch.BatchConfig
 import rapid.*
@@ -20,6 +21,9 @@ case class ArangoDBConfig(host: String, port: Int, user: String, password: Strin
  * on read). Each LightDB instance gets its own ArangoDB database; each store its own collection.
  * Queries are translated to AQL; nested-document predicates resolve natively via AQL array filters.
  * Spatial filters, distance sort, and hierarchical drill-down facets are evaluated in-memory.
+ *
+ * Implements `PrefixScanningStore` (prefix-scan over `_key`), which makes it a first-class backend
+ * for the `traversal` module's graph DSL (BFS/DFS, reachability, shortest/all paths).
  */
 class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                        path: Option[Path],
@@ -28,7 +32,8 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
                                                                        config: ArangoDBConfig,
                                                                        databaseName: String,
                                                                        db: LightDB,
-                                                                       storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, db, storeManager) {
+                                                                       storeManager: StoreManager) extends Collection[Doc, Model](name, path, model, db, storeManager)
+  with PrefixScanningStore[Doc, Model] {
   override type TX = ArangoDBTransaction[Doc, Model]
 
   private lazy val client: ArangoDB =
@@ -74,7 +79,7 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
  * @param databaseName the ArangoDB database to use; defaults to the LightDB instance name when `None`
  */
 case class ArangoDBStoreManager(config: ArangoDBConfig,
-                                databaseName: Option[String] = None) extends CollectionManager {
+                                databaseName: Option[String] = None) extends CollectionManager with PrefixScanningStoreManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = ArangoDBStore[Doc, Model]
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

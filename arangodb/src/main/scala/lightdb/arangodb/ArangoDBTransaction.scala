@@ -17,7 +17,7 @@ import lightdb.id.Id
 import lightdb.materialized.{MaterializedAggregate, MaterializedAndDoc, MaterializedIndex}
 import lightdb.store.Conversion
 import lightdb.store.write.WriteOp
-import lightdb.transaction.CollectionTransaction
+import lightdb.transaction.{CollectionTransaction, PrefixScanningTransaction}
 import lightdb.{Query, SearchResults}
 import rapid.Task
 
@@ -27,7 +27,7 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
   store: ArangoDBStore[Doc, Model],
   parent: Option[lightdb.transaction.Transaction[Doc, Model]],
   writeHandlerFactory: lightdb.transaction.Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
-) extends CollectionTransaction[Doc, Model] {
+) extends CollectionTransaction[Doc, Model] with PrefixScanningTransaction[Doc, Model] {
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
 
   private val DuplicateKeyErrorNum = 1210
@@ -36,9 +36,10 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
 
   // -- Json <-> ArangoDB document ------------------------------------------------------------------
   // Stored body = the document's fields merged with every indexed-field projection (so computed
-  // indexed fields and tokenized fields are queryable via AQL), with LightDB `_id` mapped to
-  // ArangoDB `_key`. Tokenized fields are stored as token arrays. On read the reserved
-  // `_key`/`_id`/`_rev` attributes are stripped and LightDB `_id` is restored from `_key`.
+  // indexed fields and tokenized fields are queryable via AQL). ArangoDB-reserved attribute names
+  // (`_id`->`_key`, `_from`/`_to`, which ArangoDB strips in document collections) are escaped via
+  // `ArangoQuery.escapeKey`; tokenized fields are stored as token arrays. On read, ArangoDB's system
+  // `_id`/`_rev` are dropped and the escaped names are restored.
   private def toBody(doc: Doc): String = {
     val state = new IndexingState
     val base: Map[String, Json] = doc.json(store.model.rw) match {
@@ -53,11 +54,12 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
       } else raw
       m.updated(f.name, stored)
     }
-    JsonFormatter.Compact(Obj((merged - "_id") + ("_key" -> str(doc._id.value))))
+    JsonFormatter.Compact(Obj(merged.map { case (k, v) => ArangoQuery.escapeKey(k) -> v }))
   }
 
   private def toJson(raw: RawJson): Json = JsonParser(raw.get()) match {
-    case o: Obj => Obj((o.value - "_key" - "_id" - "_rev") + ("_id" -> o.value.getOrElse("_key", Null)))
+    // Drop ArangoDB's system `_id` (coll/key) and `_rev`; restore escaped names (e.g. `_key`->`_id`).
+    case o: Obj => Obj(o.value.collect { case (k, v) if k != "_id" && k != "_rev" => ArangoQuery.unescapeKey(k) -> v })
     case other => other
   }
 
@@ -68,6 +70,19 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     val cursor = store.database.query("FOR d IN @@col RETURN d", classOf[RawJson], Map[String, Any]("@col" -> store.arangoName).asJava)
+    new Iterator[Json] {
+      override def hasNext: Boolean = cursor.hasNext
+      override def next(): Json = toJson(cursor.next())
+    }
+  })
+
+  // Prefix-scan over LightDB `_id` (stored as `_key`); backs the traversal module's edge lookups.
+  override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
+    val cursor = store.database.query(
+      "FOR d IN @@col FILTER STARTS_WITH(d.`_key`, @prefix) SORT d.`_key` RETURN d",
+      classOf[RawJson],
+      Map[String, Any]("@col" -> store.arangoName, "prefix" -> prefix).asJava
+    )
     new Iterator[Json] {
       override def hasNext: Boolean = cursor.hasNext
       override def next(): Json = toJson(cursor.next())
