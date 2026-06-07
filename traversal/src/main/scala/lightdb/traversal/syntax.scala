@@ -4,6 +4,7 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.graph.EdgeDocument
 import lightdb.id.Id
 import lightdb.transaction.PrefixScanningTransaction
+import lightdb.graph.NativeGraphTraversal
 import lightdb.traversal.graph.{EdgeTraversalBuilder, TraversalPath, TraversalStrategy}
 import rapid.{Pull, Step, Stream, Task}
 
@@ -65,14 +66,19 @@ final class TransactionTraverse[Doc <: Document[Doc], Model <: DocumentModel[Doc
     maxDepth: Int,
     bufferSize: Int = 100,
     edgeFilter: E => Boolean = (_: E) => true
-  )(implicit ev: Doc =:= E): Stream[TraversalPath[E, From, From]] = {
-    allPathsInternal[E, From](
-      from,
-      to,
-      maxDepth,
-      bufferSize,
-      edgeFilter
-    )(edgesFor[E, From, From])
+  )(implicit ev: Doc =:= E): Stream[TraversalPath[E, From, From]] = tx match {
+    // Native backends (e.g. ArangoDB K_PATHS) run the whole path search in the engine. A path is
+    // allowed iff every edge passes the filter, applied here so the native traversal stays eligible.
+    case _: NativeGraphTraversal =>
+      _root_.lightdb.traversal
+        .from(from)
+        .withMaxDepth(maxDepth)
+        .follow[E, From](tx.asInstanceOf[PrefixScanningTransaction[E, _]])
+        .findPaths(to)
+        .filter(path => path.edges.forall(edgeFilter))
+    // Generic backends use the streaming BFS path-finder (lazily emits paths, so `.take(n)` short-circuits).
+    case _ =>
+      allPathsInternal[E, From](from, to, maxDepth, bufferSize, edgeFilter)(edgesFor[E, From, From])
   }
 
   private def allPathsInternal[E <: EdgeDocument[E, From, From], From <: Document[From]](
