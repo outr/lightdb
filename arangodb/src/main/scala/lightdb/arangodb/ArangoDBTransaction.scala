@@ -7,7 +7,8 @@ import com.arangodb.util.RawJson
 import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
-import lightdb.aggregate.AggregateQuery
+import lightdb.SortDirection
+import lightdb.aggregate.{AggregateFunction, AggregateQuery, AggregateType}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.DuplicateIdException
 import lightdb.facet.FacetComputation
@@ -389,11 +390,61 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
     }
   }
 
-  // Aggregation is computed in-memory via the shared `Aggregator`; correct for all
-  // AggregateType/Group/sub-aggregate/Concat cases. Native AQL COLLECT pushdown is a future optimization.
+  // Native AQL COLLECT pushdown for the common shapes (Group + Max/Min/Avg/Sum/Count/CountDistinct,
+  // no sub-aggregates, no HAVING, translatable WHERE). Everything else (sub-aggregates, Concat/
+  // ConcatDistinct, HAVING, residual WHERE) falls back to the correct in-memory `Aggregator`.
   override def aggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] =
-    lightdb.util.Aggregator(query, store.model)
+    if canPushdownAggregate(query) then nativeAggregate(query)
+    else lightdb.util.Aggregator(query, store.model)
 
   override def aggregateCount(query: AggregateQuery[Doc, Model]): Task[Int] =
     aggregate(query).count
+
+  private def canPushdownAggregate(query: AggregateQuery[Doc, Model]): Boolean =
+    query.filter.isEmpty && // HAVING
+      query.functions.nonEmpty &&
+      !query.query.filter.exists(ArangoQuery.filterHasResidual) &&
+      query.functions.forall(f => f.subAggregates.isEmpty && (f.`type` match {
+        case AggregateType.Group | AggregateType.Max | AggregateType.Min | AggregateType.Avg |
+             AggregateType.Sum | AggregateType.Count | AggregateType.CountDistinct => true
+        case _ => false // Concat / ConcatDistinct
+      }))
+
+  private def aqlAggExpr(f: AggregateFunction[_, _, Doc]): String = {
+    val field = s"d.`${ArangoQuery.escapeKey(f.field.name)}`"
+    f.`type` match {
+      case AggregateType.Max => s"MAX($field)"
+      case AggregateType.Min => s"MIN($field)"
+      case AggregateType.Avg => s"AVERAGE($field)"
+      case AggregateType.Sum => s"SUM($field)"
+      case AggregateType.Count => "COUNT_DISTINCT(d.`_key`)" // docs per group (keys are unique)
+      case AggregateType.CountDistinct => s"COUNT_DISTINCT($field)"
+      case other => throw new UnsupportedOperationException(s"Unsupported native aggregate: $other")
+    }
+  }
+
+  private def nativeAggregate(query: AggregateQuery[Doc, Model]): rapid.Stream[MaterializedAggregate[Doc, Model]] = rapid.Stream.fromIterator(Task {
+    val groups = query.functions.filter(_.`type` == AggregateType.Group)
+    val metrics = query.functions.filter(_.`type` != AggregateType.Group)
+    val sb = new StringBuilder("FOR d IN @@col")
+    query.query.filter.foreach(f => sb.append(s" FILTER ${ArangoQuery.translate(f, store.model)}"))
+    sb.append(" COLLECT ")
+    sb.append(groups.map(g => s"`${g.name}` = d.`${ArangoQuery.escapeKey(g.field.name)}`").mkString(", "))
+    if (metrics.nonEmpty) {
+      if (groups.nonEmpty) sb.append(" ")
+      sb.append("AGGREGATE " + metrics.map(m => s"`${m.name}` = ${aqlAggExpr(m)}").mkString(", "))
+    }
+    if (query.sort.nonEmpty) {
+      sb.append(" SORT " + query.sort.map { case (f, dir) => s"`${f.name}` ${if dir == SortDirection.Descending then "DESC" else "ASC"}" }.mkString(", "))
+    }
+    query.limit.foreach(l => sb.append(s" LIMIT $l"))
+    val ret = query.functions.map(f => s"`${f.name}`: `${f.name}`").mkString(", ")
+    sb.append(s" RETURN { $ret }")
+
+    val cursor = store.database.query(sb.toString, classOf[RawJson], Map[String, Any]("@col" -> store.arangoName).asJava)
+    new Iterator[MaterializedAggregate[Doc, Model]] {
+      override def hasNext: Boolean = cursor.hasNext
+      override def next(): MaterializedAggregate[Doc, Model] = MaterializedAggregate[Doc, Model](JsonParser(cursor.next().get()), store.model)
+    }
+  })
 }

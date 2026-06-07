@@ -39,8 +39,10 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
   with PrefixScanningStore[Doc, Model] {
   override type TX = ArangoDBTransaction[Doc, Model]
 
-  private lazy val client: ArangoDB =
-    new ArangoDB.Builder().host(config.host, config.port).user(config.user).password(config.password).build()
+  // The ArangoDB client (connection pool) is shared across all stores created by the same manager;
+  // the manager refcounts active stores and shuts it down once the last one disposes.
+  private def manager: ArangoDBStoreManager = storeManager.asInstanceOf[ArangoDBStoreManager]
+  private def client: ArangoDB = manager.client
 
   private[arangodb] lazy val database: ArangoDatabase = {
     val d = client.db(databaseName)
@@ -84,7 +86,7 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
   // HTTP round-trip per document (see ArangoDBTransaction.applyWriteOps).
   override def defaultBatchConfig: BatchConfig = BatchConfig.Buffered()
 
-  override protected def initialize(): Task[Unit] = super.initialize().next(Task {
+  override protected def initialize(): Task[Unit] = Task(manager.acquireClient()).next(super.initialize()).next(Task {
     collection // force collection (and edge/vertex) creation
     // Persistent indexes for indexed fields so AQL filters/sorts don't full-scan. `_id` is the
     // primary index; spatial fields are evaluated in-memory; failures are non-fatal.
@@ -99,7 +101,7 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
                                            writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] =
     Task(ArangoDBTransaction(this, parent, writeHandlerFactory))
 
-  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task(client.shutdown()))
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task(manager.releaseClient()))
 }
 
 /**
@@ -110,6 +112,17 @@ class ArangoDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Str
 case class ArangoDBStoreManager(config: ArangoDBConfig,
                                 databaseName: Option[String] = None) extends CollectionManager with PrefixScanningStoreManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = ArangoDBStore[Doc, Model]
+
+  // One ArangoDB client (connection pool) shared by all stores from this manager. Refcounted by
+  // active stores; shut down when the last store disposes. (LightDB creates a manager per instance.)
+  private lazy val sharedClient: ArangoDB =
+    new ArangoDB.Builder().host(config.host, config.port).user(config.user).password(config.password).build()
+  private val activeStores = new java.util.concurrent.atomic.AtomicInteger(0)
+
+  private[arangodb] def client: ArangoDB = sharedClient
+  private[arangodb] def acquireClient(): Unit = { activeStores.incrementAndGet(); () }
+  private[arangodb] def releaseClient(): Unit =
+    if (activeStores.decrementAndGet() <= 0) try sharedClient.shutdown() catch { case _: Throwable => () }
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
