@@ -1,7 +1,8 @@
 package lightdb.traversal.graph
 
+import fabric.rw.*
 import lightdb.doc.Document
-import lightdb.graph.EdgeDocument
+import lightdb.graph.{EdgeDocument, NativeGraphTraversal}
 import lightdb.id.Id
 import lightdb.transaction.{PrefixScanningTransaction, Transaction}
 import rapid.{Pull, Step, Stream, Task}
@@ -18,7 +19,8 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
   tx: PrefixScanningTransaction[E, _],
   maxDepth: Int,
   edgeFilter: E => Boolean = (_: E) => true,
-  strategy: TraversalStrategy = TraversalStrategy.BFS
+  strategy: TraversalStrategy = TraversalStrategy.BFS,
+  edgeFilterSet: Boolean = false
 ) {
   /**
    * Configure the maximum traversal depth
@@ -30,7 +32,7 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
    *
    * @param predicate A predicate function to filter edges
    */
-  def filter(predicate: E => Boolean): EdgeTraversalBuilder[E, F, T] = copy(edgeFilter = predicate)
+  def filter(predicate: E => Boolean): EdgeTraversalBuilder[E, F, T] = copy(edgeFilter = predicate, edgeFilterSet = true)
 
   /**
    * Configure traversal strategy
@@ -55,9 +57,23 @@ case class EdgeTraversalBuilder[E <: EdgeDocument[E, F, T], F <: Document[F], T 
    *
    * @return A stream of edge documents
    */
-  def edges: Stream[E] = strategy match {
-    case TraversalStrategy.BFS => executeBFSEdges()
-    case TraversalStrategy.DFS => executeDFSEdges()
+  def edges: Stream[E] = tx match {
+    // Delegate the whole traversal to a backend-native engine (e.g. ArangoDB AQL OUTBOUND) when
+    // available. Only when no edge filter is set — a native multi-hop traversal can't apply a JVM
+    // predicate to prune mid-traversal, so a filtered traversal falls back to the generic path.
+    case native: NativeGraphTraversal if !edgeFilterSet => nativeEdges(native)
+    case _ => strategy match {
+      case TraversalStrategy.BFS => executeBFSEdges()
+      case TraversalStrategy.DFS => executeDFSEdges()
+    }
+  }
+
+  private def nativeEdges(native: NativeGraphTraversal): Stream[E] = rapid.Stream.force {
+    fromIds.toList.map { starts =>
+      val rw = tx.store.model.rw.asInstanceOf[fabric.rw.RW[E]]
+      native.nativeTraverseEdges(starts.map(_.value), maxDepth, strategy == TraversalStrategy.BFS)
+        .map(json => json.as[E](rw))
+    }
   }
 
   /**

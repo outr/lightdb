@@ -23,10 +23,24 @@ object ArangoQuery {
   private def lit(json: Json): String = JsonFormatter.Compact(json)
   private def litStr(s: String): String = lit(str(s))
 
-  // LightDB's `_id` is stored as ArangoDB's `_key` (ArangoDB's own `_id` is the system "coll/key"),
-  // so a filter/sort on `_id` must reference `_key`.
-  private def mapField(name: String): String = if name == "_id" then "_key" else name
-  private def fieldRef(alias: String, name: String): String = s"$alias.`${mapField(name)}`"
+  // ArangoDB reserves the top-level attributes `_id`/`_key`/`_rev`/`_from`/`_to` (the latter two are
+  // silently dropped in document collections), so LightDB's `_id` and EdgeDocument's `_from`/`_to`
+  // are stored under escaped names. Filters/sorts must reference the escaped names too.
+  def escapeKey(name: String): String = name match {
+    case "_id" => "_key"
+    case "_from" => "from_"
+    case "_to" => "to_"
+    case "_rev" => "rev_"
+    case n => n
+  }
+  def unescapeKey(name: String): String = name match {
+    case "_key" => "_id"
+    case "from_" => "_from"
+    case "to_" => "_to"
+    case "rev_" => "_rev"
+    case n => n
+  }
+  private def fieldRef(alias: String, name: String): String = s"$alias.`${escapeKey(name)}`"
 
   // Escape regex metacharacters so a literal substring can be used in REGEX_TEST.
   private def escapeRegex(s: String): String = s.flatMap {
