@@ -5,7 +5,7 @@ import lightdb.graph.EdgeDocument
 import lightdb.id.Id
 import lightdb.transaction.PrefixScanningTransaction
 import lightdb.traversal.graph.{EdgeTraversalBuilder, TraversalPath, TraversalStrategy}
-import rapid.{Pull, Step, Stream, Task}
+import rapid.Stream
 
 /**
  * Syntax / extension methods for enabling the lightweight graph traversal DSL against any
@@ -65,73 +65,15 @@ final class TransactionTraverse[Doc <: Document[Doc], Model <: DocumentModel[Doc
     maxDepth: Int,
     bufferSize: Int = 100,
     edgeFilter: E => Boolean = (_: E) => true
-  )(implicit ev: Doc =:= E): Stream[TraversalPath[E, From, From]] = {
-    allPathsInternal[E, From](
-      from,
-      to,
-      maxDepth,
-      bufferSize,
-      edgeFilter
-    )(edgesFor[E, From, From])
-  }
-
-  private def allPathsInternal[E <: EdgeDocument[E, From, From], From <: Document[From]](
-    from: Id[From],
-    to: Id[From],
-    maxDepth: Int,
-    bufferSize: Int = 100,
-    edgeFilter: E => Boolean = (_: E) => true
-  )(edgesForFunc: Id[From] => Stream[E]): Stream[TraversalPath[E, From, From]] = {
-    import scala.collection.mutable
-
-    val queue = mutable.Queue[(Id[From], List[E])]()
-    val seen = mutable.Set[List[Id[From]]]()
-    queue.enqueue((from, Nil))
-
-    var buffer: List[TraversalPath[E, From, From]] = Nil
-
-    val pullTask: Task[Step[TraversalPath[E, From, From]]] = Task {
-      if buffer.nonEmpty then {
-        val next = buffer.head
-        buffer = buffer.tail
-        Step.Emit(next)
-      } else {
-        var collected = List.empty[TraversalPath[E, From, From]]
-
-        while queue.nonEmpty && collected.size < bufferSize do {
-          val (currentId, path) = queue.dequeue()
-
-          if path.length < maxDepth then {
-            val edges: List[E] = edgesForFunc(currentId).toList.sync()
-            val filteredEdges = edges.filter(edgeFilter)
-            val nextSteps = filteredEdges.filterNot(e => path.exists(_._to == e._to))
-            val newPaths = nextSteps.map(e => (e._to, path :+ e))
-            val (completed, pending) = newPaths.partition(_._1 == to)
-
-            pending.foreach {
-              case (id, newPath) =>
-                val signature = from +: newPath.map(_._to)
-                if !seen.contains(signature) then {
-                  seen += signature
-                  queue.enqueue((id, newPath))
-                }
-            }
-
-            collected ++= completed.map(p => TraversalPath(p._2))
-          }
-        }
-
-        if collected.nonEmpty then {
-          buffer = collected.tail
-          Step.Emit(collected.head)
-        } else {
-          Step.Stop
-        }
-      }
-    }
-    val pull = Pull(pullTask)
-    Stream(Task.pure(pull))
-  }
+  )(implicit ev: Doc =:= E): Stream[TraversalPath[E, From, From]] =
+    _root_.lightdb.traversal
+      .from(from)
+      .withMaxDepth(maxDepth)
+      .follow[E, From](tx.asInstanceOf[PrefixScanningTransaction[E, _]])
+      .findPaths(to)
+      // A path is allowed iff every edge in it passes the filter; applying it here keeps the native
+      // (unfiltered) traversal eligible while preserving edge-filter semantics.
+      .filter(path => path.edges.forall(edgeFilter))
 
   /**
    * Find shortest paths between two nodes.
