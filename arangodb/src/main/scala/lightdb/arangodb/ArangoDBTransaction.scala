@@ -122,6 +122,18 @@ case class ArangoDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]
       }
     })
 
+  override def nativeShortestPathEdges(fromKey: String, toKey: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
+    val from = s"${store.vertexNamespace}/$fromKey"
+    val to = s"${store.vertexNamespace}/$toKey"
+    // SHORTEST_PATH yields (vertex, edge) pairs; the start vertex's edge is null — filter it out.
+    val aql = "FOR v, e IN OUTBOUND SHORTEST_PATH @from TO @to @@col FILTER e != null RETURN e"
+    val cursor = store.database.query(aql, classOf[RawJson], Map[String, Any]("@col" -> store.arangoName, "from" -> from, "to" -> to).asJava)
+    new Iterator[Json] {
+      override def hasNext: Boolean = cursor.hasNext
+      override def next(): Json = toJson(cursor.next())
+    }
+  })
+
   // -- Raw AQL ------------------------------------------------------------------------------------
   // Parity with SQL's raw-query support. `@@col` is auto-bound to this store's collection when the
   // query references it; the caller supplies any other bind parameters.
