@@ -21,7 +21,7 @@ import org.apache.lucene.facet.taxonomy.FastTaxonomyFacetCounts
 import org.apache.lucene.facet.{DrillDownQuery, FacetsCollector, FacetsCollectorManager}
 import org.apache.lucene.index.{StoredFields, Term}
 import org.apache.lucene.search.grouping.{FirstPassGroupingCollector, SearchGroup, TermGroupSelector, TopGroups, TopGroupsCollector}
-import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, MatchAllDocsQuery, MatchNoDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermInSetQuery, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
+import org.apache.lucene.search.{BooleanClause, BooleanQuery, BoostQuery, IndexSearcher, KnnFloatVectorQuery, MatchAllDocsQuery, MatchNoDocsQuery, MultiCollectorManager, RegexpQuery, ScoreDoc, SortField, SortedNumericSortField, TermInSetQuery, TermQuery, TopFieldCollectorManager, TopFieldDocs, TotalHitCountCollectorManager, Query => LuceneQuery, Sort => LuceneSort}
 import org.apache.lucene.util.BytesRef
 import org.apache.lucene.util.automaton.RegExp
 import rapid.Task
@@ -56,11 +56,23 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
 
   def apply[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = Task {
     val indexSearcher = tx.state.indexSearcher
-    val q: LuceneQuery = filter2Lucene(query.filter).rewrite(indexSearcher)
-    val s: LuceneSort = sort(query.sort)
+    val knnSortOpt: Option[Sort.ByVectorDistance[_]] = query.sort.collectFirst {
+      case bv: Sort.ByVectorDistance[_] => bv
+    }
     val limit = query.limit.orElse(query.pageSize).getOrElse(100_000_000)   // TODO: Evaluate a configurable upper limit
     if limit <= 0 then throw new RuntimeException(s"Limit must be a positive value, but set to $limit")
     val max = limit + query.offset
+    // Native KNN: a vector sort becomes a KnnFloatVectorQuery (top-`max` nearest, with the regular
+    // filter applied as a pre-filter). Results are scored by similarity, so order by score (nearest
+    // first); Lucene KNN is nearest-only, so a descending vector sort is rejected.
+    val q: LuceneQuery = knnSortOpt match {
+      case Some(bv) => knnQuery(bv, max, query.filter, indexSearcher)
+      case None => filter2Lucene(query.filter).rewrite(indexSearcher)
+    }
+    val s: LuceneSort = knnSortOpt match {
+      case Some(_) => new LuceneSort(SortField.FIELD_SCORE)
+      case None => sort(query.sort)
+    }
 
     val collectors = List(
       Some(new TopFieldCollectorManager(s, max, max)),
@@ -380,11 +392,32 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
         val fieldSortName = s"${parentFieldName(field.name)}Sort"
         LatLonDocValuesField.newDistanceSort(fieldSortName, from.latitude, from.longitude)
       case _: Sort.ByVectorDistance[_] =>
-        throw new UnsupportedOperationException(
-          "Vector search (Sort.ByVectorDistance) is not yet supported by the Lucene backend; " +
-            "use a backend with native vector support such as PostgreSQL with pgvector."
-        )
+        // Handled before sort() is called (see apply / knnQuery); never reached via sort2SortField.
+        throw new UnsupportedOperationException("Sort.ByVectorDistance must be handled as a KnnFloatVectorQuery")
     }
+  }
+
+  /**
+   * Builds a `KnnFloatVectorQuery` for a vector KNN sort: top-`k` nearest by the field's indexed
+   * similarity function, with the regular query filter applied as a pre-filter. Lucene KNN is
+   * nearest-first only, so a descending vector sort is rejected.
+   */
+  private def knnQuery(bv: Sort.ByVectorDistance[_],
+                       k: Int,
+                       filter: Option[Filter[Doc]],
+                       searcher: IndexSearcher): LuceneQuery = {
+    if bv.direction == SortDirection.Descending then {
+      throw new UnsupportedOperationException(
+        "Lucene vector search returns nearest-first only; a descending Sort.ByVectorDistance is not supported."
+      )
+    }
+    val fieldName = parentFieldName(bv.field.name)
+    val target = bv.vector.iterator.map(_.toFloat).toArray
+    val preFilter: LuceneQuery = filter match {
+      case Some(f) => filter2Lucene(Some(f)).rewrite(searcher)
+      case None => null
+    }
+    new KnnFloatVectorQuery(fieldName, target, k, preFilter)
   }
 
   def filter2Lucene(filter: Option[Filter[Doc]]): LuceneQuery = {
