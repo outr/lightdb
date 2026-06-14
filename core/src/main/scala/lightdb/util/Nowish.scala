@@ -1,5 +1,7 @@
 package lightdb.util
 
+import lightdb.time.Timestamp
+
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -10,6 +12,8 @@ import java.util.concurrent.atomic.AtomicLong
  */
 object Nowish {
   private val lastTime = new AtomicLong(-1L)
+
+  def timestamp: Timestamp = Timestamp(apply())
 
   def apply(): Long = lastTime.updateAndGet { last =>
     val now = System.currentTimeMillis()
