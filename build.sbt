@@ -92,7 +92,7 @@ val scribeVersion: String = "3.19.0"
 
 val luceneVersion: String = "10.4.0"
 
-val hikariCPVersion: String = "7.0.2"
+val hikariCPVersion: String = "7.1.0"
 
 val commonsDBCP2Version: String = "2.14.0"
 
