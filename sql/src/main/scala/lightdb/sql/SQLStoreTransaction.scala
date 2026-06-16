@@ -110,6 +110,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
     val connection = state.connectionManager.getConnection(state)
     val s = connection.createStatement()
+    s.setFetchSize(1000)
     state.register(s)
     val rs = s.executeQuery(s"SELECT * FROM ${store.fqn}")
     state.register(rs)
@@ -224,10 +225,14 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val deletes = mutable.ArrayBuffer.empty[Id[Doc]]
 
     ops.foreach {
-      case WriteOp.Insert(doc) => inserts += doc
-      case WriteOp.Upsert(doc) => upserts += doc
-      case WriteOp.Delete(id) => deletes += id
+      case WriteOp.Insert(doc) => inserts += doc; trackCacheWrite(doc._id, Some(doc))
+      case WriteOp.Upsert(doc) => upserts += doc; trackCacheWrite(doc._id, Some(doc))
+      case WriteOp.Delete(id) => deletes += id; trackCacheWrite(id, None)
     }
+    // trackCacheWrite buffers into cachePending; commit's applyCachePending then
+    // refreshes the store-level point cache. Without this, a cached SQL store
+    // keeps returning the pre-write value after a warming read — this native
+    // batch path bypasses Transaction.applyWriteOps (which tracks it generically).
 
     if inserts.nonEmpty then {
       state.withInsertPreparedStatement { ps =>

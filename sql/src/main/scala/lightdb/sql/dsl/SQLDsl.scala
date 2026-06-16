@@ -1,5 +1,7 @@
 package lightdb.sql.dsl
 
+import fabric.Json
+import fabric.io.JsonFormatter
 import lightdb.ListExtras
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
@@ -246,8 +248,20 @@ object SQLDsl {
 
   final case class Join(joinType: JoinType, table: Ident.Table, on: Option[Expr])
 
+  sealed trait Projection {
+    private[dsl] def render: SQLPart
+  }
+  object Projection {
+    final case class Col(column: Ident.Column) extends Projection {
+      override private[dsl] def render: SQLPart = SQLPart.Fragment(column.value)
+    }
+    final case class Aliased(value: Value, alias: String) extends Projection {
+      override private[dsl] def render: SQLPart = SQLQuery(List(value.render, SQLPart.Fragment(s" AS ${SqlIdent.quote(alias)}")))
+    }
+  }
+
   final case class Select(
-    columns: List[Ident.Column] = Nil,
+    projections: List[Projection] = Nil,
     from: Option[Ident.Table] = None,
     joins: List[Join] = Nil,
     where: Option[Expr] = None,
@@ -255,7 +269,7 @@ object SQLDsl {
     limit: Option[Int] = None,
     offset: Option[Int] = None
   ) {
-    def select(cols: Ident.Column*): Select = copy(columns = cols.toList)
+    def select(cols: Projection*): Select = copy(projections = cols.toList)
     def from(table: Ident.Table): Select = copy(from = Some(table))
 
     def join(table: Ident.Table, on: Expr): Select =
@@ -276,10 +290,10 @@ object SQLDsl {
     def limit(n: Int): Select = copy(limit = Some(n))
     def offset(n: Int): Select = copy(offset = Some(n))
 
-    def toSQLQuery: SQLQuery = {
+    private[dsl] def coreParts: List[SQLPart] = {
       val cols: List[SQLPart] =
-        if columns.isEmpty then List(SQLPart.Fragment("*"))
-        else columns.map(c => SQLPart.Fragment(c.value)).intersperse(SQLPart.Fragment(", "))
+        if projections.isEmpty then List(SQLPart.Fragment("*"))
+        else projections.map(_.render).intersperse(SQLPart.Fragment(", "))
 
       val fromPart: List[SQLPart] = from match {
         case Some(t) => List(SQLPart.Fragment(" FROM "), SQLPart.Fragment(t.value))
@@ -306,39 +320,59 @@ object SQLDsl {
         case None => Nil
       }
 
-      val orderPart: List[SQLPart] =
-        if orderBy.isEmpty then Nil
-        else {
-          val parts: List[SQLPart] = orderBy.map { ob =>
-            SQLQuery(List(
-              SQLPart.Fragment(ob.col.value),
-              SQLPart.Fragment(" "),
-              SQLPart.Fragment(ob.direction.sql)
-            ))
-          }
-          SQLPart.Fragment(" ORDER BY ") :: parts.intersperse(SQLPart.Fragment(", "))
-        }
+      List(SQLPart.Fragment("SELECT ")) ::: cols ::: fromPart ::: joinPart ::: wherePart
+    }
 
-      val limitPart: List[SQLPart] = limit match {
-        case Some(l) => List(SQLPart.Fragment(" LIMIT "), SQLPart.Arg(SQLQuery.toJson(l)))
-        case None => Nil
-      }
+    def toSQLQuery: SQLQuery = SQLQuery(coreParts ::: renderOrderBy(orderBy) ::: renderLimit(limit) ::: renderOffset(offset))
+  }
 
-      val offsetPart: List[SQLPart] = offset match {
-        case Some(o) => List(SQLPart.Fragment(" OFFSET "), SQLPart.Arg(SQLQuery.toJson(o)))
-        case None => Nil
-      }
+  final case class Union(selects: List[Select], all: Boolean = true,
+                         orderBy: List[OrderBy] = Nil, limit: Option[Int] = None, offset: Option[Int] = None) {
+    def orderBy(cols: OrderBy*): Union = copy(orderBy = cols.toList)
+    def limit(n: Int): Union = copy(limit = Some(n))
+    def offset(n: Int): Union = copy(offset = Some(n))
 
-      SQLQuery(
-        List(SQLPart.Fragment("SELECT ")) ::: cols ::: fromPart ::: joinPart ::: wherePart ::: orderPart ::: limitPart ::: offsetPart
-      )
+    def toSQLQuery: SQLQuery = {
+      val sep = SQLPart.Fragment(if all then " UNION ALL " else " UNION ")
+      val bodies: List[SQLPart] = selects
+        .map(s => SQLQuery(SQLPart.Fragment("(") :: s.coreParts ::: List(SQLPart.Fragment(")"))))
+        .intersperse(sep)
+      SQLQuery(bodies ::: renderOrderBy(orderBy) ::: renderLimit(limit) ::: renderOffset(offset))
     }
   }
 
   // ----------------------------
   // Convenience constructors
   // ----------------------------
-  def select(cols: Ident.Column*): Select = Select(columns = cols.toList)
+  given columnToProjection: Conversion[Ident.Column, Projection] = Projection.Col(_)
+
+  def select(cols: Projection*): Select = Select(projections = cols.toList)
+
+  def litAs(value: Any, alias: String): Projection = Projection.Aliased(Value.Arg(value), alias)
+  def colAs(column: Ident.Column, alias: String): Projection = Projection.Aliased(Value.Raw(column.value), alias)
+
+  def union(selects: Select*): Union = Union(selects.toList, all = false)
+  def unionAll(selects: Select*): Union = Union(selects.toList, all = true)
+
+  def arrayContains(col: Ident.Column, value: Json): Expr = {
+    val j = JsonFormatter.Compact(value)
+    List(s"%[$j,%", s"%,$j,%", s"%,$j]%", s"%[$j]%").map(p => Expr.Like(col, Value.Arg(p))).reduce(_ or _)
+  }
+
+  private def renderOrderBy(orderBy: List[OrderBy]): List[SQLPart] =
+    if orderBy.isEmpty then Nil
+    else {
+      val parts: List[SQLPart] = orderBy.map { ob =>
+        SQLQuery(List(SQLPart.Fragment(ob.col.value), SQLPart.Fragment(" "), SQLPart.Fragment(ob.direction.sql)))
+      }
+      SQLPart.Fragment(" ORDER BY ") :: parts.intersperse(SQLPart.Fragment(", "))
+    }
+
+  private def renderLimit(limit: Option[Int]): List[SQLPart] =
+    limit.map(l => List(SQLPart.Fragment(" LIMIT "), SQLPart.Arg(SQLQuery.toJson(l)))).getOrElse(Nil)
+
+  private def renderOffset(offset: Option[Int]): List[SQLPart] =
+    offset.map(o => List(SQLPart.Fragment(" OFFSET "), SQLPart.Arg(SQLQuery.toJson(o)))).getOrElse(Nil)
 
   def table(name: String): Ident.Table = Ident.table(name)
   def table(store: Store[?, ?]): Ident.Table = store match {
