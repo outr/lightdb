@@ -104,7 +104,9 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     }
   }
 
-  override def insert(stream: rapid.Stream[Doc]): Task[Int] = {
+  override def insert(stream: rapid.Stream[Doc], commitEvery: Option[Int] = None): Task[Int] = commitEvery match {
+    case Some(_) => super.insert(stream, commitEvery)
+    case None =>
     if !store.persistedIndexEnabled || store.name == "_backingStore" then {
       super.insert(stream)
     } else {
@@ -142,7 +144,9 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
     }
   }
 
-  override def upsert(stream: rapid.Stream[Doc]): Task[Int] = {
+  override def upsert(stream: rapid.Stream[Doc], commitEvery: Option[Int] = None): Task[Int] = commitEvery match {
+    case Some(_) => super.upsert(stream, commitEvery)
+    case None =>
     if !store.persistedIndexEnabled || store.name == "_backingStore" then {
       super.upsert(stream)
     } else {

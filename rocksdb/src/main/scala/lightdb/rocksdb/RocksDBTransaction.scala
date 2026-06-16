@@ -87,10 +87,13 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     doc
   }
 
-  override def upsert(stream: rapid.Stream[Doc]): Task[Int] = Task.defer {
-    batchUpsert(stream.evalTap { doc =>
-      store.trigger.upsert(doc, this)
-    })
+  override def upsert(stream: rapid.Stream[Doc], commitEvery: Option[Int] = None): Task[Int] = commitEvery match {
+    case Some(_) => super.upsert(stream, commitEvery)
+    case None => Task.defer {
+      batchUpsert(stream.evalTap { doc =>
+        store.trigger.upsert(doc, this)
+      })
+    }
   }
 
   private def batchUpsert(stream: rapid.Stream[Doc]): Task[Int] = Task.defer {

@@ -41,8 +41,26 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this)
     .next(writeHandler.write(WriteOp.Insert(doc)))
     .map(_ => doc)
-  def insert(stream: rapid.Stream[Doc]): Task[Int] =
-    stream.evalMap(insert).count.flatTap(_ => flush)
+
+  /**
+   * Optimized insert for handling large streams of documents.
+   *
+   * @param stream the stream to insert
+   * @param commitEvery if set, will create a transaction per batch to avoid overflowing transactions with too many
+   *                    inserts.
+   * @return the insertion count
+   */
+  def insert(stream: rapid.Stream[Doc], commitEvery: Option[Int] = None): Task[Int] = commitEvery match {
+    case Some(chunkSize) => stream
+      .chunk(chunkSize)
+      .evalMap { chunk =>
+        store.transaction { writeTransaction =>
+          writeTransaction.insert(chunk).map(_.size)
+        }
+      }
+      .sum
+    case None => stream.evalMap(insert).count.flatTap(_ => flush)
+  }
 
   final def insert(docs: Seq[Doc]): Task[Seq[Doc]] = insert(rapid.Stream.emits(docs)).map(_ => docs)
   def insertJson(stream: rapid.Stream[Json]): Task[Int] = insert(stream.map(_.as[Doc](store.model.rw)))
@@ -50,8 +68,27 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this)
     .next(writeHandler.write(WriteOp.Upsert(doc)))
     .map(_ => doc)
-  def upsert(stream: rapid.Stream[Doc]): Task[Int] =
-    stream.evalMap(upsert).count.flatTap(_ => flush)
+
+  /**
+   * Optimized upsert for handling large streams of documents.
+   *
+   * @param stream the stream to upsert
+   * @param commitEvery if set, will create a transaction per batch to avoid overflowing transactions with too many
+   *                    upserts.
+   * @return the upsert count
+   */
+  def upsert(stream: rapid.Stream[Doc], commitEvery: Option[Int] = None): Task[Int] = commitEvery match {
+    case Some(chunkSize) => stream
+      .chunk(chunkSize)
+      .evalMap { chunk =>
+        store.transaction { writeTransaction =>
+          writeTransaction.upsert(chunk).map(_.size)
+        }
+      }
+      .sum
+    case None => stream.evalMap(upsert).count.flatTap(_ => flush)
+  }
+
   final def upsert(docs: Seq[Doc]): Task[Seq[Doc]] = upsert(rapid.Stream.emits(docs)).map(_ => docs)
   def upsertJson(stream: rapid.Stream[Json]): Task[Int] = upsert(stream.map(_.as[Doc](store.model.rw)))
 
