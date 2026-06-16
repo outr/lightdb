@@ -17,6 +17,9 @@ case class Timestamp(value: Long = System.currentTimeMillis()) extends AnyVal {
   def minute: Int = apply(Timestamp.Field.Minute)
   def second: Int = apply(Timestamp.Field.Second)
   def millisecond: Int = apply(Timestamp.Field.Millisecond)
+  
+  def timeInMillis: Long = value
+  def timeInSeconds: Long = value / 1000L
 
   def apply(field: Timestamp.Field): Int = field match {
     case Timestamp.Field.Year => value.t.year

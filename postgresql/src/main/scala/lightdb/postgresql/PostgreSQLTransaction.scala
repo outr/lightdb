@@ -2,6 +2,7 @@ package lightdb.postgresql
 
 import fabric.*
 import fabric.rw.*
+import fabric.io.JsonFormatter
 import lightdb.Sort
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.query.SQLPart
@@ -29,6 +30,33 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
 
   override protected def notLikePart(name: String, pattern: String): SQLPart =
     SQLPart(s"$name NOT ILIKE ?", pattern.json)
+
+  // Array membership against the compact-JSON text column. An element is bounded by `[`/`,` on the
+  // left and `,`/`]` on the right, so anchoring on those boundaries gives exact matches for any
+  // scalar type (no `42` matching `420`) while remaining LIKE-based, so the pg_trgm GIN index applies.
+  private def arrayBoundaryPatterns(v: String): List[String] = List(s"%[$v,%", s"%,$v,%", s"%,$v]%", s"%[$v]%")
+
+  override protected def arrayContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] =
+    if (values.isEmpty) None
+    else Some {
+      val q = SqlIdent.quote(fieldName)
+      val (clauses, args) = values.map { json =>
+        val patterns = arrayBoundaryPatterns(JsonFormatter.Compact(json))
+        (s"(${patterns.map(_ => s"$q ILIKE ?").mkString(" OR ")})", patterns.map(_.json))
+      }.unzip
+      SQLPart(clauses.mkString(" AND "), args.flatten*)
+    }
+
+  override protected def arrayNotContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] =
+    if (values.isEmpty) None
+    else Some {
+      val q = SqlIdent.quote(fieldName)
+      val (clauses, args) = values.map { json =>
+        val patterns = arrayBoundaryPatterns(JsonFormatter.Compact(json))
+        (s"(${patterns.map(_ => s"$q NOT ILIKE ?").mkString(" AND ")})", patterns.map(_.json))
+      }.unzip
+      SQLPart(clauses.mkString(" AND "), args.flatten*)
+    }
 
   override def populate(ps: PreparedStatement, arg: Json, index: Int): Unit = arg match {
     case Bool(b, _) => ps.setBoolean(index + 1, b)
