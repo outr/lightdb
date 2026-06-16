@@ -159,8 +159,12 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
    * Record a pending cache mutation for this transaction. The operation is buffered in [[cachePending]]
    * and applied to the store-level cache on commit (or discarded on rollback). No-op when caching is
    * disabled.
+   *
+   * `protected` so store-native batch write paths (e.g. [[lightdb.sql.SQLStoreTransaction.flushOps]])
+   * can keep the point cache consistent too — otherwise a cached SQL store returns stale reads after a
+   * write, since those paths bypass [[applyWriteOps]].
    */
-  private def trackCacheWrite(id: Id[Doc], doc: Option[Doc]): Unit =
+  protected def trackCacheWrite(id: Id[Doc], doc: Option[Doc]): Unit =
     if (store.cache.isDefined) cachePending.put(id, doc)
 
   protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]]
