@@ -59,6 +59,24 @@ trait AbstractSpecialCasesSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         }
       }
     }
+    "round-trip String fields that begin with a JSON literal" in {
+      val tricky = List(
+        SpecialOne("24 Hours Music for Dogs", WrappedString("12 Monkeys"), Person("Andrew", 1), _id = Id("tricky-num-space")),
+        SpecialOne("20230402_165246", WrappedString("Matt 2007"), Person("Bianca", 2), _id = Id("tricky-controls"))
+      )
+      DB.specialOne.transaction { transaction =>
+        for {
+          _ <- transaction.insert(tricky)
+          got <- transaction.query.filter(_._id.in(tricky.map(_._id))).toList
+        } yield {
+          val byId = got.map(o => o._id -> o).toMap
+          byId(SpecialOne.id("tricky-num-space")).name should be("24 Hours Music for Dogs")
+          byId(SpecialOne.id("tricky-num-space")).wrappedString should be(WrappedString("12 Monkeys"))
+          byId(SpecialOne.id("tricky-controls")).name should be("20230402_165246")
+          byId(SpecialOne.id("tricky-controls")).wrappedString should be(WrappedString("Matt 2007"))
+        }
+      }
+    }
     "truncate the database" in {
       DB.truncate().succeed
     }

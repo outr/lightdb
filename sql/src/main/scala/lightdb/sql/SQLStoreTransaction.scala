@@ -1146,6 +1146,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   protected def toJson(value: Any, rw: RW[_]): Json = obj2Value(value) match {
     case null => Null
+    case s: String if isStringField(rw) => str(s)
     case s: String => try {
       JsonParser(s)
     } catch {
@@ -1159,6 +1160,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case bd: BigDecimal => num(bd)
     case b: Byte => num(b)
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
+  }
+
+  private def isStringField(rw: RW[_]): Boolean = {
+    def base(dt: DefType): Boolean = dt match {
+      case DefType.Str => true
+      case DefType.Opt(inner) => base(inner.defType)
+      case _ => false
+    }
+    base(rw.definition.defType)
   }
 
   protected def obj2Value(obj: Any): Any = obj match {
