@@ -82,7 +82,9 @@ class LuceneBlockJoinDerivedStore[
    *
    * Join rule: child documents are linked to a parent using ParentChildSupport.parentField(childModel) == parent._id.
    */
-  override def reIndex(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = {
+  override def reIndex(progressManager: ProgressManager = ProgressManager.none,
+                       commitEvery: Option[Int] = None): Task[Boolean] = {
+    val effectiveCommitEvery = commitEvery.getOrElse(this.commitEvery)
     val ps = parentSource()
     val cs = childSource()
     val joinField = model.parentField(cs.model)
@@ -98,7 +100,7 @@ class LuceneBlockJoinDerivedStore[
               .filter((_: ChildModel) => Filter.Equals(joinField, p._id))
               .toList,
           truncateFirst = truncateFirst,
-          commitEvery = commitEvery
+          commitEvery = effectiveCommitEvery
         )
       }
     }.flatTap { _ =>
