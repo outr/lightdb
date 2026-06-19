@@ -30,9 +30,10 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
    * themselves and override this — see [[lightdb.store.split.SplitCollection]], which re-derives the
    * index from the backing storage instead.
    */
-  override def reIndex(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] =
+  override def reIndex(progressManager: ProgressManager = ProgressManager.none,
+                       commitEvery: Option[Int] = None): Task[Boolean] =
     if !storeMode.isAll then {
-      super.reIndex(progressManager)
+      super.reIndex(progressManager, commitEvery)
     } else {
       transaction { tx =>
         tx.count.flatMap { total =>
@@ -47,7 +48,7 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
               )
             }
           }
-          tx.upsert(stream)
+          tx.upsert(stream, commitEvery)
         }.map(_ => true)
       }
     }
