@@ -68,8 +68,9 @@ class SplitCollection[
     Task.pure(false)
   }
 
-  override def reIndex(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = transaction { transaction =>
-    reIndexInternal(transaction, progressManager).map(_ => true)
+  override def reIndex(progressManager: ProgressManager = ProgressManager.none,
+                       commitEvery: Option[Int] = None): Task[Boolean] = transaction { transaction =>
+    reIndexInternal(transaction, progressManager, commitEvery).map(_ => true)
   }
 
   override def reIndexDoc(doc: Doc): Task[Boolean] = transaction { transaction =>
@@ -78,7 +79,9 @@ class SplitCollection[
 
   override def optimize(): Task[Unit] = searching.optimize().next(storage.optimize())
 
-  private def reIndexInternal(transaction: TX, progressManager: ProgressManager): Task[Unit] = Task.defer {
+  private def reIndexInternal(transaction: TX,
+                              progressManager: ProgressManager,
+                              commitEvery: Option[Int] = None): Task[Unit] = Task.defer {
     val startNanos = System.nanoTime()
     def elapsedMs: Long = (System.nanoTime() - startNanos) / 1_000_000L
 
@@ -113,7 +116,8 @@ class SplitCollection[
                     message = Some(s"Re-Indexing $name: $count of $total")
                   )
                 }
-              }
+              },
+              commitEvery = commitEvery
             ).unit
           }.next(Task {
             scribe.debug(s"[reindex-trace] $name searching.insert(stream) completed (elapsedMs=$elapsedMs).")

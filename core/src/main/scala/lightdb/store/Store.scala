@@ -114,7 +114,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = Task.pure(false)
 
-  def reIndex(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = Task.pure(false)
+  def reIndex(progressManager: ProgressManager = ProgressManager.none,
+              commitEvery: Option[Int] = None): Task[Boolean] = Task.pure(false)
 
   def reIndexDoc(doc: Doc): Task[Boolean] = Task.pure(false)
 

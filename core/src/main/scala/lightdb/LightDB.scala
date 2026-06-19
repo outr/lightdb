@@ -89,11 +89,16 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    * Offers each store the ability to re-index data if supported. Only stores that separate storage and indexing
    * (like SplitStore) will do any work. Returns the number of stores that were re-indexed. Provide the list of the
    * stores to re-index or all stores will be invoked.
+   *
+   * @param commitEvery if set, commits in batches of this size during the re-index. Useful for stores (like SQL) that
+   *                    become sluggish when a single transaction accumulates a very large number of writes.
    */
-  def reIndex(stores: List[Store[_, _]] = stores, progressManager: ProgressManager = ProgressManager.none): Task[Int] = if stores.nonEmpty then {
+  def reIndex(stores: List[Store[_, _]] = stores,
+              progressManager: ProgressManager = ProgressManager.none,
+              commitEvery: Option[Int] = None): Task[Int] = if stores.nonEmpty then {
     val pms = progressManager.split(stores.length)
     stores.zip(pms).map {
-      case (store, pm) => store.reIndex(pm).map { result =>
+      case (store, pm) => store.reIndex(pm, commitEvery).map { result =>
         if !result then pm(Some(1.0), None) // Mark non-indexing stores as complete so they don't drag down progress
         result
       }
