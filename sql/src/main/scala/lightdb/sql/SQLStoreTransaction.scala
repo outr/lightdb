@@ -1148,7 +1148,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case null => Null
     case s: String if isStringField(rw) => str(s)
     case s: String => try {
-      JsonParser(s)
+      val parsed = JsonParser(s)
+      if (JsonFormatter.Compact(parsed) == s) parsed else str(s)
     } catch {
       case _: Throwable => str(s)
     }
