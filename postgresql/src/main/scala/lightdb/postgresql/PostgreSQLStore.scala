@@ -37,6 +37,13 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
       if (fields.exists(_.isVector)) {
         s.executeUpdate("CREATE EXTENSION IF NOT EXISTS vector")
       }
+      // PostGIS + the spatial helper functions are created only when the model has a Geo field, so
+      // plain (non-spatial) deployments don't require the extension. The functions back the
+      // distance/contains/intersects overrides in PostgreSQLTransaction.
+      if (fields.exists(f => PostgreSQLStore.referencesGeo(f.getRW().definition))) {
+        s.executeUpdate("CREATE EXTENSION IF NOT EXISTS postgis SCHEMA public")
+        PostgreSQLStore.GeoFunctions.foreach(s.executeUpdate)
+      }
     } finally {
       s.close()
     }
@@ -132,4 +139,60 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
     lookup(field.getRW().definition)
   }
+}
+
+object PostgreSQLStore {
+  /** True if a field is (or contains) a `lightdb.spatial.Geo` value. */
+  def referencesGeo(d: Definition): Boolean =
+    d.className.contains("lightdb.spatial.Geo") || (d.defType match {
+      case DefType.Arr(of) => referencesGeo(of)
+      case DefType.Opt(of) => referencesGeo(of)
+      case _ => false
+    })
+
+  // The geo column holds GeoJSON — either a single geometry or an array of them. Each helper
+  // normalizes both inputs to a JSON array, builds PostGIS geometries from the elements, and
+  // computes the pairwise relation. `SET search_path = public` so PostGIS resolves regardless of
+  // the caller's schema. Mirrors lightdb.h2.H2SpatialFunctions semantics.
+  private def norm(p: Int): String =
+    s"CASE WHEN ($$$p) IS NULL THEN '[]'::jsonb WHEN jsonb_typeof(($$$p)::jsonb) = 'array' THEN ($$$p)::jsonb ELSE jsonb_build_array(($$$p)::jsonb) END"
+
+  private val distanceMin: String =
+    s"""CREATE OR REPLACE FUNCTION public.ldb_geo_distance_min(text, text)
+       |RETURNS double precision LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$fn$$
+       |  SELECT min(ST_Distance(ST_GeomFromGeoJSON(ge::text)::geography, ST_GeomFromGeoJSON(oe::text)::geography))
+       |  FROM jsonb_array_elements(${norm(1)}) ge, jsonb_array_elements(${norm(2)}) oe
+       |$$fn$$""".stripMargin
+
+  private val distanceJson: String =
+    s"""CREATE OR REPLACE FUNCTION public.ldb_geo_distance_json(text, text)
+       |RETURNS text LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$fn$$
+       |  SELECT COALESCE(jsonb_agg(d ORDER BY gi, oi)::text, '[]')
+       |  FROM (
+       |    SELECT ST_Distance(ST_GeomFromGeoJSON(ge.v::text)::geography, ST_GeomFromGeoJSON(oe.v::text)::geography) AS d,
+       |           ge.i AS gi, oe.i AS oi
+       |    FROM jsonb_array_elements(${norm(1)}) WITH ORDINALITY ge(v, i),
+       |         jsonb_array_elements(${norm(2)}) WITH ORDINALITY oe(v, i)
+       |  ) t
+       |$$fn$$""".stripMargin
+
+  private val spatialContains: String =
+    s"""CREATE OR REPLACE FUNCTION public.ldb_geo_spatial_contains(text, text)
+       |RETURNS int LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$fn$$
+       |  SELECT CASE WHEN EXISTS (
+       |    SELECT 1 FROM jsonb_array_elements(${norm(1)}) ge, jsonb_array_elements(${norm(2)}) oe
+       |    WHERE ST_Contains(ST_GeomFromGeoJSON(ge::text), ST_GeomFromGeoJSON(oe::text))
+       |  ) THEN 1 ELSE 0 END
+       |$$fn$$""".stripMargin
+
+  private val spatialIntersects: String =
+    s"""CREATE OR REPLACE FUNCTION public.ldb_geo_spatial_intersects(text, text)
+       |RETURNS int LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$fn$$
+       |  SELECT CASE WHEN EXISTS (
+       |    SELECT 1 FROM jsonb_array_elements(${norm(1)}) ge, jsonb_array_elements(${norm(2)}) oe
+       |    WHERE ST_Intersects(ST_GeomFromGeoJSON(ge::text), ST_GeomFromGeoJSON(oe::text))
+       |  ) THEN 1 ELSE 0 END
+       |$$fn$$""".stripMargin
+
+  val GeoFunctions: List[String] = List(distanceMin, distanceJson, spatialContains, spatialIntersects)
 }
