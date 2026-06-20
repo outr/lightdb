@@ -6,7 +6,7 @@ import lightdb.LightDB
 import lightdb.distance.*
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.id.Id
-import lightdb.spatial.{Geo, Point, Polygon}
+import lightdb.spatial.{DistanceAndDoc, Geo, Point, Polygon}
 import lightdb.store.{Collection, CollectionManager}
 import lightdb.upgrade.DatabaseUpgrade
 import org.scalatest.matchers.should.Matchers
@@ -21,6 +21,19 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
   private val id1 = Id[Person]("john")
   private val id2 = Id[Person]("jane")
   private val id3 = Id[Person]("bob")
+
+  // Assert the result order (by name) exactly and each distance within tolerance: backends compute
+  // distance differently (e.g. PostGIS uses an ellipsoidal model and measures to a polygon's
+  // nearest edge, vs the JVM's spherical, representative-point calc), so we allow a few miles.
+  private def checkDistances(list: List[DistanceAndDoc[Person]], expected: List[(String, List[Double])]) = {
+    list.map(_.doc.name) should be(expected.map(_._1))
+    list.zip(expected).foreach { case (dad, (_, ex)) =>
+      val miles = dad.distance.map(_.mi)
+      miles.size should be(ex.size)
+      miles.zip(ex).foreach { case (actual, e) => actual should be(e +- math.max(5.0, e * 0.02)) }
+    }
+    succeed
+  }
 
   private val newYorkCity = Point(40.7142, -74.0119)
   private val chicago = Point(41.8119, -87.6873)
@@ -86,13 +99,9 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
           from = oklahomaCity,
           radius = Some(1320.miles)
         ).toList.map { list =>
-          val people = list.map(_.doc)
-          val distances = list.map(_.distance.map(_.mi.toInt))
-          people.zip(distances).map {
-            case (p, d) => p.name -> d
-          } should be(List(
-            "Jane Doe" -> List(28),
-            "John Doe" -> List(1316)
+          checkDistances(list, List(
+            "Jane Doe" -> List(28.0),
+            "John Doe" -> List(1316.0)
           ))
         }
       }
@@ -104,13 +113,9 @@ abstract class AbstractSpatialSpec extends AsyncWordSpec with AsyncTaskSpec with
           from = noble,
           radius = Some(10_000.miles)
         ).toList.map { list =>
-          val people = list.map(_.doc)
-          val distances = list.map(_.distance.map(_.mi))
-          people.zip(distances).map {
-            case (p, d) => p.name -> d
-          } should be(List(
-            ("Jane Doe", List(14.840719626909188)),
-            ("Bob Dole", List(695.6419047674393, 1334.038796028706))
+          checkDistances(list, List(
+            "Jane Doe" -> List(14.840719626909188),
+            "Bob Dole" -> List(695.6419047674393, 1334.038796028706)
           ))
         }
       }

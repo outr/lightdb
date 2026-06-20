@@ -3,10 +3,14 @@ package lightdb.postgresql
 import fabric.*
 import fabric.rw.*
 import fabric.io.JsonFormatter
-import lightdb.Sort
+import lightdb.{Sort, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
+import lightdb.filter.Filter
+import lightdb.spatial.Geo
 import lightdb.sql.query.SQLPart
 import lightdb.sql.{SQLState, SQLStoreTransaction, SqlIdent}
+import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.vector.VectorMetric
 
@@ -80,5 +84,33 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       case VectorMetric.DotProduct => "<#>"
     }
     List(SQLPart(s"$col $op ?::vector AS $alias", sort.vector.json))
+  }
+
+  // Spatial distance/relations via PostGIS (functions created in PostgreSQLStore.initConnection when
+  // a Geo field is present). The geo column holds the GeoJSON (a single geometry or an array); the
+  // `?` bind is the query geometry's GeoJSON.
+  override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = {
+    val col = SqlIdent.quote(d.field.name)
+    val aliasJson = SqlIdent.quote(s"${d.field.name}Distance")
+    val aliasMin = SqlIdent.quote(s"${d.field.name}DistanceMin")
+    List(
+      SQLPart(s"public.ldb_geo_distance_json($col, ?) AS $aliasJson", d.from.json),
+      SQLPart(s"public.ldb_geo_distance_min($col, ?) AS $aliasMin", d.from.json)
+    )
+  }
+
+  override protected def distanceFilter(f: Filter.Distance[Doc]): SQLPart =
+    SQLPart(s"public.ldb_geo_distance_min(${SqlIdent.quote(f.fieldName)}, ?) <= ?", f.from.json, f.radius.valueInMeters.json)
+
+  override protected def spatialContainsFilter(f: Filter.SpatialContains[Doc]): SQLPart =
+    SQLPart(s"public.ldb_geo_spatial_contains(${SqlIdent.quote(f.fieldName)}, ?) = 1", f.geo.toJson)
+
+  override protected def spatialIntersectsFilter(f: Filter.SpatialIntersects[Doc]): SQLPart =
+    SQLPart(s"public.ldb_geo_spatial_intersects(${SqlIdent.quote(f.fieldName)}, ?) = 1", f.geo.toJson)
+
+  // Order by the per-row minimum distance pseudo-column emitted by extraFieldsForDistance.
+  override protected def sortByDistance[G <: Geo](field: Field[_, List[G]], direction: SortDirection): SQLPart = {
+    val dir = if (direction == SortDirection.Descending) "DESC" else "ASC"
+    SQLPart.Fragment(s"${SqlIdent.quote(s"${field.name}DistanceMin")} $dir")
   }
 }
