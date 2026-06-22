@@ -369,7 +369,7 @@ object SQLDsl {
     def toSQLQuery: SQLQuery = {
       val sep = SQLPart.Fragment(if all then " UNION ALL " else " UNION ")
       val bodies: List[SQLPart] = selects
-        .map(s => SQLQuery(SQLPart.Fragment("(") :: s.coreParts ::: List(SQLPart.Fragment(")"))))
+        .map(s => SQLQuery(SQLPart.Fragment("(") :: (s.coreParts ::: renderOrderBy(s.orderBy) ::: renderLimit(s.limit) ::: renderOffset(s.offset)) ::: List(SQLPart.Fragment(")"))))
         .intersperse(sep)
       SQLQuery(bodies ::: renderOrderBy(orderBy) ::: renderLimit(limit) ::: renderOffset(offset))
     }
