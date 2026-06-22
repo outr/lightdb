@@ -180,6 +180,20 @@ object SQLDsl {
       }
     }
 
+    /** `[NOT] EXISTS (subquery)` — the subquery's WHERE may reference outer columns (correlated). */
+    final case class Exists(select: Select, negate: Boolean = false) extends Expr {
+      override private[dsl] def render: SQLQuery = SQLQuery(
+        SQLPart.Fragment(if (negate) "NOT EXISTS (" else "EXISTS (") :: SQLQuery(select.coreParts) :: List(SQLPart.Fragment(")"))
+      )
+    }
+
+    /** `col [NOT] IN (subquery)`. */
+    final case class InSubquery(col: Ident.Column, select: Select, negate: Boolean = false) extends Expr {
+      override private[dsl] def render: SQLQuery = SQLQuery(
+        SQLPart.Fragment(col.value) :: SQLPart.Fragment(if (negate) " NOT IN (" else " IN (") :: SQLQuery(select.coreParts) :: List(SQLPart.Fragment(")"))
+      )
+    }
+
     final case class And(left: Expr, right: Expr) extends Expr {
       override private[dsl] def render: SQLQuery = SQLQuery(List(
         SQLPart.Fragment("("),
@@ -265,12 +279,23 @@ object SQLDsl {
     from: Option[Ident.Table] = None,
     joins: List[Join] = Nil,
     where: Option[Expr] = None,
+    groupBy: List[Ident.Column] = Nil,
+    having: Option[Expr] = None,
     orderBy: List[OrderBy] = Nil,
     limit: Option[Int] = None,
     offset: Option[Int] = None
   ) {
     def select(cols: Projection*): Select = copy(projections = cols.toList)
     def from(table: Ident.Table): Select = copy(from = Some(table))
+    def groupBy(cols: Ident.Column*): Select = copy(groupBy = cols.toList)
+    def having(expr: Expr): Select = copy(having = Some(expr))
+
+    /** Apply a builder transform, keeping the immutable flow (e.g. for conditional clauses). */
+    def modify(f: Select => Select): Select = f(this)
+    /** Apply `f` only when `condition`, else leave unchanged — clean conditional `WHERE`/joins. */
+    def modifyIf(condition: Boolean)(f: Select => Select): Select = if (condition) f(this) else this
+    /** Apply `f` with the value only when the option is defined — clean optional clauses. */
+    def modifyWith[T](option: Option[T])(f: (Select, T) => Select): Select = option.fold(this)(f(this, _))
 
     def join(table: Ident.Table, on: Expr): Select =
       copy(joins = joins :+ Join(JoinType.Inner, table, Some(on)))
@@ -320,7 +345,16 @@ object SQLDsl {
         case None => Nil
       }
 
-      List(SQLPart.Fragment("SELECT ")) ::: cols ::: fromPart ::: joinPart ::: wherePart
+      val groupByPart: List[SQLPart] =
+        if (groupBy.isEmpty) Nil
+        else SQLPart.Fragment(" GROUP BY ") :: groupBy.map(c => SQLPart.Fragment(c.value): SQLPart).intersperse(SQLPart.Fragment(", "))
+
+      val havingPart: List[SQLPart] = having match {
+        case Some(h) => List(SQLPart.Fragment(" HAVING "), h.render)
+        case None => Nil
+      }
+
+      List(SQLPart.Fragment("SELECT ")) ::: cols ::: fromPart ::: joinPart ::: wherePart ::: groupByPart ::: havingPart
     }
 
     def toSQLQuery: SQLQuery = SQLQuery(coreParts ::: renderOrderBy(orderBy) ::: renderLimit(limit) ::: renderOffset(offset))
@@ -392,6 +426,11 @@ object SQLDsl {
   def rawValue(sql: String): Value = Value.Raw(sql)
   def rawExpr(sql: String): Expr = Expr.Raw(sql)
 
+  /** `EXISTS (subquery)` / `NOT EXISTS (subquery)` — correlate the subquery's WHERE to outer columns. */
+  def exists(select: Select): Expr = Expr.Exists(select)
+  def notExists(select: Select): Expr = Expr.Exists(select, negate = true)
+  def count(alias: String): Projection = Projection.Aliased(Value.Raw("count(*)"), alias)
+
   def asc(col: Ident.Column): OrderBy = OrderBy(col, SortDirection.Asc)
   def desc(col: Ident.Column): OrderBy = OrderBy(col, SortDirection.Desc)
 
@@ -419,6 +458,8 @@ object SQLDsl {
     def isNull: Expr = Expr.IsNull(c)
     def isNotNull: Expr = Expr.IsNotNull(c)
     def in(values: Any*): Expr = Expr.In(c, values.toList.map(Value.Arg))
+    def inSelect(select: Select): Expr = Expr.InSubquery(c, select)
+    def notInSelect(select: Select): Expr = Expr.InSubquery(c, select, negate = true)
   }
 }
 
