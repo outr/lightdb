@@ -142,6 +142,11 @@ object SQLDsl {
       ))
     }
 
+    /** A general comparison between two arbitrary values (function/cast results, columns, args). */
+    final case class Compare(left: Value, op: String, right: Value) extends Expr {
+      override private[dsl] def render: SQLQuery = SQLQuery(List(left.render, SQLPart.Fragment(s" $op "), right.render))
+    }
+
     final case class Like(left: Ident.Column, pattern: Value) extends Expr {
       override private[dsl] def render: SQLQuery = SQLQuery(List(
         SQLPart.Fragment(left.value),
@@ -237,6 +242,23 @@ object SQLDsl {
 
     final case class Raw(sql: String) extends Value {
       override private[dsl] def render: SQLPart = SQLPart.Fragment(sql)
+    }
+
+    /** A column referenced as a value (e.g. as a function argument or comparison operand). */
+    final case class Col(column: Ident.Column) extends Value {
+      override private[dsl] def render: SQLPart = SQLPart.Fragment(column.value)
+    }
+
+    /** A SQL function call: `name(arg1, arg2, ...)`. */
+    final case class Func(name: String, args: List[Value]) extends Value {
+      override private[dsl] def render: SQLPart =
+        SQLQuery(SQLPart.Fragment(s"$name(") :: args.map(_.render).intersperse(SQLPart.Fragment(", ")) ::: List(SQLPart.Fragment(")")))
+    }
+
+    /** A cast: `CAST(value AS sqlType)`. */
+    final case class Cast(value: Value, sqlType: String) extends Value {
+      override private[dsl] def render: SQLPart =
+        SQLQuery(List(SQLPart.Fragment("CAST("), value.render, SQLPart.Fragment(s" AS $sqlType)")))
     }
   }
 
@@ -426,6 +448,11 @@ object SQLDsl {
   def rawValue(sql: String): Value = Value.Raw(sql)
   def rawExpr(sql: String): Expr = Expr.Raw(sql)
 
+  /** A SQL function call value: `func("split_part", col.asValue, arg("/"), arg(2))`. */
+  def func(name: String, args: Value*): Value = Value.Func(name, args.toList)
+  /** A cast value: `cast(func(...), "INTEGER")` → `CAST(... AS INTEGER)`. */
+  def cast(value: Value, sqlType: String): Value = Value.Cast(value, sqlType)
+
   /** `EXISTS (subquery)` / `NOT EXISTS (subquery)` — correlate the subquery's WHERE to outer columns. */
   def exists(select: Select): Expr = Expr.Exists(select)
   def notExists(select: Select): Expr = Expr.Exists(select, negate = true)
@@ -460,6 +487,18 @@ object SQLDsl {
     def in(values: Any*): Expr = Expr.In(c, values.toList.map(Value.Arg))
     def inSelect(select: Select): Expr = Expr.InSubquery(c, select)
     def notInSelect(select: Select): Expr = Expr.InSubquery(c, select, negate = true)
+    /** This column as a [[Value]] (for use as a function argument or value comparison operand). */
+    def asValue: Value = Value.Col(c)
+  }
+
+  // Value ops: compare arbitrary values (function/cast results, columns) to each other.
+  implicit final class ValueOps(private val v: Value) extends AnyVal {
+    def ===(other: Value): Expr = Expr.Compare(v, "=", other)
+    def =!=(other: Value): Expr = Expr.Compare(v, "<>", other)
+    def <(other: Value): Expr = Expr.Compare(v, "<", other)
+    def <=(other: Value): Expr = Expr.Compare(v, "<=", other)
+    def >(other: Value): Expr = Expr.Compare(v, ">", other)
+    def >=(other: Value): Expr = Expr.Compare(v, ">=", other)
   }
 }
 
