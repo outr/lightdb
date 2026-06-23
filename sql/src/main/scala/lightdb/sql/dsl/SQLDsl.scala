@@ -260,6 +260,12 @@ object SQLDsl {
       override private[dsl] def render: SQLPart =
         SQLQuery(List(SQLPart.Fragment("CAST("), value.render, SQLPart.Fragment(s" AS $sqlType)")))
     }
+
+    /** A scalar subquery used as a value: `(SELECT ...)` — e.g. a correlated count in a projection. */
+    final case class Subquery(select: Select) extends Value {
+      override private[dsl] def render: SQLPart =
+        SQLQuery(SQLPart.Fragment("(") :: select.toSQLQuery :: List(SQLPart.Fragment(")")))
+    }
   }
 
   // ----------------------------
@@ -452,6 +458,8 @@ object SQLDsl {
   def func(name: String, args: Value*): Value = Value.Func(name, args.toList)
   /** A cast value: `cast(func(...), "INTEGER")` → `CAST(... AS INTEGER)`. */
   def cast(value: Value, sqlType: String): Value = Value.Cast(value, sqlType)
+  /** A scalar subquery as a value (e.g. a correlated count in a SELECT projection). */
+  def subValue(select: Select): Value = Value.Subquery(select)
 
   /** `EXISTS (subquery)` / `NOT EXISTS (subquery)` — correlate the subquery's WHERE to outer columns. */
   def exists(select: Select): Expr = Expr.Exists(select)
