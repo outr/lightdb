@@ -4,8 +4,8 @@ import fabric.*
 import fabric.io.{JsonFormatter, JsonParser}
 import rapid.Task
 import rapid.taskTaskOps
-import spice.http.{Header, HeaderKey, Headers, HttpMethod, HttpResponse, HttpStatus}
-import spice.http.client.HttpClient
+import spice.http.{Header, HeaderKey, Headers, HttpMethod, HttpRequest, HttpResponse, HttpStatus}
+import spice.http.client.{HttpClient, RetryManager}
 import spice.http.content.Content
 import spice.net.{ContentType, URL}
 
@@ -14,7 +14,7 @@ import lightdb.opensearch.OpenSearchStore
 import java.util.concurrent.ThreadLocalRandom
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 import lightdb.opensearch.OpenSearchMetrics
 
@@ -297,6 +297,19 @@ case class OpenSearchClient(config: OpenSearchConfig) {
     loop(initialDelay, first = true)
   }
 
+  // No-op retry manager for the sync probe in runTaskRequestWithPolling: surface the
+  // failure immediately without retrying OR logging. A probe timeout there is the
+  // expected signal to fail over to async task polling, not an error — so going
+  // through the default RetryManager (which retries N times and logs the final
+  // failure at ERROR) both delays the failover and emits misleading noise.
+  private val noRetryQuiet: RetryManager = new RetryManager {
+    override def retry(request: HttpRequest,
+                       retry: Task[Try[HttpResponse]],
+                       failures: Int,
+                       throwable: Throwable): Task[Try[HttpResponse]] =
+      Task.pure(Failure(throwable))
+  }
+
   private def runTaskRequestWithPolling(name: String,
                                         syncReq: HttpClient,
                                         asyncReq: HttpClient): Task[Json] = {
@@ -304,8 +317,8 @@ case class OpenSearchClient(config: OpenSearchConfig) {
       case None =>
         send(syncReq).flatMap(resp => parseJsonOrError(resp, s"OpenSearch $name failed"))
       case Some(threshold) =>
-        // Use direct send (no retries) for the sync probe — if it times out we fall back to async.
-        syncReq.timeout(threshold).send().attempt.flatMap {
+        // Direct, non-retrying, silent send for the sync probe — if it times out we fall back to async.
+        syncReq.retryManager(noRetryQuiet).timeout(threshold).send().attempt.flatMap {
           case Success(resp) =>
             parseJsonOrError(resp, s"OpenSearch $name failed")
           case Failure(t) if isTimeout(t) =>

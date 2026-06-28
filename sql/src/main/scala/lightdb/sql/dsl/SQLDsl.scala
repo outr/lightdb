@@ -266,6 +266,22 @@ object SQLDsl {
       override private[dsl] def render: SQLPart =
         SQLQuery(SQLPart.Fragment("(") :: select.toSQLQuery :: List(SQLPart.Fragment(")")))
     }
+
+    /** The `*` wildcard, for `count(*)` and similar — keeps such expressions fragment-free. */
+    case object Star extends Value {
+      override private[dsl] def render: SQLPart = SQLPart.Fragment("*")
+    }
+
+    /** SQL `NULL` (wrap in [[Cast]] for a typed null, e.g. across a UNION). */
+    case object Null extends Value {
+      override private[dsl] def render: SQLPart = SQLPart.Fragment("NULL")
+    }
+
+    /** A SQL array literal: `ARRAY[a, b, …]` (each element parameterized). */
+    final case class Arr(values: List[Value]) extends Value {
+      override private[dsl] def render: SQLPart =
+        SQLQuery(SQLPart.Fragment("ARRAY[") :: values.map(_.render).intersperse(SQLPart.Fragment(", ")) ::: List(SQLPart.Fragment("]")))
+    }
   }
 
   // ----------------------------
@@ -411,7 +427,9 @@ object SQLDsl {
   def select(cols: Projection*): Select = Select(projections = cols.toList)
 
   def litAs(value: Any, alias: String): Projection = Projection.Aliased(Value.Arg(value), alias)
-  def colAs(column: Ident.Column, alias: String): Projection = Projection.Aliased(Value.Raw(column.value), alias)
+  def colAs(column: Ident.Column, alias: String): Projection = Projection.Aliased(Value.Col(column), alias)
+  /** Project an arbitrary [[Value]] (function, cast, scalar subquery, …) under an alias. */
+  def valueAs(value: Value, alias: String): Projection = Projection.Aliased(value, alias)
 
   def union(selects: Select*): Union = Union(selects.toList, all = false)
   def unionAll(selects: Select*): Union = Union(selects.toList, all = true)
@@ -461,10 +479,31 @@ object SQLDsl {
   /** A scalar subquery as a value (e.g. a correlated count in a SELECT projection). */
   def subValue(select: Select): Value = Value.Subquery(select)
 
+  // Typed scalar/aggregate function helpers — keep computed columns (sort keys, semi-joins)
+  // fragment-free and refactor-safe instead of hand-written SQL strings.
+  /** `COALESCE(a, b, …)` — first non-null. */
+  def coalesce(values: Value*): Value = Value.Func("COALESCE", values.toList)
+  /** `GREATEST(a, b, …)`. */
+  def greatest(values: Value*): Value = Value.Func("GREATEST", values.toList)
+  /** `LEAST(a, b, …)`. */
+  def least(values: Value*): Value = Value.Func("LEAST", values.toList)
+  /** `MAX(col)` as a value (e.g. inside a scalar subquery). */
+  def max(column: Ident.Column): Value = Value.Func("MAX", List(Value.Col(column)))
+  /** `MIN(col)` as a value. */
+  def min(column: Ident.Column): Value = Value.Func("MIN", List(Value.Col(column)))
+  /** `count(*)` as a value. */
+  def countStar: Value = Value.Func("count", List(Value.Star))
+  /** A typed SQL `NULL`: `CAST(NULL AS sqlType)` — use to line up columns across a UNION. */
+  def nullAs(sqlType: String): Value = Value.Cast(Value.Null, sqlType)
+  /** A SQL array literal `ARRAY[…]` of parameterized values. */
+  def arrayOf(values: Any*): Value = Value.Arr(values.toList.map(Value.Arg(_)))
+  /** `array_position(array, element)` — 1-based index of `element` in `array` (NULL if absent). */
+  def arrayPosition(array: Value, element: Value): Value = Value.Func("array_position", List(array, element))
+
   /** `EXISTS (subquery)` / `NOT EXISTS (subquery)` — correlate the subquery's WHERE to outer columns. */
   def exists(select: Select): Expr = Expr.Exists(select)
   def notExists(select: Select): Expr = Expr.Exists(select, negate = true)
-  def count(alias: String): Projection = Projection.Aliased(Value.Raw("count(*)"), alias)
+  def count(alias: String): Projection = Projection.Aliased(countStar, alias)
 
   def asc(col: Ident.Column): OrderBy = OrderBy(col, SortDirection.Asc)
   def desc(col: Ident.Column): OrderBy = OrderBy(col, SortDirection.Desc)
