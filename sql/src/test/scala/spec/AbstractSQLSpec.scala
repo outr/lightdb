@@ -127,6 +127,43 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         }
       }
     }
+    "execute a correlated scalar subquery with coalesce/max as a sort key" in {
+      db.people.transaction { transaction =>
+        import SQLDsl.*
+        val txn = transaction
+        val p = table(db.people).as("p")
+        val p2 = table(db.people).as("p2")
+        // Per person, the max age among people of the same gender — a correlated scalar subquery
+        // wrapped in coalesce(..., 0), built entirely from typed helpers (no raw fragments). Uses
+        // only COALESCE/MAX so it runs across every SQL backend the spec covers.
+        val maxAgeSameGender = SQLDsl
+          .select(valueAs(max(p2.col(Person.age)), "m"))
+          .from(p2)
+          .where(p2.col(Person.gender) === p.col(Person.gender))
+        val q = SQLDsl
+          .select(p.col(Person.name), valueAs(coalesce(subValue(maxAgeSameGender), arg(0)), "sortKey"))
+          .from(p)
+          .orderBy(desc(col("sortKey")), asc(p.col(Person.name)))
+          .toSQLQuery
+        txn.search[NameSort](q).flatMap(_.list).map { rows =>
+          // Males' max age = 35 (Adam, Charlie); female's = 11 (Brenda). Sort desc by key, then name asc.
+          rows.map(_.name) should be(List("Adam", "Charlie", "Brenda"))
+          rows.map(_.sortKey) should be(List(35, 35, 11))
+        }
+      }
+    }
+    "render greatest/least/count(*) without raw fragments" in {
+      Task {
+        import SQLDsl.*
+        val sql = SQLDsl
+          .select(count("c"), valueAs(greatest(col("a").asValue, arg(0)), "g"), valueAs(least(col("b").asValue, arg(0)), "l"))
+          .from(table("t"))
+          .toSQLQuery.query.replaceAll("\\s+", " ")
+        sql should include("count(*) AS")
+        sql should include("GREATEST(")
+        sql should include("LEAST(")
+      }
+    }
     "verify generated SQL query contains no limit" in {
       db.people.transaction { transaction =>
         Task {
@@ -246,5 +283,11 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
 
   object Name {
     implicit val rw: RW[Name] = RW.gen
+  }
+
+  case class NameSort(name: String, sortKey: Int)
+
+  object NameSort {
+    implicit val rw: RW[NameSort] = RW.gen
   }
 }

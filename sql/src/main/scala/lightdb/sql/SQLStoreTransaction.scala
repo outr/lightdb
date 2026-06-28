@@ -1148,8 +1148,19 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case null => Null
     case s: String if isStringField(rw) => str(s)
     case s: String => try {
-      val parsed = JsonParser(s)
-      if (JsonFormatter.Compact(parsed) == s) parsed else str(s)
+      JsonParser(s) match {
+        // A parsed object/array is unambiguously stored JSON — return it
+        // directly. The byte-exact round-trip check below must NOT gate these:
+        // serialization normalization (e.g. fabric renders 1E-7 as 1.0E-7) makes
+        // `Compact(parsed) == s` a false negative that would demote a
+        // legitimately-stored object/array to a raw String.
+        case o: Obj => o
+        case a: Arr => a
+        // Scalar that merely *looks* like JSON: keep the round-trip check to
+        // distinguish genuine JSON from a raw string value.
+        case parsed if JsonFormatter.Compact(parsed) == s => parsed
+        case _ => str(s)
+      }
     } catch {
       case _: Throwable => str(s)
     }
