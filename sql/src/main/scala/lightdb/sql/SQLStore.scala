@@ -58,6 +58,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def connectionManager: ConnectionManager
 
+  private lazy val viewExecutor: lightdb.view.NativeViewExecutor = new SqlViewExecutor(this, connectionManager)
+
+  override def nativeViewExecutor: Option[lightdb.view.NativeViewExecutor] = Some(viewExecutor)
+
   override protected def initialize(): Task[Unit] = super.initialize().next(Task.next {
     transaction(initTransaction)
   })
