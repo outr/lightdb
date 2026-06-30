@@ -83,7 +83,7 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       index.releaseIndexSearch(s)
     }
     scribe.info(s"Optimizing Lucene Index for $name. Current segment count: $currentSegments")
-    index.indexWriter.forceMerge(1)
+    index.write(_.forceMerge(1))
   }
 
   override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {
