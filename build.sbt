@@ -90,7 +90,7 @@ val fabricVersion: String = "1.30.0"
 
 val scribeVersion: String = "3.19.0"
 
-val luceneVersion: String = "10.4.0"
+val luceneVersion: String = "10.5.0"
 
 val hikariCPVersion: String = "7.1.0"
 
@@ -102,7 +102,7 @@ val duckdbVersion: String = "1.5.4.0"
 
 val h2Version: String = "2.4.240"
 
-val postgresqlVersion: String = "42.7.11"
+val postgresqlVersion: String = "42.7.12"
 
 val mariadbVersion: String = "3.5.9"
 
@@ -112,7 +112,7 @@ val googleSheetsVersion: String = "v4-rev20260610-2.0.0"
 
 val googleAuthVersion: String = "1.48.0"
 
-val googleHttpClientGsonVersion: String = "2.1.0"
+val googleHttpClientGsonVersion: String = "2.1.1"
 
 val chronicleMapVersion: String = "2026.1"
 
@@ -122,7 +122,7 @@ val testcontainersVersion: String = "2.0.5"
 
 val mongoVersion: String = "5.6.2"
 
-val qdrantVersion: String = "1.18.1"
+val qdrantVersion: String = "1.18.3"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice, all)
@@ -380,7 +380,7 @@ lazy val apiSpice = project.in(file("api-spice"))
 		libraryDependencies ++= Seq(
 			"com.outr" %% "spice-server" % spiceVersion,
 			// Undertow server impl is published one minor behind core; only needed for tests.
-			"com.outr" %% "spice-server-undertow" % "1.10.1" % Test,
+			"com.outr" %% "spice-server-undertow" % "1.10.2" % Test,
 			"com.outr" %% "spice-client-netty" % spiceVersion % Test,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test
 		)
