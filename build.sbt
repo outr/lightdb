@@ -122,7 +122,7 @@ val testcontainersVersion: String = "2.0.5"
 
 val mongoVersion: String = "5.6.2"
 
-val qdrantVersion: String = "1.18.1"
+val qdrantVersion: String = "1.18.3"
 
 lazy val root = project.in(file("."))
 	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice, all)
