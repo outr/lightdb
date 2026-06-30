@@ -20,7 +20,12 @@ private[spec] object PostgreSQLTestContainer {
   private class Container(image: DockerImageName) extends GenericContainer[Container](image)
 
   private lazy val container: Container = {
-    val image = Profig("lightdb.postgresql.testcontainers.image").opt[String].getOrElse("postgres:latest")
+    // PostGIS-enabled image (a superset of the official `postgres` image, incl. the `pg_trgm`
+    // contrib module) so the spatial spec's `CREATE EXTENSION postgis` succeeds. Plain `postgres`
+    // images lack PostGIS, which made the spatial spec pass locally (developer's :5432 server has
+    // it) but fail in CI where the ephemeral container is the only server. Vector tests use a
+    // separate pgvector container, so they're unaffected. Overridable via Profig.
+    val image = Profig("lightdb.postgresql.testcontainers.image").opt[String].getOrElse("postgis/postgis:17-3.5")
     val c = new Container(DockerImageName.parse(image))
     c.withExposedPorts(Port)
     c.withEnv("POSTGRES_DB", "basic")
