@@ -15,7 +15,7 @@ import lightdb.transaction.{Transaction, WriteHandler}
 import lightdb.transaction.batch.BatchConfig
 import lightdb.transaction.handler.{AsyncWriteHandler, BufferedWriteHandler, DirectWriteHandler, QueuedWriteHandler}
 import lightdb.store.write.WriteOp
-import lightdb.trigger.StoreTriggers
+import lightdb.trigger.{StoreTrigger, StoreTriggers}
 import lightdb.util.{Disposable, Initializable, StoreMetrics}
 import rapid.*
 
@@ -38,6 +38,74 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   lazy val lock: LockManager[Id[Doc], Doc] = new LockManager
 
   object trigger extends StoreTriggers[Doc, Model]
+
+  /**
+   * A native executor for [[lightdb.view.View]] relations that depend on this store, or `None` to
+   * use the portable in-memory engine. SQL stores override this to lower a co-located relation to a
+   * single query. See [[lightdb.view.NativeViewExecutor]].
+   */
+  def nativeViewExecutor: Option[lightdb.view.NativeViewExecutor] = None
+
+  /**
+   * Register `f` to run once after any write transaction on this store commits. `f` runs post-commit
+   * (its reads observe the committed changes) and only when the transaction actually wrote
+   * (insert/upsert/delete) or truncated. The hook into the concrete `Doc`/`Model` types lives here so
+   * a `Store[?, ?]` dependency can be subscribed without capturing existentials. Used by materialized
+   * views for incremental maintenance.
+   */
+  def onCommittedChange(f: () => Task[Unit]): Unit = {
+    val dirty = ConcurrentHashMap.newKeySet[Transaction[Doc, Model]]()
+    @volatile var truncated = false
+    trigger += new StoreTrigger[Doc, Model] {
+      override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { dirty.add(transaction); () }
+      override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { dirty.add(transaction); () }
+      override def delete(id: Id[Doc], transaction: Transaction[Doc, Model]): Task[Unit] = Task { dirty.add(transaction); () }
+      override def truncate: Task[Unit] = Task { truncated = true; () }
+      override def transactionCommitted(transaction: Transaction[Doc, Model]): Task[Unit] = {
+        val wrote = dirty.remove(transaction)
+        if (wrote || truncated) {
+          truncated = false
+          f()
+        } else {
+          Task.unit
+        }
+      }
+    }
+  }
+
+  /**
+   * Like [[onCommittedChange]], but hands the listener the *scope* of the committed write: the
+   * inserted/upserted documents (so the caller can derive which partitions changed) and whether the
+   * transaction also deleted or truncated. Deletes carry only an id (the document is already gone), so
+   * a removal can't be mapped to a partition — `removed = true` signals the caller to fall back to a
+   * full rebuild. Used by [[lightdb.view.View]] for scope-incremental maintenance.
+   */
+  def onCommittedChangeDetailed(f: (List[Doc], Boolean) => Task[Unit]): Unit = {
+    val changed = new ConcurrentHashMap[Transaction[Doc, Model], java.util.List[Doc]]()
+    val removed = ConcurrentHashMap.newKeySet[Transaction[Doc, Model]]()
+    @volatile var truncated = false
+    def list(tx: Transaction[Doc, Model]): java.util.List[Doc] =
+      changed.computeIfAbsent(tx, _ => java.util.Collections.synchronizedList(new java.util.ArrayList[Doc]()))
+    trigger += new StoreTrigger[Doc, Model] {
+      override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
+      override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
+      override def delete(id: Id[Doc], transaction: Transaction[Doc, Model]): Task[Unit] = Task { removed.add(transaction); () }
+      override def truncate: Task[Unit] = Task { truncated = true; () }
+      override def transactionCommitted(transaction: Transaction[Doc, Model]): Task[Unit] = {
+        val docs = Option(changed.remove(transaction)) match {
+          case Some(l) => scala.jdk.CollectionConverters.ListHasAsScala(l).asScala.toList
+          case None => Nil
+        }
+        val hadRemoval = removed.remove(transaction) | truncated
+        if (docs.nonEmpty || hadRemoval) {
+          truncated = false
+          f(docs, hadRemoval)
+        } else {
+          Task.unit
+        }
+      }
+    }
+  }
 
   // -- Point-lookup cache (opt-in via LightDB.store(..., cache = ...)) -----------------------------------
   @volatile private var _cacheConfig: CacheConfig = CacheConfig.None
@@ -218,6 +286,12 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       }
       _ = set.remove(transaction)
       _ <- logger.info(s"Released Transaction for $name").when(Store.LogTransactions)
+      // Post-commit: the writes are now durable, so reads issued here (in a fresh transaction)
+      // observe them. Drives derived-data maintenance (materialized views). Only on commit success.
+      _ <- commitResult match {
+        case scala.util.Success(_) => trigger.transactionCommitted(transaction)
+        case scala.util.Failure(_) => Task.unit
+      }
       _ <- commitResult match {
         case scala.util.Success(_) => Task.unit
         case scala.util.Failure(t) => Task.error(t)
