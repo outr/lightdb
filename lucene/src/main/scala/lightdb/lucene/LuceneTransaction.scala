@@ -68,7 +68,10 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   private var _strictInsertReader: org.apache.lucene.index.DirectoryReader = _
   private def strictInsertSearcher: org.apache.lucene.search.IndexSearcher = synchronized {
     if _strictInsertReader == null then {
-      _strictInsertReader = org.apache.lucene.index.DirectoryReader.open(store.index.indexWriter, true, false)
+      // Opening an NRT reader flushes the writer's in-memory segments — a
+      // writer-side op, so route it through the dedicated writer thread to
+      // keep it off an interruptible caller thread.
+      _strictInsertReader = store.index.write(w => org.apache.lucene.index.DirectoryReader.open(w, true, false))
     }
     new org.apache.lucene.search.IndexSearcher(_strictInsertReader)
   }
@@ -107,10 +110,10 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       val b = new BooleanQuery.Builder
       b.add(new TermQuery(new Term("_id", parentId)), BooleanClause.Occur.SHOULD)
       b.add(new TermQuery(new Term(LuceneBlockJoinFields.ParentIdField, parentId)), BooleanClause.Occur.SHOULD)
-      store.index.indexWriter.deleteDocuments(b.build())
+      store.index.write(_.deleteDocuments(b.build()))
     } else {
       val query = searchBuilder.filter2Lucene(Some(index === value))
-      store.index.indexWriter.deleteDocuments(query)
+      store.index.write(_.deleteDocuments(query))
     }
     true
   }
@@ -472,7 +475,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override def truncate: Task[Int] = for
     count <- this.count
-    _ <- Task(store.index.indexWriter.deleteAll())
+    _ <- Task(store.index.write(_.deleteAll()))
   yield count
 
   private def addDoc(doc: Doc, upsert: Boolean): Task[Doc] = Task {
@@ -491,10 +494,12 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
           deleteBuilder.add(new TermQuery(new Term("_id", id.value)), BooleanClause.Occur.SHOULD)
           deleteBuilder.add(new TermQuery(new Term(LuceneBlockJoinFields.ParentIdField, id.value)), BooleanClause.Occur.SHOULD)
           val deleteQuery = deleteBuilder.build()
-          store.index.indexWriter.deleteDocuments(deleteQuery)
-          store.index.indexWriter.addDocuments(docs)
+          store.index.write { w =>
+            w.deleteDocuments(deleteQuery)
+            w.addDocuments(docs)
+          }
         } else {
-          store.index.indexWriter.addDocuments(docs)
+          store.index.write(_.addDocuments(docs))
         }
       } else {
         val luceneFields = store.fields.flatMap { field =>
@@ -504,9 +509,9 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
         luceneFields.foreach(document.add)
 
         if upsert then {
-          store.index.indexWriter.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document))
+          store.index.write(_.updateDocument(new Term("_id", id.value), facetsPrepareDoc(document)))
         } else {
-          store.index.indexWriter.addDocument(facetsPrepareDoc(document))
+          store.index.write(_.addDocument(facetsPrepareDoc(document)))
         }
       }
     }

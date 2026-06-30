@@ -11,9 +11,51 @@ import profig.Profig
 import fabric.rw.*
 
 import java.nio.file.{Files, Path}
+import java.util.concurrent.{Callable, ExecutionException, Executors, ExecutorService, ThreadFactory}
 
 case class Index(path: Option[Path]) {
   lazy val analyzer: Analyzer = new StandardAnalyzer
+
+  // IndexWriter operations must never run on a thread that can be
+  // interrupted. Lucene's FSDirectory uses interruptible NIO channels, so a
+  // `Thread.interrupt()` landing during a write/flush/commit closes the
+  // channel and permanently breaks the writer — surfacing thereafter as
+  // "FileLock invalidated by an external force" / "this IndexWriter is
+  // closed". Effect runtimes that cancel a task by interrupting its carrier
+  // thread (rapid's `Fiber.cancel`, for one) expose every write driven from a
+  // cancellable context. Isolate all mutations + commit/rollback/dispose onto
+  // a dedicated, never-interrupted thread: if the CALLER is interrupted while
+  // awaiting the result the submitted op still runs to completion here, so the
+  // writer is never left half-closed.
+  private val writerExecutor: ExecutorService =
+    Executors.newSingleThreadExecutor(new ThreadFactory {
+      override def newThread(r: Runnable): Thread = {
+        val t = new Thread(r, s"lucene-writer-${path.map(_.getFileName.toString).getOrElse("mem")}")
+        t.setDaemon(true)
+        t
+      }
+    })
+
+  /** Run `f` on the dedicated writer thread, blocking the caller for the
+    * result. An `ExecutionException` is unwrapped so the original failure
+    * (e.g. a Lucene `IOException`) propagates unchanged. A caller interrupt
+    * surfaces as `InterruptedException` while the submitted op completes
+    * safely off-thread. */
+  private def onWriter[T](f: => T): T =
+    try writerExecutor.submit(new Callable[T] { override def call(): T = f }).get()
+    catch {
+      case e: ExecutionException => throw Option(e.getCause).getOrElse(e)
+      case _: java.util.concurrent.RejectedExecutionException =>
+        // The executor is shut down — `dispose` is in progress or done, and a
+        // racing transaction release is still trying to flush. Interrupt
+        // isolation no longer matters during teardown, so run inline (matches
+        // the pre-isolation behavior: the op either succeeds or hits a closed
+        // writer, rather than surfacing a spurious rejected-execution error).
+        f
+    }
+
+  /** Route an `IndexWriter` mutation through the dedicated writer thread. */
+  def write[T](f: IndexWriter => T): T = onWriter(f(indexWriter))
 
   private lazy val indexDirectory: BaseDirectory = path.map(FSDirectory.open).getOrElse(new ByteBuffersDirectory)
   private lazy val config = {
@@ -51,7 +93,10 @@ case class Index(path: Option[Path]) {
 
   def releaseTaxonomyReader(taxonomyReader: TaxonomyReader): Unit = taxonomyReader.close()
 
-  def commit(): Unit = {
+  // Raw bodies (run ON the writer thread). Kept separate so the public
+  // entry points can wrap them in `onWriter` without the single-thread
+  // executor deadlocking on a re-entrant submit.
+  private def commitInternal(): Unit = {
     indexWriter.flush()
     indexWriter.commit()
     if taxonomyLoaded then {
@@ -59,18 +104,25 @@ case class Index(path: Option[Path]) {
     }
   }
 
-  def rollback(): Unit = {
+  private def rollbackInternal(): Unit = {
     indexWriter.rollback()
     if taxonomyLoaded then {
       taxonomyWriter.rollback()
     }
   }
 
+  def commit(): Unit = onWriter(commitInternal())
+
+  def rollback(): Unit = onWriter(rollbackInternal())
+
   def dispose(): Unit = {
-    commit()
-    indexWriter.close()
-    if taxonomyLoaded then {
-      taxonomyDirectory.close()
+    onWriter {
+      commitInternal()
+      indexWriter.close()
+      if taxonomyLoaded then {
+        taxonomyDirectory.close()
+      }
     }
+    writerExecutor.shutdown()
   }
 }
