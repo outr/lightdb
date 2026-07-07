@@ -69,6 +69,14 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
   // without turning the barrier into a "wait forever" hang.
   private val CommitBarrierMaxAttempts: Int = 20
 
+  // PERF: page materialization concurrency. In split-store (StoreMode.Indexes) mode,
+  // materializing a search hit does a per-hit RocksDB point-get + full-doc deserialize
+  // (see `loadDoc`). Done sequentially this cost ~N× the single-doc latency per page
+  // (observed ~12s for a 50-hit page of large UnifiedEntity docs). RocksDB point-gets
+  // are thread-safe and rapid's `.par` preserves input order, so we load a page's docs
+  // concurrently. Bounded to the available cores (min 4) to avoid oversubscription.
+  private val MaterializationParallelism: Int = math.max(4, Runtime.getRuntime.availableProcessors())
+
   /**
    * Default OpenSearch transaction semantics prioritize ingest throughput.
    *
@@ -1974,7 +1982,7 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       }
 
       val filterPathOverride = cursorSafeFilterPath(config.searchFilterPath)
-      client.search(store.readIndexName, body, filterPathOverride = filterPathOverride).map { json =>
+      client.search(store.readIndexName, body, filterPathOverride = filterPathOverride).flatMap { json =>
         val hitsObj = json.asObj.get("hits").getOrElse(obj()).asObj
         val hitsArr = hitsObj.get("hits").getOrElse(arr()).asArr
         val hits = hitsArr.value.map(_.asObj)
@@ -2028,9 +2036,13 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
           Map.empty
         }
 
-        val stream = rapid.Stream
+        // Materialize the page's hits concurrently (order-preserving). `hits` is already
+        // fully in memory; the only per-hit cost we parallelize is `materializeHit` ->
+        // `loadDoc` (a RocksDB point-get + deserialize in split-store mode). See
+        // `MaterializationParallelism`.
+        rapid.Stream
           .emits(hits.toList)
-          .evalMap { h =>
+          .par(maxThreads = MaterializationParallelism) { h =>
             val id = Id[Doc](h.get("_id").getOrElse(throw new RuntimeException("OpenSearch hit missing _id")).asString)
             val score = h.get("_score") match {
               case Some(Null) | None => 0.0
@@ -2040,21 +2052,24 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
             val hydratedSource = stripInternalFields(sourceWithId(source, id))
             materializeHit(q, h.asInstanceOf[Json], id, hydratedSource).map(v => (v, score))
           }
-        val results = SearchResults(
-          model = store.model,
-          offset = 0,
-          limit = Some(pageSize),
-          total = total,
-          streamWithScore = stream,
-          facetResults = facetResults,
-          transaction = this
-        )
+          .toList
+          .map { materialized =>
+            val results = SearchResults(
+              model = store.model,
+              offset = 0,
+              limit = Some(pageSize),
+              total = total,
+              streamWithScore = rapid.Stream.emits(materialized),
+              facetResults = facetResults,
+              transaction = this
+            )
 
-        val nextCursorToken = hits.lastOption.flatMap(_.get("sort")) match {
-          case Some(sortValues) if hits.length >= pageSize => Some(OpenSearchCursor.encode(sortValues))
-          case _ => None
-        }
-        OpenSearchCursorPage(results, nextCursorToken)
+            val nextCursorToken = hits.lastOption.flatMap(_.get("sort")) match {
+              case Some(sortValues) if hits.length >= pageSize => Some(OpenSearchCursor.encode(sortValues))
+              case _ => None
+            }
+            OpenSearchCursorPage(results, nextCursorToken)
+          }
       }
     }
   }
