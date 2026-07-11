@@ -188,14 +188,15 @@ object SQLDsl {
     /** `[NOT] EXISTS (subquery)` — the subquery's WHERE may reference outer columns (correlated). */
     final case class Exists(select: Select, negate: Boolean = false) extends Expr {
       override private[dsl] def render: SQLQuery = SQLQuery(
-        SQLPart.Fragment(if (negate) "NOT EXISTS (" else "EXISTS (") :: SQLQuery(select.coreParts) :: List(SQLPart.Fragment(")"))
+        SQLPart.Fragment(if (negate) "NOT EXISTS (" else "EXISTS (") :: select.toSQLQuery :: List(SQLPart.Fragment(")"))
       )
     }
 
-    /** `col [NOT] IN (subquery)`. */
+    /** `col [NOT] IN (subquery)` — renders the FULL subquery, so an ORDER BY + LIMIT (top-N
+      * membership) is honored rather than silently dropped. */
     final case class InSubquery(col: Ident.Column, select: Select, negate: Boolean = false) extends Expr {
       override private[dsl] def render: SQLQuery = SQLQuery(
-        SQLPart.Fragment(col.value) :: SQLPart.Fragment(if (negate) " NOT IN (" else " IN (") :: SQLQuery(select.coreParts) :: List(SQLPart.Fragment(")"))
+        SQLPart.Fragment(col.value) :: SQLPart.Fragment(if (negate) " NOT IN (" else " IN (") :: select.toSQLQuery :: List(SQLPart.Fragment(")"))
       )
     }
 
@@ -287,7 +288,11 @@ object SQLDsl {
   // ----------------------------
   // SELECT query
   // ----------------------------
-  final case class OrderBy(col: Ident.Column, direction: SortDirection)
+  /** Order by any [[Value]] — a column, or an expression like `random()` / `COALESCE(...)`. */
+  final case class OrderBy(value: Value, direction: SortDirection)
+  object OrderBy {
+    def apply(col: Ident.Column, direction: SortDirection): OrderBy = OrderBy(Value.Col(col), direction)
+  }
 
   sealed trait SortDirection { def sql: String }
   object SortDirection {
@@ -315,6 +320,11 @@ object SQLDsl {
     }
     final case class Aliased(value: Value, alias: String) extends Projection {
       override private[dsl] def render: SQLPart = SQLQuery(List(value.render, SQLPart.Fragment(s" AS ${SqlIdent.quote(alias)}")))
+    }
+    /** `*` or `qualifier.*` — project one side of a join without the other's columns colliding. */
+    final case class Star(qualifier: Option[String]) extends Projection {
+      override private[dsl] def render: SQLPart =
+        SQLPart.Fragment(qualifier.map(q => s"${SqlIdent.quote(q)}.*").getOrElse("*"))
     }
   }
 
@@ -412,8 +422,15 @@ object SQLDsl {
 
     def toSQLQuery: SQLQuery = {
       val sep = SQLPart.Fragment(if all then " UNION ALL " else " UNION ")
-      val bodies: List[SQLPart] = selects
-        .map(s => SQLQuery(SQLPart.Fragment("(") :: (s.coreParts ::: renderOrderBy(s.orderBy) ::: renderLimit(s.limit) ::: renderOffset(s.offset)) ::: List(SQLPart.Fragment(")"))))
+      // Each branch is wrapped as an aliased FROM-subquery rather than a bare parenthesized SELECT:
+      // SQLite rejects `(SELECT … ORDER BY … LIMIT …) UNION …` outright, and PostgreSQL requires the
+      // alias — `SELECT * FROM (…) uN` keeps per-branch ORDER BY/LIMIT portable across both.
+      val bodies: List[SQLPart] = selects.zipWithIndex
+        .map { case (s, i) =>
+          SQLQuery(SQLPart.Fragment("SELECT * FROM (") ::
+            (s.coreParts ::: renderOrderBy(s.orderBy) ::: renderLimit(s.limit) ::: renderOffset(s.offset)) :::
+            List(SQLPart.Fragment(s") ${SqlIdent.quote(s"u$i")}")))
+        }
         .intersperse(sep)
       SQLQuery(bodies ::: renderOrderBy(orderBy) ::: renderLimit(limit) ::: renderOffset(offset))
     }
@@ -434,6 +451,9 @@ object SQLDsl {
   def union(selects: Select*): Union = Union(selects.toList, all = false)
   def unionAll(selects: Select*): Union = Union(selects.toList, all = true)
 
+  def star: Projection = Projection.Star(None)
+  def star(qualifier: String): Projection = Projection.Star(Some(qualifier))
+
   def arrayContains(col: Ident.Column, value: Json): Expr = {
     val j = JsonFormatter.Compact(value)
     List(s"%[$j,%", s"%,$j,%", s"%,$j]%", s"%[$j]%").map(p => Expr.Like(col, Value.Arg(p))).reduce(_ or _)
@@ -443,7 +463,7 @@ object SQLDsl {
     if orderBy.isEmpty then Nil
     else {
       val parts: List[SQLPart] = orderBy.map { ob =>
-        SQLQuery(List(SQLPart.Fragment(ob.col.value), SQLPart.Fragment(" "), SQLPart.Fragment(ob.direction.sql)))
+        SQLQuery(List(ob.value.render, SQLPart.Fragment(" "), SQLPart.Fragment(ob.direction.sql)))
       }
       SQLPart.Fragment(" ORDER BY ") :: parts.intersperse(SQLPart.Fragment(", "))
     }
@@ -507,6 +527,10 @@ object SQLDsl {
 
   def asc(col: Ident.Column): OrderBy = OrderBy(col, SortDirection.Asc)
   def desc(col: Ident.Column): OrderBy = OrderBy(col, SortDirection.Desc)
+  def asc(value: Value): OrderBy = OrderBy(value, SortDirection.Asc)
+  def desc(value: Value): OrderBy = OrderBy(value, SortDirection.Desc)
+  /** `random()` as a sort value: `orderBy(asc(random))` shuffles the result set server-side. */
+  def random: Value = Value.Func("random", Nil)
 
   implicit final class TableOps(private val t: Ident.Table) extends AnyVal {
     /** Qualified column using this table's alias if present, otherwise its name. */
