@@ -362,75 +362,65 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     rapid.Stream.fromIterator[V](Task {
       val results = resultsFor(sql)
       state.register(results.rs)
-      val iterator = new Iterator[V] {
-        private lazy val fieldNames: List[String] = {
-          val metaData = results.rs.getMetaData
-          val count = metaData.getColumnCount
-          (1 to count).toList.map { index =>
-            metaData.getColumnName(index)
-          }
-        }
-
-        override def hasNext: Boolean = results.rs.next()
-
-        override def next(): V = {
-          val fieldValues = fieldNames.map { name =>
-            val obj = results.rs.getObject(name)
-            obj2Value(obj) match {
-              case null => Null
-              case s: String => str(s)
-              case b: Boolean => bool(b)
-              case i: Int => num(i)
-              case l: Long => num(l)
-              case f: Float => num(f)
-              case d: Double => num(d)
-              case bd: BigDecimal => num(bd)
-              case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
-            }
-          }
-          val json = obj(fieldNames.zip(fieldValues): _*)
-          json.as[V]
-        }
-      }
+      val iterator = genericIterator[V](results.rs)
       val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
       ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.query, ps))
     })
+  }
+
+  // Row → V for arbitrary (non-Doc) result shapes: values come back typed for scalars, but complex
+  // fields (List/Obj/Json) are STORED as JSON text — a Str column whose expected DefType (from V's RW
+  // definition) is non-string is parsed back to JSON, so e.g. a List[String] column round-trips.
+  private def genericIterator[V](rs: ResultSet)(implicit rw: RW[V]): Iterator[V] = new Iterator[V] {
+    private lazy val fieldNames: List[String] = {
+      val metaData = rs.getMetaData
+      val count = metaData.getColumnCount
+      (1 to count).toList.map { index =>
+        metaData.getColumnName(index)
+      }
+    }
+    private lazy val expected: Map[String, Definition] = rw.definition.defType match {
+      case o: DefType.Obj => o.map
+      case _ => Map.empty
+    }
+    private def jsonExpected(d: Definition): Boolean = d.defType match {
+      case DefType.Opt(inner) => jsonExpected(inner)
+      case _: DefType.Arr | _: DefType.Obj | DefType.Json | _: DefType.Poly => true
+      case _ => false
+    }
+
+    override def hasNext: Boolean = rs.next()
+
+    override def next(): V = {
+      val fieldValues = fieldNames.map { name =>
+        val obj = rs.getObject(name)
+        val json = obj2Value(obj) match {
+          case null => Null
+          case s: String => str(s)
+          case b: Boolean => bool(b)
+          case i: Int => num(i)
+          case l: Long => num(l)
+          case f: Float => num(f)
+          case d: Double => num(d)
+          case bd: BigDecimal => num(bd)
+          case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
+        }
+        json match {
+          case Str(s, _) if expected.get(name).exists(jsonExpected) =>
+            try JsonParser(s) catch { case _: Throwable => json }
+          case _ => json
+        }
+      }
+      val json = obj(fieldNames.zip(fieldValues): _*)
+      json.as[V]
+    }
   }
 
   def search[V](sql: SQLQuery)(implicit rw: RW[V]): Task[SearchResults[Doc, Model, V]] = Task {
     val results = resultsFor(sql)
     state.register(results.rs)
     val stream = rapid.Stream.fromIterator[V](Task {
-      val iterator = new Iterator[V] {
-        private lazy val fieldNames: List[String] = {
-          val metaData = results.rs.getMetaData
-          val count = metaData.getColumnCount
-          (1 to count).toList.map { index =>
-            metaData.getColumnName(index)
-          }
-        }
-
-        override def hasNext: Boolean = results.rs.next()
-
-        override def next(): V = {
-          val fieldValues = fieldNames.map { name =>
-            val obj = results.rs.getObject(name)
-            obj2Value(obj) match {
-              case null => Null
-              case s: String => str(s)
-              case b: Boolean => bool(b)
-              case i: Int => num(i)
-              case l: Long => num(l)
-              case f: Float => num(f)
-              case d: Double => num(d)
-              case bd: BigDecimal => num(bd)
-              case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
-            }
-          }
-          val json = obj(fieldNames.zip(fieldValues): _*)
-          json.as[V]
-        }
-      }
+      val iterator = genericIterator[V](results.rs)
       val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
       ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.query, ps))
     })

@@ -25,6 +25,7 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     age = 21,
     gender = Gender.Male,
     city = Some(City("Somewhere")),
+    nicknames = Set("Ad", "Addy"),
     _id = Person.id("adam")
   )
   private val brenda = Person(
@@ -149,6 +150,74 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
           // Males' max age = 35 (Adam, Charlie); female's = 11 (Brenda). Sort desc by key, then name asc.
           rows.map(_.name) should be(List("Adam", "Charlie", "Brenda"))
           rows.map(_.sortKey) should be(List(35, 35, 11))
+        }
+      }
+    }
+    "order by a random() expression with a limit" in {
+      db.people.transaction { transaction =>
+        import SQLDsl.*
+        val txn = transaction
+        val q = SQLDsl
+          .select(col(Person.name))
+          .from(table(db.people))
+          .orderBy(asc(random))
+          .limit(2)
+          .toSQLQuery
+        txn.search[Name](q).flatMap(_.list).map { names =>
+          names should have size 2
+          names.map(_.name).toSet.subsetOf(Set("Adam", "Brenda", "Charlie")) should be(true)
+        }
+      }
+    }
+    "order a union's branches independently by expression" in {
+      db.people.transaction { transaction =>
+        import SQLDsl.*
+        val txn = transaction
+        def branch(f: Expr) = SQLDsl
+          .select(col(Person.name))
+          .from(table(db.people))
+          .where(f)
+          .orderBy(asc(random))
+          .limit(1)
+        val q = unionAll(branch(col(Person.age) < 30), branch(col(Person.age) >= 30)).toSQLQuery
+        txn.search[Name](q).flatMap(_.list).map { names =>
+          names should have size 2
+          names.exists(n => Set("Adam", "Brenda").contains(n.name)) should be(true)
+          names.exists(_.name == "Charlie") should be(true)
+        }
+      }
+    }
+    "materialize a collection field through the generic search path" in {
+      db.people.transaction { transaction =>
+        import SQLDsl.*
+        val txn = transaction
+        val q = SQLDsl
+          .select(col(Person.name), col("nicknames"))
+          .from(table(db.people))
+          .where(col(Person.name) === "Adam")
+          .toSQLQuery
+        txn.search[NameNicknames](q).flatMap(_.list).map { rows =>
+          rows.map(_.name) should be(List("Adam"))
+          rows.head.nicknames should be(Set("Ad", "Addy"))
+        }
+      }
+    }
+    "honor order/limit inside an IN-subquery (top-N membership)" in {
+      db.people.transaction { transaction =>
+        import SQLDsl.*
+        val txn = transaction
+        val oldest = SQLDsl
+          .select(col(Person.name))
+          .from(table(db.people))
+          .orderBy(desc(col(Person.age)))
+          .limit(1)
+        val q = SQLDsl
+          .select(col(Person.name))
+          .from(table(db.people))
+          .where(col(Person.name).inSelect(oldest))
+          .toSQLQuery
+        txn.search[Name](q).flatMap(_.list).map { names =>
+          names should be(List(Name("Charlie")))
         }
       }
     }
@@ -286,6 +355,12 @@ abstract class AbstractSQLSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
   }
 
   case class NameSort(name: String, sortKey: Int)
+
+  object NameNicknames {
+    implicit val rw: RW[NameNicknames] = RW.gen
+  }
+
+  case class NameNicknames(name: String, nicknames: Set[String])
 
   object NameSort {
     implicit val rw: RW[NameSort] = RW.gen
