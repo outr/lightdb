@@ -104,7 +104,7 @@ val h2Version: String = "2.4.240"
 
 val postgresqlVersion: String = "42.7.13"
 
-val mariadbVersion: String = "3.5.9"
+val mariadbVersion: String = "3.5.10"
 
 val arangodbVersion: String = "7.26.0"
 
