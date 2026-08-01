@@ -23,8 +23,10 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
    * before it existed; re-writing each document recomputes those projections and refreshes the index.
    * Call this once after adding such a field.
    *
-   * Streams the documents straight from the read into the upsert (no materialization), so it scales to
-   * very large collections with bounded memory. This is a maintenance operation, not a hot path.
+   * Materializes only the id list, then rewrites the documents in short, independent per-batch
+   * transactions, so it scales to very large collections with bounded memory AND never holds a
+   * long-lived read transaction open across its own writes (see the note in the body). This is a
+   * maintenance operation, not a hot path.
    *
    * Stores whose documents live elsewhere (`StoreMode.Indexes` / split storage) cannot rebuild from
    * themselves and override this — see [[lightdb.store.split.SplitCollection]], which re-derives the
@@ -35,12 +37,26 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
     if !storeMode.isAll then {
       super.reIndex(progressManager, commitEvery)
     } else {
+      // Materialize the ID LIST in one short read transaction, then rewrite the documents in independent
+      // batches, each in its OWN transaction. The previous shape (a single transaction streaming reads
+      // WHILE upserting back into the same store) held a long-lived read transaction open across every
+      // write batch; on SQL backends the reads and writes land on different pooled connections, so an
+      // uncommitted batch could hold row locks a later batch needed while the application waited on that
+      // batch to advance the stream — a circular wait split across the JVM and the database, invisible
+      // to the database's deadlock detector (it only sees one waiter), so it stalled forever instead of
+      // aborting. Ids-only materialization keeps memory bounded for very large collections.
+      val batchSize = commitEvery.getOrElse(1_000)
       transaction { tx =>
-        tx.count.flatMap { total =>
-          val counter = new AtomicInteger(0)
-          val stream = tx.stream.evalTap { _ =>
-            Task {
-              val current = counter.incrementAndGet()
+        tx.query.materialized(m => List(m._id)).toList.map(_.map(mi => mi(_._id)))
+      }.flatMap { ids =>
+        val total = ids.size
+        val counter = new AtomicInteger(0)
+        ids.grouped(batchSize).toList.foldLeft(Task.unit) { (acc, batch) =>
+          acc.flatMap { _ =>
+            transaction { tx =>
+              tx.query.filter(_._id.in(batch)).toList.flatMap(docs => tx.upsert(docs))
+            }.map { docs =>
+              val current = counter.addAndGet(docs.size)
               progressManager.percentage(
                 current = current,
                 total = total,
@@ -48,7 +64,6 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
               )
             }
           }
-          tx.upsert(stream, commitEvery)
         }.map(_ => true)
       }
     }
