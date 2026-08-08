@@ -92,6 +92,35 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     dirty = true
   }
 
+  /**
+   * Whether a failed read may be retried on a fresh connection.
+   *
+   * Only when this transaction has no uncommitted writes. Those writes live on the very connection a
+   * retry throws away, so retrying around them would silently drop them and report success.
+   */
+  private[sql] def retryableRead: Boolean = synchronized {
+    !dirty && batchInsert.get() == 0 && batchUpsert.get() == 0
+  }
+
+  /**
+   * Throw away this transaction's connection and everything bound to it, so the next call opens a
+   * fresh one. For use when the connection is already known dead (see the stale-plan retry in
+   * [[SQLStoreTransaction.resultsFor]]).
+   *
+   * The cached prepared statements have to go with it: each belongs to that connection, so reusing
+   * one afterwards only fails again against something closed. Nothing is closed individually here --
+   * the connection is broken, and the pool discards it on release rather than handing it back.
+   */
+  private[sql] def discardConnection(): Unit = synchronized {
+    cache.clear()
+    statements = Nil
+    resultSets = Nil
+    psInsert = null
+    psUpsert = null
+    Try(connectionManager.releaseConnection(this))
+    connection = null
+  }
+
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
       if psInsert == null then {
         val connection = connectionManager.getConnection(this)

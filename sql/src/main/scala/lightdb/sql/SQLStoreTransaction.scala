@@ -304,13 +304,35 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   def resultsFor(sql: SQLQuery): SQLResults = {
     if SQLStoreTransaction.LogQueries then scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
-    try {
+
+    def run(): SQLResults = {
       state.closePendingResults()
       state.withPreparedStatement(sql.query) { ps =>
         sql.populate(ps, this)
         SQLResults(ps.executeQuery(), sql.query, ps)
       }
+    }
+
+    try {
+      run()
     } catch {
+      // PostgreSQL SQLSTATE 0A000, "cached plan must not change result type": DDL altered the result
+      // shape of a statement this connection had already prepared SERVER-side. It says nothing about
+      // the query -- the same SQL succeeds on any other connection -- and it is transient, appearing
+      // for a few seconds around a deployment (migrations on startup, or an outgoing process still
+      // serving on connections whose plans the incoming one just invalidated) and clearing as those
+      // connections cycle out.
+      //
+      // The driver has already marked the connection broken, so ONE retry on a fresh one is the whole
+      // fix. Without it every stale connection costs a real request a 500 before the pool discards it.
+      case t: Throwable if SQLStoreTransaction.isStalePlan(t) && state.retryableRead =>
+        scribe.warn(s"Stale cached plan (schema changed under a prepared statement); retrying on a fresh connection: ${sql.query}")
+        state.discardConnection()
+        try run()
+        catch {
+          case retried: Throwable =>
+            throw new SQLException(s"Error executing query after stale-plan retry: ${sql.query} (params: ${sql.args.mkString(" | ")})", retried)
+        }
       case t: Throwable => throw new SQLException(s"Error executing query: ${sql.query} (params: ${sql.args.mkString(" | ")})", t)
     }
   }
@@ -1496,6 +1518,31 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 object SQLStoreTransaction {
   var LogQueries: Boolean = false
   var FetchSize: Int = 1_000
+
+  /** PostgreSQL's SQLSTATE for `cached plan must not change result type`. */
+  private val StalePlanSQLState = "0A000"
+
+  /**
+   * Whether this failure is a server-side prepared statement whose cached plan was invalidated by
+   * DDL, anywhere in the cause chain.
+   *
+   * Matched on SQLSTATE rather than message text so it still holds against a server running with a
+   * localized `lc_messages`. Depth-bounded because a self-referencing cause would otherwise spin.
+   */
+  private[sql] def isStalePlan(t: Throwable): Boolean = {
+    var current = t
+    var found = false
+    var depth = 0
+    while (!found && current != null && depth < 16) {
+      found = current match {
+        case e: SQLException => e.getSQLState == StalePlanSQLState
+        case _ => false
+      }
+      current = current.getCause
+      depth += 1
+    }
+    found
+  }
 
   /**
    * SQLState class `23` is "integrity constraint violation" per ANSI SQL — covers PK/UNIQUE
