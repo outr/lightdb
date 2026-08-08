@@ -200,6 +200,19 @@ object SQLDsl {
       )
     }
 
+    /** `col IN (SELECT … UNION SELECT …)`.
+      *
+      * Distinct from [[InSubquery]] because OR-ing two membership tests as separate `IN` clauses
+      * defeats the planner — it can no longer use a single hash semi-join and falls back to scanning.
+      * Expressing the alternatives as ONE subquery keeps it a single semi-join, which is what the
+      * shape actually means: membership in the union of two sets.
+      */
+    final case class InUnion(col: Ident.Column, union: Union, negate: Boolean = false) extends Expr {
+      override private[dsl] def render: SQLQuery = SQLQuery(
+        SQLPart.Fragment(col.value) :: SQLPart.Fragment(if (negate) " NOT IN (" else " IN (") :: union.toSQLQuery :: List(SQLPart.Fragment(")"))
+      )
+    }
+
     final case class And(left: Expr, right: Expr) extends Expr {
       override private[dsl] def render: SQLQuery = SQLQuery(List(
         SQLPart.Fragment("("),
@@ -558,6 +571,8 @@ object SQLDsl {
     def in(values: Any*): Expr = Expr.In(c, values.toList.map(Value.Arg))
     def inSelect(select: Select): Expr = Expr.InSubquery(c, select)
     def notInSelect(select: Select): Expr = Expr.InSubquery(c, select, negate = true)
+    def inUnion(union: Union): Expr = Expr.InUnion(c, union)
+    def notInUnion(union: Union): Expr = Expr.InUnion(c, union, negate = true)
     /** This column as a [[Value]] (for use as a function argument or value comparison operand). */
     def asValue: Value = Value.Col(c)
   }
