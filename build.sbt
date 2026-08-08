@@ -62,7 +62,7 @@ ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
 val rapidVersion: String = "2.9.9"
 
-val profigVersion: String = "3.7.1"
+val profigVersion: String = "3.8.0"
 
 val reactifyVersion: String = "4.2.0"
 
