@@ -1696,9 +1696,15 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                 Task.pure(Map.empty)
               }
 
-            val stream = rapid.Stream
+            // PERF: materialize the page's hits concurrently (order-preserving). In split-store
+            // (StoreMode.Indexes) mode each hit does a per-hit RocksDB point-get + full-doc
+            // deserialize via `materializeHit` -> `loadDoc`; sequential `.evalMap` made a 50-hit
+            // page cost ~50x the single-doc latency. RocksDB point-gets are thread-safe and rapid's
+            // `.par` preserves input order (score sort retained); `hits` is already fully in memory,
+            // so only the per-hit doc load is parallelized. See `MaterializationParallelism`.
+            val materializedT: Task[List[(V, Double)]] = rapid.Stream
               .emits(hits.toList)
-              .evalMap { h =>
+              .par(maxThreads = MaterializationParallelism) { h =>
                 val id = Id[Doc](h.get("_id").getOrElse(throw new RuntimeException("OpenSearch hit missing _id")).asString)
                 val score = h.get("_score") match {
                   case Some(Null) | None => 0.0
@@ -1708,17 +1714,20 @@ case class OpenSearchTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
                 val hydratedSource = stripInternalFields(sourceWithId(source, id))
                 materializeHit(q, h, id, hydratedSource).map(v => (v, score))
               }
+              .toList
 
-            facetResultsT.map { facetResults =>
-              SearchResults(
-                model = store.model,
-                offset = q.offset,
-                limit = q.limit,
-                total = total,
-                streamWithScore = stream,
-                facetResults = facetResults,
-                transaction = this
-              )
+            materializedT.flatMap { materialized =>
+              facetResultsT.map { facetResults =>
+                SearchResults(
+                  model = store.model,
+                  offset = q.offset,
+                  limit = q.limit,
+                  total = total,
+                  streamWithScore = rapid.Stream.emits(materialized),
+                  facetResults = facetResults,
+                  transaction = this
+                )
+              }
             }
           }
         }
