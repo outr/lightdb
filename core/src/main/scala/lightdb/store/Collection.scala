@@ -2,6 +2,7 @@ package lightdb.store
 
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.field.Field
 import lightdb.progress.ProgressManager
 import lightdb.transaction.CollectionTransaction
 import rapid.Task
@@ -61,6 +62,46 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
                 current = current,
                 total = total,
                 message = Some(s"Re-Indexing $name: $current of $total")
+              )
+            }
+          }
+        }.map(_ => true)
+      }
+    }
+
+  /**
+   * Field-scoped re-index: the same batching as above, writing only [[fields]].
+   *
+   * Deliberately shares the ids-first, batch-per-transaction shape rather than inventing a second one.
+   * That shape exists to avoid a specific deadlock — a long-lived read transaction streaming WHILE
+   * writes commit on other pooled connections — and a partial write is just as capable of hitting it.
+   *
+   * The saving is in the WRITE, through [[Transaction.updateFields]]: backends that can set individual
+   * columns do so, and the rest fall back to a whole-document upsert, which is correct but no faster.
+   */
+  override def reIndex(indexes: List[Field.Indexed[Doc, ?]],
+                       progressManager: ProgressManager,
+                       commitEvery: Option[Int]): Task[Boolean] =
+    if (indexes.isEmpty || !storeMode.isAll) {
+      super.reIndex(indexes, progressManager, commitEvery)
+    } else {
+      val batchSize = commitEvery.getOrElse(1_000)
+      val names = indexes.map(_.name).mkString(", ")
+      transaction { tx =>
+        tx.query.materialized(m => List(m._id)).toList.map(_.map(mi => mi(_._id)))
+      }.flatMap { ids =>
+        val total = ids.size
+        val counter = new AtomicInteger(0)
+        ids.grouped(batchSize).toList.foldLeft(Task.unit) { (acc, batch) =>
+          acc.flatMap { _ =>
+            transaction { tx =>
+              tx.query.filter(_._id.in(batch)).toList.flatMap(docs => tx.updateFields(docs, indexes).map(_ => docs.size))
+            }.map { written =>
+              val current = counter.addAndGet(written)
+              progressManager.percentage(
+                current = current,
+                total = total,
+                message = Some(s"Re-Indexing $name [$names]: $current of $total")
               )
             }
           }
