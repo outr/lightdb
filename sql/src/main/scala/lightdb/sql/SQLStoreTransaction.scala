@@ -128,6 +128,48 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     rs2Iterator(rs, Conversion.Json(store.fields))
   })
 
+  /**
+   * Set ONLY these columns, for these documents, in one batched statement.
+   *
+   * The SQL-specific half of a field-scoped re-index. The generic path upserts whole documents, which
+   * for a backfill is almost entirely wasted work: every column rewritten and every index maintained
+   * to populate one. Backfilling a single derived column over 1.4M rows that way was measured at 3%
+   * after five hours.
+   *
+   * `UPDATE ... SET c = ? WHERE _id = ?` instead — one prepared statement, one round trip per batch,
+   * and the write touches only the columns asked for. Values still come from the field definitions via
+   * `getJson`, exactly as the upsert path binds them, so this changes how the write is issued and
+   * never what is written.
+   *
+   * Rows that no longer exist simply update nothing; the count returned is what the database actually
+   * changed rather than the number attempted.
+   */
+  override def updateFields(docs: List[Doc], fields: List[Field[Doc, ?]]): Task[Int] = Task {
+    if (docs.isEmpty || fields.isEmpty) 0
+    else {
+      state.closePendingResults()
+      val sets = fields.map(f => s"${SqlIdent.quote(f.name)} = ?").mkString(", ")
+      val sql = s"UPDATE ${store.fqn} SET $sets WHERE ${SqlIdent.quote("_id")} = ?"
+      state.withPreparedStatement(sql) { ps =>
+        try {
+          docs.foreach { doc =>
+            // One IndexingState per document, matching the upsert path: it memoizes derived work for
+            // the doc being written, so sharing one across documents would hand the second document
+            // the first one's values.
+            val indexingState = new IndexingState
+            fields.zipWithIndex.foreach {
+              case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
+            }
+            ps.setString(fields.length + 1, doc._id.value)
+            ps.addBatch()
+          }
+          state.markDirty()
+          ps.executeBatch().count(_ != 0)
+        } finally state.returnPreparedStatement(sql, ps)
+      }
+    }
+  }
+
   def populate(ps: PreparedStatement, arg: Json, index: Int): Unit = arg match {
     case Null => ps.setNull(index + 1, Types.NULL)
     case o: Obj => ps.setString(index + 1, JsonFormatter.Compact(o))

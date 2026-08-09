@@ -70,6 +70,21 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
     .map(_ => doc)
 
   /**
+   * Write back ONLY [[fields]] for these documents, leaving every other column untouched.
+   *
+   * The hook a field-scoped re-index writes through ([[lightdb.store.Store.reIndex]]). Backends that
+   * can express a partial write override this; the default upserts the whole document, which is
+   * correct and simply forgoes the saving, so no backend has to implement it to stay right.
+   *
+   * The VALUES still come from the documents, computed by the field definitions themselves, so a
+   * backend override changes only how the write is issued - never what the value is. That matters:
+   * the alternative, teaching each backend to recompute a field in its own dialect, is a second
+   * definition of the same thing, and the two drift.
+   */
+  def updateFields(docs: List[Doc], fields: List[lightdb.field.Field[Doc, ?]]): Task[Int] =
+    docs.map(upsert).tasks.map(_.size)
+
+  /**
    * Optimized upsert for handling large streams of documents.
    *
    * @param stream the stream to upsert

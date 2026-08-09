@@ -185,6 +185,29 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   def reIndex(progressManager: ProgressManager = ProgressManager.none,
               commitEvery: Option[Int] = None): Task[Boolean] = Task.pure(false)
 
+  /**
+   * Re-index only the named FIELDS, rather than rewriting every document.
+   *
+   * Adding an indexed field leaves it NULL on existing rows, and the only cure was a full re-index:
+   * read each document, write ALL of its columns back, and pay the index maintenance for every one of
+   * them. That cost is proportional to the document, not to the change. Backfilling ONE derived column
+   * across 1.4M rows that way was measured at over five hours for 3% - days of work to populate a
+   * column computable in under a minute.
+   *
+   * Takes [[Field.Indexed]] rather than [[Field]] deliberately: only an indexed field HAS an index to
+   * rebuild, so a stored-only field passed here would be a silent no-op. The type says so instead.
+   *
+   * The value is still computed in Scala from the document, so the field definition remains the single
+   * source of truth and no SQL duplicate of it can drift. What changes is the WRITE: only these columns
+   * are set.
+   *
+   * Defaults to a full re-index, which is correct but not faster, so a backend that cannot do better
+   * still behaves properly.
+   */
+  def reIndex(indexes: List[Field.Indexed[Doc, ?]],
+              progressManager: ProgressManager,
+              commitEvery: Option[Int]): Task[Boolean] = reIndex(progressManager, commitEvery)
+
   def reIndexDoc(doc: Doc): Task[Boolean] = Task.pure(false)
 
   /**
