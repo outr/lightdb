@@ -7,4 +7,4 @@ sbt Test/compile
 sbt test
 sbt docs/mdoc
 sbt publishSigned
-sbt sonatypeBundleRelease
+sbt sonaRelease
