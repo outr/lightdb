@@ -7,7 +7,6 @@ val developerId: String = "darkfrog"
 val developerName: String = "Matt Hicks"
 val developerURL: String = "https://matthicks.com"
 
-name := projectName
 ThisBuild / organization := org
 
 ThisBuild / version := "4.48.0-SNAPSHOT"
@@ -16,13 +15,16 @@ ThisBuild / scalaVersion := "3.8.4"
 
 ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation", "-Wconf:any:silent")
 
-publishMavenStyle := true
+ThisBuild / publishMavenStyle := true
 
-ThisBuild / sonatypeCredentialHost := xerial.sbt.Sonatype.sonatypeCentralHost
-ThisBuild / publishTo := sonatypePublishToBundle.value
-ThisBuild / sonatypeProfileName := org
+// Publishing to Sonatype Central Portal is built into sbt (1.11+/2.x): stage with
+// `publishSigned`, then `sonaUpload` (manual release) or `sonaRelease` (automatic).
+ThisBuild / publishTo := {
+	val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
+	if (isSnapshot.value) Some("central-snapshots" at centralSnapshots)
+	else localStaging.value
+}
 ThisBuild / licenses := Seq("MIT" -> url(s"https://github.com/$githubOrg/$projectName/blob/master/LICENSE"))
-ThisBuild / sonatypeProjectHosting := Some(xerial.sbt.Sonatype.GitHubHosting(githubOrg, projectName, email))
 ThisBuild / homepage := Some(url(s"https://github.com/$githubOrg/$projectName"))
 ThisBuild / scmInfo := Some(
 	ScmInfo(
@@ -37,14 +39,14 @@ ThisBuild / developers := List(
 ThisBuild / outputStrategy := Some(StdoutOutput)
 
 Global / excludeFilter := (Global / excludeFilter).value ||
-  HiddenFileFilter || "db" || "upload" || "logs" || "target" || "data" || "benchmark"
+	HiddenFileFilter || "db" || "upload" || "logs" || "target" || "data" || "benchmark"
 
 ThisBuild / javaOptions ++= Seq(
 	"--enable-native-access=ALL-UNNAMED",
 	"--add-opens=java.base/java.nio=ALL-UNNAMED",
 	"--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
 	"--add-modules", "jdk.incubator.vector",
-  "--illegal-access=permit",
+	"--illegal-access=permit",
 	"--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED",
 	"--add-exports=java.base/sun.nio.ch=ALL-UNNAMED",
 	"--add-exports=jdk.unsupported/sun.misc=ALL-UNNAMED",
@@ -125,37 +127,34 @@ val mongoVersion: String = "5.6.2"
 val qdrantVersion: String = "1.18.3"
 
 lazy val root = project.in(file("."))
-	.aggregate(core.jvm, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice, all)
+	.aggregate(core, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice, all)
 	.settings(
 		name := projectName,
 		publish := {},
 		publishLocal := {}
 	)
 
-lazy val core = crossProject(JVMPlatform)
-	.crossType(CrossType.Pure)
+lazy val core = project.in(file("core"))
 	.settings(
 		name := s"$projectName-core",
+		fork := true,
+		Test / fork := true,
 		libraryDependencies ++= Seq(
-			"com.outr" %%% "scribe" % scribeVersion,
-			"com.outr" %%% "reactify" % reactifyVersion,
-			"org.typelevel" %%% "fabric-io" % fabricVersion,
+			"com.outr" %% "scribe" % scribeVersion,
+			"com.outr" %% "reactify" % reactifyVersion,
+			"org.typelevel" %% "fabric-io" % fabricVersion,
 			"com.outr" %% "scribe-slf4j2" % scribeVersion,
-			"com.outr" %%% "profig" % profigVersion,
+			"com.outr" %% "profig" % profigVersion,
 			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
 			"org.locationtech.jts" % "jts-core" % jtsVersion,
-			"com.outr" %%% "rapid-core" % rapidVersion,
-			"org.scalatest" %%% "scalatest" % scalaTestVersion % Test,
-			"com.outr" %%% "rapid-test" % rapidVersion % Test
+			"com.outr" %% "rapid-core" % rapidVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"com.outr" %% "rapid-test" % rapidVersion % Test
 		)
-	)
-	.jvmSettings(
-		fork := true,
-		Test / fork := true
 	)
 
 lazy val sql = project.in(file("sql"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-sql",
 		fork := true,
@@ -168,7 +167,7 @@ lazy val sql = project.in(file("sql"))
 	)
 
 lazy val traversal = project.in(file("traversal"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-traversal",
 		fork := true,
@@ -228,7 +227,7 @@ lazy val duckdb = project.in(file("duckdb"))
 	)
 
 lazy val lucene = project.in(file("lucene"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-lucene",
 		fork := true,
@@ -247,7 +246,7 @@ lazy val lucene = project.in(file("lucene"))
 	)
 
 lazy val tantivy = project.in(file("tantivy"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-tantivy",
 		fork := true,
@@ -259,7 +258,7 @@ lazy val tantivy = project.in(file("tantivy"))
 	)
 
 lazy val opensearch = project.in(file("opensearch"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
+	.dependsOn(core, core % "test->test", traversal % "test->test")
 	.settings(
 		name := s"$projectName-opensearch",
 		fork := true,
@@ -272,7 +271,7 @@ lazy val opensearch = project.in(file("opensearch"))
 	)
 
 lazy val halodb = project.in(file("halodb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-halo",
 		fork := true,
@@ -284,7 +283,7 @@ lazy val halodb = project.in(file("halodb"))
 	)
 
 lazy val rocksdb = project.in(file("rocksdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, traversal % "test->test")
+	.dependsOn(core, core % "test->test", traversal, traversal % "test->test")
 	.settings(
 		name := s"$projectName-rocks",
 		fork := true,
@@ -299,7 +298,7 @@ lazy val rocksdb = project.in(file("rocksdb"))
 	)
 
 lazy val mapdb = project.in(file("mapdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-mapdb",
 		libraryDependencies ++= Seq(
@@ -311,7 +310,7 @@ lazy val mapdb = project.in(file("mapdb"))
 	)
 
 lazy val lmdb = project.in(file("lmdb"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-lmdb",
 		libraryDependencies ++= Seq(
@@ -323,7 +322,7 @@ lazy val lmdb = project.in(file("lmdb"))
 	)
 
 lazy val chronicleMap = project.in(file("chronicleMap"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-chroniclemap",
 		libraryDependencies ++= Seq(
@@ -335,7 +334,7 @@ lazy val chronicleMap = project.in(file("chronicleMap"))
 	)
 
 lazy val googleSheets = project.in(file("googleSheets"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-google-sheets",
 		fork := true,
@@ -349,7 +348,7 @@ lazy val googleSheets = project.in(file("googleSheets"))
 	)
 
 lazy val redis = project.in(file("redis"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-redis",
 		libraryDependencies ++= Seq(
@@ -361,7 +360,7 @@ lazy val redis = project.in(file("redis"))
 	)
 
 lazy val api = project.in(file("api"))
-	.dependsOn(core.jvm, core.jvm % "test->test")
+	.dependsOn(core, core % "test->test")
 	.settings(
 		name := s"$projectName-api",
 		fork := true,
@@ -372,7 +371,7 @@ lazy val api = project.in(file("api"))
 	)
 
 lazy val apiSpice = project.in(file("api-spice"))
-	.dependsOn(api, api % "test->test", core.jvm % "test->test")
+	.dependsOn(api, api % "test->test", core % "test->test")
 	.settings(
 		name := s"$projectName-api-spice",
 		fork := true,
@@ -387,7 +386,7 @@ lazy val apiSpice = project.in(file("api-spice"))
 	)
 
 lazy val mongodb = project.in(file("mongodb"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
+	.dependsOn(core, core % "test->test", traversal % "test->test")
 	.settings(
 		name := s"$projectName-mongodb",
 		fork := true,
@@ -413,7 +412,7 @@ lazy val mariadb = project.in(file("mariadb"))
 	)
 
 lazy val arangodb = project.in(file("arangodb"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
+	.dependsOn(core, core % "test->test", traversal % "test->test")
 	.settings(
 		name := s"$projectName-arangodb",
 		fork := true,
@@ -426,7 +425,7 @@ lazy val arangodb = project.in(file("arangodb"))
 	)
 
 lazy val qdrant = project.in(file("qdrant"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal % "test->test")
+	.dependsOn(core, core % "test->test", traversal % "test->test")
 	.settings(
 		name := s"$projectName-qdrant",
 		fork := true,
@@ -439,7 +438,7 @@ lazy val qdrant = project.in(file("qdrant"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core.jvm, core.jvm % "test->test", traversal, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice)
+	.dependsOn(core, core % "test->test", traversal, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
@@ -450,7 +449,7 @@ lazy val all = project.in(file("all"))
 	)
 
 lazy val benchmark = project.in(file("benchmark"))
-	.dependsOn(all, core.jvm, core.jvm % "test->test")
+	.dependsOn(all, core, core % "test->test")
 	.enablePlugins(JmhPlugin)
 	.settings(
 		name := s"$projectName-benchmark",
@@ -470,7 +469,7 @@ lazy val benchmark = project.in(file("benchmark"))
 			"org.jooq" % "jooq" % "3.20.10",
 			"io.quickchart" % "QuickChart" % "1.2.0",
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-			"com.outr" %%% "rapid-test" % rapidVersion % Test
+			"com.outr" %% "rapid-test" % rapidVersion % Test
 		),
 		// Fat-JAR setup so JMH can run via `java -jar` instead of `sbt benchmark/Jmh/run`. Going
 		// through sbt for forks > 1 is fragile (sbt's stream cleanup wipes the per-fork classpath
@@ -516,8 +515,8 @@ lazy val docs = project
 	.dependsOn(all)
 	.enablePlugins(MdocPlugin)
 	.settings(
-	  mdocVariables := Map(
+		mdocVariables := Map(
 			"VERSION" -> version.value
-	  ),
-	  mdocOut := file(".")
+		),
+		mdocOut := file(".")
 	)
