@@ -1,8 +1,9 @@
 package lightdb.lucene
 
 import fabric.define.{DefType, Definition}
+import fabric.io.JsonFormatter
 import fabric.rw.Asable
-import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Str, obj}
+import fabric.{Arr, Bool, Json, Null, NumDec, NumInt, Obj, Str, obj}
 import lightdb.doc.{Document, DocumentModel, JsonConversion}
 import lightdb.facet.{FacetResult, FacetResultValue}
 import lightdb.field.Field.Tokenized
@@ -615,6 +616,9 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
       case DefType.Opt(d) if d.defType == DefType.Str => new TermQuery(new Term(mapName(field.name), Field.NullString))
       case _ => new TermQuery(new Term(mapName(field.name), "null"))
     }
+    // Object-valued fields (polymorphic records, nested objects, raw Json) are indexed as a single
+    // term holding the value's compact JSON — render the comparison value the same way.
+    case o: Obj => new TermQuery(new Term(mapName(field.name), JsonFormatter.Compact(o)))
     case json => throw new RuntimeException(s"Unsupported equality check: $json (${field.rw.definition})")
   }
 
