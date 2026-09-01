@@ -107,6 +107,48 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     }
   }
 
+  /**
+   * Like [[onCommittedChangeDetailed]], but hands over the DELETED IDS rather than only a flag.
+   *
+   * A delete has no document, which is why the detailed hook could say only "something was removed" and
+   * every listener had to fall back to a full rebuild. The id is available at the trigger though, and for
+   * a store whose id encodes its partition that is enough to place the removal - so a view can recompute
+   * one scope instead of rebuilding everything. Truncation still cannot be placed and is reported by
+   * [[truncated]].
+   */
+  def onCommittedChangeWithRemovals(f: (List[Doc], List[Id[Doc]], Boolean) => Task[Unit]): Unit = {
+    val changed = new ConcurrentHashMap[Transaction[Doc, Model], java.util.List[Doc]]()
+    val deleted = new ConcurrentHashMap[Transaction[Doc, Model], java.util.List[Id[Doc]]]()
+    @volatile var truncated = false
+    def list(tx: Transaction[Doc, Model]): java.util.List[Doc] =
+      changed.computeIfAbsent(tx, _ => java.util.Collections.synchronizedList(new java.util.ArrayList[Doc]()))
+    def ids(tx: Transaction[Doc, Model]): java.util.List[Id[Doc]] =
+      deleted.computeIfAbsent(tx, _ => java.util.Collections.synchronizedList(new java.util.ArrayList[Id[Doc]]()))
+    trigger += new StoreTrigger[Doc, Model] {
+      override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
+      override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
+      override def delete(id: Id[Doc], transaction: Transaction[Doc, Model]): Task[Unit] = Task { ids(transaction).add(id); () }
+      override def truncate: Task[Unit] = Task { truncated = true; () }
+      override def transactionCommitted(transaction: Transaction[Doc, Model]): Task[Unit] = {
+        val docs = Option(changed.remove(transaction)) match {
+          case Some(l) => scala.jdk.CollectionConverters.ListHasAsScala(l).asScala.toList
+          case None => Nil
+        }
+        val removedIds = Option(deleted.remove(transaction)) match {
+          case Some(l) => scala.jdk.CollectionConverters.ListHasAsScala(l).asScala.toList
+          case None => Nil
+        }
+        val wasTruncated = truncated
+        if (docs.nonEmpty || removedIds.nonEmpty || wasTruncated) {
+          truncated = false
+          f(docs, removedIds, wasTruncated)
+        } else {
+          Task.unit
+        }
+      }
+    }
+  }
+
   // -- Point-lookup cache (opt-in via LightDB.store(..., cache = ...)) -----------------------------------
   @volatile private var _cacheConfig: CacheConfig = CacheConfig.None
 
