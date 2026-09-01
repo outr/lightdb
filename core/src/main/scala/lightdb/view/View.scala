@@ -2,6 +2,7 @@ package lightdb.view
 
 import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.id.Id
 import lightdb.field.Field
 import lightdb.filter.*
 import lightdb.store.Collection
@@ -106,6 +107,39 @@ class View[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val store: Collect
         docs.foreach { d =>
           val s = scopeOf(d)
           pendingScopes.put(s, () => recomputeScope(s, scopeField, scopedRelation))
+        }
+        drainScoped()
+      }
+    }
+
+  /**
+   * Scope-incremental maintenance that can also place a DELETE.
+   *
+   * [[maintainScopedOn]] falls back to a full rebuild on any removal, because a delete carries no
+   * document to derive a scope from. Where the id encodes its scope, [[scopeOfId]] recovers it and the
+   * removal is recomputed like any other change - turning "one row deleted" from a whole-view rebuild
+   * into a single scope. Return None for an id whose scope cannot be read; that one falls back, so a
+   * partial answer is still safe.
+   *
+   * Truncation always rebuilds: it removes everything, and no per-id scope survives to recompute.
+   */
+  def maintainScopedWithRemovals[D <: Document[D], DM <: DocumentModel[D], S](dependency: lightdb.store.Store[D, DM],
+                                                                             scopeField: Field.Indexed[Doc, S])
+                                                                            (scopeOf: D => S)
+                                                                            (scopeOfId: Id[D] => Option[S])
+                                                                            (scopedRelation: S => Relation): Unit =
+    dependency.onCommittedChangeWithRemovals { (docs, removedIds, truncated) =>
+      Task.defer {
+        if (truncated) needsFullRebuild.set(true)
+        docs.foreach { d =>
+          val s = scopeOf(d)
+          pendingScopes.put(s, () => recomputeScope(s, scopeField, scopedRelation))
+        }
+        removedIds.foreach { id =>
+          scopeOfId(id) match {
+            case Some(s) => pendingScopes.put(s, () => recomputeScope(s, scopeField, scopedRelation))
+            case None => needsFullRebuild.set(true)
+          }
         }
         drainScoped()
       }
