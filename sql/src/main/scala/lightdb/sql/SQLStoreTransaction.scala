@@ -77,6 +77,20 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   /**
+   * Hook for backends to provide an optimized single-token containment predicate
+   * on a tokenized field — the SQL analogue of a Lucene term query, which is what
+   * `Filter.Exact` means on a tokenized field: "contains this token", not "the
+   * whole stored text equals this token". Default behavior is a LIKE on the
+   * token; like [[tokenizedEqualsPart]] this is substring containment, so a
+   * token that is a prefix of a longer word overmatches. Backends with a
+   * boundary-aware pattern facility can override.
+   *
+   * Receives `fieldName` as a raw (unquoted) column name — see [[tokenizedEqualsPart]].
+   */
+  protected def tokenizedExactPart(fieldName: String, token: String): SQLPart =
+    likePart(SqlIdent.quote(fieldName), s"%$token%")
+
+  /**
    * Hook for backends to provide an optimized tokenized inequality predicate.
    * Default behavior is NOT(all tokens present).
    *
@@ -1382,6 +1396,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       case Filter.EndsWith(fieldName, query) => likePart(SqlIdent.quote(fieldName), s"%$query")
       case Filter.Contains(fieldName, query) => likePart(SqlIdent.quote(fieldName), s"%$query%")
       case Filter.Exact(fieldName, query) if fields.head.isArr => likePart(SqlIdent.quote(fieldName), s"%\"$query\"%")
+      // Tokenized fields: Exact is token containment (a term query), not whole-string equality
+      case Filter.Exact(fieldName, query) if fields.head.isTokenized => tokenizedExactPart(fieldName, query)
       case Filter.Exact(fieldName, query) => likePart(SqlIdent.quote(fieldName), s"$query")
       case f: Filter.Distance[C] =>
         if targetStore eq store then {
