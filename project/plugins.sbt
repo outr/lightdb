@@ -8,4 +8,4 @@ addSbtPlugin("com.github.sbt" % "sbt-git" % "2.1.0")
 
 addSbtPlugin("com.timushev.sbt" % "sbt-updates" % "0.7.0")
 
-addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.9.1")
+addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.9.2")
