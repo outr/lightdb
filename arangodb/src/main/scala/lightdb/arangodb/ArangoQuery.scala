@@ -65,7 +65,10 @@ object ArangoQuery {
     case f: Filter.EndsWith[Doc, _] => stringOp(f.fieldName, model, e => s"REGEX_TEST($e, ${litStr(escapeRegex(f.query) + "$")})")
     case f: Filter.Contains[Doc, _] => stringOp(f.fieldName, model, e => s"REGEX_TEST($e, ${litStr(escapeRegex(f.query))})")
     case f: Filter.Regex[Doc, _] => stringOp(f.fieldName, model, e => s"REGEX_TEST($e, ${litStr(f.expression)})")
-    case f: Filter.Exact[Doc, _] => stringOp(f.fieldName, model, e => s"$e == ${litStr(f.query)}")
+    case f: Filter.Exact[Doc, _] =>
+      // A tokenized field is stored as its token array, so Exact is token containment.
+      if model.fieldByName(f.fieldName).isTokenized then tokenizedEquals(f.fieldName, str(f.query))
+      else stringOp(f.fieldName, model, e => s"$e == ${litStr(f.query)}")
     case m: Filter.Multi[Doc] => multi(m, model, translate)
     case f: Filter.Nested[Doc] => nestedClause(fieldRef("d", f.path), f.path + ".", f.filter)
     case _: Filter.MatchNone[Doc] => "false"

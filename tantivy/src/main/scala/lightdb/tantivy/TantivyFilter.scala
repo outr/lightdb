@@ -99,7 +99,24 @@ object TantivyFilter {
       else pb.Query(pb.Query.Node.Contains(pb.QueryContains(field = f.fieldName, value = f.query)))
 
     case f: Filter.Exact[Doc, _] =>
-      pb.Query(pb.Query.Node.Exact(pb.QueryExact(field = f.fieldName, value = f.query)))
+      // String fields (tokenized ones included) are indexed as a single raw term of the whole
+      // value — see TantivySchema.unwrap — so on a tokenized field Exact is "contains this
+      // whitespace-delimited token, case-insensitively", expressed as a regex over the raw term.
+      // Tantivy's regex engine has no ^/$/\b anchors, hence the optional whitespace groups and
+      // explicit case classes.
+      if model.fieldByName[Any](f.fieldName).isTokenized then {
+        val token = Option(f.query).getOrElse("").trim
+        if token.isEmpty then noneQuery
+        else {
+          val ci = token.flatMap { c =>
+            if c.isLetter && c.toLower != c.toUpper then s"[${c.toLower}${c.toUpper}]"
+            else if "\\.^$|?*+()[]{}".contains(c) then s"\\$c"
+            else c.toString
+          }
+          val ws = "[ \\t\\r\\n]"
+          pb.Query(pb.Query.Node.Regex(pb.QueryRegex(field = f.fieldName, pattern = s"(.*$ws)?$ci($ws.*)?")))
+        }
+      } else pb.Query(pb.Query.Node.Exact(pb.QueryExact(field = f.fieldName, value = f.query)))
 
     case m: Filter.Multi[Doc] =>
       val (musts0, shoulds, mustNots) = partition(model, m)

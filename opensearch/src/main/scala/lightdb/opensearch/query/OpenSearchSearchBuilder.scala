@@ -393,7 +393,10 @@ class OpenSearchSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         val v = if keywordNormalize then normalizeKeyword(q) else q
         if hasModelField(fieldName) then {
           val fn = fieldNameForPattern(fieldName)
-          OpenSearchDsl.term(fn, str(v))
+          // A tokenized field is indexed through the standard analyzer (lower-cased tokens), so
+          // Exact is a single-term containment query and the term must be normalized the same way.
+          val term = if model.fields.exists(f => f.name == fieldName && f.isTokenized) then v.trim.toLowerCase else v
+          OpenSearchDsl.term(fn, str(term))
         } else {
           val base = rewriteReservedIdFieldName(fieldName)
           val keyword = s"$base.keyword"
