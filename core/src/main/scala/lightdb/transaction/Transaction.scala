@@ -21,6 +21,10 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   @volatile private var rolledBack = false
   final def isRolledBack: Boolean = rolledBack
 
+  /** Flag the transaction as aborting before end hooks are notified, so a hook that manages a
+    * dependent transaction (e.g. a reverse-edge store) can abort it rather than commit it. */
+  private[lightdb] final def markRolledBack(): Unit = rolledBack = true
+
   /** Terminal abort. Stop pending/asynchronous writes before rolling back the backend. Backends
     * without transactional storage cannot undo already-applied writes; this is not distributed ACID. */
   final def rollback: Task[Unit] = Task.defer {
