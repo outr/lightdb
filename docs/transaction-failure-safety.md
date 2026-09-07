@@ -18,6 +18,9 @@ transactional databases or provide distributed transactions. Rebuild dependent m
   Applications must still stop and join their producers before disposing stores.
 - SQLState is the only SQL commit path. JDBC commit errors propagate. SQL close discards batches and
   closes statements/results; datasource release rolls back uncommitted work and closes, never commits.
+- SQLState guards JDBC and pool operations with a reentrant lock, not intrinsic monitors. This keeps
+  blocking JDBC/pool waits from pinning virtual-thread carriers on Java 21 while preserving per-state
+  serialization and reentrancy.
 - Async flush includes writes already dequeued by workers. Abort discards queued writes and joins
   workers before backend rollback. Zero workers are rejected, and a barrier detects exited workers.
 - TransactionManager brackets acquisition incrementally, aborting open scopes after a later failure.
@@ -42,7 +45,12 @@ external service. SQLite tests use isolated in-memory fixtures. `all/compile` an
 The Nabo consumer adds disposable PostgreSQL tests of the ordinary managed API, including all five
 batch modes, failed bodies before/after explicit flush, a deferred constraint failing at commit,
 connection reuse, explicit rollback and materialized-view behavior. See its hardening tracker for
-the consumer run results and artifact fingerprints.
+the consumer run results and artifact fingerprints. Its 40-borrower/four-connection regression first
+failed on Java 21 with pool timeouts while SQLState used intrinsic monitors. After changing only those
+locks, all 147 Nabo tests passed, including 20 PostgreSQL checks with the virtual-thread scheduler
+restricted to four carriers. The consumer test is necessary: the LightDB build ran on a newer JDK
+where this Java 21 pinning behavior is not reproduced. This matches the blocking-monitor limitation
+and targeted ReentrantLock remedy in the [Java 21 virtual-thread documentation](https://docs.oracle.com/en/java/javase/21/core/virtual-threads.html).
 
 ## Explicit boundaries / follow-up
 

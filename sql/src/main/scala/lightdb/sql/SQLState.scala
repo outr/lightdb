@@ -7,6 +7,7 @@ import rapid.Task
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import scala.util.Try
 
@@ -23,10 +24,18 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   private var statements = List.empty[Statement]
   private var resultSets = List.empty[ResultSet]
   private var dirty = false
+  private val stateLock = new ReentrantLock()
+
+  // JDBC calls and pool checkout can block. Holding an intrinsic monitor here pins virtual-thread
+  // carriers on Java 21, starving the borrowers that need to resume and return pool connections.
+  private def withStateLock[A](f: => A): A = {
+    stateLock.lock()
+    try f finally stateLock.unlock()
+  }
 
   private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
 
-  def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = synchronized {
+  def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = withStateLock {
     val connection = connectionManager.getConnection(this)
 
     def createPs(): PreparedStatement = {
@@ -49,7 +58,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     }
   }
 
-  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = synchronized {
+  def returnPreparedStatement(sql: String, ps: PreparedStatement): Unit = withStateLock {
     if ps == null then ()
     else if caching then {
       cache.computeIfAbsent(sql, _ => new ConcurrentLinkedQueue[PreparedStatement]).add(ps)
@@ -64,7 +73,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
    * while a previous result set is still open. Prepared statements are
    * left alone to avoid breaking statement pooling/reuse.
    */
-  def closePendingResults(): Unit = synchronized {
+  def closePendingResults(): Unit = withStateLock {
     // Ensure read-your-writes semantics: SQLStoreTransaction buffers inserts/upserts using JDBC batches.
     // Before executing any new statements (especially SELECTs), flush pending batches so subsequent reads
     // within the same transaction can see the writes.
@@ -77,7 +86,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     statements = prepared
   }
 
-  private def flushBatches(): Unit = synchronized {
+  private def flushBatches(): Unit = withStateLock {
     if batchInsert.get() > 0 && psInsert != null then {
       psInsert.executeBatch()
       batchInsert.set(0)
@@ -88,7 +97,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     }
   }
 
-  def markDirty(): Unit = synchronized {
+  def markDirty(): Unit = withStateLock {
     dirty = true
   }
 
@@ -98,7 +107,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
    * Only when this transaction has no uncommitted writes. Those writes live on the very connection a
    * retry throws away, so retrying around them would silently drop them and report success.
    */
-  private[sql] def retryableRead: Boolean = synchronized {
+  private[sql] def retryableRead: Boolean = withStateLock {
     !dirty && batchInsert.get() == 0 && batchUpsert.get() == 0
   }
 
@@ -111,7 +120,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
    * one afterwards only fails again against something closed. Nothing is closed individually here --
    * the connection is broken, and the pool discards it on release rather than handing it back.
    */
-  private[sql] def discardConnection(): Unit = synchronized {
+  private[sql] def discardConnection(): Unit = withStateLock {
     cache.clear()
     statements = Nil
     resultSets = Nil
@@ -121,7 +130,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     connection = null
   }
 
-  def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
+  def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = withStateLock {
       if psInsert == null then {
         val connection = connectionManager.getConnection(this)
         psInsert = connection.prepareStatement(store.insertSQL)
@@ -130,7 +139,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
       f(psInsert)
   }
 
-  def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = synchronized {
+  def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = withStateLock {
       if psUpsert == null then {
         val connection = connectionManager.getConnection(this)
         psUpsert = connection.prepareStatement(store.upsertSQL)
@@ -139,7 +148,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
       f(psUpsert)
   }
 
-  def register(s: Statement): Unit = synchronized {
+  def register(s: Statement): Unit = withStateLock {
     // Only track non-prepared statements; prepared statements may be pooled.
     s match {
       case _: PreparedStatement => ()
@@ -147,12 +156,12 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     }
   }
 
-  def register(rs: ResultSet): Unit = synchronized {
+  def register(rs: ResultSet): Unit = withStateLock {
     resultSets = rs :: resultSets
   }
 
   /** Commit only here, never at resource release; JDBC failures must reach the caller. */
-  def commit: Task[Unit] = Task { synchronized {
+  def commit: Task[Unit] = Task { withStateLock {
     flushBatches()
     // Also commit raw JDBC/DDL and read transactions, which may not have called markDirty.
     connectionManager.currentConnection(this).foreach { c =>
@@ -174,7 +183,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     if (failure != null) throw failure
   }
 
-  def rollback: Task[Unit] = Task { synchronized {
+  def rollback: Task[Unit] = Task { withStateLock {
     try discardBatches()
     finally {
       dirty = false
@@ -185,7 +194,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }}
 
   /** Cleanup never flushes. Attempt every close even if one resource is already broken. */
-  def close: Task[Unit] = Task { synchronized {
+  def close: Task[Unit] = Task { withStateLock {
     var failure: Throwable = null
     def cleanup(f: => Unit): Unit = try f catch { case scala.util.control.NonFatal(t) =>
       if (failure == null) failure = t else if (failure ne t) failure.addSuppressed(t)
