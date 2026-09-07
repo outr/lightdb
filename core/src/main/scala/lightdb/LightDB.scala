@@ -212,9 +212,18 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       override def transactionEnd(transaction: Transaction[E, M]): Task[Unit] = super
         .transactionEnd(transaction)
         .flatMap { _ =>
-          val tx = map.remove(transaction)
-          reverse.transaction.release(tx)
+          Option(map.remove(transaction)) match {
+            case Some(tx) if transaction.isRolledBack => reverse.transaction.abort(tx)
+            case Some(tx) => reverse.transaction.release(tx)
+            case None => Task.unit
+          }
         }
+
+      // Commit failures abort without an end notification; make sure the reverse side never outlives
+      // the forward transaction.
+      override def transactionRolledBack(transaction: Transaction[E, M]): Task[Unit] = super
+        .transactionRolledBack(transaction)
+        .flatMap(_ => Option(map.remove(transaction)).map(tx => reverse.transaction.abort(tx)).getOrElse(Task.unit))
 
       private def tx(transaction: Transaction[E, M]): reverse.TX = map.get(transaction)
 

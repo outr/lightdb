@@ -366,7 +366,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     def abort(transaction: TX): Task[Unit] = abort(transaction, notifyEnd = true)
 
     private def abort(transaction: TX, notifyEnd: Boolean): Task[Unit] =
-      (if (notifyEnd) Task.defer(trigger.transactionEnd(transaction)) else Task.unit)
+      Task(transaction.markRolledBack())
+        .next(if (notifyEnd) Task.defer(trigger.transactionEnd(transaction)) else Task.unit)
         .guarantee(transaction.rollback)
         .guarantee(transaction.close)
         .guarantee(Task { set.remove(transaction); () })
