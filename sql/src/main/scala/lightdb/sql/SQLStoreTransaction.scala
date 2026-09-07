@@ -91,6 +91,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     likePart(SqlIdent.quote(fieldName), s"%$token%")
 
   /**
+   * Hook for dialects to rewrite a fully rendered query before it is prepared. The DSL renders
+   * portable SQL that SQLite/PostgreSQL/H2/DuckDB all accept; MySQL/MariaDB differ in places the
+   * DSL cannot see from the outside (`RAND()`, no `LIMIT` directly inside `IN (SELECT …)`). Applied
+   * at every execution entry point, so the rewritten text is also what keys the prepared-statement
+   * cache; entry points nest (`search` → `resultsFor`), so implementations must be idempotent.
+   */
+  protected def dialectQuery(sql: SQLQuery): SQLQuery = sql
+
+  /**
    * Hook for backends to provide an optimized tokenized inequality predicate.
    * Default behavior is NOT(all tokens present).
    *
@@ -358,7 +367,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override protected def _close: Task[Unit] = state.close
 
-  def resultsFor(sql: SQLQuery): SQLResults = {
+  def resultsFor(rendered: SQLQuery): SQLResults = {
+    val sql = dialectQuery(rendered)
     if SQLStoreTransaction.LogQueries then scribe.info(s"Executing Query: ${sql.query} (${sql.args.mkString(", ")})")
 
     def run(): SQLResults = {
@@ -393,7 +403,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
   }
 
-  def executeUpdate(sql: SQLQuery): Int = {
+  def executeUpdate(rendered: SQLQuery): Int = {
+    val sql = dialectQuery(rendered)
     try {
       state.closePendingResults()
       state.withPreparedStatement(sql.query) { ps =>
@@ -442,7 +453,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       state.register(results.rs)
       val iterator = genericIterator[V](results.rs)
       val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.query, ps))
+      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(results.sql, ps))
     })
   }
 
@@ -500,7 +511,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val stream = rapid.Stream.fromIterator[V](Task {
       val iterator = genericIterator[V](results.rs)
       val ps = results.rs.getStatement.asInstanceOf[PreparedStatement]
-      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(sql.query, ps))
+      ActionIterator(iterator, onClose = () => state.returnPreparedStatement(results.sql, ps))
     })
     SearchResults(
       model = store.model,
@@ -552,7 +563,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       val ps = rs.getStatement.asInstanceOf[PreparedStatement]
       ActionIterator(iterator, onClose = () => {
         Try(rs.close())
-        state.returnPreparedStatement(sql.query, ps)
+        state.returnPreparedStatement(results.sql, ps)
       })
     })
     SearchResults(

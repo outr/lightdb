@@ -2,6 +2,7 @@ package lightdb.mariadb
 
 import lightdb.aggregate.AggregateType
 import lightdb.doc.{Document, DocumentModel}
+import lightdb.sql.query.{SQLPart, SQLQuery}
 import lightdb.sql.{SQLState, SQLStoreTransaction}
 import lightdb.transaction.Transaction
 
@@ -25,5 +26,34 @@ case class MariaDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case AggregateType.Concat => s"GROUP_CONCAT($column SEPARATOR ';;')"
     case AggregateType.ConcatDistinct => s"GROUP_CONCAT(DISTINCT $column SEPARATOR ',,')"
     case other => super.aggExpr(other, column)
+  }
+
+  override protected def dialectQuery(sql: SQLQuery): SQLQuery = MariaDBTransaction.dialect(sql)
+}
+
+object MariaDBTransaction {
+  // The DSL renders a function call as a `name(` fragment followed by its arguments, so match the
+  // opening rather than the full `random()`.
+  private val RandomFunction = "\\brandom\\(".r
+
+  /** Rewrites portable DSL output into what MySQL/MariaDB accept: `RAND()` instead of `random()`, and
+    * `IN (SELECT * FROM (SELECT … LIMIT n) AS x)` where MariaDB rejects a `LIMIT` directly inside an
+    * `IN` subquery ("This version of MariaDB doesn't yet support 'LIMIT & IN/ALL/ANY/SOME subquery'"). */
+  private[mariadb] def dialect(sql: SQLQuery): SQLQuery = SQLQuery(rewriteParts(sql.parts))
+
+  private def rewriteParts(parts: List[SQLPart]): List[SQLPart] = parts match {
+    case SQLPart.Fragment(open) :: (sub: SQLQuery) :: SQLPart.Fragment(")") :: rest
+      if open.endsWith(" IN (") && hasTopLevelLimit(sub) =>
+      val derived = SQLQuery(List(SQLPart.Fragment("SELECT * FROM ("), dialect(sub), SQLPart.Fragment(") AS lightdb_in")))
+      SQLPart.Fragment(open) :: derived :: SQLPart.Fragment(")") :: rewriteParts(rest)
+    case (sub: SQLQuery) :: rest => dialect(sub) :: rewriteParts(rest)
+    case SQLPart.Fragment(value) :: rest => SQLPart.Fragment(RandomFunction.replaceAllIn(value, "RAND(")) :: rewriteParts(rest)
+    case other :: rest => other :: rewriteParts(rest)
+    case Nil => Nil
+  }
+
+  private def hasTopLevelLimit(sub: SQLQuery): Boolean = sub.parts.exists {
+    case SQLPart.Fragment(" LIMIT ") => true
+    case _ => false
   }
 }
