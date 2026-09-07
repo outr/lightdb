@@ -39,10 +39,17 @@ class RocksDBTraversalExistsChildParentDrivenSpec
   override protected def afterAll(): Unit = {
     try super.afterAll()
     finally {
-      System.clearProperty("lightdb.traversal.existsChild.native")
-      System.clearProperty("lightdb.traversal.existsChild.parentDriven")
-      System.clearProperty("lightdb.traversal.existsChild.parentDriven.maxParents")
-      System.clearProperty("lightdb.existsChild.maxParentIds")
+      // Profig snapshots system properties at init, so clearing the property alone leaves the value
+      // visible to every later suite in this JVM (FilterPlanner reads it through Profig).
+      List(
+        "lightdb.traversal.existsChild.native",
+        "lightdb.traversal.existsChild.parentDriven",
+        "lightdb.traversal.existsChild.parentDriven.maxParents",
+        "lightdb.existsChild.maxParentIds"
+      ).foreach { key =>
+        System.clearProperty(key)
+        Profig(key).remove()
+      }
     }
   }
 
