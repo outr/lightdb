@@ -151,55 +151,62 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     resultSets = rs :: resultSets
   }
 
-  def commit: Task[Unit] = Task {
-    synchronized {
-      if dirty then {
-        if batchInsert.get() > 0 then {
-          psInsert.executeBatch()
-          batchInsert.set(0)
-        }
-        if batchUpsert.get() > 0 then {
-          psUpsert.executeBatch()
-          batchUpsert.set(0)
-        }
-        dirty = false
-        commitInternal()
+  /** Commit only here, never at resource release; JDBC failures must reach the caller. */
+  def commit: Task[Unit] = Task { synchronized {
+    flushBatches()
+    // Also commit raw JDBC/DDL and read transactions, which may not have called markDirty.
+    connectionManager.currentConnection(this).foreach { c =>
+      if (!c.getAutoCommit) c.commit()
+    }
+    dirty = false
+  }}
+
+  private def discardBatches(): Unit = {
+    batchInsert.set(0)
+    batchUpsert.set(0)
+    // Discard counters first: even a broken statement must not be re-flushed during cleanup.
+    var failure: Throwable = null
+    List(psInsert, psUpsert).filter(_ != null).foreach { ps =>
+      try ps.clearBatch() catch { case scala.util.control.NonFatal(t) =>
+        if (failure == null) failure = t else if (failure ne t) failure.addSuppressed(t)
       }
     }
+    if (failure != null) throw failure
   }
 
-  private def commitInternal(): Unit = {
-    Try(connectionManager.getConnection(this).commit()).failed.foreach { t =>
-      scribe.warn(s"Commit failed: ${t.getMessage}")
+  def rollback: Task[Unit] = Task { synchronized {
+    try discardBatches()
+    finally {
+      dirty = false
+      connectionManager.currentConnection(this).foreach { c =>
+        if (!c.isClosed && !c.getAutoCommit) c.rollback()
+      }
     }
-  }
+  }}
 
-  def rollback: Task[Unit] = Task {
-    synchronized {
-      if dirty then {
-        dirty = false
-        Try(connectionManager.getConnection(this).rollback()).failed.foreach { t =>
-          scribe.warn(s"Rollback failed: ${t.getMessage}")
-        }
-      }
+  /** Cleanup never flushes. Attempt every close even if one resource is already broken. */
+  def close: Task[Unit] = Task { synchronized {
+    var failure: Throwable = null
+    def cleanup(f: => Unit): Unit = try f catch { case scala.util.control.NonFatal(t) =>
+      if (failure == null) failure = t else if (failure ne t) failure.addSuppressed(t)
     }
-  }
-
-  def close: Task[Unit] = Task {
-    synchronized {
-      if batchInsert.get() > 0 then {
-        psInsert.executeBatch()
-        batchInsert.set(0)
-      }
-      if batchUpsert.get() > 0 then {
-        psUpsert.executeBatch()
-        batchUpsert.set(0)
-      }
-      resultSets.foreach(rs => Try(rs.close()))
-      statements.foreach(s => Try(s.close()))
-      if psInsert != null then psInsert.close()
-      if psUpsert != null then psUpsert.close()
-      connectionManager.releaseConnection(this)
-    }
-  }
+    cleanup(discardBatches())
+    // Manual close without commit must not leave a dirty single/shared connection to publish later.
+    if (dirty) cleanup(connectionManager.currentConnection(this).foreach { c =>
+      if (!c.isClosed && !c.getAutoCommit) c.rollback()
+    })
+    dirty = false
+    resultSets.foreach(rs => cleanup(rs.close()))
+    resultSets = Nil
+    import scala.jdk.CollectionConverters.*
+    val prepared = cache.values().asScala.flatMap(_.iterator().asScala).toList
+    (statements ++ prepared ++ List(psInsert, psUpsert).filter(_ != null)).distinct
+      .foreach(s => cleanup(s.close()))
+    cache.clear()
+    statements = Nil
+    psInsert = null
+    psUpsert = null
+    cleanup(connectionManager.releaseConnection(this))
+    if (failure != null) throw failure
+  }}
 }

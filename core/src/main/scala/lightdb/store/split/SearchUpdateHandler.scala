@@ -26,8 +26,5 @@ trait SearchUpdateHandler[
 
 object SearchUpdateHandler {
   def rollbackIfSupported(txn: lightdb.transaction.Transaction[?, ?]): Task[Unit] =
-    txn match {
-      case r: RollbackSupport[?, ?] => r.rollback
-      case _ => Task.unit
-    }
+    txn.rollback
 }

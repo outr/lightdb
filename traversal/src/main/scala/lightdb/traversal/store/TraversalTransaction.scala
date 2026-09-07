@@ -252,10 +252,7 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
 
   override protected def _commit: Task[Unit] = backing.commit
   override protected def _rollback: Task[Unit] =
-    backing match {
-      case r: lightdb.transaction.RollbackSupport[Doc, Model] => r.rollback
-      case _ => Task.unit
-    }
+    backing.rollback
   override protected def _close: Task[Unit] = store.backing.transaction.release(backing)
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
@@ -832,5 +829,4 @@ case class TraversalTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc
       )
     ).count
 }
-
 

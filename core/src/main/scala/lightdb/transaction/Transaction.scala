@@ -18,6 +18,16 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def parent: Option[Transaction[Doc, Model]]
   def writeHandler: WriteHandler[Doc, Model]
 
+  @volatile private var rolledBack = false
+  final def isRolledBack: Boolean = rolledBack
+
+  /** Terminal abort. Stop pending/asynchronous writes before rolling back the backend. Backends
+    * without transactional storage cannot undo already-applied writes; this is not distributed ACID. */
+  final def rollback: Task[Unit] = Task.defer {
+    rolledBack = true
+    writeHandler.abort.guarantee(_rollback).guarantee(Task(cachePending.clear()))
+  }
+
   // -- Tx-local cache overlay -----------------------------------------------------------------------------
   // Writes in this transaction are accumulated here and applied to `store.cache` on commit. On rollback
   // the overlay is discarded, so rolled-back writes never reach the store cache.
@@ -115,8 +125,11 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
    */
   def estimatedCount: Task[Int] = count
   def flush: Task[Unit] = writeHandler.flush
-  final def commit: Task[Unit] = writeHandler.flush.next(_commit).next(applyCachePending)
-  final def close: Task[Unit] = writeHandler.close.next(_close)
+  final def commit: Task[Unit] = Task.defer {
+    if (rolledBack) Task.error(new IllegalStateException("Cannot commit a rolled-back transaction"))
+    else writeHandler.flush.next(_commit).next(applyCachePending)
+  }
+  final def close: Task[Unit] = writeHandler.close.guarantee(_close)
 
   /**
    * Drain `cachePending` into the store-level cache. Called after `_commit` succeeds so rolled-back or

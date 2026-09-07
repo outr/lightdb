@@ -33,7 +33,10 @@ class MultiStore[
 
   def transaction[Return](f: TXN => Task[Return]): Task[Return] = Task.defer {
     val txn = new TXN
-    Task.defer(f(txn)).guarantee(txn.release)
+    Task.defer(f(txn)).attempt.flatMap {
+      case scala.util.Success(result) => txn.release.map(_ => result)
+      case scala.util.Failure(error) => Task.error[Return](error).guarantee(txn.abort)
+    }
   }
 
   def truncate: Task[Int] = transaction { txn =>
@@ -56,14 +59,21 @@ class MultiStore[
       s.transaction.create().sync()
     })
 
-    def release: Task[Unit] = transactions
-      .entrySet()
-      .asScala
-      .map { e =>
+    def release: Task[Unit] = finish(commit = true)
+    def abort: Task[Unit] = finish(commit = false)
+
+    private def finish(commit: Boolean): Task[Unit] = Task.defer {
+      var failed = !commit
+      val entries = transactions.entrySet().asScala.toList
+      transactions.clear()
+      entries.foldLeft(Task.unit) { (cleanup, e) => cleanup.guarantee(Task.defer {
         val s = ms(e.getKey)
-        s.transaction.release(e.getValue.asInstanceOf[s.TX])
-      }
-      .tasks
-      .unit
+        val tx = e.getValue.asInstanceOf[s.TX]
+        (if (failed) s.transaction.abort(tx) else s.transaction.release(tx)).handleError { error =>
+          failed = true
+          Task.error(error)
+        }
+      }) }
+    }
   }
 }

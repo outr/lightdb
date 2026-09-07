@@ -65,16 +65,13 @@ case class SplitCollectionTransaction[
     _ <- searchUpdateHandler.commit
   yield ()
 
-  override protected def _rollback: Task[Unit] = for
-    _ <- SearchUpdateHandler.rollbackIfSupported(storage)
-    _ <- searchUpdateHandler.rollback
-  yield ()
+  override protected def _rollback: Task[Unit] =
+    storage.rollback.guarantee(searchUpdateHandler.rollback).guarantee(searching.rollback)
 
-  override protected def _close: Task[Unit] = for
-    _ <- store.storage.transaction.release(storage)
-    _ <- searchUpdateHandler.close
-    _ <- store.searching.transaction.release(searching)
-  yield ()
+  override protected def _close: Task[Unit] =
+    store.storage.transaction.release(storage)
+      .guarantee(searchUpdateHandler.close)
+      .guarantee(store.searching.transaction.release(searching))
 
   override def doSearch[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] =
     searching.doSearch(query)
