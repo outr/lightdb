@@ -26,7 +26,10 @@ class StoreTriggers[Doc <: Document[Doc], Model <: DocumentModel[Doc]] extends S
     list.map(_.transactionEnd(transaction)).tasks.unit
 
   override def transactionCommitted(transaction: Transaction[Doc, Model]): Task[Unit] =
-    list.map(_.transactionCommitted(transaction)).tasks.unit
+    list.foldLeft(Task.unit)((cleanup, t) => cleanup.guarantee(Task.defer(t.transactionCommitted(transaction))))
+
+  override def transactionRolledBack(transaction: Transaction[Doc, Model]): Task[Unit] =
+    list.foldLeft(Task.unit)((cleanup, t) => cleanup.guarantee(Task.defer(t.transactionRolledBack(transaction))))
 
   override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] =
     list.map(_.insert(doc, transaction)).tasks.unit

@@ -17,10 +17,15 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     maxQueueSize0: Int,
     flushOps: Seq[WriteOp[Doc]] => Task[Unit]
 ) extends WriteHandler[Doc, Model] with QueueingSupport[Doc] {
+  // `flush` is a barrier that waits for the workers to drain the queue; with no workers it would wait forever.
+  require(activeThreads > 0, s"AsyncWriteHandler requires at least one active thread (got $activeThreads)")
+
   override protected val queue: AtomicQueue[WriteOp[Doc]] = new AtomicQueue[WriteOp[Doc]]
   override protected val maxQueueSize: Int = maxQueueSize0
 
   @volatile private var keepAlive = true
+  @volatile private var aborted = false
+  private var processing = 0
   private val throwable = new AtomicReference[Throwable](null)
   private val finished = new AtomicInteger(0)
   private val minChunkSize = math.max(1, chunkSize / 4)
@@ -44,7 +49,10 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     if (t == null) Task.unit else Task.error(t)
   }
 
-  override def write(op: WriteOp[Doc]): Task[Unit] = failIfError.next(enqueue(op))
+  override def write(op: WriteOp[Doc]): Task[Unit] = Task.defer {
+    require(keepAlive && !aborted, "Async write handler is closed")
+    failIfError.next(enqueue(op))
+  }
 
   override def get(id: Id[Doc]): Task[Option[Option[Doc]]] = Task.pure(None)
 
@@ -63,12 +71,17 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   private def recursivelyProcess: Task[Unit] = Task.defer {
-    val chunk = drain(adaptiveChunkSize())
-    if ((chunk.isEmpty && !keepAlive) || throwable.get() != null) {
+    val chunk = synchronized {
+      val c = if (aborted || throwable.get() != null) Nil else drain(adaptiveChunkSize())
+      if (c.nonEmpty) processing += 1
+      c
+    }
+    if (aborted || (chunk.isEmpty && !keepAlive) || throwable.get() != null) {
+      if (chunk.nonEmpty) synchronized { processing -= 1 }
       Task.unit
     } else {
       val task = if (chunk.nonEmpty) {
-        flushOps(chunk)
+        Task.defer(flushOps(chunk)).guarantee(Task { synchronized { processing -= 1 } })
       } else {
         Task.sleep(waitTime)
       }
@@ -76,26 +89,29 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
   }
 
-  override def flush: Task[Unit] = Task.defer {
-    failIfError.next {
-      val chunk = drain(adaptiveChunkSize())
-      if (chunk.isEmpty) Task.unit
-      else flushOps(chunk).next(flush)
-    }
-  }
+  // An empty queue alone is not flushed: a worker may already have removed its chunk and still
+  // be writing. The barrier includes in-flight work, so commit cannot overtake those writes.
+  // Once every worker has exited nothing will ever drain the queue, so stop waiting and report
+  // instead of hanging.
+  override def flush: Task[Unit] = failIfError.next(
+    Task.condition(Task.function(
+      synchronized { queue.size == 0 && processing == 0 } || throwable.get() != null || finished.get() == activeThreads
+    ), delay = waitTime)).next(failIfError).next(Task.defer {
+      if (!aborted && queue.size > 0) Task.error(new IllegalStateException("Async write handler workers exited with unflushed writes"))
+      else Task.unit
+    })
 
   override def clear: Task[Unit] = Task {
     queue.clear()
   }
 
-  override def close: Task[Unit] = Task.defer {
-    failIfError.next(Task {
-      keepAlive = false
-    }).next(Task.condition(Task.function(finished.get() == activeThreads), delay = waitTime)).next {
-      failIfError.next(flush)
-    }
-  }.function {
-    val t = throwable.get()
-    if (t != null) throw t
-  }
+  override def abort: Task[Unit] = Task {
+    aborted = true
+    keepAlive = false
+    queue.clear()
+  }.next(Task.condition(Task.function(finished.get() == activeThreads), delay = waitTime)).next(clear)
+
+  override def close: Task[Unit] = Task { keepAlive = false }
+    .next(Task.condition(Task.function(finished.get() == activeThreads), delay = waitTime))
+    .next(Task.defer(if (aborted) Task.unit else failIfError))
 }

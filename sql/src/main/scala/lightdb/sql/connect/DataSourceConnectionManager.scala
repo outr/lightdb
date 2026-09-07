@@ -15,8 +15,9 @@ trait DataSourceConnectionManager extends ConnectionManager {
   }
 
   private def closeConnection(connection: Connection): Unit = {
-    connection.commit()
-    connection.close()
+    // Resource release must NEVER publish uncommitted work (including raw JDBC writes).
+    try { if (!connection.isClosed && !connection.getAutoCommit) connection.rollback() }
+    finally connection.close()
   }
 
   override def getConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Connection = {
@@ -37,6 +38,8 @@ trait DataSourceConnectionManager extends ConnectionManager {
   }
 
   override def releaseConnection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](state: SQLState[Doc, Model]): Unit = {
-    currentConnection(state).foreach(closeConnection)
+    val connection = state.connection
+    state.connection = null
+    Option(connection).foreach(closeConnection)
   }
 }

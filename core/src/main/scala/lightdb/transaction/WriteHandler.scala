@@ -20,6 +20,9 @@ trait WriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   /** Clear pending writes (for rollback) */
   def clear: Task[Unit]
 
+  /** Discard writes and stop/join background writers before backend rollback. */
+  def abort: Task[Unit] = clear
+
   /** Await any async workers and cleanup */
   def close: Task[Unit]
 }

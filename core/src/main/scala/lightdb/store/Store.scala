@@ -57,6 +57,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     val dirty = ConcurrentHashMap.newKeySet[Transaction[Doc, Model]]()
     @volatile var truncated = false
     trigger += new StoreTrigger[Doc, Model] {
+      override def transactionRolledBack(transaction: Transaction[Doc, Model]): Task[Unit] = Task { dirty.remove(transaction); () }
       override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { dirty.add(transaction); () }
       override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { dirty.add(transaction); () }
       override def delete(id: Id[Doc], transaction: Transaction[Doc, Model]): Task[Unit] = Task { dirty.add(transaction); () }
@@ -87,6 +88,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     def list(tx: Transaction[Doc, Model]): java.util.List[Doc] =
       changed.computeIfAbsent(tx, _ => java.util.Collections.synchronizedList(new java.util.ArrayList[Doc]()))
     trigger += new StoreTrigger[Doc, Model] {
+      override def transactionRolledBack(transaction: Transaction[Doc, Model]): Task[Unit] = Task {
+        changed.remove(transaction); removed.remove(transaction); ()
+      }
       override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
       override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
       override def delete(id: Id[Doc], transaction: Transaction[Doc, Model]): Task[Unit] = Task { removed.add(transaction); () }
@@ -125,6 +129,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     def ids(tx: Transaction[Doc, Model]): java.util.List[Id[Doc]] =
       deleted.computeIfAbsent(tx, _ => java.util.Collections.synchronizedList(new java.util.ArrayList[Id[Doc]]()))
     trigger += new StoreTrigger[Doc, Model] {
+      override def transactionRolledBack(transaction: Transaction[Doc, Model]): Task[Unit] = Task {
+        changed.remove(transaction); deleted.remove(transaction); ()
+      }
       override def insert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
       override def upsert(doc: Doc, transaction: Transaction[Doc, Model]): Task[Unit] = Task { list(transaction).add(doc); () }
       override def delete(id: Id[Doc], transaction: Transaction[Doc, Model]): Task[Unit] = Task { ids(transaction).add(id); () }
@@ -220,8 +227,6 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
                                   batchConfig: BatchConfig,
                                   writeHandlerFactory: Transaction[Doc, Model] => WriteHandler[Doc, Model]): Task[TX]
 
-  private def releaseTransaction(transaction: TX): Task[Unit] = transaction.commit
-
   def verify(progressManager: ProgressManager = ProgressManager.none): Task[Boolean] = Task.pure(false)
 
   def reIndex(progressManager: ProgressManager = ProgressManager.none,
@@ -313,7 +318,10 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     def active: Int = set.size()
 
     def apply[Return](f: TX => Task[Return]): Task[Return] = create().flatMap { transaction =>
-      f(transaction).guarantee(release(transaction))
+      Task.defer(f(transaction)).attempt.flatMap {
+        case scala.util.Success(result) => release(transaction).map(_ => result)
+        case scala.util.Failure(error) => Task.error[Return](error).guarantee(abort(transaction))
+      }
     }
 
     def shared[Return](name: String,
@@ -321,7 +329,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
                       (f: TX => Task[Return]): Task[Return] = Task.defer {
       val s = sharedMap.computeIfAbsent(name, _ => {
         scribe.info(s"Creating Shared Transaction: $name")
-        Shared(name, timeout, () => create(), tx => release(tx))
+        Shared(name, timeout, () => create(), tx => release(tx), tx => abort(tx))
       })
       s.init().flatMap(_ => s.withLock(f))
     }
@@ -335,33 +343,34 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       _ <- logger.info(s"Creating new Transaction for $name").when(Store.LogTransactions)
       transaction <- createTransaction(parent, batchConfig, tx => createWriteHandler(tx, batchConfig))
       _ = set.add(transaction)
-      _ <- trigger.transactionStart(transaction)
+      _ <- Task.defer(trigger.transactionStart(transaction)).handleError { error =>
+        Task.error[Unit](error).guarantee(abort(transaction))
+      }
     yield transaction
 
-    def release(transaction: TX): Task[Unit] = for
-      _ <- trigger.transactionEnd(transaction)
-      // Always run `close` (releases native handles, drops sets) even if commit fails — otherwise
-      // a commit-time error (e.g. a buffered DuplicateIdException surfacing at flush) would leak
-      // backend resources like LMDB read txns and corrupt subsequent transactions on the same
-      // store. Surface the commit error after close completes.
-      commitResult <- releaseTransaction(transaction).attempt
-      _ <- transaction.close.handleError { t =>
-        scribe.warn(s"close failed for transaction on $name: ${t.getMessage}")
-        Task.unit
+    /** Manual create/release commits; manual create/abort never commits. */
+    def release(transaction: TX): Task[Unit] = Task.defer {
+      if (transaction.isRolledBack) abort(transaction)
+      else {
+        Task.defer(trigger.transactionEnd(transaction)).next(transaction.commit).attempt.flatMap {
+          case scala.util.Success(_) =>
+            // A post-commit notification error must not trigger rollback or retry a durable write.
+            transaction.close.guarantee(Task { set.remove(transaction); () })
+              .guarantee(Task.defer(trigger.transactionCommitted(transaction)))
+          case scala.util.Failure(error) =>
+            Task.error[Unit](error).guarantee(abort(transaction, notifyEnd = false))
+        }
       }
-      _ = set.remove(transaction)
-      _ <- logger.info(s"Released Transaction for $name").when(Store.LogTransactions)
-      // Post-commit: the writes are now durable, so reads issued here (in a fresh transaction)
-      // observe them. Drives derived-data maintenance (materialized views). Only on commit success.
-      _ <- commitResult match {
-        case scala.util.Success(_) => trigger.transactionCommitted(transaction)
-        case scala.util.Failure(_) => Task.unit
-      }
-      _ <- commitResult match {
-        case scala.util.Success(_) => Task.unit
-        case scala.util.Failure(t) => Task.error(t)
-      }
-    yield ()
+    }
+
+    def abort(transaction: TX): Task[Unit] = abort(transaction, notifyEnd = true)
+
+    private def abort(transaction: TX, notifyEnd: Boolean): Task[Unit] =
+      (if (notifyEnd) Task.defer(trigger.transactionEnd(transaction)) else Task.unit)
+        .guarantee(transaction.rollback)
+        .guarantee(transaction.close)
+        .guarantee(Task { set.remove(transaction); () })
+        .guarantee(Task.defer(trigger.transactionRolledBack(transaction)))
 
     def releaseAll(): Task[Int] = Task.defer {
       val list = set.iterator().asScala.toList
@@ -372,6 +381,17 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
           case _ =>
         }
         list.size
+      }
+    }
+
+    /** Database disposal must not commit work whose owning body may still be running/failed. */
+    def abortAll(): Task[Int] = Task.defer {
+      val list = set.iterator().asScala.toList
+      list.map(tx => abort(tx).attempt).tasks.flatMap { results =>
+        results.collectFirst { case scala.util.Failure(t) => t } match {
+          case Some(error) => Task.error(error)
+          case None => Task.pure(list.size)
+        }
       }
     }
   }
@@ -410,12 +430,14 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   protected case class Shared(name: String,
                               timeout: FiniteDuration,
                               createTx: () => Task[TX],
-                              releaseTx: TX => Task[Unit]) { shared =>
+                              releaseTx: TX => Task[Unit],
+                              abortTx: TX => Task[Unit]) { shared =>
     private val active = new AtomicInteger(0)
     private val lastUsed = new AtomicLong(0L)
     @volatile private var started = false
     private val initStarted = new java.util.concurrent.atomic.AtomicBoolean(false)
     private val initLatch = new java.util.concurrent.CountDownLatch(1)
+    @volatile private var initError: Option[Throwable] = None
     private val maxTransactions = math.max(1, maximumConcurrency)
     private val initialTransactions = math.min(math.max(1, defaultSharedTransactions), maxTransactions)
     private val mutex = new Semaphore(maxTransactions, true)
@@ -426,16 +448,28 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
     def init(): Task[Unit] = Task.defer {
       if initStarted.compareAndSet(false, true) then {
-        List.fill(initialTransactions)(createTx()).tasks.flatMap { txs =>
-          Task {
-            txs.foreach(pool.offer)
-            total.set(txs.size)
-            initLatch.countDown()
+        (0 until initialTransactions).foldLeft(Task.unit) { (work, _) =>
+          work.next(Task.defer(createTx())).flatMap(tx => Task {
+            pool.offer(tx)
+            total.incrementAndGet()
+            ()
+          })
+        }.handleError { error =>
+          initError = Some(error)
+          sharedMap.remove(name, shared)
+          val acquired = scala.collection.mutable.ListBuffer.empty[TX]
+          var tx = pool.poll()
+          while tx != null do {
+            acquired += tx
+            tx = pool.poll()
           }
-        }
+          total.set(0)
+          acquired.foldLeft(Task.error[Unit](error))((cleanup, tx) => cleanup.guarantee(abortTx(tx)))
+        }.guarantee(Task(initLatch.countDown()))
       } else {
         Task {
           initLatch.await()
+          initError.foreach(throw _)
         }
       }
     }
@@ -446,9 +480,13 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       else {
         val current = total.get()
         if current < maxTransactions && total.compareAndSet(current, current + 1) then {
-          createTx()
+          Task.defer(createTx()).handleError { error =>
+            Task.error[TX](error).guarantee(Task { total.decrementAndGet(); () })
+          }
         } else {
-          Task(pool.take())
+          // A failed borrower may discard a transaction instead of returning one to the pool.
+          // Retry capacity reservation rather than waiting forever for that discarded instance.
+          Task.sleep(1.millis).next(acquireTx)
         }
       }
     }
@@ -471,8 +509,17 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
           .map(_ => StoreMetrics.recordSharedWait(System.nanoTime() - waitStart))
           .next {
             acquireTx.flatMap { tx =>
-              task(tx).guarantee(releaseToPool(tx).guarantee(Task(mutex.release())))
-            }
+              Task.defer(task(tx)).attempt.flatMap {
+                case scala.util.Success(value) if tx.isRolledBack =>
+                  releaseTx(tx).guarantee(Task { total.decrementAndGet(); () }).map(_ => value)
+                case scala.util.Success(value) => releaseToPool(tx).map(_ => value)
+                case scala.util.Failure(error) =>
+                  // A failed shared unit poisons its whole uncommitted batch. Never put that tx
+                  // back in the pool to be committed by a later caller or the idle-expiry timer.
+                  Task.error[A](error).guarantee(abortTx(tx))
+                    .guarantee(Task { total.decrementAndGet(); () })
+              }
+            }.guarantee(Task(mutex.release()))
           }
           .guarantee(Task {
             active.decrementAndGet()
@@ -509,8 +556,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     }
   }
 
-  override protected def doDispose(): Task[Unit] = transaction.releaseAll().flatMap { transactions =>
-    logger.warn(s"Released $transactions active transactions").when(transactions > 0)
+  override protected def doDispose(): Task[Unit] = transaction.abortAll().flatMap { transactions =>
+    logger.warn(s"Aborted $transactions active transactions").when(transactions > 0)
   }.guarantee(trigger.dispose).unit
 }
 
