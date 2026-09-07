@@ -53,7 +53,10 @@ object MongoQuery {
     case f: Filter.StartsWith[Doc, _] => Filters.regex(f.fieldName, "^" + Pattern.quote(f.query))
     case f: Filter.EndsWith[Doc, _] => Filters.regex(f.fieldName, Pattern.quote(f.query) + "$")
     case f: Filter.Contains[Doc, _] => Filters.regex(f.fieldName, Pattern.quote(f.query))
-    case f: Filter.Exact[Doc, _] => Filters.eq(f.fieldName, f.query)
+    case f: Filter.Exact[Doc, _] =>
+      // A tokenized field is stored as its token array, so Exact is token containment.
+      if model.fieldByName(f.fieldName).isTokenized then tokenizedEquals(f.fieldName, str(f.query))
+      else Filters.eq(f.fieldName, f.query)
     case f: Filter.Regex[Doc, _] => Filters.regex(f.fieldName, f.expression)
     case f: Filter.Multi[Doc] => multi(f, model)
     case f: Filter.Nested[Doc] => nestedClause("", f.path, f.filter)

@@ -3491,6 +3491,18 @@ object TraversalQueryEngine {
     case f: Filter.Exact[Doc, _] =>
       val field = f.field(model).asInstanceOf[Field[Doc, Any]]
       val v = field.get(doc, field, state)
+      // Tokenized fields: Exact is token containment (a term query), matching the tokenized Equals
+      // normalization above, not whole-value equality.
+      if field.isTokenized then {
+        val token = Option(f.query).getOrElse("").trim.toLowerCase
+        def tokens(value: Any): Set[String] =
+          Option(value).map(_.toString).getOrElse("").toLowerCase.split("\\s+").toList.map(_.trim).filter(_.nonEmpty).toSet
+        if token.isEmpty then false
+        else iterable(v) match {
+          case Some(values) => values.exists(v => tokens(v).contains(token))
+          case None => tokens(v).contains(token)
+        }
+      } else
       iterable(v) match {
         case Some(values) => values.exists(v => Option(v).exists(_.toString == f.query))
         case None => Option(v).exists(_.toString == f.query)

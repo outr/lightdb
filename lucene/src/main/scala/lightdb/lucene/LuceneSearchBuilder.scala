@@ -527,7 +527,9 @@ class LuceneSearchBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](sto
           new RegexpQuery(new Term(mapName(fieldName), s".*${LuceneStore.escapeRegexLiteral(query)}"))
         case Filter.Contains(fieldName, query) =>
           new RegexpQuery(new Term(mapName(fieldName), s".*${LuceneStore.escapeRegexLiteral(query)}.*"))
-        case f: Filter.Exact[D @unchecked, _] if f.field(m).isInstanceOf[Tokenized[_]] =>
+        // Nested-path names (`attrs.key`) are not model fields, so resolve by lookup rather than
+        // `f.field(m)`, which throws for them.
+        case f: Filter.Exact[D @unchecked, _] if m.fields.exists(mf => mf.name == f.fieldName && mf.isTokenized) =>
           // A tokenized field indexes analyzed (lower-cased) tokens; normalize the
           // term the same way tokenized equality does so Exact means "contains this token"
           new TermQuery(new Term(mapName(f.fieldName), f.query.toLowerCase))
