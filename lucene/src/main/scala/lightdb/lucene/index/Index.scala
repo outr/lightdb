@@ -58,7 +58,9 @@ case class Index(path: Option[Path]) {
   def write[T](f: IndexWriter => T): T = onWriter(f(indexWriter))
 
   private lazy val indexDirectory: BaseDirectory = path.map(FSDirectory.open).getOrElse(new ByteBuffersDirectory)
-  private lazy val config = {
+  // A fresh config per writer: Lucene refuses to reuse an IndexWriterConfig
+  // once a writer has been built from it.
+  private def newConfig: IndexWriterConfig = {
     val c = new IndexWriterConfig(analyzer)
     c.setCommitOnClose(true)
     c.setRAMBufferSizeMB(Profig("lightdb.lucene.ramBufferMB").opt[Double].getOrElse(2_000d))
@@ -68,8 +70,31 @@ case class Index(path: Option[Path]) {
     c.setUseCompoundFile(Profig("lightdb.lucene.useCompoundFile").opt[Boolean].getOrElse(false))
     c
   }
-  lazy val indexWriter = new IndexWriter(indexDirectory, config)
-  private lazy val searcherManager = new SearcherManager(indexWriter, new SearcherFactory)
+
+  // The writer and its NRT searcher manager are re-creatable, not fixed:
+  // `IndexWriter.rollback()` is the only way to discard uncommitted
+  // changes and it closes the writer for good, so a transaction rollback
+  // used to leave every later write failing with "this IndexWriter is
+  // closed" until the process restarted. A rollback now discards the
+  // pending changes and the next access opens a new writer over the same
+  // directory (the last commit is intact); the searcher manager is rebuilt
+  // beside it because it is bound to the writer instance.
+  private var currentWriter: IndexWriter = null
+  private var currentSearchers: SearcherManager = null
+
+  private def ensureWriter(): IndexWriter = synchronized {
+    if currentWriter == null || !currentWriter.isOpen then {
+      currentWriter = new IndexWriter(indexDirectory, newConfig)
+      if currentSearchers != null then {
+        try currentSearchers.close() catch { case _: Throwable => () }
+      }
+      currentSearchers = new SearcherManager(currentWriter, new SearcherFactory)
+    }
+    currentWriter
+  }
+
+  def indexWriter: IndexWriter = ensureWriter()
+  private def searcherManager: SearcherManager = { ensureWriter(); currentSearchers }
 
   private lazy val taxonomyPath = path.map(p => p.resolve("taxonomy"))
   private var taxonomyLoaded = false
@@ -80,7 +105,17 @@ case class Index(path: Option[Path]) {
     taxonomyLoaded = true
     FSDirectory.open(path)
   }.getOrElse(new ByteBuffersDirectory)
-  lazy val taxonomyWriter: DirectoryTaxonomyWriter = new DirectoryTaxonomyWriter(taxonomyDirectory)
+  // Same shape for the taxonomy writer: its rollback closes it too.
+  private var currentTaxonomyWriter: DirectoryTaxonomyWriter = null
+  private var taxonomyWriterOpen = false
+
+  def taxonomyWriter: DirectoryTaxonomyWriter = synchronized {
+    if currentTaxonomyWriter == null || !taxonomyWriterOpen then {
+      currentTaxonomyWriter = new DirectoryTaxonomyWriter(taxonomyDirectory)
+      taxonomyWriterOpen = true
+    }
+    currentTaxonomyWriter
+  }
 
   def createIndexSearcher(): IndexSearcher = {
     searcherManager.maybeRefreshBlocking()
@@ -108,7 +143,10 @@ case class Index(path: Option[Path]) {
     indexWriter.rollback()
     if taxonomyLoaded then {
       taxonomyWriter.rollback()
+      taxonomyWriterOpen = false
     }
+    // Both writers are now closed; `ensureWriter` / `taxonomyWriter` reopen
+    // them on next use over the last committed state.
   }
 
   def commit(): Unit = onWriter(commitInternal())
@@ -120,6 +158,7 @@ case class Index(path: Option[Path]) {
       commitInternal()
       indexWriter.close()
       if taxonomyLoaded then {
+        taxonomyWriterOpen = false
         taxonomyDirectory.close()
       }
     }
