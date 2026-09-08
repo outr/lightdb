@@ -546,6 +546,18 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
       lightdb.query.DocWithInnerHits[Doc, Model](doc = doc).asInstanceOf[V]
   }
 
+  /**
+   * The Long an Int-defined field holds. A Str here is a Timestamp rendered in a date-only display
+   * format (`Timestamp.ToJson`) at the moment this document was indexed; it is parsed back to millis so
+   * the write succeeds instead of dropping the document.
+   */
+  private def longOf(fieldName: String, json: Json): Long = json match {
+    case Str(s, _) => lightdb.time.TimestampParser(s).map(_.value).getOrElse(
+      throw new RuntimeException(s"Field '$fieldName' expects a number but got the string [$s]")
+    )
+    case other => other.asLong
+  }
+
   private def createLuceneFields(field: Field[Doc, _], doc: Doc, state: IndexingState): List[LuceneField] = {
     def fs: LuceneField.Store = if store.storeMode.isAll || (field.stored && field.indexed) then LuceneField.Store.YES else LuceneField.Store.NO
     if fs == LuceneField.Store.NO then {
@@ -614,7 +626,11 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
                   v.foreach(json => addJson(json, inner.defType))
                 }
               case DefType.Bool => add(new IntField(field.name, if json.asBoolean then 1 else 0, fs))
-              case DefType.Int => add(new LongField(field.name, json.asLong, fs))
+              // A numeric field can arrive as a Str only when a Timestamp was rendered through a
+              // date-only `Timestamp.ToJson` (a deliverable's display format) while this document was
+              // being indexed. Coerce it through the Timestamp parser rather than failing the write:
+              // a failed index write here silently loses the whole document.
+              case DefType.Int => add(new LongField(field.name, longOf(field.name, json), fs))
               case DefType.Dec => add(new DoubleField(field.name, json.asDouble, fs))
               case _ => throw new UnsupportedOperationException(s"Unsupported definition (field: ${field.name}, className: ${field.className}): $d for $json")
             }
