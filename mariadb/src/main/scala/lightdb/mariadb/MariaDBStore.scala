@@ -116,6 +116,11 @@ class MariaDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   override protected def tables(connection: Connection): Set[String] =
     queryNames(connection, "SELECT TABLE_NAME AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?", lightDB.name)
 
+  // MariaDB's DROP INDEX names the table; index names are case-insensitive there, so the lowercased
+  // catalog listing is fine.
+  override protected def dropIndexSQL(indexName: String): String =
+    s"DROP INDEX IF EXISTS ${SqlIdent.quote(indexName)} ON $fqn"
+
   // Resolve via information_schema directly to avoid JDBC catalog/schema ambiguity on MySQL.
   override protected def indexes(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT INDEX_NAME AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?")

@@ -49,6 +49,10 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
+  override protected def backendIndexNames: Set[String] = fields.collect {
+    case t: Field.Tokenized[Doc @unchecked] => s"${name}_${t.name}_trgm_idx"
+  }.toSet
+
   override protected def createIndexSQL(index: Field.Indexed[Doc, _]): String = {
     val col = SqlIdent.quote(index.name)
     index match {

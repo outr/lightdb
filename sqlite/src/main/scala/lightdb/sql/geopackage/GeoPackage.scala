@@ -113,7 +113,8 @@ object GeoPackage {
     exec(c, s"CREATE TABLE $t (fid INTEGER PRIMARY KEY AUTOINCREMENT${(geomCol ++ attrCols).map(", " + _).mkString})")
     val insertCols = (if (spatial) List("geom") else Nil) ++ layer.columns.map(c => quote(c._1))
     val insert = c.prepareStatement(
-      s"INSERT INTO $t (${insertCols.mkString(", ")}) VALUES (${insertCols.map(_ => "?").mkString(", ")})")
+      if (insertCols.isEmpty) s"INSERT INTO $t DEFAULT VALUES"
+      else s"INSERT INTO $t (${insertCols.mkString(", ")}) VALUES (${insertCols.map(_ => "?").mkString(", ")})")
     val offset = if (spatial) 2 else 1
     var count = 0L
     var minX = Double.MaxValue; var minY = Double.MaxValue; var maxX = Double.MinValue; var maxY = Double.MinValue
