@@ -24,10 +24,12 @@ class GeoPackageSpec extends AnyWordSpec with Matchers {
   private val path: Path = Files.createTempDirectory("gpkg").resolve("test.gpkg")
 
   private lazy val counts = GeoPackage.write(path, List(
-    Layer("units", GeometryType.Polygon, List("name" -> ColumnType.Text, "acres" -> ColumnType.Real),
+    Layer("units", Some(GeometryType.Polygon), List("name" -> ColumnType.Text, "acres" -> ColumnType.Real),
       Iterator(Feature(Some(unit), List(str("CV RA SUA"), num(640.0))))),
-    Layer("wells", GeometryType.Point, List("api" -> ColumnType.Text, "serial" -> ColumnType.Integer),
-      Iterator(Feature(Some(well), List(str("17-007-88076"), num(975702))), Feature(None, List(str("no-geom"), Null))))
+    Layer("wells", Some(GeometryType.Point), List("api" -> ColumnType.Text, "serial" -> ColumnType.Integer),
+      Iterator(Feature(Some(well), List(str("17-007-88076"), num(975702))), Feature(None, List(str("no-geom"), Null)))),
+    Layer("owners", None, List("name" -> ColumnType.Text, "share" -> ColumnType.Real),
+      Iterator(Feature(None, List(str("Helis Oil"), num(0.25)))))
   ))
 
   private def sql[T](q: String)(f: java.sql.ResultSet => T): List[T] =
@@ -39,11 +41,11 @@ class GeoPackageSpec extends AnyWordSpec with Matchers {
 
   "GeoPackage" should {
     "write the layers and report counts" in {
-      counts should be(Map("units" -> 1L, "wells" -> 2L))
+      counts should be(Map("units" -> 1L, "wells" -> 2L, "owners" -> 1L))
     }
     "carry the GeoPackage application id and required metadata tables" in {
       sql("PRAGMA application_id")(_.getInt(1)) should be(List(1196444487))
-      sql("SELECT table_name, data_type, srs_id FROM gpkg_contents ORDER BY table_name")(rs => (rs.getString(1), rs.getString(2), rs.getInt(3))) should be(
+      sql("SELECT table_name, data_type, srs_id FROM gpkg_contents WHERE data_type = 'features' ORDER BY table_name")(rs => (rs.getString(1), rs.getString(2), rs.getInt(3))) should be(
         List(("units", "features", 4326), ("wells", "features", 4326)))
       sql("SELECT table_name, column_name, geometry_type_name FROM gpkg_geometry_columns ORDER BY table_name")(rs => (rs.getString(1), rs.getString(2), rs.getString(3))) should be(
         List(("units", "geom", "POLYGON"), ("wells", "geom", "POINT")))
@@ -80,6 +82,12 @@ class GeoPackageSpec extends AnyWordSpec with Matchers {
     }
     "leave a feature with no geometry as NULL" in {
       sql("SELECT geom IS NULL FROM wells WHERE api = 'no-geom'")(_.getInt(1)) should be(List(1))
+    }
+    "write a non-spatial layer as an attributes table with no geometry column" in {
+      sql("SELECT data_type, srs_id IS NULL FROM gpkg_contents WHERE table_name = 'owners'")(rs => (rs.getString(1), rs.getInt(2))) should be(List(("attributes", 1)))
+      sql("SELECT COUNT(*) FROM gpkg_geometry_columns WHERE table_name = 'owners'")(_.getInt(1)) should be(List(0))
+      sql("SELECT name, share FROM owners")(rs => (rs.getString(1), rs.getDouble(2))) should be(List(("Helis Oil", 0.25)))
+      sql("SELECT COUNT(*) FROM pragma_table_info('owners') WHERE name = 'geom'")(_.getInt(1)) should be(List(0))
     }
   }
 }

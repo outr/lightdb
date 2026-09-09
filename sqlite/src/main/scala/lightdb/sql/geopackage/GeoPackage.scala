@@ -20,8 +20,9 @@ import scala.util.Using
  *
  * {{{
  * GeoPackage.write(path, List(
- *   GeoPackage.Layer("wells", GeometryType.Point, columns = List("api" -> ColumnType.Text), rows = ...),
- *   GeoPackage.Layer("units", GeometryType.MultiPolygon, ...)
+ *   GeoPackage.Layer("wells", Some(GeometryType.Point), columns = List("api" -> ColumnType.Text), rows = ...),
+ *   GeoPackage.Layer("units", Some(GeometryType.MultiPolygon), ...),
+ *   GeoPackage.Layer("owners", None, ...)   // attribute-only child table
  * ))
  * }}}
  */
@@ -51,9 +52,11 @@ object GeoPackage {
    *  in the layer's column order (Json Null for a missing value). */
   case class Feature(geometry: Option[Geo], values: List[Json])
 
-  /** A vector layer. `rows` may be a lazy / one-shot iterator so a large layer streams to disk. */
+  /** A layer. `geometryType` None makes an attribute-only table (OGC data_type `attributes`: the same
+   *  file can carry non-spatial child tables beside its feature layers, which GeoServer / QGIS list as
+   *  plain tables). `rows` may be a lazy / one-shot iterator so a large layer streams to disk. */
   case class Layer(name: String,
-                   geometryType: GeometryType,
+                   geometryType: Option[GeometryType],
                    columns: List[(String, ColumnType)],
                    rows: Iterator[Feature],
                    description: String = "")
@@ -104,42 +107,47 @@ object GeoPackage {
 
   private def writeLayer(c: Connection, layer: Layer): Long = {
     val t = quote(layer.name)
+    val spatial = layer.geometryType.nonEmpty
     val attrCols = layer.columns.map { case (n, ct) => s"${quote(n)} ${ct.sql}" }
-    exec(c, s"CREATE TABLE $t (fid INTEGER PRIMARY KEY AUTOINCREMENT, geom BLOB${attrCols.map(", " + _).mkString})")
-    val placeholders = ("?" :: layer.columns.map(_ => "?")).mkString(", ")
+    val geomCol = if (spatial) List("geom BLOB") else Nil
+    exec(c, s"CREATE TABLE $t (fid INTEGER PRIMARY KEY AUTOINCREMENT${(geomCol ++ attrCols).map(", " + _).mkString})")
+    val insertCols = (if (spatial) List("geom") else Nil) ++ layer.columns.map(c => quote(c._1))
     val insert = c.prepareStatement(
-      s"INSERT INTO $t (geom${layer.columns.map(c => ", " + quote(c._1)).mkString}) VALUES ($placeholders)")
+      s"INSERT INTO $t (${insertCols.mkString(", ")}) VALUES (${insertCols.map(_ => "?").mkString(", ")})")
+    val offset = if (spatial) 2 else 1
     var count = 0L
     var minX = Double.MaxValue; var minY = Double.MaxValue; var maxX = Double.MinValue; var maxY = Double.MinValue
     Using.resource(insert) { ps =>
       layer.rows.foreach { f =>
-        f.geometry match {
+        if (spatial) f.geometry match {
           case Some(g) =>
             ps.setBytes(1, GeoPackageBinary.encode(g, Srid))
             val e = envelope(g)
             minX = math.min(minX, e._1); minY = math.min(minY, e._2); maxX = math.max(maxX, e._3); maxY = math.max(maxY, e._4)
           case None => ps.setNull(1, java.sql.Types.BLOB)
         }
-        f.values.zipWithIndex.foreach { case (v, i) => bind(ps, i + 2, v, layer.columns(i)._2) }
+        f.values.zipWithIndex.foreach { case (v, i) => bind(ps, i + offset, v, layer.columns(i)._2) }
         ps.addBatch()
         count += 1
         if (count % 5000 == 0) ps.executeBatch()
       }
       ps.executeBatch()
     }
-    val hasExtent = count > 0 && minX != Double.MaxValue
+    val hasExtent = spatial && count > 0 && minX != Double.MaxValue
     val ext = if (hasExtent) List(minX, minY, maxX, maxY).map(d => java.lang.Double.valueOf(d)) else List(null, null, null, null)
     Using.resource(c.prepareStatement(
-      "INSERT INTO gpkg_contents (table_name, data_type, identifier, description, min_x, min_y, max_x, max_y, srs_id) VALUES (?, 'features', ?, ?, ?, ?, ?, ?, ?)")) { ps =>
-      ps.setString(1, layer.name); ps.setString(2, layer.name); ps.setString(3, layer.description)
-      ext.zipWithIndex.foreach { case (v, i) => if (v == null) ps.setNull(4 + i, java.sql.Types.DOUBLE) else ps.setDouble(4 + i, v.doubleValue()) }
-      ps.setInt(8, Srid)
+      "INSERT INTO gpkg_contents (table_name, data_type, identifier, description, min_x, min_y, max_x, max_y, srs_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) { ps =>
+      ps.setString(1, layer.name); ps.setString(2, if (spatial) "features" else "attributes")
+      ps.setString(3, layer.name); ps.setString(4, layer.description)
+      ext.zipWithIndex.foreach { case (v, i) => if (v == null) ps.setNull(5 + i, java.sql.Types.DOUBLE) else ps.setDouble(5 + i, v.doubleValue()) }
+      if (spatial) ps.setInt(9, Srid) else ps.setNull(9, java.sql.Types.INTEGER)
       ps.executeUpdate()
     }
-    Using.resource(c.prepareStatement(
-      "INSERT INTO gpkg_geometry_columns VALUES (?, 'geom', ?, ?, 0, 0)")) { ps =>
-      ps.setString(1, layer.name); ps.setString(2, layer.geometryType.name); ps.setInt(3, Srid)
-      ps.executeUpdate()
+    layer.geometryType.foreach { gt =>
+      Using.resource(c.prepareStatement("INSERT INTO gpkg_geometry_columns VALUES (?, 'geom', ?, ?, 0, 0)")) { ps =>
+        ps.setString(1, layer.name); ps.setString(2, gt.name); ps.setInt(3, Srid)
+        ps.executeUpdate()
+      }
     }
     count
   }
