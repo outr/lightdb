@@ -29,7 +29,8 @@ class GeoPackageSpec extends AnyWordSpec with Matchers {
     Layer("wells", Some(GeometryType.Point), List("api" -> ColumnType.Text, "serial" -> ColumnType.Integer),
       Iterator(Feature(Some(well), List(str("17-007-88076"), num(975702))), Feature(None, List(str("no-geom"), Null)))),
     Layer("owners", None, List("name" -> ColumnType.Text, "share" -> ColumnType.Real),
-      Iterator(Feature(None, List(str("Helis Oil"), num(0.25)))))
+      Iterator(Feature(None, List(str("Helis Oil"), num(0.25))))),
+    Layer("empty", None, Nil, Iterator.empty)
   ))
 
   private def sql[T](q: String)(f: java.sql.ResultSet => T): List[T] =
@@ -41,7 +42,7 @@ class GeoPackageSpec extends AnyWordSpec with Matchers {
 
   "GeoPackage" should {
     "write the layers and report counts" in {
-      counts should be(Map("units" -> 1L, "wells" -> 2L, "owners" -> 1L))
+      counts should be(Map("units" -> 1L, "wells" -> 2L, "owners" -> 1L, "empty" -> 0L))
     }
     "carry the GeoPackage application id and required metadata tables" in {
       sql("PRAGMA application_id")(_.getInt(1)) should be(List(1196444487))

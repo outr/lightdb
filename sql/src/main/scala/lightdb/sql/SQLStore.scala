@@ -179,26 +179,31 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
 
     val fieldNames = fields.map(_.name.toLowerCase).toSet
+    val declaredIndexNames = (model.compositeIndexes.map(i => s"${name}_${i.name}_idx") ++ backendIndexNames)
+      .map(_.toLowerCase).toSet
 
     // Remove LightDB-generated indexes that no longer correspond to a model field. The naming
     // convention is `${storeName}_${columnName}_idx` (or just `${columnName}_idx` for some
     // older entries). Anything that doesn't match either pattern is left alone — those are
     // backend-managed indexes (H2's `primary_key_*`, SQLite's `sqlite_autoindex_*`, etc.) and
-    // dropping them would break the schema.
+    // dropping them would break the schema. Composite and backend-specific indexes follow the
+    // same convention with an index name in the column position (`${storeName}_${indexName}_idx`),
+    // so they are recognised by their declared full name before the column rule is applied.
     val CN1 = """.+_(.+)_idx""".r
     val CN2 = """(.+)_idx""".r
     val existingIndexes = indexes(connection)
-    existingIndexes.filterNot(_.contains("autoindex")).foreach { name =>
-      val columnNameOpt: Option[String] = name match {
+    existingIndexes.filterNot(_.toLowerCase.contains("autoindex")).foreach { indexName =>
+      val lower = indexName.toLowerCase
+      val columnNameOpt: Option[String] = lower match {
         case CN1(n) => Some(n)
         case CN2(n) => Some(n)
         case _ => None
       }
       columnNameOpt.foreach { columnName =>
-        val exists = fieldNames.contains(columnName)
+        val exists = declaredIndexNames.contains(lower) || fieldNames.contains(columnName)
         if !exists then {
-          scribe.info(s"Removing unused index: $name")
-          executeUpdate(s"DROP INDEX IF EXISTS $name", tx)
+          scribe.info(s"Removing unused index: $indexName")
+          executeUpdate(dropIndexSQL(indexName), tx)
         }
       }
     }
@@ -279,6 +284,16 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${compositeIndex.name}_idx")} ON $fqn(${compositeIndex.fields.map(f => SqlIdent.quote(f.name)).mkString(", ")})$include"
   }
 
+  /** Names of the indexes this backend creates beyond one per indexed field (PostgreSQL's trigram
+    * index for a tokenized field, for example). The startup sweep keeps them. */
+  protected def backendIndexNames: Set[String] = Set.empty
+
+  /** Indexes are created quoted, so they are dropped quoted, by the catalog's real-case name. */
+  protected def dropIndexSQL(indexName: String): String = {
+    val qualified = if supportsSchemas then SqlIdent.qualified(lightDB.name, indexName) else SqlIdent.quote(indexName)
+    s"DROP INDEX IF EXISTS $qualified"
+  }
+
   protected def tables(connection: Connection): Set[String]
 
   /** The table's column names from the catalog, with their real case
@@ -301,6 +316,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
   }
 
+  /** The table's index names from the catalog, with their real case preserved: the drop built from
+    * one of them is quoted, so it must use the exact stored case (see `columns`). */
   protected def indexes(connection: Connection): Set[String] = {
     val meta = connection.getMetaData
     val schema = if supportsSchemas then {
@@ -316,7 +333,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
         val indexType = rs.getShort("TYPE")
         val isStatistic = indexType == DatabaseMetaData.tableIndexStatistic
         if indexName != null && !isStatistic then {
-          set += indexName.toLowerCase
+          set += indexName
         }
       }
       set
