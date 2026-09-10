@@ -108,7 +108,7 @@ val postgresqlVersion: String = "42.7.13"
 
 val mariadbVersion: String = "3.5.9"
 
-val arangodbVersion: String = "7.26.0"
+val arangodbVersion: String = "7.27.0"
 
 val googleSheetsVersion: String = "v4-rev20260610-2.0.0"
 
