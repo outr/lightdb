@@ -27,6 +27,7 @@ trait DataSourceConnectionManager extends ConnectionManager {
     // serialized every connection acquisition globally AND, because it wrapped
     // the blocking `openConnection()`, pinned virtual-thread carriers on
     // JDK < 24 — exhausting the scheduler under concurrent load.
+    state.ensureOpen()
     if state.connection == null then {
       state.connection = openConnection()
     }

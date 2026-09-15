@@ -24,7 +24,15 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   private var statements = List.empty[Statement]
   private var resultSets = List.empty[ResultSet]
   private var dirty = false
+  @volatile private var released = false
   private val stateLock = new ReentrantLock()
+
+  /** Whether [[close]] has run. A released state never opens a connection again. */
+  def isReleased: Boolean = released
+
+  /** Fail a use of this state after [[close]]: it would open a connection nothing ever commits or closes. */
+  private[sql] def ensureOpen(): Unit =
+    if released then throw new IllegalStateException(s"transaction for ${Option(store).map(_.name).getOrElse("<unknown store>")} used after release")
 
   // JDBC calls and pool checkout can block. Holding an intrinsic monitor here pins virtual-thread
   // carriers on Java 21, starving the borrowers that need to resume and return pool connections.
@@ -36,6 +44,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
 
   def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = withStateLock {
+    ensureOpen()
     val connection = connectionManager.getConnection(this)
 
     def createPs(): PreparedStatement = {
@@ -131,6 +140,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = withStateLock {
+      ensureOpen()
       if psInsert == null then {
         val connection = connectionManager.getConnection(this)
         psInsert = connection.prepareStatement(store.insertSQL)
@@ -140,6 +150,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = withStateLock {
+      ensureOpen()
       if psUpsert == null then {
         val connection = connectionManager.getConnection(this)
         psUpsert = connection.prepareStatement(store.upsertSQL)
@@ -216,6 +227,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     psInsert = null
     psUpsert = null
     cleanup(connectionManager.releaseConnection(this))
+    released = true
     if (failure != null) throw failure
   }}
 }

@@ -21,7 +21,7 @@ class SQLTransactionCleanupSpec extends AnyWordSpec with Matchers {
       def invoke(instance: Any, method: Method, args: Array[AnyRef]): AnyRef = call(method.getName)
     }).asInstanceOf[A]
   class Fixture(commitError: Boolean = false, rollbackError: Boolean = false) {
-    var commits = 0; var rollbacks = 0; var closes = 0
+    var commits = 0; var rollbacks = 0; var closes = 0; var opened = 0
     val connection = proxy(classOf[Connection]) {
       case "commit" => commits += 1; if (commitError) throw new SQLException("commit failed"); null
       case "rollback" => rollbacks += 1; if (rollbackError) throw new SQLException("rollback failed"); null
@@ -31,7 +31,7 @@ class SQLTransactionCleanupSpec extends AnyWordSpec with Matchers {
     }
     val manager = new DataSourceConnectionManager {
       protected val dataSource: DataSource = proxy(classOf[DataSource]) {
-        case "getConnection" => connection
+        case "getConnection" => opened += 1; connection
         case name => throw new UnsupportedOperationException(name)
       }
       protected def doDispose(): Task[Unit] = Task.unit
@@ -64,6 +64,15 @@ class SQLTransactionCleanupSpec extends AnyWordSpec with Matchers {
       val f = new Fixture(rollbackError = true)
       intercept[SQLException](f.manager.releaseConnection(f.state))
       f.closes shouldBe 1
+      f.manager.currentConnection(f.state) shouldBe None
+    }
+    "refuse to open a connection for a released transaction" in {
+      val f = new Fixture()
+      f.state.close.sync()
+      f.state.isReleased shouldBe true
+      intercept[IllegalStateException](f.manager.getConnection(f.state)).getMessage should include("used after release")
+      intercept[IllegalStateException](f.state.withPreparedStatement("SELECT 1")(_ => ()))
+      f.opened shouldBe 1
       f.manager.currentConnection(f.state) shouldBe None
     }
     "commit raw JDBC work even when no model writer set the dirty flag" in {

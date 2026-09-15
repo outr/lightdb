@@ -21,6 +21,16 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   @volatile private var rolledBack = false
   final def isRolledBack: Boolean = rolledBack
 
+  @volatile private var closed = false
+  /** Whether [[close]] has run: the transaction is released and accepts no further writes. */
+  final def isClosed: Boolean = closed
+
+  /** A write after release would go to a closed write handler and be lost without an error. */
+  private def writable[A](task: => Task[A]): Task[A] = Task.defer {
+    if (closed) Task.error(new IllegalStateException(s"transaction for ${store.name} used after release"))
+    else task
+  }
+
   /** Flag the transaction as aborting before end hooks are notified, so a hook that manages a
     * dependent transaction (e.g. a reverse-edge store) can abort it rather than commit it. */
   private[lightdb] final def markRolledBack(): Unit = rolledBack = true
@@ -52,9 +62,9 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
    * than at the call site — wrap in `.next(transaction.flush)` if the caller needs the error
    * to surface synchronously.
    */
-  final def insert(doc: Doc): Task[Doc] = store.trigger.insert(doc, this)
+  final def insert(doc: Doc): Task[Doc] = writable(store.trigger.insert(doc, this)
     .next(writeHandler.write(WriteOp.Insert(doc)))
-    .map(_ => doc)
+    .map(_ => doc))
 
   /**
    * Optimized insert for handling large streams of documents.
@@ -79,9 +89,9 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   final def insert(docs: Seq[Doc]): Task[Seq[Doc]] = insert(rapid.Stream.emits(docs)).map(_ => docs)
   def insertJson(stream: rapid.Stream[Json]): Task[Int] = insert(stream.map(_.as[Doc](store.model.rw)))
 
-  final def upsert(doc: Doc): Task[Doc] = store.trigger.upsert(doc, this)
+  final def upsert(doc: Doc): Task[Doc] = writable(store.trigger.upsert(doc, this)
     .next(writeHandler.write(WriteOp.Upsert(doc)))
-    .map(_ => doc)
+    .map(_ => doc))
 
   /**
    * Write back ONLY [[fields]] for these documents, leaving every other column untouched.
@@ -133,7 +143,7 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
     if (rolledBack) Task.error(new IllegalStateException("Cannot commit a rolled-back transaction"))
     else writeHandler.flush.next(_commit).next(applyCachePending)
   }
-  final def close: Task[Unit] = writeHandler.close.guarantee(_close)
+  final def close: Task[Unit] = writeHandler.close.guarantee(_close).guarantee(Task { closed = true })
 
   /**
    * Drain `cachePending` into the store-level cache. Called after `_commit` succeeds so rolled-back or
@@ -198,9 +208,9 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
       case None => Task.pure(None)
     }
   }
-  final def delete(id: Id[Doc]): Task[Boolean] = store.trigger.delete(id, this)
+  final def delete(id: Id[Doc]): Task[Boolean] = writable(store.trigger.delete(id, this)
     .next(writeHandler.write(WriteOp.Delete(id)))
-    .map(_ => true)
+    .map(_ => true))
 
   def list: Task[List[Doc]] = stream.toList
   def stream: rapid.Stream[Doc] = jsonStream.map(_.as[Doc](store.model.rw))
