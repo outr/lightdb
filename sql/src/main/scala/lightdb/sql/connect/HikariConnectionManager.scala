@@ -29,7 +29,10 @@ case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnecti
     hc.setIdleTimeout(60.seconds.toMillis)
     hc.setConnectionTimeout(5.minutes.toMillis)
     config.connectionInitSql.foreach(hc.setConnectionInitSql)
-    hc.setLeakDetectionThreshold(if HikariConnectionManager.EnableLeakDetection then 5.minutes.toMillis else 1.hour.toMillis)
+    // Hikari disables leak detection outright when the threshold is not below maxLifetime (30 minutes by
+    // default), so the relaxed threshold stays under it: a connection borrowed and never returned still logs
+    // where it was borrowed.
+    hc.setLeakDetectionThreshold(if HikariConnectionManager.EnableLeakDetection then 5.minutes.toMillis else 10.minutes.toMillis)
     new HikariDataSource(hc)
   }
 
