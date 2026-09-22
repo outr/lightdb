@@ -1,0 +1,8 @@
+{
+  "name": "lightdb-indexeddb-tests",
+  "private": true,
+  "description": "Node test dependencies for the lightdb-indexeddb Scala.js module. Run `npm install` here before `sbt indexeddb/test`.",
+  "devDependencies": {
+    "fake-indexeddb": "6.2.5"
+  }
+}

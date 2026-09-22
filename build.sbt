@@ -126,6 +126,8 @@ val mongoVersion: String = "5.6.2"
 
 val qdrantVersion: String = "1.18.3"
 
+val scalaJSDomVersion: String = "2.8.1"
+
 lazy val root = project.in(file("."))
 	.aggregate(core, traversal, sql, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice, all)
 	.settings(
@@ -169,6 +171,28 @@ lazy val coreCross = sbtcrossproject.CrossProject("core", file("core"))(JVMPlatf
 lazy val core = coreCross.jvm
 lazy val coreJS = coreCross.js
 
+// Spike: a browser-persisted store on IndexedDB for the Scala.js build of core. Not in the root aggregate.
+// Tests run in Node against the fake-indexeddb shim: run `npm install` in indexeddb/ once, then `sbt indexeddb/test`.
+lazy val indexeddb = project.in(file("indexeddb"))
+	.enablePlugins(ScalaJSPlugin)
+	.dependsOn(coreJS)
+	.settings(
+		name := s"$projectName-indexeddb",
+		libraryDependencies ++= Seq(
+			"org.scala-js" %% "scalajs-dom" % scalaJSDomVersion,
+			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+			"com.outr" %% "rapid-test" % rapidVersion % Test
+		),
+		scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule)),
+		// The build-wide options filter on the spec.EmbeddedTest tag annotation, which ScalaTest cannot read on
+		// Scala.js (no reflection on Java annotations). Replace them rather than inherit.
+		Test / testOptions := Seq(Tests.Argument(TestFrameworks.ScalaTest, "-oDF")),
+		// The linked test module is written under the build-wide target/, so point Node at this module's node_modules.
+		// sbt 2 caches task results by default; a JS environment is not serializable, so opt this key out.
+		jsEnv := Def.uncached(new _root_.org.scalajs.jsenv.nodejs.NodeJSEnv(
+			_root_.org.scalajs.jsenv.nodejs.NodeJSEnv.Config().withEnv(Map("NODE_PATH" -> (baseDirectory.value / "node_modules").getAbsolutePath))
+		))
+	)
 
 lazy val sql = project.in(file("sql"))
 	.dependsOn(core, core % "test->test")

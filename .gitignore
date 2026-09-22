@@ -17,3 +17,4 @@ derby.log
 *report-*.json
 benchdb/
 benchmarks.json
+node_modules/
