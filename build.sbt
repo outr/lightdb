@@ -88,7 +88,7 @@ val lmdbVersion: String = "0.9.2"
 
 val jedisVersion: String = "7.5.3"
 
-val fabricVersion: String = "1.30.0"
+val fabricVersion: String = "1.30.1"
 
 val scribeVersion: String = "3.19.0"
 
