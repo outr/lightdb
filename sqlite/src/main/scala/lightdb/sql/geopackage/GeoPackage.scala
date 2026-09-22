@@ -96,6 +96,15 @@ object GeoPackage {
       CONSTRAINT uk_gc_table_name UNIQUE (table_name),
       CONSTRAINT fk_gc_tn FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name),
       CONSTRAINT fk_gc_srs FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id))""")
+    // The spec makes this table conditional, required only where an extension is used, so a package
+    // that uses none may leave it out. Readers do not agree: GeoTools queries it whenever it opens a
+    // package and fails with "no such table: gpkg_extensions" rather than treating it as absent, which
+    // stops a layer being published out of an otherwise valid file. It is created empty, which claims
+    // no extension and costs a reader that does check nothing.
+    exec(c, """CREATE TABLE gpkg_extensions (
+      table_name TEXT, column_name TEXT, extension_name TEXT NOT NULL, definition TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      CONSTRAINT ge_tce UNIQUE (table_name, column_name, extension_name))""")
     // The three SRS entries the spec requires, plus WGS 84 which is the one we write in.
     exec(c, """INSERT INTO gpkg_spatial_ref_sys VALUES
       ('Undefined cartesian SRS', -1, 'NONE', -1, 'undefined', 'undefined cartesian coordinate reference system'),

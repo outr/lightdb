@@ -52,6 +52,10 @@ class GeoPackageSpec extends AnyWordSpec with Matchers {
         List(("units", "geom", "POLYGON"), ("wells", "geom", "POINT")))
       sql("SELECT organization, organization_coordsys_id FROM gpkg_spatial_ref_sys WHERE srs_id = 4326")(rs => (rs.getString(1), rs.getInt(2))) should be(List(("EPSG", 4326)))
     }
+    "carry an empty gpkg_extensions, which readers query whether or not an extension is used" in {
+      sql("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'gpkg_extensions'")(_.getString(1)) should be(List("gpkg_extensions"))
+      sql("SELECT COUNT(*) FROM gpkg_extensions")(_.getInt(1)) should be(List(0))
+    }
     "record the layer extent in lon/lat" in {
       sql("SELECT min_x, min_y, max_x, max_y FROM gpkg_contents WHERE table_name = 'units'")(rs => (rs.getDouble(1), rs.getDouble(2), rs.getDouble(3), rs.getDouble(4))) should be(
         List((-91.5, 30.1, -91.4, 30.2)))
