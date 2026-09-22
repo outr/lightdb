@@ -1,6 +1,6 @@
 package lightdb.store
 
-import lightdb.LightDB
+import lightdb.{LightDB, LightDBPlatform}
 import lightdb.cache.CacheConfig
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.multi.MultiStore
@@ -56,7 +56,7 @@ final class StoreBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <
    */
   def apply(): sm.S[Doc, Model] = {
     val n = name.getOrElse(model.modelName)
-    val path = db.directory.map(_.resolve(n))
+    val path = LightDBPlatform.storePath(db.directory, n)
     val effectiveMode = mode.getOrElse(StoreMode.All[Doc, Model]())
     val store = sm.create[Doc, Model](db, model, n, path, effectiveMode)
     store.configureCache(cache)
@@ -80,7 +80,7 @@ final class StoreBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <
     val effectiveMode = mode.getOrElse(StoreMode.All[Doc, Model]())
     val storesMap: Map[Key, sm.S[Doc, Model]] = keys.toList.map { key =>
       val storeName = s"${prefix}_${key2Name(key)}"
-      val path = db.directory.map(_.resolve(storeName))
+      val path = LightDBPlatform.storePath(db.directory, storeName)
       val s = sm.create[Doc, Model](db, model, storeName, path, effectiveMode)
       s.configureCache(cache)
       db.registerStore(s)

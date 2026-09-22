@@ -50,12 +50,8 @@ case class StoredValue[T](key: String,
     }
   }
 
-  def modify(f: T => T): Task[T] = Task {
-    stored.synchronized {
-      val current = get().sync()
-      val modified = f(current)
-      set(modified).sync()
-    }
+  def modify(f: T => T): Task[T] = LightDBPlatform.exclusive(stored) {
+    get().flatMap(current => set(f(current)))
   }
 
   def clear(): Task[Unit] = store.transaction { transaction =>

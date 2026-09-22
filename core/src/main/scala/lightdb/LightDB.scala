@@ -146,9 +146,7 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
       .when(upgrades.nonEmpty)
     _ <- doUpgrades(upgrades, dbInitialized = dbInitialized, stillBlocking = true).when(upgrades.nonEmpty)
     // Setup shutdown hook
-    _ = Runtime.getRuntime.addShutdownHook(new Thread(() => {
-      dispose.sync()
-    }))
+    _ = LightDBPlatform.onShutdown(dispose)
     // Set initialized
     _ <- databaseInitialized.set(true)
   yield ()

@@ -134,24 +134,41 @@ lazy val root = project.in(file("."))
 		publishLocal := {}
 	)
 
-lazy val core = project.in(file("core"))
+// Core cross-builds for the JVM and Scala.js. CrossType.Pure keeps shared sources in core/src; platform-only
+// sources live in core/.jvm/src and core/.js/src. The JVM project keeps the id `core`, so modules depending on it
+// are unchanged. The JS side is not in the root aggregate: it is exercised by the `indexeddb` spike module.
+lazy val coreCross = sbtcrossproject.CrossProject("core", file("core"))(JVMPlatform, JSPlatform)
+	.withoutSuffixFor(JVMPlatform)
+	.crossType(CrossType.Pure)
 	.settings(
 		name := s"$projectName-core",
-		fork := true,
-		Test / fork := true,
 		libraryDependencies ++= Seq(
 			"com.outr" %% "scribe" % scribeVersion,
 			"com.outr" %% "reactify" % reactifyVersion,
 			"org.typelevel" %% "fabric-io" % fabricVersion,
-			"com.outr" %% "scribe-slf4j2" % scribeVersion,
 			"com.outr" %% "profig" % profigVersion,
-			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
-			"org.locationtech.jts" % "jts-core" % jtsVersion,
 			"com.outr" %% "rapid-core" % rapidVersion,
 			"org.scalatest" %% "scalatest" % scalaTestVersion % Test,
 			"com.outr" %% "rapid-test" % rapidVersion % Test
 		)
 	)
+	.jvmSettings(
+		fork := true,
+		Test / fork := true,
+		libraryDependencies ++= Seq(
+			"com.outr" %% "scribe-slf4j2" % scribeVersion,
+			"org.locationtech.spatial4j" % "spatial4j" % spatial4JVersion,
+			"org.locationtech.jts" % "jts-core" % jtsVersion
+		)
+	)
+	.jsSettings(
+		// The shared core/src/test specs are JVM backend conformance suites; JS tests live in core/.js/src/test only.
+		Test / unmanagedSourceDirectories := Seq(baseDirectory.value / "src" / "test" / "scala")
+	)
+
+lazy val core = coreCross.jvm
+lazy val coreJS = coreCross.js
+
 
 lazy val sql = project.in(file("sql"))
 	.dependsOn(core, core % "test->test")
