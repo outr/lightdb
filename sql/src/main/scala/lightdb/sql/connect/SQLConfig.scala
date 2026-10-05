@@ -1,5 +1,15 @@
 package lightdb.sql.connect
 
+import fabric.rw.*
+import profig.Profig
+
+/**
+ * @param lazyBegin whether a pooled connection opens its database transaction only at the first statement that
+ *                  writes or locks, so a transaction that only read sends no COMMIT ([[LazyBeginConnection]]). Applies
+ *                  to pooled managers ([[HikariConnectionManager]], [[DBCPConnectionManager]]) handing out
+ *                  manual-commit connections at READ COMMITTED or weaker isolation; ignored otherwise. Defaults to
+ *                  `lightdb.sql.lazyBegin`, which defaults to false.
+ */
 case class SQLConfig(jdbcUrl: String,
                      driverClassName: Option[String] = None,
                      username: Option[String] = None,
@@ -12,4 +22,10 @@ case class SQLConfig(jdbcUrl: String,
                      // The tcp_keepalives_* SETs make the server probe each client socket so a crashed
                      // client's backend (and its locks) is reaped instead of lingering idle-in-transaction;
                      // they apply to TCP connections and are harmless no-ops on Unix-socket connections.
-                     connectionInitSql: Option[String] = Some("SET statement_timeout = 0; SET idle_in_transaction_session_timeout = 0; SET tcp_keepalives_idle = 60; SET tcp_keepalives_interval = 10; SET tcp_keepalives_count = 6;"))
+                     connectionInitSql: Option[String] = Some("SET statement_timeout = 0; SET idle_in_transaction_session_timeout = 0; SET tcp_keepalives_idle = 60; SET tcp_keepalives_interval = 10; SET tcp_keepalives_count = 6;"),
+                     lazyBegin: Boolean = SQLConfig.defaultLazyBegin)
+
+object SQLConfig {
+  /** `lightdb.sql.lazyBegin`: the default for [[SQLConfig.lazyBegin]]. */
+  def defaultLazyBegin: Boolean = Profig("lightdb.sql.lazyBegin").opt[Boolean].getOrElse(false)
+}

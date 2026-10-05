@@ -4,6 +4,8 @@ import org.apache.commons.dbcp2.BasicDataSource
 import rapid.Task
 
 case class DBCPConnectionManager(config: SQLConfig) extends DataSourceConnectionManager {
+  override protected def lazyBegin: Boolean = config.lazyBegin
+
   protected lazy val dataSource: BasicDataSource = {
     val ds = new BasicDataSource
     ds.setUrl(config.jdbcUrl)

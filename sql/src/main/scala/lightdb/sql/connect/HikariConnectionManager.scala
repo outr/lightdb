@@ -6,6 +6,8 @@ import rapid.Task
 import scala.concurrent.duration.DurationInt
 
 case class HikariConnectionManager(config: SQLConfig) extends DataSourceConnectionManager {
+  override protected def lazyBegin: Boolean = config.lazyBegin
+
   protected lazy val dataSource: HikariDataSource = {
     val hc = new HikariConfig
     hc.setJdbcUrl(config.jdbcUrl)

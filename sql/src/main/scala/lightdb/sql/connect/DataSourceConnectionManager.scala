@@ -9,9 +9,24 @@ import javax.sql.DataSource
 trait DataSourceConnectionManager extends ConnectionManager {
   protected def dataSource: DataSource
 
+  /** Whether connections open their transaction lazily, at the first statement that writes or locks
+    * ([[LazyBeginConnection]]). */
+  protected def lazyBegin: Boolean = false
+
+  // Whether the pool's isolation level lets reads run outside the transaction: checked on the first connection.
+  @volatile private var lazyBeginAllowed: Option[Boolean] = None
+
+  private def allowsLazyBegin(c: Connection): Boolean = lazyBeginAllowed.getOrElse {
+    val isolation = c.getTransactionIsolation
+    val allowed = isolation == Connection.TRANSACTION_READ_COMMITTED || isolation == Connection.TRANSACTION_READ_UNCOMMITTED
+    if !allowed then scribe.warn(s"lazyBegin is ignored: it needs READ COMMITTED isolation or weaker, the connections use level $isolation")
+    lazyBeginAllowed = Some(allowed)
+    allowed
+  }
+
   private def openConnection(): Connection = {
     val c = dataSource.getConnection
-    c
+    if lazyBegin && !c.getAutoCommit && allowsLazyBegin(c) then LazyBeginConnection(c) else c
   }
 
   private def closeConnection(connection: Connection): Unit = {

@@ -616,6 +616,33 @@ sqlDb.init.sync()
 sqlDb.rows.transaction(_.insert(Row("hi sql"))).sync()
 ```
 
+### Read-only transactions on a connection pool (`lazyBegin`)
+
+A pooled connection in manual-commit mode opens a database transaction with its first statement, so a LightDB
+transaction that only read still ends with a COMMIT: one round trip that changes nothing. With `lazyBegin` the
+connection stays in auto-commit until the first statement that writes or locks and opens the transaction just
+before it; a transaction that only read sends no COMMIT and no ROLLBACK.
+
+```scala
+import lightdb.postgresql.PostgreSQLStoreManager
+import lightdb.sql.connect.{HikariConnectionManager, SQLConfig}
+
+val manager = PostgreSQLStoreManager(HikariConnectionManager(SQLConfig(
+  jdbcUrl = "jdbc:postgresql://localhost:5432/app",
+  lazyBegin = true
+)))
+```
+
+- Off by default. `SQLConfig.lazyBegin` defaults to the `lightdb.sql.lazyBegin` setting (default `false`).
+- Applies to the pooled managers (`HikariConnectionManager`, `DBCPConnectionManager`) when their connections are in
+  manual-commit mode at READ COMMITTED isolation or weaker (the PostgreSQL default). Under REPEATABLE READ or
+  SERIALIZABLE a transaction's reads share one snapshot, which reads run in auto-commit would not, so the setting is
+  ignored with a warning.
+- A read runs before the transaction only when its result is bounded: no fetch size, a top-level `LIMIT` no larger
+  than the fetch size, or a `COUNT`. A read that may return more rows opens the transaction first, so PostgreSQL
+  still streams it through a cursor instead of loading the whole result. Locking reads (`FOR UPDATE` / `FOR SHARE`),
+  savepoints and anything run on the unwrapped driver connection open it too.
+
 ## Reindex / Optimize / Upgrades
 
 - `store.reIndex()` and `store.optimize()` give backends a chance to rebuild or compact data.
