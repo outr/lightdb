@@ -7,14 +7,31 @@ import org.apache.lucene.facet.taxonomy.directory.{DirectoryTaxonomyReader, Dire
 import org.apache.lucene.index.{ConcurrentMergeScheduler, IndexWriter, IndexWriterConfig, TieredMergePolicy}
 import org.apache.lucene.search.{IndexSearcher, SearcherFactory, SearcherManager}
 import org.apache.lucene.store.{BaseDirectory, ByteBuffersDirectory, FSDirectory}
+import org.apache.lucene.util.IOUtils
+import lightdb.lucene.LuceneDurability
 import profig.Profig
 import fabric.rw.*
 
 import java.nio.file.{Files, Path}
-import java.util.concurrent.atomic.LongAdder
-import java.util.concurrent.{Callable, ExecutionException, Executors, ExecutorService, ThreadFactory}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, LongAdder}
+import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.{Callable, ExecutionException, Executors, ExecutorService, ScheduledFuture, ScheduledThreadPoolExecutor, ThreadFactory, TimeUnit}
 
-case class Index(path: Option[Path]) {
+/**
+ * A Lucene index and its single writer.
+ *
+ * @param durability when its committed changes become durable. Deferred applies only to an index on disk (`path`
+ *                   set); the owning store decides whether the index qualifies ([[lightdb.lucene.LuceneStore]]).
+ */
+case class Index(path: Option[Path], durability: LuceneDurability = LuceneDurability.Immediate) {
+  /** Whether durable commits are deferred: see [[LuceneDurability.Deferred]]. */
+  val deferred: Boolean = path.nonEmpty && durability.isInstanceOf[LuceneDurability.Deferred]
+
+  private val durableIntervalMs: Long = durability match {
+    case LuceneDurability.Deferred(interval) => interval.toMillis
+    case LuceneDurability.Immediate => 0L
+  }
+
   lazy val analyzer: Analyzer = new StandardAnalyzer
 
   // IndexWriter operations must never run on a thread that can be
@@ -85,6 +102,7 @@ case class Index(path: Option[Path]) {
 
   private def ensureWriter(): IndexWriter = synchronized {
     if currentWriter == null || !currentWriter.isOpen then {
+      if currentWriter != null then writerLost()
       currentWriter = new IndexWriter(indexDirectory, newConfig)
       if currentSearchers != null then {
         try currentSearchers.close() catch { case _: Throwable => () }
@@ -98,7 +116,7 @@ case class Index(path: Option[Path]) {
   private def searcherManager: SearcherManager = { ensureWriter(); currentSearchers }
 
   private lazy val taxonomyPath = path.map(p => p.resolve("taxonomy"))
-  private var taxonomyLoaded = false
+  @volatile private var taxonomyLoaded = false
   private lazy val taxonomyDirectory: BaseDirectory = taxonomyPath.map { path =>
     if !Files.exists(path) then {
       Files.createDirectories(path)
@@ -129,9 +147,10 @@ case class Index(path: Option[Path]) {
 
   def releaseTaxonomyReader(taxonomyReader: TaxonomyReader): Unit = taxonomyReader.close()
 
-  // Raw bodies (run ON the writer thread). Kept separate so the public
-  // entry points can wrap them in `onWriter` without the single-thread
-  // executor deadlocking on a re-entrant submit.
+  // Raw bodies. Kept separate so the public entry points can wrap them in
+  // `onWriter` without the single-thread executor deadlocking on a
+  // re-entrant submit. A commit also runs on a deferred-commit thread (see
+  // below): IndexWriter commits concurrently with indexing.
   private def commitInternal(): Unit = {
     commits.increment()
     indexWriter.flush()
@@ -156,11 +175,148 @@ case class Index(path: Option[Path]) {
   /** How many Lucene commits (flush, commit point, fsync of the new files) this index has run. */
   def commitCount: Long = commits.sum()
 
-  def commit(): Unit = onWriter(commitInternal())
+  // -- Deferred durability ---------------------------------------------------------------------------------------
+  //
+  // The marker file is down whenever the index on disk may be behind what its storage holds: from before the first
+  // change a transaction makes (and so before the change reaches storage) until a durable commit has covered every
+  // published change with no transaction holding unpublished ones. It is fsynced when written, so the guarantee
+  // survives an OS crash as well as a process kill; it is removed without one, which at worst costs a rebuild.
 
-  def rollback(): Unit = onWriter(rollbackInternal())
+  private val marker: Option[Path] = path.map(_.resolve(Index.UncommittedMarker))
+
+  /** Whether the index was opened with the marker down: a process stopped while its changes were not yet durable, so
+    * the index may be missing writes its storage holds (or hold writes its storage rolled back). Its owner rebuilds
+    * it from that storage, then calls [[rebuilt]]. */
+  val recoveredDirty: Boolean = marker.exists(Files.exists(_))
+
+  private val markerLock = new Object
+  private var markerPresent = recoveredDirty
+  // Kept down regardless of commits: the index must be rebuilt when next opened.
+  private var rebuildRequired = recoveredDirty
+  // Transactions that have begun changing the writer and not yet committed or rolled back.
+  private val openChanges = new AtomicInteger(0)
+  // Bumped by every committed transaction that changed the index.
+  private val published = new AtomicLong(0L)
+  private val durableScheduled = new AtomicBoolean(false)
+  @volatile private var pendingDurable: ScheduledFuture[?] = null
+  // Held through a deferred durable commit; disposal takes it to wait for a running one.
+  private val durableLock = new ReentrantLock
+  @volatile private var disposed = false
+
+  private def ensureMarker(): Unit = marker.foreach { m =>
+    if !markerPresent then {
+      Files.createDirectories(m.getParent)
+      Files.write(m, Array.emptyByteArray)
+      IOUtils.fsync(m, false)
+      IOUtils.fsync(m.getParent, true)
+      markerPresent = true
+    }
+  }
+
+  private def removeMarker(): Unit = marker.foreach { m =>
+    if markerPresent then {
+      Files.deleteIfExists(m)
+      markerPresent = false
+    }
+  }
+
+  /** Keep the marker down until the index is rebuilt, whatever commits follow. */
+  def requireRebuild(): Unit = markerLock.synchronized {
+    rebuildRequired = true
+    ensureMarker()
+  }
+
+  /** The rebuild [[recoveredDirty]] or [[requireRebuild]] asked for is done: commit it durably and lift the marker. */
+  def rebuilt(): Unit = {
+    markerLock.synchronized { rebuildRequired = false }
+    if deferred then commit()
+    else {
+      onWriter(commitInternal())
+      markerLock.synchronized { removeMarker() }
+    }
+  }
+
+  /** A transaction is about to change the index. Deferred: the marker goes down first, so a crash at any point after
+    * this (its storage committed, the index not yet durable) leaves the index flagged for rebuild. */
+  def beginChange(): Unit = if deferred then markerLock.synchronized {
+    openChanges.incrementAndGet()
+    ensureMarker()
+  }
+
+  private def endChange(): Unit = markerLock.synchronized {
+    openChanges.decrementAndGet()
+  }
+
+  /** A transaction that changed the index committed. Immediate: commit durably before returning. Deferred: its
+    * changes are already in the writer, where the next searcher opened sees them; schedule the durable commit. */
+  def transactionCommitted(): Unit =
+    if deferred then {
+      published.incrementAndGet()
+      endChange()
+      scheduleDurable()
+    } else onWriter(commitInternal())
+
+  /** A transaction that changed the index rolled back. Immediate: discard the writer's uncommitted changes. Deferred:
+    * the writer also holds other transactions' published changes, so the transaction has already restored what it
+    * touched from storage ([[lightdb.lucene.LuceneTransaction]]) and only its change ends here. */
+  def transactionRolledBack(): Unit =
+    if deferred then endChange()
+    else onWriter(rollbackInternal())
+
+  /** Commit durably now: everything in the writer, published or not, becomes durable. */
+  def commit(): Unit = if deferred then onWriter(commitDurable()) else onWriter(commitInternal())
+
+  /** Discard the writer's uncommitted changes. Not for a deferred index: they include published changes. */
+  def rollback(): Unit =
+    if deferred then throw new UnsupportedOperationException(s"Cannot roll back the writer of a deferred-durability index (${path.getOrElse("memory")})")
+    else onWriter(rollbackInternal())
+
+  // One Lucene commit for every change published since the last one. The marker comes off only when nothing was
+  // published after the commit began and no transaction holds unpublished changes.
+  private def commitDurable(): Unit = {
+    durableLock.lock()
+    try {
+      if !disposed then {
+        durableScheduled.set(false)
+        val upTo = published.get()
+        commitInternal()
+        markerLock.synchronized {
+          if published.get() == upTo && openChanges.get() == 0 && !rebuildRequired then removeMarker()
+        }
+        if published.get() != upTo then scheduleDurable()
+      }
+    } finally durableLock.unlock()
+  }
+
+  private def scheduleDurable(): Unit =
+    if !disposed && durableScheduled.compareAndSet(false, true) then {
+      pendingDurable = Index.durableScheduler.schedule(new Runnable {
+        override def run(): Unit =
+          try commitDurable()
+          catch {
+            // The marker stays down: the next publish schedules another attempt, and an index that never manages
+            // one is rebuilt when next opened.
+            case t: Throwable => scribe.error(s"Deferred Lucene commit failed for ${path.getOrElse("memory")}", t)
+          }
+      }, durableIntervalMs, TimeUnit.MILLISECONDS)
+    }
+
+  // A deferred index's writer is closed only by disposal: a writer closed otherwise hit a tragic error, and the
+  // published changes it held are gone. Its searches go on over the reopened writer, but the index is rebuilt when
+  // next opened.
+  private def writerLost(): Unit = if deferred && !disposed then {
+    scribe.error(s"The Lucene writer for ${path.getOrElse("memory")} closed with changes not yet durable; the index will be rebuilt from storage when next opened")
+    requireRebuild()
+  }
 
   def dispose(): Unit = {
+    if deferred then {
+      durableLock.lock()
+      try {
+        disposed = true
+        Option(pendingDurable).foreach(_.cancel(false))
+      } finally durableLock.unlock()
+    }
     onWriter {
       commitInternal()
       indexWriter.close()
@@ -169,6 +325,31 @@ case class Index(path: Option[Path]) {
         taxonomyDirectory.close()
       }
     }
+    if deferred then markerLock.synchronized {
+      if openChanges.get() == 0 && !rebuildRequired then removeMarker()
+    }
     writerExecutor.shutdown()
+  }
+}
+
+object Index {
+  /** The marker file a deferred-durability index keeps in its directory while it may be behind its storage. */
+  val UncommittedMarker: String = ".lightdb-uncommitted"
+
+  // Runs deferred durable commits, shared by every deferred index. Its threads are never interrupted (Lucene's
+  // FSDirectory channels do not survive an interrupt): disposal cancels a pending commit without interrupting it and
+  // waits for a running one.
+  private lazy val durableScheduler: ScheduledThreadPoolExecutor = {
+    val threads = math.max(1, math.min(4, Runtime.getRuntime.availableProcessors() / 2))
+    val counter = new AtomicInteger(0)
+    val s = new ScheduledThreadPoolExecutor(threads, new ThreadFactory {
+      override def newThread(r: Runnable): Thread = {
+        val t = new Thread(r, s"lucene-durable-${counter.incrementAndGet()}")
+        t.setDaemon(true)
+        t
+      }
+    })
+    s.setRemoveOnCancelPolicy(true)
+    s
   }
 }

@@ -14,7 +14,7 @@ import lightdb.filter.{Filter, FilterPlanner, NestedQuerySupport, QueryOptimizer
 import lightdb.id.Id
 import lightdb.materialized.MaterializedAggregate
 import lightdb.spatial.{Geo, GeometryCollection, Line, MultiLine, MultiPoint, MultiPolygon, Point, Polygon}
-import lightdb.store.Conversion
+import lightdb.store.{Conversion, Store, StoreMode}
 import lightdb.transaction.{CollectionTransaction, NestedQueryTransaction, RollbackSupport, Transaction}
 import lightdb.util.Aggregator
 import lightdb.{Query, SearchResults, Sort}
@@ -26,6 +26,8 @@ import org.apache.lucene.index.{Term, VectorSimilarityFunction}
 import org.apache.lucene.search.{BooleanClause, BooleanQuery, MatchAllDocsQuery, ScoreDoc, TermQuery}
 import org.apache.lucene.util.BytesRef
 import rapid.Task
+
+import scala.jdk.CollectionConverters.*
 
 case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   store: LuceneStore[Doc, Model],
@@ -102,7 +104,10 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected def _delete(id: Id[Doc]): Task[Boolean] = _deleteInternal(store.idField, id)
 
   protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
-    state.markDirty()
+    touch(if index.name == "_id" then Some(value match {
+      case id: Id[?] => id.value
+      case other => other.toString
+    }) else None)
     if hasNestedBlockDocs && index.name == "_id" then {
       val parentId = value match {
         case id: Id[?] => id.value
@@ -121,7 +126,54 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def _commit: Task[Unit] = state.commit
 
-  override protected def _rollback: Task[Unit] = state.rollback
+  override protected def _rollback: Task[Unit] = store.storeMode match {
+    case StoreMode.Indexes(storage) if store.index.deferred && state.isDirty =>
+      restoreFrom(storage).handleError { t =>
+        Task {
+          scribe.error(s"${store.name}: restoring the documents a rolled-back transaction changed failed; the index will be rebuilt from storage when next opened", t)
+          store.index.requireRebuild()
+        }
+      }.next(state.commit)
+    case _ => state.rollback
+  }
+
+  // What this transaction changed, for the rollback of a deferred-durability index: the writer also holds the
+  // published, not yet durable changes of other transactions, so it cannot be rolled back as a whole. Instead every
+  // document the transaction touched is restored from the storage the index mirrors, or the whole index when it
+  // touched more than it tracks or an unknown set (a truncate).
+  private val touchedIds = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
+  @volatile private var touchedAll = false
+
+  private def touch(id: Option[String]): Unit = {
+    state.markDirty()
+    if store.index.deferred && !touchedAll then id match {
+      case Some(value) if touchedIds.size < LuceneTransaction.MaxTrackedChanges => touchedIds.add(value)
+      case _ =>
+        touchedAll = true
+        touchedIds.clear()
+    }
+  }
+
+  override def beforeStorageChange(id: Option[Id[Doc]]): Task[Unit] =
+    if store.index.deferred then Task(touch(id.map(_.value))) else Task.unit
+
+  private def restoreFrom(storage: Store[Doc, Model]): Task[Unit] =
+    if touchedAll then {
+      scribe.warn(s"${store.name}: restoring the whole index from storage after a rolled-back transaction")
+      Task(store.index.write(_.deleteAll())).next(storage.transaction { stx =>
+        stx.stream.evalMap(doc => addDoc(doc, upsert = false)).drain
+      })
+    } else {
+      val ids = touchedIds.asScala.toList.map(Id[Doc](_))
+      storage.transaction { stx =>
+        ids.foldLeft(Task.unit) { (previous, id) =>
+          previous.next(stx.get(id)).flatMap {
+            case Some(doc) => addDoc(doc, upsert = true).unit
+            case None => _deleteInternal(store.idField, id).unit
+          }
+        }
+      }
+    }
 
   override protected def _close: Task[Unit] = {
     val releaseParent = if ownedParent then {
@@ -476,7 +528,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override def truncate: Task[Int] = for
     count <- this.count
-    _ <- Task(state.markDirty())
+    _ <- Task(touch(None))
     _ <- Task(store.index.write(_.deleteAll()))
   yield count
 
@@ -488,7 +540,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
     if store.fields.tail.nonEmpty then {
       val id = doc._id
-      this.state.markDirty()
+      touch(Some(id.value))
       val state = new IndexingState
       if hasNestedBlockDocs then {
         val docs = createNestedBlockDocs(doc, state)
@@ -830,4 +882,10 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   } else {
     doc
   }
+}
+
+object LuceneTransaction {
+  /** How many documents a transaction on a deferred-durability index tracks for its rollback; past this, a rollback
+    * restores the whole index from storage. */
+  val MaxTrackedChanges: Int = 100_000
 }

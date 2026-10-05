@@ -23,7 +23,8 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
                                                                      model: Model,
                                                                      val storeMode: StoreMode[Doc, Model],
                                                                      lightDB: LightDB,
-                                                                     storeManager: StoreManager)
+                                                                     storeManager: StoreManager,
+                                                                     val durability: LuceneDurability = LuceneDurability.configured)
   extends Collection[Doc, Model](name, path, model, lightDB, storeManager)
     with NestedQueryStore[Doc, Model] {
   override type TX = LuceneTransaction[Doc, Model]
@@ -33,7 +34,15 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 
   IndexSearcher.setMaxClauseCount(10_000_000)
 
-  lazy val index = Index(path)
+  /** Whether this store may defer its durable commits: it must be able to rebuild its index from the storage it
+    * mirrors, from documents written through its transactions alone. */
+  protected def supportsDeferredDurability: Boolean = true
+
+  lazy val index: Index = Index(path, durability match {
+    case d: LuceneDurability.Deferred if storeMode.isIndexes && path.nonEmpty && supportsDeferredDurability => d
+    case _ => LuceneDurability.Immediate
+  })
+
   lazy val facetsConfig: FacetsConfig = {
     val c = new FacetsConfig
     fields.foreach {
@@ -51,18 +60,46 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     this.path.foreach { path =>
       if Files.exists(path) then {
         val directory = FSDirectory.open(path)
-        val reader = DirectoryReader.open(directory)
-        reader.leaves().forEach { leaf =>
-          val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
-          val latest = Version.LATEST
-          if latest != dataVersion then {
-            // TODO: Support re-indexing
-            scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
+        try {
+          // A directory with no commit point yet (a process stopped before the first commit) holds no index to check.
+          if DirectoryReader.indexExists(directory) then {
+            val reader = DirectoryReader.open(directory)
+            try reader.leaves().forEach { leaf =>
+              val dataVersion = leaf.reader().asInstanceOf[SegmentReader].getSegmentInfo.info.getVersion
+              val latest = Version.LATEST
+              if latest != dataVersion then {
+                // TODO: Support re-indexing
+                scribe.warn(s"Data Version: $dataVersion, Latest Version: $latest")
+              }
+            } finally reader.close()
           }
-        }
+        } finally directory.close()
       }
     }
-  })
+  }).next(rebuildIfLeftBehind)
+
+  // An index opened with its uncommitted marker down was left behind by a crash: rebuild it from its storage.
+  private def rebuildIfLeftBehind: Task[Unit] = Task.defer {
+    if !index.recoveredDirty then Task.unit
+    else storeMode match {
+      case StoreMode.Indexes(storage) =>
+        val started = System.currentTimeMillis()
+        logger.warn(s"$name: the search index was not durable when the database last stopped; rebuilding it from storage")
+          .next(storage.init)
+          .next(storage.transaction { stx =>
+            transaction { tx =>
+              tx.truncate.next(tx.insert(stx.stream))
+            }
+          })
+          .flatMap { count =>
+            Task(index.rebuilt())
+              .next(logger.info(s"$name: search index rebuilt from $count stored documents in ${System.currentTimeMillis() - started} ms"))
+          }
+      case _ =>
+        logger.warn(s"$name: the index has an uncommitted marker but no storage to rebuild from; it may be missing changes")
+          .next(Task(index.rebuilt()))
+    }
+  }
 
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
                                            batchConfig: BatchConfig,
@@ -92,6 +129,10 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 }
 
 object LuceneStore extends CollectionManager {
+  /** A manager whose stores use `durability` rather than the configured default ([[LuceneDurability.configured]]),
+    * e.g. `SplitStoreManager(RocksDBStore, LuceneStore.withDurability(LuceneDurability.Deferred()))`. */
+  def withDurability(durability: LuceneDurability): LuceneStoreManager = LuceneStoreManager(durability)
+
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = LuceneStore[Doc, Model]
 
   private val regexChars = ".?+*|{}[]()\"\\#~&<>@".toSet

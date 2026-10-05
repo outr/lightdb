@@ -37,6 +37,10 @@ class LuceneBlockJoinStore[
 
   override def supportsNativeExistsChild: Boolean = true
 
+  // Blocks are indexed through the writer directly and committed by the caller, outside any transaction, so the
+  // index cannot track what it is behind on.
+  override protected def supportsDeferredDurability: Boolean = false
+
   /**
    * Controls which PARENT fields are indexed into the block-join Lucene index.
    *

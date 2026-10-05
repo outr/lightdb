@@ -34,6 +34,14 @@ trait CollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] e
   override protected def _delete(id: Id[Doc]): Task[Boolean]
 
   /**
+   * The transaction that owns this one is about to change `id` (every document when `None`) in the storage this
+   * collection indexes, ahead of the change reaching this collection, if it does at all. A split collection calls it
+   * before every storage write. An index whose durability lags its storage records here that it may be behind;
+   * others do nothing.
+   */
+  def beforeStorageChange(id: Option[Id[Doc]]): Task[Unit] = Task.unit
+
+  /**
    * Backend-specific streaming implementation for a prepared query.
    *
    * Default behavior matches the historical LightDB behavior: offset-based pagination across pages.

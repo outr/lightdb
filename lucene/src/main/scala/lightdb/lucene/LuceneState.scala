@@ -18,7 +18,10 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
 
   /** The transaction is about to change the index. */
   def markDirty(): Unit = if !dirty then synchronized {
-    if !dirty then dirty = true
+    if !dirty then {
+      index.beginChange()
+      dirty = true
+    }
   }
 
   def isDirty: Boolean = dirty
@@ -48,7 +51,7 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
 
   private def commitIfDirty(): Unit = synchronized {
     if dirty then {
-      index.commit()
+      index.transactionCommitted()
       dirty = false
     }
   }
@@ -62,7 +65,7 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
     synchronized {
       if dirty then {
         dirty = false
-        index.rollback()
+        index.transactionRolledBack()
       }
     }
     releaseIndexSearcher()

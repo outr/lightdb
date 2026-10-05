@@ -37,8 +37,10 @@ case class SplitCollectionTransaction[
 
   override def jsonStream: rapid.Stream[Json] = storage.jsonStream
 
+  // The search index hears of each change before storage does, so an index that lags its storage knows it may be
+  // behind before the storage write can survive a crash.
   override def _delete(id: Id[Doc]): Task[Boolean] =
-    searchUpdateHandler.delete(id).next(storage.delete(id))
+    searching.beforeStorageChange(Some(id)).next(searchUpdateHandler.delete(id)).next(storage.delete(id))
 
   override protected def _get[V](index: UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = if index == store.idField then {
     storage.get(value.asInstanceOf[Id[Doc]])
@@ -46,11 +48,11 @@ case class SplitCollectionTransaction[
     searching.get(_ => index -> value)
   }
 
-  override protected def _insert(doc: Doc): Task[Doc] = storage.insert(doc).flatTap { _ =>
+  override protected def _insert(doc: Doc): Task[Doc] = searching.beforeStorageChange(Some(doc._id)).next(storage.insert(doc)).flatTap { _ =>
     searchUpdateHandler.insert(doc)
   }
 
-  override protected def _upsert(doc: Doc): Task[Doc] = storage.upsert(doc).flatTap { _ =>
+  override protected def _upsert(doc: Doc): Task[Doc] = searching.beforeStorageChange(Some(doc._id)).next(storage.upsert(doc)).flatTap { _ =>
     searchUpdateHandler.upsert(doc)
   }
 
@@ -90,7 +92,7 @@ case class SplitCollectionTransaction[
                            pageSize: Int): rapid.Stream[F] =
     searching.distinct(query.copy(transaction = searching), field, pageSize)
 
-  override def truncate: Task[Int] = storage.truncate.flatTap { _ =>
+  override def truncate: Task[Int] = searching.beforeStorageChange(None).next(storage.truncate).flatTap { _ =>
     searchUpdateHandler.truncate
   }
 }

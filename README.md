@@ -661,6 +661,42 @@ object splitDb extends LightDB {
 }
 ```
 
+### Search index durability (`LuceneDurability`)
+
+A committed write is searchable at once either way: every transaction searches through a near-real-time reader over
+the index writer. What differs is when the write becomes durable on disk (a Lucene commit: flush, new commit point,
+fsync of the new files, the costliest step of a write).
+
+- `LuceneDurability.Immediate` (the default): every transaction that changed the index commits it durably before
+  its own commit returns.
+- `LuceneDurability.Deferred(interval)`: a transaction's commit makes its changes visible and leaves the durable
+  commit to a timer; one Lucene commit, `interval` (default 1 second) after the first change since the last one,
+  covers every change made meanwhile, on a background thread that does not hold up writers.
+
+```scala
+import lightdb.lucene.{LuceneDurability, LuceneStore}
+import lightdb.rocksdb.RocksDBStore
+import lightdb.store.split.SplitStoreManager
+
+val storeManager = SplitStoreManager(RocksDBStore, LuceneStore.withDurability(LuceneDurability.Deferred()))
+```
+
+Deferred durability applies only to an index on disk that mirrors a storage store (`StoreMode.Indexes`, as the
+search side of a split collection), because that storage is what it is rebuilt from: storage stays the source of
+truth and is never written less durably. Any other Lucene store commits immediately whatever it is configured with.
+
+- Before a split collection transaction's first change reaches storage, a marker file (`.lightdb-uncommitted`,
+  fsynced) goes down in the index directory; it comes off once a durable commit has covered every committed change
+  and no transaction holds uncommitted ones, and at a clean `dispose`.
+- An index that opens with the marker down was left behind by a crash (process kill, OS crash) and is rebuilt from
+  its storage before the database finishes initializing, whatever durability the store now has. The rebuild reads
+  the whole collection, so a crash costs a reindex at the next start.
+- A rolled-back transaction restores the documents it touched from storage (the whole index after a rolled-back
+  truncate) rather than rolling back the shared writer, which also holds other transactions' committed changes.
+
+Without `withDurability`, stores use `lightdb.lucene.durability` (`immediate` or `deferred`) with
+`lightdb.lucene.durableCommitIntervalMs` for the interval.
+
 ## Sharded / MultiStore
 
 ```scala
