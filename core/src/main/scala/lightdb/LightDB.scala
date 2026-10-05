@@ -55,11 +55,20 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
    */
   protected def truncateOnInit: Boolean = false
 
+  /**
+   * Registers a JVM shutdown hook during initialization that disposes this database. Defaults to true. Set to false
+   * when something else owns the stop sequence (for example, work that must finish before the database closes):
+   * JVM shutdown hooks run concurrently and in no set order, so this hook could otherwise dispose the database while
+   * that work still uses it. The owner is then responsible for calling `dispose`.
+   */
+  protected def disposeOnShutdown: Boolean = true
+
   protected lazy val databaseInitialized: StoredValue[Boolean] = stored[Boolean]("_databaseInitialized", false)
   protected lazy val appliedUpgrades: StoredValue[Set[String]] = stored[Set[String]]("_appliedUpgrades", Set.empty)
 
   private var _stores = List.empty[Store[_, _ <: DocumentModel[_]]]
   private val _disposed = new AtomicBoolean(false)
+  private val _shutdownHookRegistered = new AtomicBoolean(false)
   @volatile private var initStarted = false
 
   /**
@@ -113,6 +122,11 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
   def optimize(stores: List[Store[_, _]] = stores): Task[Unit] = stores.map(_.optimize()).tasks.unit
 
   /**
+   * True if initialization registered the JVM shutdown hook that disposes this database (see `disposeOnShutdown`).
+   */
+  def shutdownHookRegistered: Boolean = _shutdownHookRegistered.get()
+
+  /**
    * True if this database has been disposed.
    */
   def disposed: Boolean = _disposed.get()
@@ -145,8 +159,10 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     _ <- logger.info(s"Applying ${upgrades.length} upgrades (${upgrades.map(_.label).mkString(", ")})...")
       .when(upgrades.nonEmpty)
     _ <- doUpgrades(upgrades, dbInitialized = dbInitialized, stillBlocking = true).when(upgrades.nonEmpty)
-    // Setup shutdown hook
-    _ = LightDBPlatform.onShutdown(dispose)
+    _ = if disposeOnShutdown then {
+      LightDBPlatform.onShutdown(dispose)
+      _shutdownHookRegistered.set(true)
+    }
     // Set initialized
     _ <- databaseInitialized.set(true)
   yield ()
