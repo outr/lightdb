@@ -11,6 +11,7 @@ import profig.Profig
 import fabric.rw.*
 
 import java.nio.file.{Files, Path}
+import java.util.concurrent.atomic.LongAdder
 import java.util.concurrent.{Callable, ExecutionException, Executors, ExecutorService, ThreadFactory}
 
 case class Index(path: Option[Path]) {
@@ -132,6 +133,7 @@ case class Index(path: Option[Path]) {
   // entry points can wrap them in `onWriter` without the single-thread
   // executor deadlocking on a re-entrant submit.
   private def commitInternal(): Unit = {
+    commits.increment()
     indexWriter.flush()
     indexWriter.commit()
     if taxonomyLoaded then {
@@ -148,6 +150,11 @@ case class Index(path: Option[Path]) {
     // Both writers are now closed; `ensureWriter` / `taxonomyWriter` reopen
     // them on next use over the last committed state.
   }
+
+  private val commits = new LongAdder
+
+  /** How many Lucene commits (flush, commit point, fsync of the new files) this index has run. */
+  def commitCount: Long = commits.sum()
 
   def commit(): Unit = onWriter(commitInternal())
 

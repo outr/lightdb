@@ -102,6 +102,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected def _delete(id: Id[Doc]): Task[Boolean] = _deleteInternal(store.idField, id)
 
   protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
+    state.markDirty()
     if hasNestedBlockDocs && index.name == "_id" then {
       val parentId = value match {
         case id: Id[?] => id.value
@@ -475,6 +476,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override def truncate: Task[Int] = for
     count <- this.count
+    _ <- Task(state.markDirty())
     _ <- Task(store.index.write(_.deleteAll()))
   yield count
 
@@ -486,6 +488,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
     if store.fields.tail.nonEmpty then {
       val id = doc._id
+      this.state.markDirty()
       val state = new IndexingState
       if hasNestedBlockDocs then {
         val docs = createNestedBlockDocs(doc, state)

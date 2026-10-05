@@ -11,6 +11,17 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
   private var oldTaxonomyReaders = List.empty[TaxonomyReader]
   private var _indexSearcher: IndexSearcher = _
   private var _taxonomyReader: TaxonomyReader = _
+  // Whether this transaction has changed the index since it last committed or rolled back. A transaction that only
+  // read has nothing to commit or roll back: its commit only releases its searcher, and its abort leaves the writer
+  // (and the changes other transactions have pending in it) alone.
+  @volatile private var dirty = false
+
+  /** The transaction is about to change the index. */
+  def markDirty(): Unit = if !dirty then synchronized {
+    if !dirty then dirty = true
+  }
+
+  def isDirty: Boolean = dirty
 
   def indexSearcher: IndexSearcher = synchronized {
     if _indexSearcher == null then {
@@ -35,18 +46,30 @@ case class LuceneState[Doc <: Document[Doc]](index: Index, hasFacets: Boolean) {
 
   def taxonomyReader: TaxonomyReader = _taxonomyReader
 
+  private def commitIfDirty(): Unit = synchronized {
+    if dirty then {
+      index.commit()
+      dirty = false
+    }
+  }
+
   def commit: Task[Unit] = Task {
-    index.commit()
+    commitIfDirty()
     releaseIndexSearcher()
   }
 
   def rollback: Task[Unit] = Task {
-    index.rollback()
+    synchronized {
+      if dirty then {
+        dirty = false
+        index.rollback()
+      }
+    }
     releaseIndexSearcher()
   }
 
   def close: Task[Unit] = Task {
-    commit()
+    commitIfDirty()
     oldIndexSearchers.foreach(index.releaseIndexSearch)
     oldTaxonomyReaders.foreach(index.releaseTaxonomyReader)
     if _indexSearcher != null then index.releaseIndexSearch(_indexSearcher)
