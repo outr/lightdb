@@ -559,7 +559,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
   override protected def doDispose(): Task[Unit] = transaction.abortAll().flatMap { transactions =>
     logger.warn(s"Aborted $transactions active transactions").when(transactions > 0)
-  }.guarantee(trigger.dispose).unit
+  }.guarantee(trigger.dispose).guarantee(Task(model.released(this))).unit
 }
 
 object Store {

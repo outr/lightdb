@@ -29,11 +29,11 @@ class HashMapStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                            writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] =
     Task(HashMapTransaction(this, parent, writeHandlerFactory))
 
-  override protected def doDispose(): Task[Unit] = Task {
+  override protected def doDispose(): Task[Unit] = super.doDispose().next(Task {
     store.synchronized {
       _map = Map.empty
     }
-  }
+  })
 }
 
 object HashMapStore extends StoreManager {

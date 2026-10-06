@@ -27,6 +27,9 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
   def id(value: String = Unique.sync()): Id[Doc] = StringId(value)
 
+  // The stores this model has initialized, so each is initialized once. A store leaves it when it is disposed: the model
+  // is a long-lived object, and keeping a disposed store would keep it, and through it its whole database, reachable
+  // for the life of the process.
   private var _initialized = Set.empty[Store[_, _]]
 
   final def initialize[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = Task.defer {
@@ -46,6 +49,9 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
   }
 
   protected def init[Model <: DocumentModel[Doc]](store: Store[Doc, Model]): Task[Unit] = Task.unit
+
+  /** `store` was disposed: the model no longer holds it. */
+  private[lightdb] def released(store: Store[_, _]): Unit = synchronized { _initialized -= store }
 
   type F[V] = Field[Doc, V]
   type I[V] = Indexed[Doc, V]
