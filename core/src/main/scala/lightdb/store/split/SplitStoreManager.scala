@@ -1,5 +1,7 @@
 package lightdb.store.split
 
+import lightdb.util.Disposable
+import rapid.Task
 import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.{CollectionManager, StoreManager, StoreMode}
@@ -8,7 +10,12 @@ import java.nio.file.Path
 
 case class SplitStoreManager[Storage <: StoreManager, Searching <: CollectionManager](storage: Storage,
                                                                                       searching: Searching,
-                                                                                      searchIndexAll: Boolean = false) extends CollectionManager {
+                                                                                      searchIndexAll: Boolean = false) extends CollectionManager with Disposable {
+  /** The manager owns both stores' shared resources; collections close before
+    * LightDB disposes this manager. Nested managers follow the same chain. */
+  override protected def doDispose(): Task[Unit] =
+    Task.sequence(List(storage, searching).collect { case owner: Disposable => owner.dispose }).unit
+
   override lazy val name: String = s"Split($storage, $searching)"
 
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SplitCollection[Doc, Model, storage.S[Doc, Model], searching.S[Doc, Model]]
