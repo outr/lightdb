@@ -9,7 +9,7 @@ val developerURL: String = "https://matthicks.com"
 
 ThisBuild / organization := org
 
-ThisBuild / version := "4.48.0-sigil-runtime-SNAPSHOT"
+ThisBuild / version := "4.48.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "3.8.4"
 
