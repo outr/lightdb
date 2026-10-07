@@ -21,9 +21,13 @@ ThisBuild / publishMavenStyle := true
 // `publishSigned`, then `sonaUpload` (manual release) or `sonaRelease` (automatic).
 ThisBuild / publishTo := {
 	val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
-	if (isSnapshot.value) Some("central-snapshots" at centralSnapshots)
+	if (version.value == "4.48.0-sigil-runtime-SNAPSHOT")
+		Some("GitHub Packages outr/lightdb" at "https://maven.pkg.github.com/outr/lightdb")
+	else if (isSnapshot.value) Some("central-snapshots" at centralSnapshots)
 	else localStaging.value
 }
+ThisBuild / credentials += Credentials("GitHub Package Registry", "maven.pkg.github.com",
+	sys.env.getOrElse("GITHUB_ACTOR", "outr"), sys.env.getOrElse("GITHUB_TOKEN", ""))
 ThisBuild / licenses := Seq("MIT" -> url(s"https://github.com/$githubOrg/$projectName/blob/master/LICENSE"))
 ThisBuild / homepage := Some(url(s"https://github.com/$githubOrg/$projectName"))
 ThisBuild / scmInfo := Some(
