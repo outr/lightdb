@@ -4,7 +4,7 @@ import fabric.Json
 import fabric.io.{JsonFormatter, JsonParser}
 import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
-import lightdb.error.DuplicateIdException
+import lightdb.error.{DuplicateIdException, StoreDisposedException}
 import lightdb.field.Field
 import lightdb.id.Id
 import lightdb.rocksdb.RocksDBTransaction.writeOptions
@@ -49,10 +49,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
     if index == store.idField then {
       val bytes = value.asInstanceOf[Id[Doc]].bytes
-      Option(store.handle match {
+      Option(store.native(store.handle match {
         case Some(h) => store.rocksDB.get(h, bytes)
         case None => store.rocksDB.get(bytes)
-      }).map(bytes2Doc)
+      })).map(bytes2Doc)
     } else {
       throw new UnsupportedOperationException(s"RocksDBStore can only get on _id, but ${index.name} was attempted")
     }
@@ -62,13 +62,13 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val keyBytes = ids.map(_.bytes).asJava
 
     rapid.Stream.fromIterator(Task {
-      val rawResults = store.handle match {
+      val rawResults = store.native(store.handle match {
         case Some(h) =>
           val handleList = java.util.Collections.nCopies(ids.size, h)
           store.rocksDB.multiGetAsList(handleList, keyBytes)
         case None =>
           store.rocksDB.multiGetAsList(keyBytes)
-      }
+      })
       rawResults
         .asScala
         .iterator
@@ -80,10 +80,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
     val json = doc.json(store.model.rw)
     val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
-    store.handle match {
+    store.native(store.handle match {
       case Some(h) => store.rocksDB.put(h, writeOptions, doc._id.bytes, bytes)
       case None => store.rocksDB.put(writeOptions, doc._id.bytes, bytes)
-    }
+    })
     doc
   }
 
@@ -101,7 +101,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val chunkSize = math.max(1, Profig("lightdb.rocksdb.batch.chunkSize").opt[Int].getOrElse(Store.MaxInsertBatch))
     stream
       .chunk(chunkSize)
-      .fold(0)((total, chunk) => Task {
+      .fold(0)((total, chunk) => Task(store.native {
         val batch = new WriteBatch
         try {
           chunk.foreach { doc =>
@@ -118,10 +118,10 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         } finally {
           batch.close()
         }
-      })
+      }))
   }
 
-  def flushOps(ops: Seq[WriteOp[Doc]]): Task[Unit] = Task {
+  def flushOps(ops: Seq[WriteOp[Doc]]): Task[Unit] = Task(store.native {
     // Honor the insert contract: every WriteOp.Insert must error if the id already exists.
     // RocksDB's underlying `put` is upsert-style, so we pre-check existence via `keyExists`
     // before adding inserts to the batch. multiGet would be cheaper for very large batches
@@ -163,13 +163,13 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     } finally {
       batch.close()
     }
-  }
+  })
 
   override protected def _exists(id: Id[Doc]): Task[Boolean] = Task {
-    store.handle match {
+    store.native(store.handle match {
       case Some(h) => store.rocksDB.keyExists(h, id.bytes)
       case None => store.rocksDB.keyExists(id.bytes)
-    }
+    })
   }
 
   override protected def _count: Task[Int] = Task {
@@ -182,15 +182,15 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   override def estimatedCount: Task[Int] = Task {
-    store.rocksDB.getLongProperty(store.handle.orNull, "rocksdb.estimate-num-keys").toInt
+    store.native(store.rocksDB.getLongProperty(store.handle.orNull, "rocksdb.estimate-num-keys")).toInt
   }
 
   override protected def _delete(id: Id[Doc]): Task[Boolean] = Task {
     val bytes = id.bytes
-    store.handle match {
+    store.native(store.handle match {
       case Some(h) => store.rocksDB.delete(h, writeOptions, bytes)
       case None => store.rocksDB.delete(writeOptions, bytes)
-    }
+    })
     true
   }
 
@@ -219,7 +219,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     if (handleOpt.isDefined && sharedOpt.isDefined) {
       val h = handleOpt.get
       val ss = sharedOpt.get
-      Task {
+      Task(store.native {
         val estimate = try {
           val raw = store.rocksDB.getProperty(h, "rocksdb.estimate-num-keys")
           if (raw == null || raw.isEmpty) 0
@@ -229,7 +229,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         ss.store.evictHandle(ss.handle)
         store.resetHandle()
         estimate
-      }
+      })
     } else {
       truncateManual
     }
@@ -246,7 +246,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
    * with long keys. Tunable via `lightdb.rocksdb.truncate.batchSize` profig
    * if a workload needs different bounds.
    */
-  private def truncateManual: Task[Int] = Task {
+  private def truncateManual: Task[Int] = Task(store.native {
     val batchSize = profig.Profig("lightdb.rocksdb.truncate.batchSize")
       .opt[Int].filter(_ > 0).getOrElse(50_000)
     val iter = store.handle match {
@@ -286,12 +286,15 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       try batch.close() catch { case _: Throwable => () }
     }
     count
-  }
+  })
 
   private def iterator(value: Boolean = true,
                        prefix: Option[String] = None): Iterator[Array[Byte]] with AutoCloseable = {
-    val lease = store.iteratorThreadPool.acquire()
-    new ThreadConfinedBufferedIterator[Array[Byte]](
+    if store.isDisposing then throw StoreDisposedException(store.name)
+    val lease = try store.iteratorThreadPool.acquire() catch {
+      case _: IllegalStateException => throw StoreDisposedException(store.name)
+    }
+    lazy val iterator: ThreadConfinedBufferedIterator[Array[Byte]] = new ThreadConfinedBufferedIterator[Array[Byte]](
       mk = new Iterator[Array[Byte]] with AutoCloseable {
       private def prefixUpperBoundBytes(p: Array[Byte]): Option[Array[Byte]] = {
         // Compute the shortest byte array that is lexicographically greater than any key starting with p.
@@ -385,9 +388,17 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       batchSize = 1024,
       sharedAgent = Some(lease),
       onClose = () => {
+        store.iterators.unregister(iterator)
         store.iteratorThreadPool.release(lease)
-      }
+      },
+      guard = Some(store.guard),
+      storeName = store.name
     )
+    if !store.iterators.register(iterator) then {
+      store.iteratorThreadPool.release(lease)
+      throw StoreDisposedException(store.name)
+    }
+    iterator
   }
 }
 

@@ -39,12 +39,19 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager with Disposa
     handlesMap.update(name, handle); ()
   }
 
+  /** Guards the shared native database for every store created on it. */
+  private[rocksdb] val guard: RocksDBNativeGuard = new RocksDBNativeGuard
+
+  private val stores = java.util.concurrent.ConcurrentHashMap.newKeySet[RocksDBStore[?, ?]]()
+
+  private[rocksdb] def unregisterStore(store: RocksDBStore[?, ?]): Unit = { stores.remove(store); () }
+
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,
                                                                          model: Model,
                                                                          name: String,
                                                                          path: Option[Path],
-                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] =
-    new RocksDBStore[Doc, Model](
+                                                                         storeMode: StoreMode[Doc, Model]): S[Doc, Model] = {
+    val store = new RocksDBStore[Doc, Model](
       name = name,
       path = path,
       model = model,
@@ -54,6 +61,9 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager with Disposa
       lightDB = db,
       storeManager = this
     )
+    stores.add(store)
+    store
+  }
 
   /**
    * Close the underlying native RocksDB instance.
@@ -64,6 +74,20 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager with Disposa
    * exit and try to call back into Java during JVM shutdown — at which point the system
    * classloader is closed and any unloaded class (e.g. `FlushOptions`) throws
    * `NoClassDefFoundError`.
+   *
+   * Later native calls on any of its stores are refused; calls in flight are waited for (bounded by
+   * `lightdb.rocksdb.disposeTimeoutSeconds`) and iterators still open are closed before the database is. If calls
+   * are still in flight when the wait ends, the database is left open rather than freed under them.
    */
-  override protected def doDispose(): Task[Unit] = Task(rocksDB.closeE())
+  override protected def doDispose(): Task[Unit] = Task {
+    val timeout = RocksDBNativeGuard.disposeTimeout
+    if guard.close(timeout) then {
+      stores.forEach(_.iterators.closeAll())
+      stores.clear()
+      rocksDB.closeE()
+    } else {
+      scribe.warn(s"RocksDB database $directory still had ${guard.inFlightCount} native calls in flight after $timeout; " +
+        "leaving it open rather than closing it under them")
+    }
+  }
 }

@@ -4,6 +4,7 @@ import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.*
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
+import lightdb.error.StoreDisposedException
 import lightdb.store.write.WriteOp
 import lightdb.transaction.{Transaction, WriteHandler}
 import lightdb.transaction.batch.BatchConfig
@@ -52,6 +53,14 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   // Reused by `doDispose`; the native handle is closed there.
   private val flushOptions: FlushOptions = new FlushOptions
 
+  /** Guards the native database: shared by every store of a shared instance, owned by a store with its own. */
+  private[rocksdb] val guard: RocksDBNativeGuard = sharedStore.map(_.store.guard).getOrElse(new RocksDBNativeGuard)
+
+  private[rocksdb] val iterators: RocksDBIteratorRegistry = new RocksDBIteratorRegistry
+
+  /** Runs a native call, refused with a `StoreDisposedException` once the database is closing. */
+  private[rocksdb] def native[R](f: => R): R = guard(name)(f)
+
   private[rocksdb] var handle: Option[ColumnFamilyHandle] = None
   resetHandle()
 
@@ -60,9 +69,9 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
       case Some(handle) => handle
       case None =>
         // Ensure new column families use the same table config (block cache, bloom filters, etc.)
-        val fresh = rocksDB.createColumnFamily(
+        val fresh = native(rocksDB.createColumnFamily(
           new ColumnFamilyDescriptor(ss.handle.getBytes(StandardCharsets.UTF_8), RocksDBStore.sharedColumnFamilyOptions)
-        )
+        ))
         // Register so subsequent lookups (e.g. peer stores, or this store
         // after another truncate) see the live handle, not None.
         ss.store.registerHandle(ss.handle, fresh)
@@ -73,24 +82,37 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
                                            batchConfig: BatchConfig,
                                            writeHandlerFactory: Transaction[Doc, Model] => WriteHandler[Doc, Model]): Task[TX] = Task {
+    if guard.isClosed then throw StoreDisposedException(name)
     RocksDBTransaction(this, parent, writeHandlerFactory)
   }
 
+  /**
+   * Aborts open transactions, closes this store's open iterators while their threads are alive, then flushes its
+   * column family. A store owning its database also waits for native calls in flight (bounded by
+   * `lightdb.rocksdb.disposeTimeoutSeconds`) and closes it; a shared database is closed by its manager. If calls are
+   * still in flight when the wait ends, the database is left open rather than freed under them.
+   */
   override protected def doDispose(): Task[Unit] =
     super.doDispose()
+      .next(Task(iterators.closeAll()))
       .next(iteratorThreadPool.dispose())
       .next(Task {
         // Reuse the pre-loaded `flushOptions` (see field comment for why allocating here
-        // would be unsafe under the shutdown-hook dispose path). When no `handle` is set we
-        // also `closeE()` the RocksDB instance — that's the per-store-owned (non-shared)
-        // path. Shared-RocksDB stores leave `closeE()` to `RocksDBSharedStore.doDispose`.
+        // would be unsafe under the shutdown-hook dispose path).
         try {
-          handle match {
-            case Some(h) =>
-              rocksDB.flush(flushOptions, h)
+          sharedStore match {
+            case Some(ss) =>
+              handle.foreach(h => guard.ifOpen(rocksDB.flush(flushOptions, h)))
+              ss.store.unregisterStore(this)
             case None =>
-              rocksDB.flush(flushOptions)
-              rocksDB.closeE()
+              val timeout = RocksDBNativeGuard.disposeTimeout
+              if guard.close(timeout) then {
+                rocksDB.flush(flushOptions)
+                rocksDB.closeE()
+              } else {
+                scribe.warn(s"RocksDB store $name still had ${guard.inFlightCount} native calls in flight after $timeout; " +
+                  "leaving its database open rather than closing it under them")
+              }
           }
         } finally {
           try flushOptions.close() catch { case _: Throwable => () }

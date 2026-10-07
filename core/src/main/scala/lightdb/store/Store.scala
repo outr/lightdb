@@ -16,6 +16,7 @@ import lightdb.transaction.batch.BatchConfig
 import lightdb.transaction.handler.{AsyncWriteHandler, BufferedWriteHandler, DirectWriteHandler, QueuedWriteHandler}
 import lightdb.store.write.WriteOp
 import lightdb.trigger.{StoreTrigger, StoreTriggers}
+import lightdb.error.StoreDisposedException
 import lightdb.util.{Disposable, Initializable, StoreMetrics}
 import rapid.*
 
@@ -336,6 +337,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
     def create(): Task[TX] = for
       _ <- Task {
+        if isDisposing then throw StoreDisposedException(name)
         if !lightDB.isInitialized && !lightDB.isInitStarted then {
           throw new RuntimeException(s"Attempted to create a transaction for store '$name' before database initialization. Call db.init before using store.transaction(...).")
         }
