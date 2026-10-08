@@ -80,7 +80,7 @@ val jtsVersion: String = "1.20.0"
 
 val haloDBVersion: String = "0.7.0"
 
-val rocksDBVersion: String = "10.10.1.1"
+val rocksDBVersion: String = "11.1.2"
 
 val mapdbVersion: String = "3.1.0"
 
