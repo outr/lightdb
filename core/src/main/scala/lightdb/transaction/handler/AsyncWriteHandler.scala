@@ -93,12 +93,21 @@ class AsyncWriteHandler[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   // be writing. The barrier includes in-flight work, so commit cannot overtake those writes.
   // Once every worker has exited nothing will ever drain the queue, so stop waiting and report
   // instead of hanging.
+  //
+  // The "exited" report is gated on the workers having actually exited, not on the queue being
+  // non-empty: `flush` is also called per batch from `Transaction.upsert(stream)`, and with
+  // several writers on one transaction (a parallel parse) another writer can enqueue between the
+  // barrier passing and this check. That is a live queue with live workers, not a stranded one,
+  // and reporting it as "unflushed" failed a whole transaction at random.
   override def flush: Task[Unit] = failIfError.next(
     Task.condition(Task.function(
       synchronized { queue.size == 0 && processing == 0 } || throwable.get() != null || finished.get() == activeThreads
     ), delay = waitTime)).next(failIfError).next(Task.defer {
-      if (!aborted && queue.size > 0) Task.error(new IllegalStateException("Async write handler workers exited with unflushed writes"))
-      else Task.unit
+      if (!aborted && finished.get() == activeThreads && queue.size > 0) {
+        Task.error(new IllegalStateException("Async write handler workers exited with unflushed writes"))
+      } else {
+        Task.unit
+      }
     })
 
   override def clear: Task[Unit] = Task {

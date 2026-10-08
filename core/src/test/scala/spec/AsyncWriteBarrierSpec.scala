@@ -21,6 +21,39 @@ class AsyncWriteBarrierSpec extends AnyWordSpec with Matchers {
         new AsyncWriteHandler[Row, Row.type](0, 1, 1.millis, 10, _ => Task.unit)
       }
     }
+    "not report unflushed writes when another writer enqueues while the barrier is released" in {
+      // Regression: `flush` is called per batch by `Transaction.upsert(stream)`; with concurrent
+      // writers on one transaction the queue can refill right after the barrier passes. Live workers
+      // will drain it — this must not fail as "workers exited with unflushed writes".
+      val written = new java.util.concurrent.atomic.AtomicInteger(0)
+      val handler = new AsyncWriteHandler[Row, Row.type](2, 1, 1.millis, 1000, ops => Task {
+        Thread.sleep(1)
+        written.addAndGet(ops.size)
+        ()
+      })
+      try {
+        val perWriter = 200
+        val writers = (0 until 4).map { _ =>
+          val t = new Thread(() => {
+            (0 until perWriter).foreach { _ =>
+              handler.write(WriteOp.Upsert(Row())).sync()
+              Thread.sleep(0L, 200_000)
+            }
+          })
+          t.start()
+          t
+        }
+        var flushes = 0
+        while (writers.exists(_.isAlive)) {
+          handler.flush.sync() // must never throw while workers are alive
+          flushes += 1
+        }
+        writers.foreach(_.join(5000L))
+        handler.flush.sync()
+        flushes should be > 0
+        written.get() shouldBe 4 * perWriter
+      } finally handler.close.sync()
+    }
     List(false, true).foreach { abort =>
       s"wait for already-dequeued writes before ${if (abort) "rollback" else "commit"}" in {
         val entered = new CountDownLatch(1)
