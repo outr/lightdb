@@ -18,6 +18,7 @@ import rapid.Task
 import java.nio.file.Path
 import java.sql.{Connection, DatabaseMetaData}
 import scala.language.implicitConversions
+import scala.util.Try
 
 abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                            path: Option[Path],
@@ -54,6 +55,29 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     SqlIdent.qualified(lightDB.name, name)
   } else {
     SqlIdent.quote(name)
+  }
+
+  private lazy val recordDefinition: Option[Definition] = Try(model.rw.definition).toOption
+
+  /** Each field of the model's record and its definition, when the record is not polymorphic. */
+  private[sql] lazy val recordFields: Map[String, Definition] = recordDefinition.map(_.defType) match {
+    case Some(DefType.Obj(map)) => map
+    case _ => Map.empty
+  }
+
+  /** For a polymorphic root, each subtype's fields and their definitions, by the discriminator naming the subtype. */
+  private[sql] lazy val recordFieldsByType: Map[String, Map[String, Definition]] = {
+    def subtypes(d: Definition): Map[String, Map[String, Definition]] = d.defType match {
+      case DefType.Poly(values, _) => values.flatMap {
+        case (typeName, sub) => sub.defType match {
+          case DefType.Obj(map) => Map(typeName -> map)
+          case _: DefType.Poly => subtypes(sub)
+          case _ => Map.empty
+        }
+      }
+      case _ => Map.empty
+    }
+    recordDefinition.map(subtypes).getOrElse(Map.empty)
   }
 
   protected def connectionManager: ConnectionManager
