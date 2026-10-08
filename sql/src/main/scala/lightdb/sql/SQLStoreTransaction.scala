@@ -1195,11 +1195,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   private def row2Value[V](rs: ResultSet, conversion: Conversion[Doc, V]): V = {
+    lazy val record = recordFields(rs)
     def jsonFromFields(fields: List[Field[Doc, _]]): Json =
-      obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw)): _*)
+      obj(fields.map(f => f.name -> toJson(rs.getObject(f.name), f.rw, record.get(f.name))): _*)
 
     conversion match {
-      case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw).as[V](field.rw)
+      case Conversion.Value(field) => toJson(rs.getObject(field.name), field.rw, record.get(field.name)).as[V](field.rw)
       case Conversion.Doc() => getDoc(rs).asInstanceOf[V]
       case Conversion.Converted(c) => c(getDoc(rs))
       case Conversion.Materialized(fields) =>
@@ -1223,9 +1224,25 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
   }
 
-  protected def toJson(value: Any, rw: RW[_]): Json = obj2Value(value) match {
+  /**
+   * A column registered for a field the model does not declare is typed as JSON, and a `String`
+   * value is written to it as its text, so text that parses as JSON is not told apart from stored
+   * JSON by the column. The record's own definition is: for a polymorphic root, the subtype the
+   * row's `type` discriminator names. This maps each of the record's fields to its definition for
+   * this row, or is empty when the row carries no discriminator a polymorphic root can resolve.
+   */
+  private def recordFields(rs: ResultSet): Map[String, Definition] =
+    if store.recordFieldsByType.isEmpty then store.recordFields
+    else {
+      val typeName = try Option(rs.getString("type")) catch { case _: SQLException => None }
+      typeName.flatMap(store.recordFieldsByType.get).getOrElse(Map.empty)
+    }
+
+  protected def toJson(value: Any, rw: RW[_]): Json = toJson(value, rw, None)
+
+  protected def toJson(value: Any, rw: RW[_], recordField: Option[Definition]): Json = obj2Value(value) match {
     case null => Null
-    case s: String if isStringField(rw) => str(s)
+    case s: String if isStringField(rw) || recordField.exists(d => isStringDefinition(d.defType)) => str(s)
     case s: String => try {
       JsonParser(s) match {
         // A parsed object/array is unambiguously stored JSON — return it
@@ -1253,13 +1270,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case v => throw new RuntimeException(s"Unsupported type: $v (${v.getClass.getName})")
   }
 
-  private def isStringField(rw: RW[_]): Boolean = {
-    def base(dt: DefType): Boolean = dt match {
-      case DefType.Str => true
-      case DefType.Opt(inner) => base(inner.defType)
-      case _ => false
-    }
-    base(rw.definition.defType)
+  private def isStringField(rw: RW[_]): Boolean = isStringDefinition(rw.definition.defType)
+
+  private def isStringDefinition(dt: DefType): Boolean = dt match {
+    case DefType.Str => true
+    case DefType.Opt(inner) => isStringDefinition(inner.defType)
+    case _ => false
   }
 
   protected def obj2Value(obj: Any): Any = obj match {
@@ -1282,6 +1298,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       parent.get(id).sync()
     case c: SQLConversion[Doc] => c.convertFromSQL(rs)
     case c: JsonConversion[Doc] =>
+      val record = recordFields(rs)
       val values = store.fields.map { field =>
         try {
           // Tokenized fields are STORED as a plain String in the base table; tokenization is a
@@ -1289,7 +1306,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           // Read the column verbatim so the value round-trips back into the case class's
           // `String` field — the previous "split on space → Arr" path broke fabric decode for
           // any caller that hit `get(_id)` / `stream` against a Tokenized field.
-          val json = toJson(rs.getObject(field.name), field.rw)
+          val json = toJson(rs.getObject(field.name), field.rw, record.get(field.name))
           field.name -> json
         } catch {
           case t: Throwable =>
