@@ -16,7 +16,7 @@ import lightdb.transaction.batch.BatchConfig
 import lightdb.transaction.handler.{AsyncWriteHandler, BufferedWriteHandler, DirectWriteHandler, QueuedWriteHandler}
 import lightdb.store.write.WriteOp
 import lightdb.trigger.{StoreTrigger, StoreTriggers}
-import lightdb.error.StoreDisposedException
+import lightdb.error.{JoinRefusedException, StoreDisposedException}
 import lightdb.util.{Disposable, Initializable, StoreMetrics}
 import rapid.*
 
@@ -290,10 +290,90 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
   private val set = ConcurrentHashMap.newKeySet[TX]
   private val sharedMap = new ConcurrentHashMap[String, Shared]()
 
+  // -- Joined transactions and group commit --------------------------------------------------------------------------
+
+  @volatile private var _groupCommitDefault: Option[Int] = None
+
+  /** Make every transaction on this store a group-commit transaction with this op bound unless it says otherwise.
+    * Called by `LightDB.store(...).withGroupCommit(...)` before `init()` runs. */
+  private[lightdb] def configureGroupCommit(bound: Option[Int]): Unit = {
+    bound.foreach(b => require(b > 0, s"group-commit bound must be positive, not $b"))
+    _groupCommitDefault = bound
+  }
+
+  /** The op bound of this store's group-commit transactions when the store opted in (see [[StoreBuilder.withGroupCommit]]). */
+  def groupCommitDefault: Option[Int] = _groupCommitDefault
+
+  /** Whether a transaction on this store can join another (`store.transaction.joining(owner)`): the store manager's
+    * capability. */
+  def supportsJoin: Boolean = storeManager.supportsJoin
+
+  /** Whether a transaction on this store can be a group-commit transaction: it can hold its writes, up to a bound,
+    * and commit or discard them whole. */
+  def supportsGroupCommit: Boolean = false
+
+  /** The largest op bound a group-commit transaction here can hold, when the store limits it (a journalled store
+    * derives it from the record size its intent must fit). A larger declared bound is lowered to it. */
+  def maxGroupCommitBound: Option[Int] = None
+
+  /** Why a transaction on this store cannot join `owner`, or `None` when it can. Backends that support joining
+    * override this to check the owner shares what the join needs (a connection manager, a database, a journal). */
+  protected def joinRefusal(owner: Transaction[?, ?]): Option[String] =
+    Some(s"store manager ${storeManager.name} does not support joined transactions")
+
+  /** Wires a newly created transaction to the owner it joins, before any write. */
+  protected def joinTransaction(transaction: TX, owner: Transaction[?, ?]): Unit = ()
+
   lazy val transaction = TransactionBuilder(None, defaultBatchConfig)
 
-  case class TransactionBuilder(parent: Option[Transaction[Doc, Model]], batchConfig: BatchConfig) {
+  /**
+   * Builds a transaction on this store.
+   *
+   * @param groupCommit `Some(Some(bound))` for a group-commit transaction holding at most `bound` ops (the write past
+   *                    it fails loud and the transaction writes nothing), `Some(None)` for none, `None` for the store
+   *                    default ([[groupCommitDefault]]). Declared when the transaction is created.
+   * @param joinOwner the transaction this one joins: the owner's commit or rollback decides both.
+   */
+  case class TransactionBuilder(parent: Option[Transaction[Doc, Model]],
+                                batchConfig: BatchConfig,
+                                groupCommit: Option[Option[Int]] = None,
+                                joinOwner: Option[Transaction[?, ?]] = None) {
     def withParent(parent: Transaction[Doc, Model]): TransactionBuilder = copy(parent = Some(parent))
+
+    /**
+     * A group-commit transaction: its writes, at most `bound` of them across it and every transaction joined to it,
+     * commit or roll back whole. The write that crosses the bound fails loud, naming the store and the count, and the
+     * transaction aborts; it never flushes part of its writes. Large writers commit in explicit chunks.
+     */
+    def withGroupCommit(bound: Int = Store.DefaultGroupCommitBound): TransactionBuilder = {
+      require(bound > 0, s"group-commit bound must be positive, not $bound")
+      copy(groupCommit = Some(Some(bound)))
+    }
+
+    /** A transaction that is not a group commit, whatever the store default. */
+    def withoutGroupCommit: TransactionBuilder = copy(groupCommit = Some(None))
+
+    /**
+     * A transaction that joins `owner`: its writes become part of the owner's commit, and the owner's commit or
+     * rollback decides both. Release it before the owner commits (typically from the owner's `transactionEnd`); its
+     * `transactionCommitted` / `transactionRolledBack` run when the owner's outcome is known. A failure in it aborts
+     * the owner. Refused with [[lightdb.error.JoinRefusedException]] when the store cannot join that owner (see
+     * [[supportsJoin]]). The op bound is the owner's.
+     */
+    def joining(owner: Transaction[?, ?]): TransactionBuilder = copy(joinOwner = Some(owner))
+
+    /** Whether a transaction on this store could join `owner` now. */
+    def canJoin(owner: Transaction[?, ?]): Boolean = joinRefusalFor(rootOf(owner)).isEmpty
+
+    private def rootOf(owner: Transaction[?, ?]): Transaction[?, ?] = owner.joinOwner.getOrElse(owner)
+
+    private def joinRefusalFor(root: Transaction[?, ?]): Option[String] =
+      if !supportsJoin then Some(s"store manager ${storeManager.name} does not support joined transactions")
+      else if root.isClosed || root.isRolledBack then Some(s"the transaction on ${root.store.name} it would join has already ended")
+      else joinRefusal(root)
+
+    private def resolvedGroupCommit: Option[Int] = groupCommit.getOrElse(groupCommitDefault)
+      .map(b => maxGroupCommitBound.fold(b)(math.min(b, _)))
 
     def withBatch(config: BatchConfig): TransactionBuilder = copy(batchConfig = config)
 
@@ -321,7 +401,10 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
     def apply[Return](f: TX => Task[Return]): Task[Return] = create().flatMap { transaction =>
       Task.defer(f(transaction)).attempt.flatMap {
         case scala.util.Success(result) => release(transaction).map(_ => result)
-        case scala.util.Failure(error) => Task.error[Return](error).guarantee(abort(transaction))
+        case scala.util.Failure(error) =>
+          Task { if (transaction.isJoined) transaction.failGroup(error) }
+            .next(Task.error[Return](error))
+            .guarantee(abort(transaction))
       }
     }
 
@@ -342,8 +425,29 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
           throw new RuntimeException(s"Attempted to create a transaction for store '$name' before database initialization. Call db.init before using store.transaction(...).")
         }
       }
+      root <- Task {
+        joinOwner.map { owner =>
+          val root = rootOf(owner)
+          joinRefusalFor(root).foreach(reason => throw JoinRefusedException(name, reason))
+          if groupCommit.exists(_.nonEmpty) then
+            throw JoinRefusedException(name, "a joined transaction takes its owner's group-commit bound, declared when the owner was created")
+          root
+        }
+      }
+      bound = if root.isEmpty then resolvedGroupCommit else None
+      _ <- Task {
+        if bound.nonEmpty && !supportsGroupCommit then
+          throw new UnsupportedOperationException(s"Store '$name' (${storeManager.name}) cannot hold a group-commit transaction")
+      }
       _ <- logger.info(s"Creating new Transaction for $name").when(Store.LogTransactions)
       transaction <- createTransaction(parent, batchConfig, tx => createWriteHandler(tx, batchConfig))
+      _ <- (root match {
+        case Some(owner) => Task {
+          joinTransaction(transaction, owner)
+          transaction.attachTo(owner)
+        }.handleError(error => Task.error[Unit](error).guarantee(transaction.close))
+        case None => Task(bound.foreach(transaction.initGroup))
+      })
       _ = set.add(transaction)
       _ <- Task.defer(trigger.transactionStart(transaction)).handleError { error =>
         Task.error[Unit](error).guarantee(abort(transaction))
@@ -352,12 +456,16 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 
     /** Manual create/release commits; manual create/abort never commits. */
     def release(transaction: TX): Task[Unit] = Task.defer {
-      if (transaction.isRolledBack) abort(transaction)
+      // A transaction its group rolled back fails its release with the cause rather than returning as if committed.
+      if (transaction.isRolledBack) abort(transaction).next(transaction.abortCause.map(Task.error[Unit]).getOrElse(Task.unit))
+      else if (transaction.isJoined) stage(transaction)
       else {
         Task.defer(trigger.transactionEnd(transaction)).next(transaction.commit).attempt.flatMap {
           case scala.util.Success(_) =>
-            // A post-commit notification error must not trigger rollback or retry a durable write.
+            // A post-commit notification error must not trigger rollback or retry a durable write. Joined transactions
+            // hear of the commit before their owner.
             transaction.close.guarantee(Task { set.remove(transaction); () })
+              .guarantee(Task.defer(transaction.group.map(_.complete(committed = true)).getOrElse(Task.unit)))
               .guarantee(Task.defer(trigger.transactionCommitted(transaction)))
           case scala.util.Failure(error) =>
             Task.error[Unit](error).guarantee(abort(transaction, notifyEnd = false))
@@ -365,14 +473,39 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
       }
     }
 
+    // A joined transaction's release hands its writes to its owner's group; its outcome follows the owner's.
+    private def stage(transaction: TX): Task[Unit] =
+      Task.defer(trigger.transactionEnd(transaction)).next(transaction.stage).attempt.flatMap {
+        case scala.util.Success(_) =>
+          transaction.close.guarantee(Task { set.remove(transaction); () }).guarantee(Task {
+            transaction.staged {
+              case true => Task(transaction.joinedCommitted()).guarantee(Task.defer(trigger.transactionCommitted(transaction)))
+              case false => transaction.joinedRolledBack().guarantee(Task.defer(trigger.transactionRolledBack(transaction)))
+            }
+          })
+        case scala.util.Failure(error) =>
+          Task(transaction.failGroup(error)).next(Task.error[Unit](error)).guarantee(abort(transaction, notifyEnd = false))
+      }
+
     def abort(transaction: TX): Task[Unit] = abort(transaction, notifyEnd = true)
 
     private def abort(transaction: TX, notifyEnd: Boolean): Task[Unit] =
-      Task(transaction.markRolledBack())
+      Task {
+        if (transaction.isJoined)
+          transaction.failGroup(transaction.abortCause.getOrElse(new IllegalStateException(s"a joined transaction on $name was aborted")))
+        else transaction.markRolledBack()
+      }
         .next(if (notifyEnd) Task.defer(trigger.transactionEnd(transaction)) else Task.unit)
         .guarantee(transaction.rollback)
         .guarantee(transaction.close)
         .guarantee(Task { set.remove(transaction); () })
+        .guarantee(Task {
+          if (transaction.isJoined) transaction.detachOpenJoin()
+        })
+        .guarantee(Task.defer {
+          if (transaction.isJoined) Task.unit
+          else transaction.group.map(_.complete(committed = false)).getOrElse(Task.unit)
+        })
         .guarantee(Task.defer(trigger.transactionRolledBack(transaction)))
 
     def releaseAll(): Task[Int] = Task.defer {
@@ -410,6 +543,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
           doc => transaction.applyWriteOps(Seq(WriteOp.Upsert(doc))).map(_ => doc),
           id => transaction.applyWriteOps(Seq(WriteOp.Delete(id))).map(_ => true)
         )
+      case BatchConfig.Buffered(_) if transaction.isGroupCommit =>
+        // The group's bound decides the size; a group commit never flushes part of its writes.
+        new BufferedWriteHandler(Int.MaxValue, ops => flushOps(transaction, ops))
       case BatchConfig.Buffered(maxBufferSize) =>
         new BufferedWriteHandler(maxBufferSize, ops => flushOps(transaction, ops))
       case BatchConfig.Queued(maxQueueSize) =>
@@ -565,6 +701,9 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
 }
 
 object Store {
+  /** The default op bound of a group-commit transaction. */
+  val DefaultGroupCommitBound: Int = 20_000
+
   var CacheQueries: Boolean = false
   var MaxInsertBatch: Int = 5_000
   var LogTransactions: Boolean = false

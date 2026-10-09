@@ -25,15 +25,109 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   /** Whether [[close]] has run: the transaction is released and accepts no further writes. */
   final def isClosed: Boolean = closed
 
-  /** A write after release would go to a closed write handler and be lost without an error. */
+  /** A write after release would go to a closed write handler and be lost without an error. A write in a
+    * group-commit transaction counts against the group's bound and fails loud past it. */
   private def writable[A](task: => Task[A]): Task[A] = Task.defer {
     if (closed) Task.error(new IllegalStateException(s"transaction for ${store.name} used after release"))
-    else task
+    else {
+      group.foreach(_.countWrite(this))
+      task
+    }
   }
 
   /** Flag the transaction as aborting before end hooks are notified, so a hook that manages a
     * dependent transaction (e.g. a reverse-edge store) can abort it rather than commit it. */
   private[lightdb] final def markRolledBack(): Unit = rolledBack = true
+
+  @volatile private var _abortCause: Option[Throwable] = None
+
+  /** Why this transaction was rolled back by its group (a failed joined transaction, a write past the group's bound),
+    * so its release fails with it rather than returning as if it had committed. */
+  final def abortCause: Option[Throwable] = _abortCause
+
+  /** Rolls the transaction back because of `cause`; its release then fails with it. */
+  private[lightdb] final def rollBackFor(cause: Throwable): Unit = synchronized {
+    rolledBack = true
+    if _abortCause.isEmpty then _abortCause = Some(cause)
+  }
+
+  // -- Joined transactions and group commit ----------------------------------------------------------------------
+
+  @volatile private var _joinOwner: Option[Transaction[?, ?]] = None
+  @volatile private var _group: Option[TransactionGroup] = None
+  private val joinOpen = new java.util.concurrent.atomic.AtomicBoolean(false)
+
+  /** The transaction this one joined (`store.transaction.joining(owner)`): its commit or rollback decides this
+    * transaction's writes. */
+  final def joinOwner: Option[Transaction[?, ?]] = _joinOwner
+
+  final def isJoined: Boolean = _joinOwner.nonEmpty
+
+  /** The group this transaction commits in: its own as an owner (created with a group-commit bound or joined by
+    * another), its owner's when joined. */
+  final def group: Option[TransactionGroup] = _joinOwner match {
+    case Some(owner) => owner.group
+    case None => _group
+  }
+
+  /** Whether this transaction holds its writes for one group commit: it was created with a group-commit bound, or it
+    * joined another transaction. */
+  final def isGroupCommit: Boolean = isJoined || _group.exists(_.bound.nonEmpty)
+
+  /** The group this transaction owns, created on first need. */
+  private[lightdb] final def ownGroup: TransactionGroup = synchronized {
+    _group.getOrElse {
+      val g = new TransactionGroup(this, None)
+      _group = Some(g)
+      g
+    }
+  }
+
+  private[lightdb] final def initGroup(bound: Int): Unit = synchronized {
+    _group = Some(new TransactionGroup(this, Some(bound)))
+  }
+
+  private[lightdb] final def attachTo(owner: Transaction[?, ?]): Unit = {
+    _joinOwner = Some(owner)
+    owner.ownGroup.joinOpened()
+    joinOpen.set(true)
+  }
+
+  /** The joined transaction ended without being staged (an abort): it no longer holds its owner's commit open. */
+  private[lightdb] final def detachOpenJoin(): Unit =
+    if joinOpen.compareAndSet(true, false) then _joinOwner.foreach(_.group.foreach(_.joinClosed()))
+
+  /** Releases a joined transaction: its writes are handed to the owner's group (see [[_stage]]) and committed or
+    * discarded with the owner. */
+  private[lightdb] final def stage: Task[Unit] = Task.defer {
+    val owner = _joinOwner.getOrElse(throw new IllegalStateException(s"transaction for ${store.name} is not joined"))
+    if (rolledBack) Task.error(new IllegalStateException("Cannot commit a rolled-back transaction"))
+    else if (owner.isRolledBack || owner.isClosed)
+      Task.error(new IllegalStateException(s"transaction for ${store.name} joined a transaction on ${owner.store.name} that has already ended"))
+    else writeHandler.flush.next(_stage)
+  }
+
+  private[lightdb] final def staged(outcome: Boolean => Task[Unit]): Unit =
+    if joinOpen.compareAndSet(true, false) then _joinOwner.foreach(_.ownGroup.stage(this, outcome))
+
+  /** A joined transaction's writes leave it: the backend makes them part of the owner's commit. Called at release,
+    * before the owner commits. A buffering backend leaves them where its owner's commit collects them. */
+  protected def _stage: Task[Unit] = Task.unit
+
+  /** A failure on a joined transaction aborts its owner too: the group commits whole or not at all. */
+  private[lightdb] final def failGroup(cause: Throwable): Unit = {
+    rollBackFor(cause)
+    _joinOwner.foreach(_.rollBackFor(new IllegalStateException(s"a transaction on ${store.name} joined to this one failed", cause)))
+  }
+
+  /** The owner of a joined transaction committed: apply its pending cache writes. */
+  private[lightdb] final def joinedCommitted(): Unit = applyCachePendingNow()
+
+  /** The owner of a joined transaction rolled back: discard its pending writes. */
+  private[lightdb] final def joinedRolledBack(): Task[Unit] = Task.defer {
+    rolledBack = true
+    writeHandler.clear.guarantee(Task(cachePending.clear()))
+  }
 
   /** Terminal abort. Stop pending/asynchronous writes before rolling back the backend. Backends
     * without transactional storage cannot undo already-applied writes; this is not distributed ACID. */
@@ -140,8 +234,13 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
   def estimatedCount: Task[Int] = count
   def flush: Task[Unit] = writeHandler.flush
   final def commit: Task[Unit] = Task.defer {
-    if (rolledBack) Task.error(new IllegalStateException("Cannot commit a rolled-back transaction"))
-    else writeHandler.flush.next(_commit).next(applyCachePending)
+    if (rolledBack) Task.error(abortCause.getOrElse(new IllegalStateException("Cannot commit a rolled-back transaction")))
+    else if (isJoined) stage
+    else group.filter(_.openMembers > 0) match {
+      case Some(g) => Task.error(new IllegalStateException(
+        s"transaction for ${store.name} cannot commit while ${g.openMembers} transaction(s) joined to it are still open"))
+      case None => writeHandler.flush.next(_commit).next(applyCachePending)
+    }
   }
   final def close: Task[Unit] = writeHandler.close.guarantee(_close).guarantee(Task { closed = true })
 
@@ -149,7 +248,9 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
    * Drain `cachePending` into the store-level cache. Called after `_commit` succeeds so rolled-back or
    * failed transactions never touch the cache. No-op when caching is disabled.
    */
-  private def applyCachePending: Task[Unit] = Task {
+  private def applyCachePending: Task[Unit] = Task(applyCachePendingNow())
+
+  private def applyCachePendingNow(): Unit = {
     store.cache.foreach { cache =>
       if (!cachePending.isEmpty) {
         val it = cachePending.entrySet().iterator()

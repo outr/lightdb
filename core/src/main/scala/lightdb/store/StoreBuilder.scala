@@ -32,23 +32,34 @@ final class StoreBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <
   val sm: SM,
   private val name: Option[String] = None,
   private val mode: Option[StoreMode[Doc, Model]] = None,
-  private val cache: CacheConfig = CacheConfig.None
+  private val cache: CacheConfig = CacheConfig.None,
+  private val groupCommit: Option[Int] = None
 ) {
   /** Override the store name. Defaults to `model.modelName`. Used as the full name for `apply()`. */
   def withName(name: String): StoreBuilder[Doc, Model, SM] =
-    new StoreBuilder(db, model, sm, Some(name), mode, cache)
+    new StoreBuilder(db, model, sm, Some(name), mode, cache, groupCommit)
 
   /** Override the [[StoreMode]]. Defaults to `StoreMode.All()`. */
   def withMode(mode: StoreMode[Doc, Model]): StoreBuilder[Doc, Model, SM] =
-    new StoreBuilder(db, model, sm, name, Some(mode), cache)
+    new StoreBuilder(db, model, sm, name, Some(mode), cache, groupCommit)
 
   /** Configure the per-store point-lookup cache. Defaults to `CacheConfig.None`. */
   def withCache(cache: CacheConfig): StoreBuilder[Doc, Model, SM] =
-    new StoreBuilder(db, model, sm, name, mode, cache)
+    new StoreBuilder(db, model, sm, name, mode, cache, groupCommit)
+
+  /**
+   * Opt the store into group commit: every transaction on it holds its writes (at most `bound` ops, across it and the
+   * transactions joined to it) and commits or discards them whole, unless the transaction is created
+   * `withoutGroupCommit`. On a split collection over RocksDB another transaction no longer sees a row until it commits,
+   * and the search index catches up after the storage write. The store must support it
+   * ([[Store.supportsGroupCommit]]).
+   */
+  def withGroupCommit(bound: Int = Store.DefaultGroupCommitBound): StoreBuilder[Doc, Model, SM] =
+    new StoreBuilder(db, model, sm, name, mode, cache, Some(bound))
 
   /** Use a custom [[StoreManager]] instead of the database's default. Re-parameterizes the builder. */
   def withStoreManager[SM2 <: StoreManager](sm2: SM2): StoreBuilder[Doc, Model, SM2] =
-    new StoreBuilder[Doc, Model, SM2](db, model, sm2, name, mode, cache)
+    new StoreBuilder[Doc, Model, SM2](db, model, sm2, name, mode, cache, groupCommit)
 
   /**
    * Materialize a single store, register it with the database, and return it. Path-dependent on the
@@ -60,6 +71,7 @@ final class StoreBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <
     val effectiveMode = mode.getOrElse(StoreMode.All[Doc, Model]())
     val store = sm.create[Doc, Model](db, model, n, path, effectiveMode)
     store.configureCache(cache)
+    store.configureGroupCommit(groupCommit)
     db.registerStore(store)
     store
   }
@@ -83,6 +95,7 @@ final class StoreBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc], SM <
       val path = LightDBPlatform.storePath(db.directory, storeName)
       val s = sm.create[Doc, Model](db, model, storeName, path, effectiveMode)
       s.configureCache(cache)
+      s.configureGroupCommit(groupCommit)
       db.registerStore(s)
       key -> s
     }.toMap

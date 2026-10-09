@@ -215,10 +215,12 @@ trait LightDB extends Initializable with Disposable with FeatureSupport[DBFeatur
     forward.trigger += new StoreTrigger[E, M] {
       private val map = new ConcurrentHashMap[Transaction[E, M], reverse.TX]
 
+      // The reverse side joins the forward transaction when the stores can, so both commit or roll back together.
       override def transactionStart(transaction: Transaction[E, M]): Task[Unit] = super
         .transactionStart(transaction)
         .flatMap { _ =>
-          reverse.transaction.create().map { tx =>
+          val builder = reverse.transaction
+          (if builder.canJoin(transaction) then builder.joining(transaction) else builder).create().map { tx =>
             map.put(transaction, tx)
           }
         }
