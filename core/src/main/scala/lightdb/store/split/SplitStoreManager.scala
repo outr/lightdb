@@ -18,6 +18,9 @@ case class SplitStoreManager[Storage <: StoreManager, Searching <: CollectionMan
 
   override lazy val name: String = s"Split($storage, $searching)"
 
+  /** Native over storage whose stores write atomically together (RocksDB): see [[SplitCollection]]. */
+  override def supportsJoin: Boolean = storage.supportsAtomicWrites
+
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SplitCollection[Doc, Model, storage.S[Doc, Model], searching.S[Doc, Model]]
 
   override def create[Doc <: Document[Doc], Model <: DocumentModel[Doc]](db: LightDB,

@@ -4,15 +4,16 @@ import lightdb.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.store.*
 import lightdb.store.prefix.{PrefixScanningStore, PrefixScanningStoreManager}
-import lightdb.error.StoreDisposedException
+import lightdb.error.{DuplicateIdException, StoreDisposedException}
 import lightdb.store.write.WriteOp
 import lightdb.transaction.{Transaction, WriteHandler}
 import lightdb.transaction.batch.BatchConfig
 import lightdb.transaction.handler.DirectWriteHandler
-import org.rocksdb.{BlockBasedTableConfig, BloomFilter, ColumnFamilyDescriptor, ColumnFamilyHandle, ColumnFamilyOptions, DBOptions, FlushOptions, LRUCache, Options, RocksDB}
+import org.rocksdb.{BlockBasedTableConfig, BloomFilter, ColumnFamilyDescriptor, ColumnFamilyHandle, ColumnFamilyOptions, DBOptions, FlushOptions, LRUCache, Options, RocksDB, WriteBatch}
+import fabric.io.JsonFormatter
 import profig.Profig
 import rapid.Task
-import fabric.rw.intRW
+import fabric.rw.{Convertible, intRW}
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
@@ -26,7 +27,7 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
                                                                       private[rocksdb] val sharedStore: Option[RocksDBSharedStoreInstance],
                                                                       val storeMode: StoreMode[Doc, Model],
                                                                       lightDB: LightDB,
-                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] {
+                                                                      storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) with PrefixScanningStore[Doc, Model] with AtomicWriteStore[Doc, Model] {
   override type TX = RocksDBTransaction[Doc, Model]
 
   override def defaultBatchConfig: BatchConfig = BatchConfig.Buffered()
@@ -40,6 +41,25 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
       doc => flushOps(transaction, Seq(WriteOp.Upsert(doc))).map(_ => doc),
       id => flushOps(transaction, Seq(WriteOp.Delete(id))).map(_ => true)
     )
+
+  /** A group-commit transaction buffers its writes and commits them in one `WriteBatch`. */
+  override def supportsGroupCommit: Boolean = true
+
+  /** The stores of one RocksDB database can be written in one atomic `WriteBatch`. */
+  override def atomicGroup: AnyRef = rocksDB
+
+  override def writeAtomically(batches: List[AtomicBatch[?, ?]]): Task[Unit] = Task(native {
+    batches.foreach { b =>
+      if !(b.store.atomicGroup eq rocksDB) then
+        throw new IllegalArgumentException(s"${b.store.name} is not in the same RocksDB database as $name")
+    }
+    batches.foreach(b => RocksDBStore.refuseExistingInserts(b))
+    val batch = new WriteBatch
+    try {
+      batches.foreach(b => RocksDBStore.addTo(b, batch))
+      rocksDB.write(RocksDBTransaction.writeOptions, batch)
+    } finally batch.close()
+  })
 
   private val iteratorThreads: Int = Profig("lightdb.rocksdb.iteratorThreadPoolSize").opt[Int].getOrElse(16)
   private[rocksdb] val iteratorThreadPool: RocksDBIteratorThreadPool =
@@ -122,6 +142,47 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 
 object RocksDBStore extends PrefixScanningStoreManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = RocksDBStore[Doc, Model]
+
+  /** One put is one WAL record; RocksDB takes values up to about 3 GiB, and this keeps well inside it. */
+  val MaxRecordBytes: Long = 1L << 30
+
+  override def maxRecordBytes: Option[Long] = Some(MaxRecordBytes)
+
+  override def supportsAtomicWrites: Boolean = true
+
+  private def encode[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model], doc: Doc): Array[Byte] =
+    JsonFormatter.Compact(doc.json(store.model.rw)).getBytes(StandardCharsets.UTF_8)
+
+  private[rocksdb] def refuseExistingInserts[Doc <: Document[Doc], Model <: DocumentModel[Doc]](b: AtomicBatch[Doc, Model]): Unit = {
+    val store = b.store.asInstanceOf[RocksDBStore[Doc, Model]]
+    b.ops.foreach {
+      case WriteOp.Insert(doc) =>
+        val exists = store.handle match {
+          case Some(h) => store.rocksDB.keyExists(h, doc._id.bytes)
+          case None => store.rocksDB.keyExists(doc._id.bytes)
+        }
+        if exists then throw DuplicateIdException(store.name, doc._id)
+      case _ => ()
+    }
+  }
+
+  private[rocksdb] def addTo[Doc <: Document[Doc], Model <: DocumentModel[Doc]](b: AtomicBatch[Doc, Model], batch: WriteBatch): Unit = {
+    val store = b.store.asInstanceOf[RocksDBStore[Doc, Model]]
+    b.ops.foreach {
+      case WriteOp.Insert(doc) => put(store, batch, doc)
+      case WriteOp.Upsert(doc) => put(store, batch, doc)
+      case WriteOp.Delete(id) => store.handle match {
+        case Some(h) => batch.delete(h, id.bytes)
+        case None => batch.delete(id.bytes)
+      }
+    }
+  }
+
+  private def put[Doc <: Document[Doc], Model <: DocumentModel[Doc]](store: RocksDBStore[Doc, Model], batch: WriteBatch, doc: Doc): Unit =
+    store.handle match {
+      case Some(h) => batch.put(h, doc._id.bytes, encode(store, doc))
+      case None => batch.put(doc._id.bytes, encode(store, doc))
+    }
 
   // NOTE: For your dedupe workload (massive repeated prefix scans), direct I/O often hurts more than it helps.
   // Disabling it allows Linux page cache + readahead to work in our favor and can dramatically improve scan throughput.

@@ -15,6 +15,10 @@ case class RocksDBSharedStore(directory: Path) extends StoreManager with Disposa
 
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = RocksDBStore[Doc, Model]
 
+  override def maxRecordBytes: Option[Long] = Some(RocksDBStore.MaxRecordBytes)
+
+  override def supportsAtomicWrites: Boolean = true
+
   val (rocksDB: RocksDB, existingHandles: List[ColumnFamilyHandle]) = RocksDBStore.createRocksDB(directory)
 
   // Mutable so the fast-truncate path (drop column family + recreate) can

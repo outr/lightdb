@@ -127,7 +127,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override protected def _commit: Task[Unit] = state.commit
 
   override protected def _rollback: Task[Unit] = store.storeMode match {
-    case StoreMode.Indexes(storage) if store.index.deferred && state.isDirty =>
+    case StoreMode.Indexes(storage) if state.isDirty =>
       restoreFrom(storage).handleError { t =>
         Task {
           scribe.error(s"${store.name}: restoring the documents a rolled-back transaction changed failed; the index will be rebuilt from storage when next opened", t)
@@ -137,16 +137,16 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     case _ => state.rollback
   }
 
-  // What this transaction changed, for the rollback of a deferred-durability index: the writer also holds the
-  // published, not yet durable changes of other transactions, so it cannot be rolled back as a whole. Instead every
-  // document the transaction touched is restored from the storage the index mirrors, or the whole index when it
-  // touched more than it tracks or an unknown set (a truncate).
+  // What this transaction changed, for the rollback of an index that mirrors storage: the writer also holds other open
+  // transactions' changes (and, deferred, published changes not yet durable), so it is never rolled back as a whole,
+  // which would discard theirs. Instead every document the transaction touched is restored from the storage the index
+  // mirrors, or the whole index when it touched more than it tracks or an unknown set (a truncate).
   private val touchedIds = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
   @volatile private var touchedAll = false
 
   private def touch(id: Option[String]): Unit = {
     state.markDirty()
-    if store.index.deferred && !touchedAll then id match {
+    if store.storeMode.isIndexes && !touchedAll then id match {
       case Some(value) if touchedIds.size < LuceneTransaction.MaxTrackedChanges => touchedIds.add(value)
       case _ =>
         touchedAll = true

@@ -112,6 +112,12 @@ class LuceneStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
       Task(LuceneTransaction(this, LuceneState[Doc](index, hasFacets), parent, writeHandlerFactory))
   }
 
+  /** The index file marker goes down and stays down: the index is rebuilt from storage when next opened, unless
+    * [[markIndexCaughtUp]] lifts it first. */
+  override def markIndexBehind(): Task[Unit] = Task(index.requireRebuild())
+
+  override def markIndexCaughtUp(): Task[Unit] = Task(index.rebuilt())
+
   override def optimize(): Task[Unit] = Task {
     val s = index.createIndexSearcher()
     val currentSegments = try {

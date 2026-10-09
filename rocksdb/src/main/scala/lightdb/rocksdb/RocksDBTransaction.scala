@@ -10,7 +10,7 @@ import lightdb.id.Id
 import lightdb.rocksdb.RocksDBTransaction.writeOptions
 import lightdb.store.Store
 import lightdb.store.write.WriteOp
-import lightdb.transaction.{PrefixScanningTransaction, Transaction}
+import lightdb.transaction.{PrefixScanningTransaction, Transaction, UndoableTransaction}
 import org.rocksdb.{ReadOptions, RocksIterator, Slice, WriteBatch, WriteOptions}
 import profig.Profig
 import rapid.*
@@ -22,7 +22,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   store: RocksDBStore[Doc, Model],
   parent: Option[Transaction[Doc, Model]],
   writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]
-) extends PrefixScanningTransaction[Doc, Model] { tx =>
+) extends PrefixScanningTransaction[Doc, Model] with UndoableTransaction[Doc, Model] { tx =>
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
 
   private def bytes2Doc(bytes: Array[Byte]): Doc = bytes2Json(bytes).as[Doc](store.model.rw)
@@ -78,6 +78,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   })
 
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
+    remember(doc._id, prior(doc._id))
     val json = doc.json(store.model.rw)
     val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
     store.native(store.handle match {
@@ -89,6 +90,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override def upsert(stream: rapid.Stream[Doc], commitEvery: Option[Int] = None): Task[Int] = commitEvery match {
     case Some(_) => super.upsert(stream, commitEvery)
+    case None if undo != null => super.upsert(stream, commitEvery)
     case None => Task.defer {
       batchUpsert(stream.evalTap { doc =>
         store.trigger.upsert(doc, this)
@@ -134,6 +136,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         case None => store.rocksDB.keyExists(doc._id.bytes)
       }
       if (exists) throw DuplicateIdException(store.name, doc._id)
+      remember(doc._id, None)
     }
 
     val batch = new WriteBatch
@@ -147,6 +150,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             case None => batch.put(doc._id.bytes, bytes)
           }
         case WriteOp.Upsert(doc) =>
+          remember(doc._id, prior(doc._id))
           val json = doc.json(store.model.rw)
           val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
           store.handle match {
@@ -154,6 +158,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             case None => batch.put(doc._id.bytes, bytes)
           }
         case WriteOp.Delete(id) =>
+          remember(id, prior(id))
           store.handle match {
             case Some(h) => batch.delete(h, id.bytes)
             case None => batch.delete(id.bytes)
@@ -186,6 +191,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   override protected def _delete(id: Id[Doc]): Task[Boolean] = Task {
+    remember(id, prior(id))
     val bytes = id.bytes
     store.native(store.handle match {
       case Some(h) => store.rocksDB.delete(h, writeOptions, bytes)
@@ -194,11 +200,55 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     true
   }
 
-  override protected def _commit: Task[Unit] = Task.unit
+  override protected def _commit: Task[Unit] = Task(clearUndo())
 
-  override protected def _rollback: Task[Unit] = Task.unit
+  override protected def _rollback: Task[Unit] = Task(undoWrites())
 
   override protected def _close: Task[Unit] = Task.unit
+
+  // -- Undo ----------------------------------------------------------------------------------------------------------
+  // The row each id held before this transaction first wrote it (None: absent), kept once `recordUndo` is called so a
+  // rollback can put storage back. A write-through store has no other way to take a written row back.
+  @volatile private var undo: java.util.concurrent.ConcurrentHashMap[String, Option[Array[Byte]]] = null
+
+  override def recordUndo(): Unit = synchronized {
+    if undo == null then undo = new java.util.concurrent.ConcurrentHashMap[String, Option[Array[Byte]]]()
+  }
+
+  private def remember(id: Id[Doc], prior: => Option[Array[Byte]]): Unit = {
+    val log = undo
+    if log != null && !log.containsKey(id.value) then log.putIfAbsent(id.value, prior)
+  }
+
+  private def prior(id: Id[Doc]): Option[Array[Byte]] = Option(store.native(store.handle match {
+    case Some(h) => store.rocksDB.get(h, id.bytes)
+    case None => store.rocksDB.get(id.bytes)
+  }))
+
+  private def clearUndo(): Unit = {
+    val log = undo
+    if log != null then log.clear()
+  }
+
+  private def undoWrites(): Unit = {
+    val log = undo
+    if log != null && !log.isEmpty then store.native {
+      val batch = new WriteBatch
+      try {
+        log.forEach { (id, before) =>
+          val key = id.getBytes(StandardCharsets.UTF_8)
+          (before, store.handle) match {
+            case (Some(bytes), Some(h)) => batch.put(h, key, bytes)
+            case (Some(bytes), None) => batch.put(key, bytes)
+            case (None, Some(h)) => batch.delete(h, key)
+            case (None, None) => batch.delete(key)
+          }
+        }
+        store.rocksDB.write(writeOptions, batch)
+        log.clear()
+      } finally batch.close()
+    }
+  }
 
   override def truncate: Task[Int] = Task.defer {
     // Fast path: drop the entire column family and recreate it. O(1) in the

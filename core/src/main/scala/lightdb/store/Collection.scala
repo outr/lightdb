@@ -17,6 +17,13 @@ abstract class Collection[Doc <: Document[Doc], Model <: DocumentModel[Doc]](nam
                                                                              storeManager: StoreManager) extends Store[Doc, Model](name, path, model, lightDB, storeManager) {
   override type TX <: CollectionTransaction[Doc, Model]
 
+  /** This collection, indexing a storage store, may be missing rows its storage holds: keep that known across a crash
+    * (an index that can be rebuilt from storage rebuilds when next opened) until [[markIndexCaughtUp]]. */
+  def markIndexBehind(): Task[Unit] = Task.unit
+
+  /** The rows [[markIndexBehind]] was about are indexed again. */
+  def markIndexCaughtUp(): Task[Unit] = Task.unit
+
   /**
    * Rebuilds derived/indexed data for a full (`StoreMode.All`) collection by re-writing every stored
    * document. A field's value is produced by its getter at write time, so a newly-added computed or
