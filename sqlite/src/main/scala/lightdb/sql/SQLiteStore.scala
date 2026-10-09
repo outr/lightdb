@@ -261,6 +261,9 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
 object SQLiteStore extends SQLCollectionManager {
   override type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = SQLiteStore[Doc, Model]
 
+  /** SQLite's default limit on a string or blob (SQLITE_MAX_LENGTH): one row, written in one transaction. */
+  override def maxRecordBytes: Option[Long] = Some(1_000_000_000L)
+
   /**
    * SQLite tuning knobs (applied via PRAGMA on connection init).
    * These default to conservative, concurrency-friendly values for WAL.
