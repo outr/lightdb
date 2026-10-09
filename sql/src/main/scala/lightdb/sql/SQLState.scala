@@ -43,9 +43,43 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
 
   private lazy val cache = new ConcurrentHashMap[String, ConcurrentLinkedQueue[PreparedStatement]]
 
+  // -- Joined transactions --------------------------------------------------------------------------------------------
+  // A joined state borrows its owner's connection: it writes on it, never commits, rolls back or releases it, and never
+  // replaces it. The owner's COMMIT or rollback decides both.
+  @volatile private var joinedTo: Option[SQLState[?, ?]] = None
+
+  /** Whether this state borrows another transaction's connection. */
+  def isJoined: Boolean = joinedTo.nonEmpty
+
+  private[sql] def joinTo(owner: SQLState[?, ?]): Unit = {
+    if owner.connectionManager ne connectionManager then
+      throw new IllegalArgumentException("a joined SQL transaction must share its owner's connection manager")
+    joinedTo = Some(owner)
+  }
+
+  /** The connection this state writes on: its own (opened on first use), or its owner's when joined. */
+  def openConnection(): java.sql.Connection = joinedTo match {
+    case Some(owner) =>
+      ensureOpen()
+      owner.openConnection()
+    case None => connectionManager.getConnection(this)
+  }
+
+
+  private def dirtied(): Unit = {
+    dirty = true
+    joinedTo.foreach(_.markDirty())
+  }
+
+  /** A joined state's release: its queued batches reach the owner's connection, uncommitted. */
+  private[sql] def stage(): Unit = withStateLock {
+    ensureOpen()
+    flushBatches()
+  }
+
   def withPreparedStatement[Return](sql: String)(f: PreparedStatement => Return): Return = withStateLock {
     ensureOpen()
-    val connection = connectionManager.getConnection(this)
+    val connection = openConnection()
 
     def createPs(): PreparedStatement = {
       val ps = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
@@ -107,7 +141,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   def markDirty(): Unit = withStateLock {
-    dirty = true
+    dirtied()
   }
 
   /**
@@ -117,7 +151,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
    * retry throws away, so retrying around them would silently drop them and report success.
    */
   private[sql] def retryableRead: Boolean = withStateLock {
-    !dirty && batchInsert.get() == 0 && batchUpsert.get() == 0
+    joinedTo.isEmpty && !dirty && batchInsert.get() == 0 && batchUpsert.get() == 0
   }
 
   /**
@@ -130,6 +164,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
    * the connection is broken, and the pool discards it on release rather than handing it back.
    */
   private[sql] def discardConnection(): Unit = withStateLock {
+    require(joinedTo.isEmpty, "a joined SQL transaction never replaces its owner's connection")
     cache.clear()
     statements = Nil
     resultSets = Nil
@@ -142,20 +177,20 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   def withInsertPreparedStatement[Return](f: PreparedStatement => Return): Return = withStateLock {
       ensureOpen()
       if psInsert == null then {
-        val connection = connectionManager.getConnection(this)
+        val connection = openConnection()
         psInsert = connection.prepareStatement(store.insertSQL)
       }
-      dirty = true
+      dirtied()
       f(psInsert)
   }
 
   def withUpsertPreparedStatement[Return](f: PreparedStatement => Return): Return = withStateLock {
       ensureOpen()
       if psUpsert == null then {
-        val connection = connectionManager.getConnection(this)
+        val connection = openConnection()
         psUpsert = connection.prepareStatement(store.upsertSQL)
       }
-      dirty = true
+      dirtied()
       f(psUpsert)
   }
 
@@ -175,7 +210,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   def commit: Task[Unit] = Task { withStateLock {
     flushBatches()
     // Also commit raw JDBC/DDL and read transactions, which may not have called markDirty.
-    connectionManager.currentConnection(this).foreach { c =>
+    if joinedTo.isEmpty then connectionManager.currentConnection(this).foreach { c =>
       if (!c.getAutoCommit) c.commit()
     }
     dirty = false
@@ -198,7 +233,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     try discardBatches()
     finally {
       dirty = false
-      connectionManager.currentConnection(this).foreach { c =>
+      if joinedTo.isEmpty then connectionManager.currentConnection(this).foreach { c =>
         if (!c.isClosed && !c.getAutoCommit) c.rollback()
       }
     }
@@ -212,7 +247,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     }
     cleanup(discardBatches())
     // Manual close without commit must not leave a dirty single/shared connection to publish later.
-    if (dirty) cleanup(connectionManager.currentConnection(this).foreach { c =>
+    if (dirty && joinedTo.isEmpty) cleanup(connectionManager.currentConnection(this).foreach { c =>
       if (!c.isClosed && !c.getAutoCommit) c.rollback()
     })
     dirty = false
@@ -226,7 +261,7 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     statements = Nil
     psInsert = null
     psUpsert = null
-    cleanup(connectionManager.releaseConnection(this))
+    if joinedTo.isEmpty then cleanup(connectionManager.releaseConnection(this))
     released = true
     if (failure != null) throw failure
   }}

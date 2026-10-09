@@ -131,7 +131,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   def sql: TxnSqlDsl.Builder[Doc, Model] = TxnSqlDsl(this)
 
   override def jsonStream: rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
-    val connection = state.connectionManager.getConnection(state)
+    val connection = state.openConnection()
     val s = connection.createStatement()
     s.setFetchSize(1000)
     state.register(s)
@@ -141,7 +141,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   })
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
-    val connection = state.connectionManager.getConnection(state)
+    val connection = state.openConnection()
     val idCol = SqlIdent.quote(store.model._id.name)
     val ps = connection.prepareStatement(s"SELECT * FROM ${store.fqn} WHERE $idCol LIKE ? ORDER BY $idCol")
     state.register(ps)
@@ -334,7 +334,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
 
     if deletes.nonEmpty then {
-      val connection = state.connectionManager.getConnection(state)
+      val connection = state.openConnection()
       val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${SqlIdent.quote(store.model._id.name)} = ?")
       val ps = connection.prepareStatement(sql.query)
       try {
@@ -350,7 +350,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   protected def _deleteInternal[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Boolean] = Task {
-    val connection = state.connectionManager.getConnection(state)
+    val connection = state.openConnection()
     val sql = SQLQuery.parse(s"DELETE FROM ${store.fqn} WHERE ${SqlIdent.quote(index.name)} = ?")
     val ps = connection.prepareStatement(sql.query)
     try {
@@ -366,6 +366,15 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   override protected def _rollback: Task[Unit] = state.rollback
 
   override protected def _close: Task[Unit] = state.close
+
+  override protected def _stage: Task[Unit] = Task(state.stage())
+
+  // A failure on a joined transaction's connection is its owner's failure too: the owner aborts, and the shared
+  // connection is never replaced under the owner's uncommitted writes.
+  private def failed(t: Throwable): Throwable = {
+    if state.isJoined then failGroup(t)
+    t
+  }
 
   def resultsFor(rendered: SQLQuery): SQLResults = {
     val sql = dialectQuery(rendered)
@@ -399,7 +408,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           case retried: Throwable =>
             throw new SQLException(s"Error executing query after stale-plan retry: ${sql.query} (params: ${sql.args.mkString(" | ")})", retried)
         }
-      case t: Throwable => throw new SQLException(s"Error executing query: ${sql.query} (params: ${sql.args.mkString(" | ")})", t)
+      case t: Throwable => throw failed(new SQLException(s"Error executing query: ${sql.query} (params: ${sql.args.mkString(" | ")})", t))
     }
   }
 
@@ -417,7 +426,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         }
       }
     } catch {
-      case t: Throwable => throw new SQLException(s"Error executing update: ${sql.query} (params: ${sql.args.mkString(" | ")})", t)
+      case t: Throwable => throw failed(new SQLException(s"Error executing update: ${sql.query} (params: ${sql.args.mkString(" | ")})", t))
     }
   }
 
@@ -1126,7 +1135,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   override def truncate: Task[Int] = Task {
     state.closePendingResults()
-    val connection = state.connectionManager.getConnection(state)
+    val connection = state.openConnection()
     val ps = connection.prepareStatement(s"DELETE FROM ${store.fqn}")
     try {
       ps.executeUpdate()
@@ -1535,7 +1544,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   private def executeQuery(sql: String): ResultSet = {
-    val connection = state.connectionManager.getConnection(state)
+    val connection = state.openConnection()
     val s = connection.createStatement()
     state.register(s)
     s.executeQuery(sql)

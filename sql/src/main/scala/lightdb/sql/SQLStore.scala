@@ -42,6 +42,20 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     new QueuedWriteHandler(maxBatch, ops => flushOps(transaction, ops), chunkSize = maxBatch)
   }
 
+  /** A SQL transaction's writes wait on its connection until COMMIT, so a group commit is a bound on them and the
+    * connection's rollback discards them. */
+  override def supportsGroupCommit: Boolean = true
+
+  /** A transaction here joins an owner on the same connection manager by borrowing the owner's connection. */
+  override protected def joinRefusal(owner: Transaction[?, ?]): Option[String] = owner match {
+    case o: SQLStoreTransaction[?, ?] if o.state.connectionManager eq connectionManager => None
+    case o: SQLStoreTransaction[?, ?] => Some(s"${o.store.name} uses a different connection manager than $name")
+    case o => Some(s"the owner's store ${o.store.name} is not a SQL store")
+  }
+
+  override protected def joinTransaction(transaction: TX, owner: Transaction[?, ?]): Unit =
+    transaction.state.joinTo(owner.asInstanceOf[SQLStoreTransaction[?, ?]].state)
+
   override def supportsNativeExistsChild: Boolean = false
 
   def supportsSchemas: Boolean = false
@@ -192,7 +206,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def initTransaction(tx: TX): Task[Unit] = Task {
     connectionManager.active()
-    val connection = tx.state.connectionManager.getConnection(tx.state)
+    val connection = tx.state.openConnection()
     initConnection(connection)
     if supportsSchemas then {
       createSchema(tx)
@@ -387,7 +401,7 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def executeUpdate(sql: String, tx: TX): Unit = {
     val state = tx.state
-    val connection = state.connectionManager.getConnection(state)
+    val connection = state.openConnection()
     val s = connection.createStatement()
     try {
       s.executeUpdate(sql)
