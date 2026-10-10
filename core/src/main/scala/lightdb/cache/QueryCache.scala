@@ -119,11 +119,13 @@ trait QueryCache {
         val size = map.size()
         if size > max then {
           val removeCount = size - max
-          map.entrySet().asScala.toList.sortBy { entry =>
+          // Usage is read once per entry before the sort: a concurrent apply or modify changes it, and a key
+          // read live mid-sort breaks the sort's contract.
+          map.entrySet().asScala.toList.map { entry =>
             val cached = entry.getValue
-            (cached.referenceCount, cached.lastAccess.value)
-          }.take(removeCount).foreach { entry =>
-            map.remove(entry.getKey)
+            entry.getKey -> (cached.referenceCount, cached.lastAccess.value)
+          }.sortBy(_._2).take(removeCount).foreach { case (key, _) =>
+            map.remove(key)
           }
         }
       }

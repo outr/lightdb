@@ -162,21 +162,22 @@ final class LruStoreCache[Doc](maxEntries: Int, ttl: Option[FiniteDuration]) ext
 
   // Evict the oldest-access entries until size is back at or below maxEntries. Sweep is performed under
   // a synchronized block so concurrent puts don't double-evict (the eviction sort is the cost we pay
-  // for not maintaining a separate access-order linked list).
+  // for not maintaining a separate access-order linked list). Readers touch entries outside the lock, so
+  // each entry's access time is read once, before the sort: read live, it can change mid-sort and break
+  // the sort's contract.
   private def evictOldest(): Unit = synchronized {
     val excess = map.size() - maxEntries
     if (excess <= 0) return
-    val candidates = map.entrySet().asScala.toArray
-    java.util.Arrays.sort(
-      candidates.asInstanceOf[Array[java.util.Map.Entry[Id[Doc], Entry[Doc]]]],
-      (a: java.util.Map.Entry[Id[Doc], Entry[Doc]], b: java.util.Map.Entry[Id[Doc], Entry[Doc]]) =>
-        java.lang.Long.compare(a.getValue.lastAccess, b.getValue.lastAccess)
-    )
+    val candidates = map.entrySet().asScala.iterator.map { e =>
+      val entry = e.getValue
+      (entry.lastAccess, e.getKey, entry)
+    }.toArray
+    candidates.sortInPlaceBy(_._1)
     var removed = 0
     var i = 0
     while (i < candidates.length && removed < excess) {
-      val e = candidates(i)
-      if (map.remove(e.getKey, e.getValue)) removed += 1
+      val (_, id, entry) = candidates(i)
+      if (map.remove(id, entry)) removed += 1
       i += 1
     }
     if (removed > 0) stats.recordEviction(removed.toLong)
