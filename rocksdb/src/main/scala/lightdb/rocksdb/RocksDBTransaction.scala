@@ -116,6 +116,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           }
           // Bulk writes can optionally skip WAL for faster rebuild/regeneration jobs.
           store.rocksDB.write(RocksDBTransaction.bulkWriteOptions, batch)
+          streamBatchedRows.addAndGet(chunk.length)
           total + chunk.length
         } finally {
           batch.close()
@@ -165,6 +166,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           }
       }
       store.rocksDB.write(writeOptions, batch)
+      batchedRows.addAndGet(ops.size)
     } finally {
       batch.close()
     }
@@ -220,10 +222,24 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     if log != null && !log.containsKey(id.value) then log.putIfAbsent(id.value, prior)
   }
 
-  private def prior(id: Id[Doc]): Option[Array[Byte]] = Option(store.native(store.handle match {
-    case Some(h) => store.rocksDB.get(h, id.bytes)
-    case None => store.rocksDB.get(id.bytes)
-  }))
+  private def prior(id: Id[Doc]): Option[Array[Byte]] = {
+    undoReads.incrementAndGet()
+    Option(store.native(store.handle match {
+      case Some(h) => store.rocksDB.get(h, id.bytes)
+      case None => store.rocksDB.get(id.bytes)
+    }))
+  }
+
+  // Counters a spec reads: prior rows read while recording undo, rows written through a WriteBatch by flushOps and by
+  // the stream upsert, and the prior row values the undo log holds.
+  private[rocksdb] val undoReads = new java.util.concurrent.atomic.AtomicLong(0L)
+  private[rocksdb] val batchedRows = new java.util.concurrent.atomic.AtomicLong(0L)
+  private[rocksdb] val streamBatchedRows = new java.util.concurrent.atomic.AtomicLong(0L)
+
+  private[rocksdb] def undoRowsHeld: Int = {
+    val log = undo
+    if log == null then 0 else log.values().asScala.count(_.isDefined)
+  }
 
   private def clearUndo(): Unit = {
     val log = undo
