@@ -17,7 +17,7 @@ import java.util.Comparator
 
 /**
  * A split transaction over RocksDB records undo on its first write. A bulk upsert after that keeps RocksDB's batched
- * write path and does not read or hold the rows it overwrites, and a rollback still puts every prior row back exactly:
+ * write path and does not read or hold the rows it overwrites (a snapshot keeps them readable), and a rollback still puts every prior row back exactly:
  * overwritten rows byte for byte, new rows gone, the index matching storage.
  */
 @EmbeddedTest
@@ -52,11 +52,12 @@ class SplitUndoBatchUpsertSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
 
   private def indexed(prefix: String): Task[Int] = db.items.transaction(_.query.filter(_.name startsWith prefix).count)
 
-  private case class Seen(undoReads: Long, undoRowsHeld: Int, batchedRows: Long, streamBatchedRows: Long, millis: Long)
+  private case class Seen(undoReads: Long, undoRowsHeld: Int, undoSnapshots: Int, batchedRows: Long, streamBatchedRows: Long, millis: Long)
 
   private def seen(tx: db.items.TX, start: Long): Seen = Seen(
     undoReads = tx.storage.undoReads.get(),
     undoRowsHeld = tx.storage.undoRowsHeld,
+    undoSnapshots = tx.storage.undoSnapshotsHeld,
     batchedRows = tx.storage.batchedRows.get(),
     streamBatchedRows = tx.storage.streamBatchedRows.get(),
     millis = (System.nanoTime() - start) / 1_000_000L
@@ -107,6 +108,7 @@ class SplitUndoBatchUpsertSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
       yield {
         s.undoReads shouldBe 0L
         s.undoRowsHeld shouldBe 0
+        s.undoSnapshots shouldBe 1
         s.batchedRows shouldBe (N + 1).toLong
       }
     }
@@ -120,6 +122,7 @@ class SplitUndoBatchUpsertSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
       yield {
         s.undoReads shouldBe 0L
         s.undoRowsHeld shouldBe 0
+        s.undoSnapshots shouldBe 1
         s.streamBatchedRows shouldBe N.toLong
       }
     }
@@ -134,6 +137,39 @@ class SplitUndoBatchUpsertSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
         row.map(_.name) shouldBe Some("new-7")
         old.map(_.name) shouldBe Some("new-7")
         newHits shouldBe N
+      }
+    }
+    "put back, after a truncate, the rows the transaction wrote before it, as a rolled-back truncate always has" in {
+      for
+        _ <- db.scratch.transaction(_.insert(List(Item("kept-a", Id("a")), Item("kept-b", Id("b")), Item("kept-c", Id("c")))))
+        failed <- db.scratch.transaction { tx =>
+          tx.upsert(rapid.Stream.emits(List(Item("changed-a", Id("a")), Item("added-d", Id("d")))))
+            .next(tx.truncate)
+            .next(tx.upsert(Item("added-e", Id("e"))))
+            .next(Task.error[Unit](new RuntimeException("roll back")))
+        }.attempt.map(_.isFailure)
+        rows <- db.scratch.transaction(_.storage.list)
+      yield {
+        failed shouldBe true
+        rows.map(i => i._id.value -> i.name).sorted shouldBe List("a" -> "kept-a")
+      }
+    }
+    "put back the row another transaction committed between this one's writes, not the one before it" in {
+      for
+        _ <- db.scratch.transaction(_.insert(List(Item("before-x", Id("x")), Item("before-y", Id("y")))))
+        failed <- db.scratch.transaction { tx =>
+          tx.upsert(Item("mine-x", Id("x")))
+            .next(db.scratch.transaction(_.upsert(Item("theirs-y", Id("y")))))
+            .next(tx.upsert(rapid.Stream.emits(List(Item("mine-y", Id("y")), Item("mine-z", Id("z"))))))
+            .next(Task.error[Unit](new RuntimeException("roll back")))
+        }.attempt.map(_.isFailure)
+        rows <- db.scratch.transaction(_.storage.list)
+        theirs <- db.scratch.transaction(_.query.filter(_.name === "theirs-y").count)
+        mine <- db.scratch.transaction(_.query.filter(_.name startsWith "mine-").count)
+      yield {
+        failed shouldBe true
+        rows.map(i => i._id.value -> i.name).sorted shouldBe List("a" -> "kept-a", "x" -> "before-x", "y" -> "theirs-y")
+        (theirs, mine) shouldBe (1, 0)
       }
     }
     "dispose" in db.dispose.succeed
@@ -155,6 +191,7 @@ object SplitUndoBatchUpsertSpec {
     override lazy val directory: Option[Path] = Some(dir)
     override protected def disposeOnShutdown: Boolean = false
     val items: SplitCollection[Item, Item.type, RocksDBStore[Item, Item.type], LuceneStore[Item, Item.type]] = store(Item)()
+    val scratch: SplitCollection[Item, Item.type, RocksDBStore[Item, Item.type], LuceneStore[Item, Item.type]] = store(Item).withName("scratch")()
     override def upgrades: List[DatabaseUpgrade] = Nil
   }
 }

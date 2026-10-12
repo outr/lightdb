@@ -7,15 +7,16 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.error.{DuplicateIdException, StoreDisposedException}
 import lightdb.field.Field
 import lightdb.id.Id
-import lightdb.rocksdb.RocksDBTransaction.writeOptions
+import lightdb.rocksdb.RocksDBTransaction.{UndoPrior, writeOptions}
 import lightdb.store.Store
 import lightdb.store.write.WriteOp
 import lightdb.transaction.{PrefixScanningTransaction, Transaction, UndoableTransaction}
-import org.rocksdb.{ReadOptions, RocksIterator, Slice, WriteBatch, WriteOptions}
+import org.rocksdb.{ReadOptions, RocksIterator, Slice, Snapshot, WriteBatch, WriteOptions}
 import profig.Profig
 import rapid.*
 
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.*
 
 case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
@@ -78,19 +79,19 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   })
 
   override protected def _upsert(doc: Doc): Task[Doc] = Task {
-    remember(doc._id, prior(doc._id))
+    val base = beforeWrite(Iterator.single(doc._id))
     val json = doc.json(store.model.rw)
     val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
     store.native(store.handle match {
       case Some(h) => store.rocksDB.put(h, writeOptions, doc._id.bytes, bytes)
       case None => store.rocksDB.put(writeOptions, doc._id.bytes, bytes)
     })
+    afterWrite(base, 1)
     doc
   }
 
   override def upsert(stream: rapid.Stream[Doc], commitEvery: Option[Int] = None): Task[Int] = commitEvery match {
     case Some(_) => super.upsert(stream, commitEvery)
-    case None if undo != null => super.upsert(stream, commitEvery)
     case None => Task.defer {
       batchUpsert(stream.evalTap { doc =>
         store.trigger.upsert(doc, this)
@@ -106,6 +107,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       .fold(0)((total, chunk) => Task(store.native {
         val batch = new WriteBatch
         try {
+          val base = beforeWrite(chunk.iterator.map(_._id))
           chunk.foreach { doc =>
             val json = doc.json(store.model.rw)
             val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
@@ -116,6 +118,7 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           }
           // Bulk writes can optionally skip WAL for faster rebuild/regeneration jobs.
           store.rocksDB.write(RocksDBTransaction.bulkWriteOptions, batch)
+          afterWrite(base, chunk.length)
           streamBatchedRows.addAndGet(chunk.length)
           total + chunk.length
         } finally {
@@ -137,8 +140,12 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         case None => store.rocksDB.keyExists(doc._id.bytes)
       }
       if (exists) throw DuplicateIdException(store.name, doc._id)
-      remember(doc._id, None)
+      remember(doc._id)
     }
+    val base = beforeWrite(ops.iterator.collect {
+      case WriteOp.Upsert(doc) => doc._id
+      case WriteOp.Delete(id) => id
+    })
 
     val batch = new WriteBatch
     try {
@@ -151,7 +158,6 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             case None => batch.put(doc._id.bytes, bytes)
           }
         case WriteOp.Upsert(doc) =>
-          remember(doc._id, prior(doc._id))
           val json = doc.json(store.model.rw)
           val bytes = JsonFormatter.Compact(json).getBytes(StandardCharsets.UTF_8)
           store.handle match {
@@ -159,13 +165,13 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             case None => batch.put(doc._id.bytes, bytes)
           }
         case WriteOp.Delete(id) =>
-          remember(id, prior(id))
           store.handle match {
             case Some(h) => batch.delete(h, id.bytes)
             case None => batch.delete(id.bytes)
           }
       }
       store.rocksDB.write(writeOptions, batch)
+      afterWrite(base, ops.size)
       batchedRows.addAndGet(ops.size)
     } finally {
       batch.close()
@@ -193,52 +199,136 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   override protected def _delete(id: Id[Doc]): Task[Boolean] = Task {
-    remember(id, prior(id))
+    val base = beforeWrite(Iterator.single(id))
     val bytes = id.bytes
     store.native(store.handle match {
       case Some(h) => store.rocksDB.delete(h, writeOptions, bytes)
       case None => store.rocksDB.delete(writeOptions, bytes)
     })
+    afterWrite(base, 1)
     true
   }
 
-  override protected def _commit: Task[Unit] = Task(clearUndo())
+  override protected def _commit: Task[Unit] = Task(undoLock.synchronized {
+    clearUndo()
+    releaseSnapshots()
+  })
 
   override protected def _rollback: Task[Unit] = Task(undoWrites())
 
-  override protected def _close: Task[Unit] = Task.unit
+  override protected def _close: Task[Unit] = Task(undoLock.synchronized {
+    clearUndo()
+    releaseSnapshots()
+  })
 
   // -- Undo ----------------------------------------------------------------------------------------------------------
-  // The row each id held before this transaction first wrote it (None: absent), kept once `recordUndo` is called so a
-  // rollback can put storage back. A write-through store has no other way to take a written row back.
-  @volatile private var undo: java.util.concurrent.ConcurrentHashMap[String, Option[Array[Byte]]] = null
+  // Once `recordUndo` is called, the state each id had before this transaction first wrote it, so a rollback can put
+  // storage back: a write-through store has no other way to take a written row back. A write does not read the rows it
+  // replaces: the log names a RocksDB snapshot that still shows them, so they stay in the database, pinned by the
+  // snapshot, and only a rollback reads them. One snapshot serves the transaction's writes for as long as nothing else
+  // has written to the database since it was taken (the sequence numbers since are all this transaction's, each on an
+  // id the log already names); a write after another writer's takes a new one. An insert records its id as absent. A
+  // truncate that drops the column family reads the pending rows first, since the drop takes them.
+  @volatile private var undo: ConcurrentHashMap[String, UndoPrior] = null
+  // Guarded by undoLock, as is every read through a snapshot, so none is released while in use.
+  private val undoSnapshots = new java.util.ArrayList[Snapshot]()
+  private var current: UndoPrior.At = null
+  // The latest sequence number `current` covers: every write after its own sequence number and up to this one is this
+  // transaction's. -1 when a write may have come from elsewhere.
+  private var currentThrough: Long = -1L
+  private val undoLock = new Object
 
-  override def recordUndo(): Unit = synchronized {
-    if undo == null then undo = new java.util.concurrent.ConcurrentHashMap[String, Option[Array[Byte]]]()
+  override def recordUndo(): Unit = undoLock.synchronized {
+    if undo == null then undo = new ConcurrentHashMap[String, UndoPrior]()
   }
 
-  private def remember(id: Id[Doc], prior: => Option[Array[Byte]]): Unit = {
+  private def remember(id: Id[Doc]): Unit = {
     val log = undo
-    if log != null && !log.containsKey(id.value) then log.putIfAbsent(id.value, prior)
+    if log != null then log.putIfAbsent(id.value, UndoPrior.Held(None))
   }
 
-  private def prior(id: Id[Doc]): Option[Array[Byte]] = {
-    undoReads.incrementAndGet()
-    Option(store.native(store.handle match {
-      case Some(h) => store.rocksDB.get(h, id.bytes)
-      case None => store.rocksDB.get(id.bytes)
-    }))
+  // Called just before a write: names a snapshot that still shows the prior row of each id the transaction writes first,
+  // and returns the sequence number the write follows, for afterWrite (-1 when not recording undo).
+  private def beforeWrite(ids: Iterator[Id[Doc]]): Long = {
+    val log = undo
+    if log == null then -1L
+    else undoLock.synchronized {
+      val latest = store.native(store.rocksDB.getLatestSequenceNumber)
+      val first = ids.filterNot(id => log.containsKey(id.value))
+      if !first.hasNext then latest
+      else {
+        val base = if current != null && latest == currentThrough then latest
+        else {
+          val snapshot = store.native(store.rocksDB.getSnapshot())
+          if undoSnapshots.isEmpty then store.undoing.add(this)
+          undoSnapshots.add(snapshot)
+          current = UndoPrior.At(snapshot)
+          currentThrough = snapshot.getSequenceNumber
+          currentThrough
+        }
+        first.foreach(id => log.putIfAbsent(id.value, current))
+        base
+      }
+    }
   }
 
-  // Counters a spec reads: prior rows read while recording undo, rows written through a WriteBatch by flushOps and by
-  // the stream upsert, and the prior row values the undo log holds.
+  // Called after a write of `ops` operations that followed sequence number `base`: the current snapshot keeps serving
+  // only if the write took exactly the next `ops` sequence numbers, so no other writer came between.
+  private def afterWrite(base: Long, ops: Int): Unit = if base >= 0L then undoLock.synchronized {
+    if current != null && base == currentThrough then {
+      val latest = store.native(store.rocksDB.getLatestSequenceNumber)
+      currentThrough = if latest == base + ops then latest else -1L
+    }
+  }
+
+  // The prior rows of the ids whose entries name a snapshot, read through it. Called under undoLock.
+  private def readPending(log: ConcurrentHashMap[String, UndoPrior]): Map[String, Option[Array[Byte]]] =
+    log.asScala.toList.collect { case (id, UndoPrior.At(snapshot)) => snapshot -> id }.groupMap(_._1)(_._2).flatMap {
+      case (snapshot, ids) =>
+        val readOptions = new ReadOptions().setSnapshot(snapshot)
+        try {
+          val keys = ids.map(_.getBytes(StandardCharsets.UTF_8)).asJava
+          val values = store.native(store.handle match {
+            case Some(h) => store.rocksDB.multiGetAsList(readOptions, java.util.Collections.nCopies(ids.size, h), keys)
+            case None => store.rocksDB.multiGetAsList(readOptions, keys)
+          })
+          undoReads.addAndGet(ids.size)
+          ids.iterator.zip(values.asScala.iterator.map(Option(_)))
+        } finally readOptions.close()
+    }
+
+  /** Reads the rows this transaction's undo log names through snapshots and holds them instead, releasing the
+    * snapshots: called before a truncate drops the column family the snapshots would be read from. */
+  private[rocksdb] def holdPriors(): Unit = undoLock.synchronized {
+    val log = undo
+    if log != null then readPending(log).foreach((id, before) => log.put(id, UndoPrior.Held(before)))
+    releaseSnapshots()
+  }
+
+  private def releaseSnapshots(): Unit = undoLock.synchronized {
+    current = null
+    currentThrough = -1L
+    if !undoSnapshots.isEmpty then {
+      store.undoing.remove(this)
+      store.guard.ifOpen(undoSnapshots.forEach(s => store.rocksDB.releaseSnapshot(s)))
+      undoSnapshots.clear()
+    }
+  }
+
+  // Counters a spec reads: prior rows read for the undo log, rows written through a WriteBatch by flushOps and by the
+  // stream upsert, the prior row values the undo log holds in memory, and the snapshots it holds.
   private[rocksdb] val undoReads = new java.util.concurrent.atomic.AtomicLong(0L)
   private[rocksdb] val batchedRows = new java.util.concurrent.atomic.AtomicLong(0L)
   private[rocksdb] val streamBatchedRows = new java.util.concurrent.atomic.AtomicLong(0L)
 
+  private[rocksdb] def undoSnapshotsHeld: Int = undoLock.synchronized(undoSnapshots.size)
+
   private[rocksdb] def undoRowsHeld: Int = {
     val log = undo
-    if log == null then 0 else log.values().asScala.count(_.isDefined)
+    if log == null then 0 else log.values().asScala.count {
+      case UndoPrior.Held(Some(_)) => true
+      case _ => false
+    }
   }
 
   private def clearUndo(): Unit = {
@@ -246,27 +336,38 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     if log != null then log.clear()
   }
 
-  private def undoWrites(): Unit = {
+  private def undoWrites(): Unit = undoLock.synchronized {
     val log = undo
-    if log != null && !log.isEmpty then store.native {
-      val batch = new WriteBatch
-      try {
-        log.forEach { (id, before) =>
-          val key = id.getBytes(StandardCharsets.UTF_8)
-          (before, store.handle) match {
-            case (Some(bytes), Some(h)) => batch.put(h, key, bytes)
-            case (Some(bytes), None) => batch.put(key, bytes)
-            case (None, Some(h)) => batch.delete(h, key)
-            case (None, None) => batch.delete(key)
+    try {
+      if log != null && !log.isEmpty then store.native {
+        val pending = readPending(log)
+        val batch = new WriteBatch
+        try {
+          log.forEach { (id, entry) =>
+            val key = id.getBytes(StandardCharsets.UTF_8)
+            val before = entry match {
+              case UndoPrior.Held(bytes) => bytes
+              case UndoPrior.At(_) => pending(id)
+            }
+            (before, store.handle) match {
+              case (Some(bytes), Some(h)) => batch.put(h, key, bytes)
+              case (Some(bytes), None) => batch.put(key, bytes)
+              case (None, Some(h)) => batch.delete(h, key)
+              case (None, None) => batch.delete(key)
+            }
           }
-        }
-        store.rocksDB.write(writeOptions, batch)
-        log.clear()
-      } finally batch.close()
+          store.rocksDB.write(writeOptions, batch)
+        } finally batch.close()
+      }
+    } finally {
+      clearUndo()
+      releaseSnapshots()
     }
   }
 
   override def truncate: Task[Int] = Task.defer {
+    // Rows this or another open transaction must be able to put back are read before the truncate removes them.
+    store.undoing.synchronized(store.undoing.asScala.toList).foreach(_.holdPriors())
     // Fast path: drop the entire column family and recreate it. O(1) in the
     // store size — vs `truncateManual` which iterates every key. For stores
     // with millions of entries (e.g. `entityRelationshipTraversal` after a
@@ -469,6 +570,12 @@ case class RocksDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 }
 
 object RocksDBTransaction {
+  /** The state an id had before a transaction first wrote it: held (None: absent), or readable through a snapshot. */
+  private[rocksdb] enum UndoPrior {
+    case Held(bytes: Option[Array[Byte]])
+    case At(snapshot: Snapshot)
+  }
+
   /**
    * Default write options (WAL enabled). This is used for single-document writes and deletes.
    */

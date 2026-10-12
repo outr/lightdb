@@ -78,6 +78,10 @@ class RocksDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
 
   private[rocksdb] val iterators: RocksDBIteratorRegistry = new RocksDBIteratorRegistry
 
+  /** Transactions whose undo logs name snapshots of this store, so a truncate can have them read their rows first. */
+  private[rocksdb] val undoing: java.util.Set[RocksDBTransaction[Doc, Model]] =
+    java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(new java.util.IdentityHashMap[RocksDBTransaction[Doc, Model], java.lang.Boolean]()))
+
   /** Runs a native call, refused with a `StoreDisposedException` once the database is closing. */
   private[rocksdb] def native[R](f: => R): R = guard(name)(f)
 
