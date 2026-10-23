@@ -124,7 +124,7 @@ val testcontainersVersion: String = "2.0.5"
 
 val mongoVersion: String = "5.6.2"
 
-val qdrantVersion: String = "1.18.3"
+val qdrantVersion: String = "1.20.0"
 
 val scalaJSDomVersion: String = "2.8.1"
 
