@@ -19,7 +19,7 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
   lazy val modelName: String = getClass.getSimpleName.replace("$", "")
 
-  private var _fields = List.empty[Field[Doc, _]]
+  @volatile private var _fields = List.empty[Field[Doc, _]]
   private var _compositeIndexes = List.empty[CompositeIndex[Doc]]
   private var _nestedPaths = Set.empty[String]
 
@@ -75,8 +75,16 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
 
   def fields: List[Field[Doc, _]] = _fields
 
-  private[lightdb] def addField[V](field: Field[Doc, V]): Unit = synchronized {
-    _fields = _fields ::: List(field)
+  /**
+   * Registers a field, built by `create`, for each of `names` the model does not already hold, and returns the names it
+   * registered. Finding and adding happen under the model's lock, so stores sharing the model register each name once
+   * however their initializations interleave.
+   */
+  private[lightdb] def addMissingFields(names: List[String])(create: String => Field[Doc, _]): List[String] = synchronized {
+    val present = _fields.map(_.name).toSet
+    val missing = names.distinct.filterNot(present.contains)
+    if missing.nonEmpty then _fields = _fields ::: missing.map(create)
+    missing
   }
 
   def compositeIndexes: List[CompositeIndex[Doc]] = _compositeIndexes
@@ -132,7 +140,7 @@ trait DocumentModel[Doc <: Document[Doc]] { model =>
   lazy val builder: FilterBuilder[Doc, this.type] = new FilterBuilder(this, 1, Nil)
 
   object field {
-    private def add[V, F <: Field[Doc, V]](field: F): F = synchronized {
+    private def add[V, F <: Field[Doc, V]](field: F): F = model.synchronized {
       _fields = _fields ::: List(field)
       field
     }
