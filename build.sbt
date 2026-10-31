@@ -479,7 +479,7 @@ lazy val qdrant = project.in(file("qdrant"))
 	)
 
 lazy val all = project.in(file("all"))
-	.dependsOn(core, core % "test->test", traversal, sqlite, postgresql, mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice)
+	.dependsOn(core, core % "test->test", traversal, sqlite, postgresql, postgresql % "test->test", mariadb, duckdb, h2, lucene, opensearch, halodb, rocksdb, mapdb, lmdb, chronicleMap, redis, googleSheets, tantivy, mongodb, arangodb, qdrant, api, apiSpice)
 	.settings(
 		name := s"$projectName-all",
 		fork := true,
