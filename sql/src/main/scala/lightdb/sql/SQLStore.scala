@@ -114,7 +114,8 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     val entries = fields.collect {
       case field if !field.rw.definition.className.contains("lightdb.spatial.GeoPoint") =>
         if field == model._id then {
-          s"${SqlIdent.quote("_id")} VARCHAR NOT NULL PRIMARY KEY"
+          // a keyless model (see KeylessModel) has the column and no key
+          s"${SqlIdent.quote("_id")} VARCHAR NOT NULL${if model.isInstanceOf[KeylessModel] then "" else " PRIMARY KEY"}"
         } else {
           val t = columnType(field)
           s"${SqlIdent.quote(field.name)} $t"

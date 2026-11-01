@@ -40,6 +40,70 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     DuckDBTransaction(this, state, parent, writeHandlerFactory)
   }
 
+  /**
+   * Loads a CSV file into this store's table, natively: DuckDB reads the file in parallel and inserts straight from it (see
+   * [[CsvImportOptions]]), so no row passes through the JVM. In `tx`, so a failure (a missing column, a cancel, a malformed row) leaves
+   * the table as it was.
+   *
+   * Only the columns [[CsvImportOptions.columns]] name, the row number field and `_id` are written: any other field of the model is
+   * left NULL, so a model that is read back as a document (`JsonDocumentModel`'s `json` column) has nothing to read it from; query it
+   * by field (`.value(...)`, `.json(...)`, filters, sorts, counts) instead. A model that mixes in [[lightdb.sql.KeylessModel]] has no
+   * primary key, which makes the load and the file markedly smaller.
+   */
+  def importCsv(csv: Path, options: CsvImportOptions, control: CsvImportControl = new CsvImportControl)(tx: TX): Task[CsvImportResult] = Task {
+    val started = System.currentTimeMillis()
+    val connection = tx.state.openConnection()
+    val source = CsvImport.readCsv(csv, options)
+    val known = fields.map(_.name).toSet
+    // the file's own column names, as DuckDB reads them (column0, column1 ... when there is no header)
+    val available: Vector[String] = {
+      val s = connection.createStatement()
+      try {
+        val rs = s.executeQuery(s"DESCRIBE SELECT * FROM $source")
+        val names = Vector.newBuilder[String]
+        while rs.next() do names += rs.getString("column_name")
+        names.result()
+      } finally s.close()
+    }
+    def resolve(c: CsvColumn): String = c.source match {
+      case CsvColumn.Source.Place(n) =>
+        if n >= 1 && n <= available.size then available(n - 1)
+        else throw new IllegalArgumentException(s"The CSV has ${available.size} columns, so there is no column $n (for ${c.field}).")
+      case CsvColumn.Source.Heading(h) =>
+        available.find(_ == h).orElse(available.find(_.equalsIgnoreCase(h.trim)))
+          .getOrElse(throw new IllegalArgumentException(s"The CSV has no column headed \"$h\" (for ${c.field}); it has: ${available.mkString(", ")}."))
+    }
+    options.columns.foreach { c =>
+      if !known.contains(c.field) then throw new IllegalArgumentException(s"${name} has no field ${c.field}; it has: ${known.toList.sorted.mkString(", ")}.")
+    }
+    options.rowNumberField.foreach { f =>
+      if !known.contains(f) then throw new IllegalArgumentException(s"${name} has no field $f for the row numbers.")
+    }
+    val rowNumber = "\"__row\""
+    val targets = List(SqlIdent.quote("_id")) ++ options.rowNumberField.map(SqlIdent.quote) ++ options.columns.map(c => SqlIdent.quote(c.field))
+    val values = List(if options.idFromRowNumber then s"CAST($rowNumber AS VARCHAR)" else "CAST(uuid() AS VARCHAR)") ++
+      options.rowNumberField.map(_ => rowNumber) ++ options.columns.map { c =>
+      val column = SqlIdent.quote(resolve(c))
+      c.tryCast.fold(column)(t => s"TRY_CAST($column AS ${CsvImport.typeName(t)})")
+    }
+    if options.replace then {
+      val s = connection.createStatement()
+      try s.executeUpdate(s"DELETE FROM $fqn") finally s.close()
+    }
+    val statement = connection.createStatement()
+    val loaded =
+      try {
+        control.running(statement)
+        statement.executeLargeUpdate(s"INSERT INTO $fqn(${targets.mkString(", ")}) SELECT ${values.mkString(", ")} FROM (SELECT row_number() OVER () AS $rowNumber, * FROM $source)")
+      } catch {
+        case t: Throwable if control.isCancelled =>
+          val cancelled = new java.util.concurrent.CancellationException(s"The import of ${csv.getFileName} was cancelled.")
+          cancelled.initCause(t)
+          throw cancelled
+      } finally statement.close()
+    CsvImportResult(loaded, System.currentTimeMillis() - started)
+  }
+
   // TODO: Use DuckDB's Appender for better performance
   /*override def insert(doc: Doc)(transaction: Transaction[Doc]): Unit = {
     fields.zipWithIndex.foreach {

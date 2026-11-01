@@ -5,7 +5,7 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.sql.connect.ConnectionManager
-import lightdb.sql.{SQLState, SQLStore, SqlIdent}
+import lightdb.sql.{KeylessModel, SQLState, SQLStore, SqlIdent}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.transaction.batch.BatchConfig
@@ -67,7 +67,8 @@ class MariaDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   override protected def createTable(tx: TX): Unit = {
     val entries = fields.collect {
       case field if !field.rw.definition.className.contains("lightdb.spatial.GeoPoint") =>
-        if field == model._id then s"${SqlIdent.quote("_id")} VARCHAR($VarcharLength) NOT NULL PRIMARY KEY"
+        if field == model._id then
+          s"${SqlIdent.quote("_id")} VARCHAR($VarcharLength) NOT NULL${if model.isInstanceOf[KeylessModel] then "" else " PRIMARY KEY"}"
         else s"${SqlIdent.quote(field.name)} ${def2Type(field.name, field.rw.definition)}"
     }.mkString(", ")
     executeUpdate(s"CREATE TABLE IF NOT EXISTS $fqn($entries)", tx)
