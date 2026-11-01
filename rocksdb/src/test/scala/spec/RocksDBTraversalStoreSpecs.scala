@@ -45,3 +45,8 @@ class RocksDBTraversalStorePersistedIndexBuildSpec extends AbstractTraversalPers
 }
 
 
+
+@EmbeddedTest
+class RocksDBTraversalStoreQueryOffsetLimitSpec extends AbstractQueryOffsetLimitSpec with TraversalRocksDBWrappedManager {
+  override def storeManager: CollectionManager = traversalStoreManager
+}
