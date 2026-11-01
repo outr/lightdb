@@ -60,11 +60,115 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
    * - add a filter that constrains the match set
    * - add a computed score column and an ORDER BY clause
    */
-  protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: SortDirection): Option[BestMatchPlan] = None
+  protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: SortDirection): Option[BestMatchPlan] = {
+    val terms = textTerms(filter)
+    if terms.isEmpty then None
+    else if !ranksText then throw new UnsupportedOperationException(
+      s"${store.name} (${getClass.getSimpleName}) cannot rank tokenized text, so it cannot sort by best match."
+    )
+    else Some(bm25Plan(terms, direction))
+  }
+
+  /** One query token a best-match ranking scores: the tokenized field it was asked of, its words (see [[TextWords]]), and the boost
+    * of its clause. */
+  protected case class TextTerm(fieldName: String, words: List[String], boost: Double)
 
   /**
-   * Hook for backends to provide an optimized tokenized (full-text-like) equality predicate.
-   * Default behavior falls back to token-by-token LIKE matching.
+   * The text terms of `filter` that score, as Lucene scores them: a tokenized `Exact`'s token and each token of a tokenized `Equals`,
+   * under `Must` and `Should` clauses (`Filter` and `MustNot` clauses do not score).
+   */
+  protected def textTerms(filter: Option[Filter[Doc]]): List[TextTerm] = {
+    def tokenized(name: String): Boolean = store.model.fields.exists(f => f.name == name && f.isTokenized)
+    def term(fieldName: String, token: String, boost: Double): Option[TextTerm] =
+      Some(TextWords(token)).filter(_.nonEmpty).map(words => TextTerm(fieldName, words, boost))
+    def loop(f: Filter[Doc], boost: Double): List[TextTerm] = f match {
+      case e: Filter.Exact[Doc @unchecked, _] if tokenized(e.fieldName) => term(e.fieldName, e.query, boost).toList
+      case e: Filter.Equals[Doc @unchecked, _] if e.value != null && e.value != None && tokenized(e.fieldName) =>
+        e.getJson(store.model) match {
+          case Str(s, _) => s.split("\\s+").toList.flatMap(t => term(e.fieldName, t, boost))
+          case _ => Nil
+        }
+      case m: Filter.Multi[Doc] => m.filters.flatMap { c =>
+        c.condition match {
+          case Condition.Must | Condition.Should => loop(c.filter, boost * c.boost.getOrElse(1.0))
+          case _ => Nil
+        }
+      }
+      case _ => Nil
+    }
+    filter.toList.flatMap(loop(_, 1.0)).distinct
+  }
+
+  /**
+   * A column's text in its word form (see [[TextWords]]) as this dialect writes it, given the column (qualified as needed). `None`
+   * when the dialect cannot: tokenized predicates then fall back to substring LIKE, and a best-match sort over text terms fails.
+   */
+  protected def wordsText(column: String): Option[String] = None
+
+  /** Whether this dialect matches tokenized text by whole words and ranks it. */
+  protected def ranksText: Boolean = wordsText("x").nonEmpty
+
+  protected def charLengthSQL(expression: String): String = s"LENGTH($expression)"
+
+  protected def positionSQL(needle: String, haystack: String): String = s"POSITION($needle IN $haystack)"
+
+  protected def greatestPart(a: SQLPart, b: SQLPart): SQLPart =
+    SQLQuery(List(SQLPart.Fragment("GREATEST("), a, SQLPart.Fragment(", "), b, SQLPart.Fragment(")")))
+
+  protected def doubleType: String = "DOUBLE PRECISION"
+
+  /** Whether `column` holds `words` as consecutive whole words. */
+  protected def textMatchPart(column: String, words: List[String]): SQLPart =
+    if words.isEmpty then SQLPart.Fragment("1=0")
+    else withArg(s"${positionSQL("?", wordsText(column).get)} > 0", TextWords.pattern(words).json)
+
+  /** How many times a row that matches `words` holds them in `column`. */
+  protected def textFrequencyPart(column: String, words: List[String]): SQLPart = {
+    val text = wordsText(column).get
+    val pattern = TextWords.pattern(words)
+    withArg(s"((${charLengthSQL(text)} - ${charLengthSQL(s"REPLACE($text, ?, '')")}) / ${pattern.length})", pattern.json)
+  }
+
+  /** `sql` with its one `?` bound to `arg`, the rest kept as written (a dialect's text may hold what reads as a named placeholder). */
+  private def withArg(sql: String, arg: Json): SQLPart = {
+    val at = sql.indexOf('?')
+    SQLQuery(List(SQLPart.Fragment(sql.substring(0, at)), SQLPart.Arg(arg), SQLPart.Fragment(sql.substring(at + 1))))
+  }
+
+  /**
+   * Scores every row by BM25 over `terms` (Lucene's k1 and b): for each term a row holds, the term's inverse document frequency over
+   * the whole table, times its frequency in the row, saturated, with the row's length (in characters) against the table's average.
+   * A row the filter kept on another clause scores 0 for every term it does not hold.
+   */
+  private def bm25Plan(terms: List[TextTerm], direction: SortDirection): BestMatchPlan = {
+    import SQLPart.Fragment
+    val scoreColumn = SqlIdent.quote("__score")
+    val alias = SqlIdent.quote("__bm")
+    val k1 = TextWords.K1.toString
+    val b = TextWords.B.toString
+    val rows = s"(SELECT COUNT(*) FROM ${store.fqn} $alias)"
+    val parts: List[SQLPart] = terms.map { t =>
+      val column = SqlIdent.quote(t.fieldName)
+      val outer = s"${store.fqn}.$column"
+      val inner = s"$alias.$column"
+      def documents: SQLPart = SQLQuery(List(Fragment(s"(SELECT COUNT(*) FROM ${store.fqn} $alias WHERE "), textMatchPart(inner, t.words), Fragment(")")))
+      val idf = SQLQuery(List(Fragment(s"LN(1.0 + ($rows - "), documents, Fragment(" + 0.5) / ("), documents, Fragment(" + 0.5))")))
+      def frequency: SQLPart = SQLQuery(List(Fragment("CAST("), greatestPart(Fragment("1"), textFrequencyPart(outer, t.words)), Fragment(s" AS $doubleType)")))
+      val average = s"(SELECT AVG(CAST(${charLengthSQL(s"COALESCE($inner, '')")} AS $doubleType)) FROM ${store.fqn} $alias)"
+      val ratio = s"COALESCE(CAST(${charLengthSQL(s"COALESCE($outer, '')")} AS $doubleType) / NULLIF($average, 0), 1.0)"
+      SQLQuery(List(
+        Fragment("(CASE WHEN "), textMatchPart(outer, t.words), Fragment(s" THEN ${t.boost} * "), idf, Fragment(" * "), frequency,
+        Fragment(" / ("), frequency, Fragment(s" + $k1 * (1 - $b + $b * $ratio)) ELSE 0.0 END)")
+      ))
+    }
+    val score = SQLQuery(Fragment("(") :: parts.intersperse(Fragment(" + ")) ::: List(Fragment(s") AS $scoreColumn")))
+    val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
+    BestMatchPlan(scoreColumn, score, Nil, Fragment("1=1"), Fragment(s"$scoreColumn $dir"))
+  }
+
+  /**
+   * Hook for backends to provide an optimized tokenized (full-text-like) equality predicate: every whitespace-separated token of
+   * `value` is in the field, as whole words. Without [[wordsText]] the default falls back to token-by-token LIKE matching.
    *
    * Receives `fieldName` as a raw (unquoted) column name — implementations that emit it into
    * SQL should route through [[SqlIdent.quote]].
@@ -72,23 +176,23 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   protected def tokenizedEqualsPart(fieldName: String, value: String): SQLPart = {
     val q = SqlIdent.quote(fieldName)
     val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
-    val parts = tokens.map(t => likePart(q, s"%$t%"))
+    val parts = if ranksText then tokens.map(t => textMatchPart(q, TextWords(t))) else tokens.map(t => likePart(q, s"%$t%"))
     if parts.isEmpty then SQLPart.Fragment("1=1") else SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
   }
 
   /**
    * Hook for backends to provide an optimized single-token containment predicate
    * on a tokenized field — the SQL analogue of a Lucene term query, which is what
-   * `Filter.Exact` means on a tokenized field: "contains this token", not "the
-   * whole stored text equals this token". Default behavior is a LIKE on the
-   * token; like [[tokenizedEqualsPart]] this is substring containment, so a
-   * token that is a prefix of a longer word overmatches. Backends with a
-   * boundary-aware pattern facility can override.
+   * `Filter.Exact` means on a tokenized field: "contains this token" (its words, whole
+   * and consecutive), not "the whole stored text equals this token". Without
+   * [[wordsText]] the default is a LIKE on the token: substring containment, so a
+   * token that is part of a longer word overmatches.
    *
    * Receives `fieldName` as a raw (unquoted) column name — see [[tokenizedEqualsPart]].
    */
   protected def tokenizedExactPart(fieldName: String, token: String): SQLPart =
-    likePart(SqlIdent.quote(fieldName), s"%$token%")
+    if ranksText then textMatchPart(SqlIdent.quote(fieldName), TextWords(token))
+    else likePart(SqlIdent.quote(fieldName), s"%$token%")
 
   /**
    * Hook for dialects to rewrite a fully rendered query before it is prepared. The DSL renders
@@ -106,13 +210,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
    * Receives `fieldName` as a raw (unquoted) column name — see [[tokenizedEqualsPart]].
    */
   protected def tokenizedNotEqualsPart(fieldName: String, value: String): SQLPart = {
-    val q = SqlIdent.quote(fieldName)
-    val tokens = value.split("\\s+").toList.filter(_.nonEmpty)
-    val inner = if tokens.isEmpty then SQLPart.Fragment("1=1") else {
-      val parts = tokens.map(t => likePart(q, s"%$t%"))
-      SQLQuery(parts.intersperse(SQLPart.Fragment(" AND ")))
-    }
-    SQLQuery(List(SQLPart.Fragment("NOT("), inner, SQLPart.Fragment(")")))
+    SQLQuery(List(SQLPart.Fragment("NOT("), tokenizedEqualsPart(fieldName, value), SQLPart.Fragment(")")))
   }
 
   /**

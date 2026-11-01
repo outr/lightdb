@@ -3,7 +3,7 @@ package lightdb.mariadb
 import lightdb.aggregate.AggregateType
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.query.{SQLPart, SQLQuery}
-import lightdb.sql.{SQLState, SQLStoreTransaction}
+import lightdb.sql.{SQLState, SQLStoreTransaction, TextWords}
 import lightdb.transaction.Transaction
 
 /**
@@ -29,6 +29,14 @@ case class MariaDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   override protected def dialectQuery(sql: SQLQuery): SQLQuery = MariaDBTransaction.dialect(sql)
+
+  // MySQL's CONCAT (`||` is OR), CHAR_LENGTH (LENGTH counts bytes), and a backslash doubled in a string literal.
+  override protected def wordsText(column: String): Option[String] =
+    Some(s"CONCAT(' ', REGEXP_REPLACE(LOWER(COALESCE($column, '')), '${TextWords.Separator.replace("\\", "\\\\")}', '  '), ' ')")
+
+  override protected def charLengthSQL(expression: String): String = s"CHAR_LENGTH($expression)"
+
+  override protected def doubleType: String = "DOUBLE"
 }
 
 object MariaDBTransaction {

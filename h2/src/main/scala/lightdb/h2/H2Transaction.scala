@@ -7,7 +7,7 @@ import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.Geo
 import lightdb.sql.query.SQLPart
-import lightdb.sql.{SQLState, SQLStoreTransaction, SqlIdent}
+import lightdb.sql.{SQLState, SQLStoreTransaction, SqlIdent, TextWords}
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import fabric.{Bool, Json, NumDec, NumInt, Str}
@@ -72,43 +72,8 @@ case class H2Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     }
   }
 
-  private def tokenize(value: String): List[String] =
-    value.split("\\s+").toList.map(_.trim.toLowerCase).filter(_.nonEmpty)
-
-  private def findFirstTokenizedEquals(filter: Option[Filter[Doc]]): Option[(String, String)] = {
-    def loop(f: Filter[Doc]): Option[(String, String)] = f match {
-      case e: Filter.Equals[Doc, _] if e.value != null && e.value != None && e.field(store.model).isTokenized =>
-        e.getJson(store.model) match {
-          case Str(s, _) => Some(e.fieldName -> s)
-          case _ => None
-        }
-      case m: Filter.Multi[Doc] =>
-        m.filters.iterator.map(fc => loop(fc.filter)).collectFirst { case Some(v) => v }
-      case _ => None
-    }
-    filter.flatMap(loop)
-  }
-
-  override protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: lightdb.SortDirection): Option[BestMatchPlan] = {
-    // Heuristic best-match ranking for H2. This is intentionally backend-portable and does not require
-    // H2 fulltext extensions. It is not indexed like SQLite FTS5, but provides deterministic scoring.
-    findFirstTokenizedEquals(filter).flatMap { case (fieldName, raw) =>
-      val tokens = tokenize(raw)
-      if tokens.isEmpty then None
-      else {
-        val scoreColumn = SqlIdent.quote("__score")
-        val qualified = s"LOWER(${store.fqn}.${SqlIdent.quote(fieldName)})"
-        val cond = tokens.map(_ => s"CASE WHEN $qualified LIKE ? THEN 1 ELSE 0 END").mkString(" + ")
-        val scoreField = SQLPart(s"($cond) AS $scoreColumn", tokens.map(t => s"%$t%".json): _*)
-        val dir = direction match {
-          case SortDirection.Descending => "DESC"
-          case SortDirection.Ascending => "ASC"
-        }
-        val sortPart = SQLPart.Fragment(s"$scoreColumn $dir")
-        Some(BestMatchPlan(scoreColumn, scoreField, Nil, SQLPart.Fragment("1=1"), sortPart))
-      }
-    }
-  }
+  override protected def wordsText(column: String): Option[String] =
+    Some(s"(' ' || REGEXP_REPLACE(LOWER(COALESCE($column, '')), '${TextWords.Separator}', '  ') || ' ')")
 
   override protected def extraFieldsForDistance(d: Conversion.Distance[Doc, _]): List[SQLPart] = {
     val col = SqlIdent.quote(d.field.name)

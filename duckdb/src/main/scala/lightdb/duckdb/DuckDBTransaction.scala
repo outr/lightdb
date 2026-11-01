@@ -3,7 +3,7 @@ package lightdb.duckdb
 import fabric.rw.*
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.sql.query.SQLPart
-import lightdb.sql.{SQLState, SQLStoreTransaction}
+import lightdb.sql.{SQLState, SQLStoreTransaction, TextWords}
 import lightdb.transaction.Transaction
 
 case class DuckDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
@@ -16,4 +16,9 @@ case class DuckDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
 
   override protected def regexpPart(name: String, expression: String): SQLPart =
     SQLPart(s"regexp_matches($name, ?)", expression.json)
+
+  override protected def wordsText(column: String): Option[String] =
+    Some(s"(' ' || regexp_replace(lower(COALESCE($column, '')), '${TextWords.Separator}', '  ', 'g') || ' ')")
+
+  override protected def doubleType: String = "DOUBLE"
 }

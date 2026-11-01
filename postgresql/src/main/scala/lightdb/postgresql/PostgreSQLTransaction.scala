@@ -8,8 +8,8 @@ import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.filter.Filter
 import lightdb.spatial.Geo
-import lightdb.sql.query.SQLPart
-import lightdb.sql.{SQLState, SQLStoreTransaction, SqlIdent}
+import lightdb.sql.query.{SQLPart, SQLQuery}
+import lightdb.sql.{SQLState, SQLStoreTransaction, SqlIdent, TextWords}
 import lightdb.store.Conversion
 import lightdb.transaction.Transaction
 import lightdb.vector.VectorMetric
@@ -34,6 +34,21 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
 
   override protected def notLikePart(name: String, pattern: String): SQLPart =
     SQLPart(s"$name NOT ILIKE ?", pattern.json)
+
+  // [[:alnum:]] follows the database's character classification: under a UTF-8 locale it is every letter and digit, as
+  // TextWords.Separator has it; under the C locale only the ASCII ones are.
+  override protected def wordsText(column: String): Option[String] =
+    Some(s"(' ' || regexp_replace(lower(COALESCE($column, '')), '[^[:alnum:]_]+', '  ', 'g') || ' ')")
+
+  // The ILIKE on the longest word comes first: the tokenized field's trigram index answers it, and only the rows it keeps have
+  // their word form computed.
+  override protected def textMatchPart(column: String, words: List[String]): SQLPart =
+    if words.isEmpty then super.textMatchPart(column, words)
+    else SQLQuery(List(
+      SQLPart(s"($column ILIKE ? AND ", TextWords.containsLike(words.maxBy(_.length)).json),
+      super.textMatchPart(column, words),
+      SQLPart.Fragment(")")
+    ))
 
   // Array membership against the compact-JSON text column. An element is bounded by `[`/`,` on the
   // left and `,`/`]` on the right, so anchoring on those boundaries gives exact matches for any

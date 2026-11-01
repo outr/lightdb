@@ -253,6 +253,10 @@ class SQLiteStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
         result(if pattern.matcher(value).find() then 1 else 0)
       }
     })
+    // A text's word form (TextWords), for matching and ranking tokenized fields without FTS5.
+    org.sqlite.Function.create(c, "lightdb_words", new org.sqlite.Function() {
+      override def xFunc(): Unit = result(TextWords.form(Option(value_text(0)).getOrElse("")))
+    })
   }
 
   override protected def tables(connection: Connection): Set[String] = SQLiteStore.tables(connection)
