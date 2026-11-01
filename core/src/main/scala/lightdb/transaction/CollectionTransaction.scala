@@ -56,13 +56,16 @@ trait CollectionTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] e
           val totalQuery = query.copy(limit = Some(1), countTotal = true)
           doSearch(totalQuery).flatMap { results =>
             val total = results.total.getOrElse(0)
+            // `limit` counts from the offset: the rows are `offset` until `offset + limit`, or until the total if that comes first
             val end = query.limit match {
-              case Some(l) => math.min(l, total)
+              case Some(l) => math.min(query.offset.toLong + l, total.toLong).toInt
               case None => total
             }
-            val pages = query.offset to end by query.pageSize.get
+            val size = query.pageSize.get
+            // each page asks for one page, or what is left of the limit
+            val pages = query.offset until end by size
             val iterator = pages.iterator.map { offset =>
-              rapid.Stream.force(doSearch(query.copy(offset = offset)).map(_.streamWithScore))
+              rapid.Stream.force(doSearch(query.copy(offset = offset, limit = Some(math.min(size, end - offset)))).map(_.streamWithScore))
             }
             Task.pure(Pull.fromIterator(iterator))
           }
