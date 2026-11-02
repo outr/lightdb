@@ -11,6 +11,7 @@ import rapid.{AsyncTaskSpec, Task}
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 
+@EmbeddedTest
 class SplitStoreDisposalSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers {
   private class Owner extends CollectionManager with Disposable {
     type S[Doc <: Document[Doc], Model <: DocumentModel[Doc]] = Collection[Doc, Model]

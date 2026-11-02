@@ -17,6 +17,7 @@ import scala.util.Using
  * QGIS, ogr2ogr) checks: the OGC metadata tables, the SRS, and that each geometry blob is valid
  * GeoPackage Binary whose WKB decodes to the coordinates that went in.
  */
+@EmbeddedTest
 class GeoPackageSpec extends AnyWordSpec with Matchers {
   private val unit = Polygon.lonLat(-91.5, 30.1, -91.4, 30.1, -91.4, 30.2, -91.5, 30.2)
   private val well = Point(latitude = 30.15, longitude = -91.45)
