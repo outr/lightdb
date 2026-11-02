@@ -301,7 +301,16 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case NumDec(bd, _) => ps.setBigDecimal(index + 1, bd.bigDecimal)
   }
 
-  override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] = Task {
+  override protected def _get[V](index: Field.UniqueIndex[Doc, V], value: V): Task[Option[Doc]] =
+    Task(getOne(index, value, forUpdate = false))
+
+  /** Where the store locks rows, `modify` reads the row with `FOR UPDATE`: the row lock holds until this transaction
+    * commits or rolls back, so a `modify` of it from another process waits for that and then reads the committed row. */
+  override protected def lockingRead(id: Id[Doc]): Task[Option[Doc]] =
+    if store.supportsRowLocks then Task(getOne(store.idField, id, forUpdate = true))
+    else super.lockingRead(id)
+
+  private def getOne[V](index: Field.UniqueIndex[Doc, V], value: V, forUpdate: Boolean): Option[Doc] = {
     val b = new SQLQueryBuilder[Doc, Model](
       store = store,
       state = state,
@@ -313,7 +322,8 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       limit = Some(1),
       offset = 0
     )
-    val results = resultsFor(b.query)
+    val query = if forUpdate then SQLQuery(b.parts ::: List(SQLPart.Fragment("\nFOR UPDATE"))) else b.query
+    val results = resultsFor(query)
     val rs = results.rs
     try {
       if rs.next() then {

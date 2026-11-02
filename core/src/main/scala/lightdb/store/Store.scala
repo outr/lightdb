@@ -462,7 +462,8 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
           case scala.util.Success(_) =>
             // A post-commit notification error must not trigger rollback or retry a durable write. Joined transactions
             // hear of the commit before their owner.
-            transaction.close.guarantee(Task { set.remove(transaction); () })
+            // The records it modified are released as soon as the commit is durable.
+            Task(transaction.releaseLocks()).guarantee(transaction.close).guarantee(Task { set.remove(transaction); () })
               .guarantee(Task.defer(transaction.group.map(_.complete(committed = true)).getOrElse(Task.unit)))
               .guarantee(Task.defer(trigger.transactionCommitted(transaction)))
           case scala.util.Failure(error) =>
@@ -477,8 +478,10 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         case scala.util.Success(_) =>
           transaction.close.guarantee(Task { set.remove(transaction); () }).guarantee(Task {
             transaction.staged {
-              case true => Task(transaction.joinedCommitted()).guarantee(Task.defer(trigger.transactionCommitted(transaction)))
-              case false => transaction.joinedRolledBack().guarantee(Task.defer(trigger.transactionRolledBack(transaction)))
+              case true => Task(transaction.joinedCommitted()).guarantee(Task(transaction.releaseLocks()))
+                .guarantee(Task.defer(trigger.transactionCommitted(transaction)))
+              case false => transaction.joinedRolledBack().guarantee(Task(transaction.releaseLocks()))
+                .guarantee(Task.defer(trigger.transactionRolledBack(transaction)))
             }
           })
         case scala.util.Failure(error) =>
@@ -496,6 +499,7 @@ abstract class Store[Doc <: Document[Doc], Model <: DocumentModel[Doc]](val name
         .next(if (notifyEnd) Task.defer(trigger.transactionEnd(transaction)) else Task.unit)
         .guarantee(transaction.rollback)
         .guarantee(transaction.close)
+        .guarantee(Task(transaction.releaseLocks()))
         .guarantee(Task { set.remove(transaction); () })
         .guarantee(Task {
           if (transaction.isJoined) transaction.detachOpenJoin()

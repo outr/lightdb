@@ -58,6 +58,14 @@ case class LMDBTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
     throw new UnsupportedOperationException(s"LMDBStore can only get on _id, but ${index.name} was attempted")
   }
 
+  /** `readTxn` is a snapshot taken when this transaction began (or last committed). `modify` must read the latest
+    * commit, which may be the write of a transaction it waited for, so it moves the snapshot forward first. */
+  override protected def lockingRead(id: Id[Doc]): Task[Option[Doc]] = Task {
+    _readTxn.reset()
+    _readTxn.renew()
+    instance.get(_readTxn, id.bytes).map(bytes2Doc)
+  }
+
   override protected def _insert(doc: Doc): Task[Doc] =
     flushOps(Seq(WriteOp.Insert(doc))).map(_ => doc)
 

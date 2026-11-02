@@ -299,16 +299,89 @@ trait Transaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]] {
       case Some(doc) => Task.pure(Some(doc))
       case None => Task.pure(Some(create))
     }.map(_.get)
+  /**
+   * Reads the record `id`, hands it to `f` and writes what `f` returns: an upsert for `Some`, a delete for `None` when
+   * `deleteOnNone`, nothing otherwise.
+   *
+   * With `establishLock` (the default) the read-modify-write is atomic within this process. The call takes the store's
+   * lock on `id` before it reads and this transaction keeps it until it has committed or rolled back, so a concurrent
+   * `modify` of the same record in another transaction waits and then reads the committed row: no update is lost, and
+   * no caller sees a write that is later rolled back. Calls in the same transaction share the lock and run one at a
+   * time; each reads the row as the previous one left it. Because the lock is held to the end of the transaction, two
+   * transactions that each modify several records should take them in the same order, or they can wait on each other
+   * forever; so should a body that, holding a record, waits for another transaction that modifies it.
+   *
+   * The lock is per process. Across processes or replicas sharing one database it holds only where the store also
+   * locks the row in the database: the SQL stores whose `supportsRowLocks` is true (PostgreSQL, MariaDB) read it with
+   * `SELECT ... FOR UPDATE`, so a second process's `modify` of an existing record waits for the first one's commit.
+   * Two processes creating the same missing record can still both read it as missing. Every other store gives no
+   * guarantee across processes.
+   *
+   * Without `establishLock` the read and the write are not protected against concurrent writers.
+   */
   def modify(id: Id[Doc],
              establishLock: Boolean = true,
              deleteOnNone: Boolean = false)
-            (f: Forge[Option[Doc], Option[Doc]]): Task[Option[Doc]] = store.lock(id, get(id), establishLock) { existing =>
-    f(existing).flatMap {
-      case Some(doc) => upsert(doc).map(_ => Some(doc))
-      case None if deleteOnNone => delete(id).map(_ => None)
-      case None => Task.pure(None)
+            (f: Forge[Option[Doc], Option[Doc]]): Task[Option[Doc]] =
+    locked(id, if establishLock then modifyRead(id) else get(id), establishLock) { existing =>
+      f(existing).flatMap {
+        case Some(doc) => upsert(doc).map(_ => Some(doc))
+        case None if deleteOnNone => delete(id).map(_ => None)
+        case None => Task.pure(None)
+      }
+    }
+
+  // -- Record locks ------------------------------------------------------------------------------------------------
+  // The store-level locks this transaction took for `modify`, released when it ends (see Store.transaction's release,
+  // stage and abort). `callLocks` serializes this transaction's own calls on one record.
+  private val heldLocks: java.util.Set[Id[Doc]] = ConcurrentHashMap.newKeySet[Id[Doc]]()
+  private lazy val callLocks = new lightdb.lock.LockManager[Id[Doc], Doc]
+
+  /** Whether this transaction, its parent or the transaction it joined holds `on`'s lock on `id`. */
+  private[lightdb] final def holdsLock(on: Store[?, ?], id: Id[?]): Boolean =
+    ((store eq on) && heldLocks.contains(id)) || parent.exists(_.holdsLock(on, id)) || joinOwner.exists(_.holdsLock(on, id))
+
+  /** Runs `f` on the value `value` reads, holding the store's lock on `id` until this transaction ends. */
+  private[lightdb] final def locked(id: Id[Doc], value: => Task[Option[Doc]], establishLock: Boolean)
+                                   (f: Forge[Option[Doc], Option[Doc]]): Task[Option[Doc]] =
+    if establishLock then {
+      Task {
+        // A lock taken after release would never be released.
+        if closed then throw new IllegalStateException(s"transaction for ${store.name} used after release")
+        if !holdsLock(store, id) then {
+          store.lock.lock(id)
+          heldLocks.add(id)
+        }
+        ()
+      }.next(callLocks(id, value)(f))
+    } else {
+      value.flatMap(f(_))
+    }
+
+  /** Releases the store-level locks this transaction holds. Called once it has committed or rolled back. */
+  private[lightdb] final def releaseLocks(): Unit = {
+    val it = heldLocks.iterator()
+    while it.hasNext do {
+      val id = it.next()
+      it.remove()
+      store.lock.unlock(id)
     }
   }
+
+  /** The row [[modify]] starts from: this transaction's own pending write for `id`, else [[lockingRead]]. */
+  private def modifyRead(id: Id[Doc]): Task[Option[Doc]] = writeHandler.get(id).flatMap {
+    case Some(result) => Task.pure(result)
+    case None => Option(cachePending.get(id)) match {
+      case Some(pending) => Task.pure(pending)
+      case None => lockingRead(id)
+    }
+  }
+
+  /**
+   * Reads `id` for [[modify]], with this process's lock on it held. A backend that can also lock the row in the
+   * database, until this transaction ends, overrides this to do so.
+   */
+  protected def lockingRead(id: Id[Doc]): Task[Option[Doc]] = get(id)
   final def delete(id: Id[Doc]): Task[Boolean] = writable(store.trigger.delete(id, this)
     .next(writeHandler.write(WriteOp.Delete(id)))
     .map(_ => true))

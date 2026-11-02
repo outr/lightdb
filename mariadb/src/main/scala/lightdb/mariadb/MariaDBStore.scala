@@ -40,6 +40,8 @@ class MariaDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
   // MySQL/MariaDB treats a "schema" as a database; give each LightDB instance its own.
   override def supportsSchemas: Boolean = true
 
+  override def supportsRowLocks: Boolean = true
+
   private val VarcharLength = 255
   // utf8mb4-safe index prefix: 191 * 4 = 764 bytes, leaving room for additional columns in a
   // composite index within InnoDB's 3072-byte key limit.

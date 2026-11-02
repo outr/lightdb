@@ -239,7 +239,7 @@ case class Query[Doc <: Document[Doc], Model <: DocumentModel[Doc], V](transacti
           case None => Task.pure(None)
         }
       } else {
-        collection.lock(doc._id, Task.pure(Some(doc)), establishLock) { current =>
+        transaction.locked(doc._id, Task.pure(Some(doc)), establishLock) { current =>
           f(current.getOrElse(doc)).flatMap {
             case Some(modified) => transaction.upsert(modified).when(!current.contains(modified))
             case None => transaction.delete(doc._id).when(deleteOnNone)

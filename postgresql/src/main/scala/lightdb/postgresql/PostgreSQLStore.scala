@@ -25,6 +25,8 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 
   override def supportsSchemas: Boolean = true
 
+  override def supportsRowLocks: Boolean = true
+
   override protected def initConnection(connection: Connection): Unit = {
     super.initConnection(connection)
 

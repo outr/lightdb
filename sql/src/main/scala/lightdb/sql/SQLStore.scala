@@ -60,6 +60,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   def supportsSchemas: Boolean = false
 
+  /** Whether the database locks a row read with `SELECT ... FOR UPDATE` until the reading transaction ends, so
+    * [[lightdb.transaction.Transaction.modify]] also excludes other processes using the same database. */
+  def supportsRowLocks: Boolean = false
+
   /**
    * Quoted, fully-qualified table reference, e.g. `"my_schema"."Users"` or `"Users"`. Always
    * quoted so user-provided table names that collide with SQL reserved words (`order`, `user`,
