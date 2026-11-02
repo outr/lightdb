@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * eviction must complete and leave the cache at its cap. Sorting by an access time read live fails
  * here with "Comparison method violates its general contract!", since the readers change it mid-sort.
  */
+@EmbeddedTest
 class LruStoreCacheConcurrentEvictionSpec extends AnyWordSpec with Matchers {
   "LruStoreCache" should {
     "evict under its cap while readers touch entries" in {

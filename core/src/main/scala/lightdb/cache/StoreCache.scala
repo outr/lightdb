@@ -2,9 +2,9 @@ package lightdb.cache
 
 import lightdb.id.Id
 
+import java.util.{Comparator, TreeSet}
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.duration.FiniteDuration
-import scala.jdk.CollectionConverters.*
 
 /**
  * Per-store, in-memory point-lookup cache. Hand-rolled (no third-party deps) and backed by
@@ -14,7 +14,7 @@ import scala.jdk.CollectionConverters.*
  *     backend lookup succeeds).
  *   - TTL (when configured) is checked lazily on `get` — expired entries are removed and treated as a miss.
  *   - LRU eviction (in [[LruStoreCache]]) fires inside `put` when the entry count exceeds the configured
- *     `maxEntries`; entries are removed in oldest-access-first order.
+ *     `maxEntries`; entries are removed in oldest-access-first order, at O(log n) amortized cost.
  *
  * Concurrent populate of the same id from multiple threads is allowed — the last `put` wins. This avoids
  * any locking on the read path and is correct because all values for the same id are equivalent (same
@@ -52,7 +52,7 @@ object StoreCache {
   // --------------------------------------------------------------------------------------------------
   // Internal entry record. `lastAccess` is volatile so reads see fresh values without per-entry locking.
   // --------------------------------------------------------------------------------------------------
-  private[cache] final class Entry[Doc](val doc: Doc, @volatile var lastAccess: Long) {
+  private[cache] class Entry[Doc](val doc: Doc, @volatile var lastAccess: Long) {
     def touch(now: Long): Unit = lastAccess = now
     def isExpired(now: Long, ttlNanos: Long): Boolean =
       ttlNanos > 0L && (now - lastAccess) > ttlNanos
@@ -111,16 +111,26 @@ final class UnboundedStoreCache[Doc](ttl: Option[FiniteDuration]) extends StoreC
 }
 
 // ----------------------------------------------------------------------------------------------------
-// LRU — bounded by `maxEntries`. On insert, if size > maxEntries, evict oldest-access-first entries
-// until back under the cap. TTL (if configured) is checked lazily on access.
+// LRU — bounded by `maxEntries`. Reads are lock-free: a hit only stamps the entry's access time. Writes
+// keep an index of every entry ordered by the access time it had when indexed (never later than its
+// current one), under one lock. An insert past the cap takes the index's head: if that entry has not
+// been read since it was indexed it is the least recently accessed and is removed, otherwise it is
+// re-indexed at its current access time and the next head is examined. Each re-index answers at least
+// one read, so eviction costs O(log n) amortized per operation. TTL (if configured) is checked lazily
+// on access.
 // ----------------------------------------------------------------------------------------------------
 final class LruStoreCache[Doc](maxEntries: Int, ttl: Option[FiniteDuration]) extends StoreCache[Doc] {
-  import StoreCache.{Entry, now, ttlNanos}
+  import LruStoreCache.{LruEntry, Node}
+  import StoreCache.{now, ttlNanos}
 
   require(maxEntries > 0, s"maxEntries must be > 0, got $maxEntries")
 
   private val ttlNs = ttlNanos(ttl)
-  private val map = new ConcurrentHashMap[Id[Doc], Entry[Doc]]()
+  private val map = new ConcurrentHashMap[Id[Doc], LruEntry[Doc]]()
+  // Guarded by `lock`, as is every change to `map`: each entry in `map` has exactly one node here.
+  private val index = new TreeSet[Node[Doc]](Node.order)
+  private val lock = new Object
+  private var sequence = 0L
   override val stats: CacheStats = new CacheStats
 
   override def get(id: Id[Doc]): Option[Doc] = {
@@ -131,7 +141,7 @@ final class LruStoreCache[Doc](maxEntries: Int, ttl: Option[FiniteDuration]) ext
     } else {
       val n = now()
       if (entry.isExpired(n, ttlNs)) {
-        if (map.remove(id, entry)) stats.recordEviction()
+        if (remove(id, entry)) stats.recordEviction()
         stats.recordMiss()
         None
       } else {
@@ -143,43 +153,86 @@ final class LruStoreCache[Doc](maxEntries: Int, ttl: Option[FiniteDuration]) ext
   }
 
   override def put(id: Id[Doc], doc: Doc): Unit = {
-    map.put(id, new Entry[Doc](doc, now()))
-    // Cheap fast-path: most puts won't trigger an eviction sweep.
-    if (map.size() > maxEntries) evictOldest()
+    val removed = lock.synchronized {
+      val entry = new LruEntry[Doc](id, doc, now())
+      val previous = map.put(id, entry)
+      if (previous != null) index.remove(previous.node)
+      indexAt(entry, entry.lastAccess)
+      evictOverCap()
+    }
+    if (removed > 0) stats.recordEviction(removed.toLong)
   }
 
   override def evict(id: Id[Doc]): Unit = {
-    if (map.remove(id) != null) stats.recordEviction()
+    val removed = lock.synchronized {
+      val entry = map.remove(id)
+      if (entry != null) index.remove(entry.node)
+      entry != null
+    }
+    if (removed) stats.recordEviction()
   }
 
   override def clear(): Unit = {
-    val n = map.size()
-    map.clear()
+    val n = lock.synchronized {
+      val n = map.size()
+      map.clear()
+      index.clear()
+      n
+    }
     if (n > 0) stats.recordEviction(n.toLong)
   }
 
   override def size: Int = map.size()
 
-  // Evict the oldest-access entries until size is back at or below maxEntries. Sweep is performed under
-  // a synchronized block so concurrent puts don't double-evict (the eviction sort is the cost we pay
-  // for not maintaining a separate access-order linked list). Readers touch entries outside the lock, so
-  // each entry's access time is read once, before the sort: read live, it can change mid-sort and break
-  // the sort's contract.
-  private def evictOldest(): Unit = synchronized {
-    val excess = map.size() - maxEntries
-    if (excess <= 0) return
-    val candidates = map.entrySet().asScala.iterator.map { e =>
-      val entry = e.getValue
-      (entry.lastAccess, e.getKey, entry)
-    }.toArray
-    candidates.sortInPlaceBy(_._1)
+  private def remove(id: Id[Doc], entry: LruEntry[Doc]): Boolean = lock.synchronized {
+    val removed = map.remove(id, entry)
+    if (removed) index.remove(entry.node)
+    removed
+  }
+
+  // Under `lock`.
+  private def indexAt(entry: LruEntry[Doc], stamp: Long): Unit = {
+    sequence += 1
+    val node = new Node[Doc](stamp, sequence, entry)
+    entry.node = node
+    index.add(node)
+  }
+
+  // Under `lock`. A reader can keep touching entries while this runs, so re-indexing is bounded by the
+  // entry count: past it the head is removed as it stands, as a snapshot of access times would have.
+  private def evictOverCap(): Int = {
     var removed = 0
-    var i = 0
-    while (i < candidates.length && removed < excess) {
-      val (_, id, entry) = candidates(i)
-      if (map.remove(id, entry)) removed += 1
-      i += 1
+    var reindexed = 0
+    while (map.size() > maxEntries) {
+      val node = index.pollFirst()
+      val entry = node.entry
+      val current = entry.lastAccess
+      if (current != node.stamp && reindexed < map.size()) {
+        indexAt(entry, current)
+        reindexed += 1
+      } else {
+        map.remove(entry.id)
+        removed += 1
+      }
     }
-    if (removed > 0) stats.recordEviction(removed.toLong)
+    removed
+  }
+}
+
+object LruStoreCache {
+  private[cache] final class LruEntry[Doc](val id: Id[Doc], doc: Doc, lastAccess: Long)
+    extends StoreCache.Entry[Doc](doc, lastAccess) {
+    // Guarded by the cache's lock.
+    var node: Node[Doc] = null
+  }
+
+  /** An entry's place in the eviction index: the access time it had when indexed, then insertion order. */
+  private[cache] final class Node[Doc](val stamp: Long, val sequence: Long, val entry: LruEntry[Doc])
+
+  private[cache] object Node {
+    def order[Doc]: Comparator[Node[Doc]] = (a: Node[Doc], b: Node[Doc]) => {
+      val byStamp = java.lang.Long.compare(a.stamp, b.stamp)
+      if (byStamp != 0) byStamp else java.lang.Long.compare(a.sequence, b.sequence)
+    }
   }
 }
