@@ -53,6 +53,18 @@ case class SplitCollectionTransaction[
 
   override def jsonStream: rapid.Stream[Json] = storage.jsonStream
 
+  /**
+   * A field-scoped write touches the search index only: each document's index row is rewritten from what storage holds
+   * now, and storage is never written. The documents passed may be copies read earlier; a write made to one since keeps
+   * its place (a whole-document upsert of the copy would put the older version back), and one removed since has its
+   * index row removed. The count is of the documents storage still holds.
+   */
+  override def updateFields(docs: List[Doc], fields: List[lightdb.field.Field[Doc, ?]]): Task[Int] =
+    docs.map(d => storage.get(d._id).flatMap {
+      case Some(current) => searching.upsert(current).map(_ => 1)
+      case None => searching.delete(d._id).map(_ => 0)
+    }).tasks.map(_.sum)
+
   @volatile private var undoRecorded = false
 
   // A write-through write that a rollback must be able to take back.
