@@ -27,7 +27,7 @@ class DuckDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Strin
     val assignments = fields.filterNot(_ == model._id).map { f =>
       val q = SqlIdent.quote(f.name)
       s"$q=excluded.$q"
-    }
+    } ++ retiredColumnsCleared
     val idCol = SqlIdent.quote(model._id.name)
     val update = if assignments.nonEmpty then assignments.mkString(", ") else s"$idCol=$idCol"
     s"INSERT INTO $fqn(${cols.mkString(", ")}) VALUES(${values.mkString(", ")}) ON CONFLICT($idCol) DO UPDATE SET $update"

@@ -82,7 +82,7 @@ class MariaDBStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: Stri
     val updates = fields.filterNot(_ == model._id).map { f =>
       val q = SqlIdent.quote(f.name)
       s"$q = VALUES($q)"
-    }
+    } ++ retiredColumnsCleared
     val updateClause = if updates.nonEmpty then updates.mkString(", ") else {
       val q = SqlIdent.quote("_id"); s"$q = VALUES($q)"
     }

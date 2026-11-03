@@ -235,7 +235,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     state.register(s)
     val rs = s.executeQuery(s"SELECT * FROM ${store.fqn}")
     state.register(rs)
-    rs2Iterator(rs, Conversion.Json(store.fields))
+    storedRows(rs)
   })
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
@@ -246,7 +246,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     ps.setString(1, s"$prefix%")
     val rs = ps.executeQuery()
     state.register(rs)
-    rs2Iterator(rs, Conversion.Json(store.fields))
+    storedRows(rs)
   })
 
   /**
@@ -1304,6 +1304,28 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     case AggregateFilter.Contains(name, _, query) => SQLPart(s"${SqlIdent.quote(name)} LIKE ?", s"%$query%".json)
     case AggregateFilter.Exact(name, _, query) => SQLPart(s"${SqlIdent.quote(name)} LIKE ?", query.json)
     case f: AggregateFilter.Distance[_] => throw new UnsupportedOperationException("Distance not supported in SQL!")
+  }
+
+  /** Each row as stored: its declared fields, and each of the store's retired columns ([[SQLStore.retiredColumns]]) that
+    * holds a value on it, read as JSON. */
+  private def storedRows(rs: ResultSet): Iterator[Json] = {
+    val retired = store.retiredColumns
+    val declared = Conversion.Json[Doc](store.fields)
+    new Iterator[Json] {
+      override def hasNext: Boolean = rs.next()
+      override def next(): Json = {
+        val row = row2Value(rs, declared)
+        if retired.isEmpty then row
+        else {
+          val kept = retired.flatMap(c => Option(rs.getObject(c)).map(v => c -> retiredValue(v)))
+          if kept.isEmpty then row else Obj(row.asObj.value ++ kept)
+        }
+      }
+    }
+  }
+
+  private def retiredValue(value: Any): Json = try toJson(value, fabric.rw.valueRW) catch {
+    case _: RuntimeException => str(value.toString)
   }
 
   private def rs2Iterator[V](rs: ResultSet, conversion: Conversion[Doc, V]): Iterator[V] = new Iterator[V] {

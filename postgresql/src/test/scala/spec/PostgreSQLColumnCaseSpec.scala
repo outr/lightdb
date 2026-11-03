@@ -16,29 +16,13 @@ import java.nio.file.Path
 import java.sql.{Connection, DriverManager}
 
 /**
- * Reproduces the column-name casing bug in `SQLStore`'s schema
- * reconciliation.
+ * `SQLStore` emits every identifier quoted (`SqlIdent.quote`), so a model field `legacyCamelField` becomes a
+ * PostgreSQL column named `legacyCamelField`, case preserved, and a statement naming it must use that case: a quoted
+ * `"legacycamelfield"` does not match it.
  *
- * LightDB quotes every identifier it emits (`SqlIdent.quote`), so a
- * model field `legacyCamelField` becomes a Postgres column physically
- * named `legacyCamelField` — case preserved. But `SQLStore.columns()`
- * reads catalog names back through
- * `ResultSetMetaData.getColumnName(...).toLowerCase`, and the drop path
- * (`initTransaction`) then feeds that lowercased name straight into a
- * *quoted* `DROP COLUMN "..."`. Quoted identifiers are case-sensitive,
- * so `DROP COLUMN "legacycamelfield"` does NOT match the real
- * `legacyCamelField` column — Postgres rejects it with
- * `column "legacycamelfield" ... does not exist` and store
- * initialization crashes.
- *
- * Real-world impact: deploy version A of a model, then version B with a
- * camelCase field removed — version B's startup reconciliation cannot
- * drop the now-unused column and the process fails to boot.
- *
- * Test shape: initialize the table with the camelCase column present,
- * dispose, then initialize a second instance whose model lacks that
- * column. The second initialization must succeed and the column must
- * actually be gone.
+ * Version A of a model has the camelCase field; version B removed it. Opening the table with version B keeps the
+ * column (a store never drops a column on open) and reports it under its real case in `retiredColumns`; dropping it
+ * explicitly with `dropRetiredColumns` removes it.
  */
 @EmbeddedTest
 class PostgreSQLColumnCaseSpec extends AsyncWordSpec with AsyncTaskSpec with Matchers with BeforeAndAfterAll with PostgreSQLAvailability {
@@ -83,16 +67,18 @@ class PostgreSQLColumnCaseSpec extends AsyncWordSpec with AsyncTaskSpec with Mat
     "dispose the original instance" in {
       DBBefore.dispose.succeed
     }
-    "re-initialize with the camelCase column removed — reconciliation must drop it" in {
-      // Before the SQLStore fix this throws:
-      //   RuntimeException: Failed to execute update:
-      //     ALTER TABLE "PostgreSQLColumnCaseSpec"."schema_evolution_record"
-      //     DROP COLUMN "legacycamelfield"
-      //   Caused by: column "legacycamelfield" ... does not exist
+    "re-initialize with the camelCase field removed, keeping its column under its real case" in {
       DBAfter.init.map { _ =>
         val cols = physicalColumns()
-        cols should not contain "legacyCamelField"
+        cols should contain("legacyCamelField")
         cols should contain("keepField")
+        DBAfter.records.asInstanceOf[lightdb.sql.SQLStore[?, ?]].retiredColumns shouldBe List("legacyCamelField")
+      }
+    }
+    "drop the retired camelCase column when asked" in {
+      DBAfter.records.asInstanceOf[lightdb.sql.SQLStore[?, ?]].dropRetiredColumns(List("legacyCamelField")).map { dropped =>
+        dropped shouldBe List("legacyCamelField")
+        physicalColumns() should not contain "legacyCamelField"
       }
     }
     "dispose" in {

@@ -252,21 +252,18 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     }
     connection.commit()
 
-    // Add/Remove columns. `existingColumns` carries the catalog's real
-    // column case — DROP/ADD statements quote their identifiers, so they
-    // must reference that exact case. Membership tests are
-    // case-insensitive (Postgres folds unquoted identifiers); they run
-    // against `existingColumnsLower`.
+    // Add columns; keep the ones no field declares. `existingColumns` carries the catalog's real column case — ADD and
+    // DROP statements quote their identifiers, so they must reference that exact case. Membership tests are
+    // case-insensitive (Postgres folds unquoted identifiers); they run against `existingColumnsLower`.
     val existingColumns = columns(connection)
     val existingColumnsLower = existingColumns.map(_.toLowerCase)
-    // Drop columns
-    existingColumns.foreach { name =>
-      if !fieldNames.contains(name.toLowerCase) then {
-        scribe.info(s"Removing column $fqn.$name (existing: ${existingColumns.mkString(", ")}, expected: ${fieldNames.mkString(", ")}).")
-        executeUpdate(s"ALTER TABLE $fqn DROP COLUMN ${SqlIdent.quote(name)}", tx)
-      }
+    // A column no field declares holds what an earlier model stored: opening the store never drops data, so it stays
+    // until dropRetiredColumns removes it.
+    val retired = existingColumns.toList.filterNot(c => fieldNames.contains(c.toLowerCase)).sorted
+    if retired.nonEmpty then {
+      scribe.info(s"Keeping column(s) of $fqn that no field declares: ${retired.mkString(", ")} (dropRetiredColumns removes them)")
     }
-    // Add columns
+    retire(retired)
     fields.foreach { field =>
       val name = field.name
       if !existingColumnsLower.contains(name.toLowerCase) then {
@@ -396,13 +393,65 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     s"$insertPrefix INTO $fqn(${fields.map(f => SqlIdent.quote(f.name)).mkString(", ")}) VALUES(${values.mkString(", ")})"
   }
 
+  /** The upsert statement. A document holds none of the [[retiredColumns]], so a write of it leaves each NULL, as it
+    * would leave a field the document lacks; every dialect's statement clears them. */
   protected def createUpsertSQL(): String = {
-    val values = fields.map(field2Value)
-    s"$upsertPrefix INTO $fqn(${fields.map(f => SqlIdent.quote(f.name)).mkString(", ")}) VALUES(${values.mkString(", ")})"
+    val names = fields.map(f => SqlIdent.quote(f.name)) ++ retiredColumns.map(SqlIdent.quote)
+    val values = fields.map(field2Value) ++ retiredColumns.map(_ => "NULL")
+    s"$upsertPrefix INTO $fqn(${names.mkString(", ")}) VALUES(${values.mkString(", ")})"
   }
 
-  private[sql] lazy val insertSQL: String = createInsertSQL()
-  private[sql] lazy val upsertSQL: String = createUpsertSQL()
+  /** `column = NULL` for each of the [[retiredColumns]]: what an upsert's update clause appends. */
+  protected def retiredColumnsCleared: List[String] = retiredColumns.map(c => s"${SqlIdent.quote(c)} = NULL")
+
+  @volatile private var writeStatements: Option[(String, String)] = None
+
+  private def statements: (String, String) = writeStatements.getOrElse {
+    val built = (createInsertSQL(), createUpsertSQL())
+    writeStatements = Some(built)
+    built
+  }
+
+  private[sql] def insertSQL: String = statements._1
+  private[sql] def upsertSQL: String = statements._2
+
+  @volatile private var _retiredColumns: List[String] = Nil
+
+  /**
+   * The table's columns that no field of the model declares, by their names in the catalog: what an earlier version of
+   * the model stored in fields it has since removed. Opening the store adds a column for each new field and never drops
+   * one, so these keep their values on every row not written since, and the transaction's `jsonStream` reads them back
+   * beside the declared fields (where not NULL) for code that carries such values forward. A document written to the
+   * store holds none of them, so the write leaves each NULL on its row. They are removed only by [[dropRetiredColumns]].
+   */
+  def retiredColumns: List[String] = _retiredColumns
+
+  private def retire(columns: List[String]): Unit = {
+    _retiredColumns = columns
+    writeStatements = None
+  }
+
+  /**
+   * Drops the named [[retiredColumns]] and their values from the table, returning the columns dropped (a name that is
+   * not a retired column is ignored; names match without regard to case). Refuses a column a field declares. For a
+   * caller that has carried every value it needs out of them; run it while nothing writes to the store, since a
+   * transaction already open may hold a statement naming the column.
+   */
+  def dropRetiredColumns(names: List[String]): Task[List[String]] = transaction { tx =>
+    Task {
+      val declared = fields.map(_.name.toLowerCase).toSet
+      names.find(n => declared.contains(n.toLowerCase)).foreach { n =>
+        throw new IllegalArgumentException(s"$fqn.$n is declared by a field of ${model.getClass.getSimpleName}, not retired")
+      }
+      val dropping = _retiredColumns.filter(c => names.exists(_.equalsIgnoreCase(c)))
+      dropping.foreach { c =>
+        scribe.info(s"Dropping retired column $fqn.$c")
+        executeUpdate(s"ALTER TABLE $fqn DROP COLUMN ${SqlIdent.quote(c)}", tx)
+      }
+      retire(_retiredColumns.filterNot(dropping.contains))
+      dropping
+    }
+  }
 
   protected def executeUpdate(sql: String, tx: TX): Unit = {
     val state = tx.state

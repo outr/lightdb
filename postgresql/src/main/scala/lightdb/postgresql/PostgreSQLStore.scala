@@ -128,7 +128,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
        |USING (VALUES (${values.mkString(", ")})) AS $source (${fieldNames.mkString(", ")})
        |ON $target.$idCol = $source.$idCol
        |WHEN MATCHED THEN
-       |    UPDATE SET ${fieldNames.map(f => s"$f = $source.$f").mkString(", ")}
+       |    UPDATE SET ${(fieldNames.map(f => s"$f = $source.$f") ++ retiredColumnsCleared).mkString(", ")}
        |WHEN NOT MATCHED THEN
        |    INSERT (${fieldNames.mkString(", ")}) VALUES (${fieldNames.map(f => s"$source.$f").mkString(", ")});
        |""".stripMargin
