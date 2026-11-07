@@ -3,7 +3,7 @@ package lightdb.postgresql
 import fabric.*
 import fabric.rw.*
 import fabric.io.JsonFormatter
-import lightdb.{Sort, SortDirection}
+import lightdb.{ListExtras, Sort, SortDirection}
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.filter.Filter
@@ -50,13 +50,24 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       SQLPart.Fragment(")")
     ))
 
-  // Array membership against the compact-JSON text column. An element is bounded by `[`/`,` on the
-  // left and `,`/`]` on the right, so anchoring on those boundaries gives exact matches for any
-  // scalar type (no `42` matching `420`) while remaining LIKE-based, so the pg_trgm GIN index applies.
+  // Array membership of scalar values is jsonb containment of the compact-JSON text column, which the list's jsonb index answers
+  // (PostgreSQLStore.additionalIndexSQL) and which matches a value exactly, as Lucene's term does. An object is not a scalar:
+  // containment would also match a larger object holding it, so a list of objects keeps the boundary patterns below.
+  private def scalar(json: Json): Boolean = json match {
+    case _: Str | _: NumInt | _: NumDec | _: Bool => true
+    case _ => false
+  }
+
+  private def containsPart(fieldName: String, values: List[Json]): SQLPart =
+    SQLPart(s"${PostgreSQLStore.jsonb(SqlIdent.quote(fieldName))} @> ?::jsonb", JsonFormatter.Compact(Arr(values.toVector)).json)
+
+  // An element is bounded by `[`/`,` on the left and `,`/`]` on the right, so anchoring on those boundaries gives exact matches
+  // (no `42` matching `420`) while remaining LIKE-based, so the pg_trgm GIN index applies.
   private def arrayBoundaryPatterns(v: String): List[String] = List(s"%[$v,%", s"%,$v,%", s"%,$v]%", s"%[$v]%")
 
   override protected def arrayContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] =
     if (values.isEmpty) None
+    else if (values.forall(scalar)) Some(containsPart(fieldName, values))
     else Some {
       val q = SqlIdent.quote(fieldName)
       val (clauses, args) = values.map { json =>
@@ -66,8 +77,12 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
       SQLPart(clauses.mkString(" AND "), args.flatten*)
     }
 
+  // None of the values: each one's containment negated.
   override protected def arrayNotContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] =
     if (values.isEmpty) None
+    else if (values.forall(scalar)) Some(SQLQuery(values.map[SQLPart] { v =>
+      SQLQuery(List(SQLPart.Fragment("NOT ("), containsPart(fieldName, List(v)), SQLPart.Fragment(")")))
+    }.intersperse(SQLPart.Fragment(" AND "))))
     else Some {
       val q = SqlIdent.quote(fieldName)
       val (clauses, args) = values.map { json =>

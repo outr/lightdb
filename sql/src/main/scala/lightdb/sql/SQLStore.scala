@@ -300,7 +300,9 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
     fields.foreach {
       case index: UniqueIndex[Doc, _] if index.name == "_id" => // Ignore _id
       case index: UniqueIndex[Doc, _] => executeUpdate(createUniqueIndexSQL(index), tx)
-      case index: Indexed[Doc, _] => executeUpdate(createIndexSQL(index), tx)
+      case index: Indexed[Doc, _] =>
+        executeUpdate(createIndexSQL(index), tx)
+        additionalIndexSQL(index).foreach(executeUpdate(_, tx))
       case _: Field[Doc, _] => // Nothing to do
     }
 
@@ -315,6 +317,10 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   protected def createIndexSQL(index: Indexed[Doc, _]): String =
     s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(s"${name}_${index.name}_idx")} ON $fqn(${SqlIdent.quote(index.name)})"
+
+  /** Indexes this backend builds for a field beside its own (PostgreSQL's jsonb index for a list, for example). Each must create
+    * only if missing, and be named so the startup sweep keeps it: outside the `_idx` convention, or listed in [[backendIndexNames]]. */
+  protected def additionalIndexSQL(index: Indexed[Doc, _]): List[String] = Nil
 
   protected def createCompositeIndexSQL(compositeIndex: CompositeIndex[Doc]): String = {
     val include = compositeIndex.include match {

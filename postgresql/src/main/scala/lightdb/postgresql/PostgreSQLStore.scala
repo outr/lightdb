@@ -76,6 +76,16 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
     }
   }
 
+  /** A list's jsonb GIN index, which answers membership (see PostgreSQLTransaction.arrayContainsAllParts); the trigram index stays
+    * for LIKE matching inside the list's values. Named `<Store>_<field>_jsonb`, outside the sweep's `_idx` convention, so one built
+    * ahead of time under that name (CONCURRENTLY, on a large table) is taken as it is. */
+  override protected def additionalIndexSQL(index: Field.Indexed[Doc, _]): List[String] =
+    if index.isArr && !index.isVector && !PostgreSQLStore.referencesGeo(index.rw.definition) then List(
+      s"CREATE INDEX IF NOT EXISTS ${SqlIdent.quote(PostgreSQLStore.jsonbIndexName(name, index.name))} ON $fqn " +
+        s"USING gin ((${PostgreSQLStore.jsonb(SqlIdent.quote(index.name))}) jsonb_path_ops)"
+    )
+    else Nil
+
   override protected def createTransaction(parent: Option[Transaction[Doc, Model]],
                                            batchConfig: BatchConfig,
                                            writeHandlerFactory: Transaction[Doc, Model] => lightdb.transaction.WriteHandler[Doc, Model]): Task[TX] = Task {
@@ -148,6 +158,11 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 }
 
 object PostgreSQLStore {
+  def jsonbIndexName(storeName: String, fieldName: String): String = s"${storeName}_${fieldName}_jsonb"
+
+  /** A list column as jsonb, written exactly as its jsonb index's expression so the planner matches the two. */
+  def jsonb(quotedColumn: String): String = s"($quotedColumn)::jsonb"
+
   /** True if a field is (or contains) a `lightdb.spatial.Geo` value. */
   def referencesGeo(d: Definition): Boolean =
     d.className.contains("lightdb.spatial.Geo") || (d.defType match {
