@@ -24,7 +24,6 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   override lazy val writeHandler: lightdb.transaction.WriteHandler[Doc, Model] = writeHandlerFactory(this)
 
   private def ftsTableName: String = s"${store.name}__fts"
-  private def scoreColumn: String = SqlIdent.quote("__score")
 
   /** An FTS5 query for `words` as consecutive whole words of column `fieldName` (they hold only letters, digits and underscores). */
   private def ftsPhrase(fieldName: String, words: List[String]): String = s"{$fieldName} : \"${words.mkString(" ")}\""
@@ -36,34 +35,32 @@ case class SQLiteTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
   }
 
   /**
-   * With FTS5, its own BM25 (`bm25`) over the terms' phrases, joined LEFT so that a row the filter keeps on another clause stays
-   * (scoring 0). FTS5 has no per-phrase weight, so a clause's boost is not applied. Without FTS5, the shared ranking over the
-   * `lightdb_words` function.
+   * With FTS5, the text terms score by its own BM25 (`bm25`) over their phrases, joined LEFT so that a row the filter keeps on another
+   * clause stays (scoring 0 for text), added to what every other clause scores (see the shared plan). FTS5 has no per-phrase weight, so
+   * a text clause's boost is not applied. Without FTS5, the shared ranking over the `lightdb_words` function throughout.
    */
-  override protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: lightdb.SortDirection): Option[BestMatchPlan] =
-    if !SQLiteStore.EnableFTS then super.bestMatchPlan(filter, direction)
+  override protected def bestMatchPlan(filter: Option[Filter[Doc]]): BestMatchPlan = {
+    val shared = super.bestMatchPlan(filter)
+    val terms = textTerms(filter)
+    if !SQLiteStore.EnableFTS || terms.isEmpty then shared
     else {
-      val terms = textTerms(filter)
-      if terms.isEmpty then None
-      else {
-        val fts = SqlIdent.quote(ftsTableName)
-        val idCol = SqlIdent.quote("_id")
-        val ftsId = SqlIdent.quote("__fts_id")
-        val ftsScore = SqlIdent.quote("__fts_score")
-        val alias = SqlIdent.quote("__bm")
-        val query = terms.map(t => ftsPhrase(t.fieldName, t.words)).distinct.mkString(" OR ")
-        val join = List(SQLPart(
-          s" LEFT JOIN (SELECT $idCol AS $ftsId, -bm25($fts) AS $ftsScore FROM $fts WHERE $fts MATCH ?) AS $alias ON $alias.$ftsId = ${store.fqn}.$idCol",
-          query.json
-        ))
-        val scoreField = SQLPart.Fragment(s"COALESCE($alias.$ftsScore, 0.0) AS $scoreColumn")
-        val dir = direction match {
-          case SortDirection.Descending => "DESC"
-          case SortDirection.Ascending => "ASC"
-        }
-        Some(BestMatchPlan(scoreColumn, scoreField, join, SQLPart.Fragment("1=1"), SQLPart.Fragment(s"$scoreColumn $dir")))
-      }
+      val fts = SqlIdent.quote(ftsTableName)
+      val idCol = SqlIdent.quote("_id")
+      val ftsId = SqlIdent.quote("__fts_id")
+      val ftsScore = SqlIdent.quote("__fts_score")
+      val alias = SqlIdent.quote("__bm")
+      val query = terms.map(t => ftsPhrase(t.fieldName, t.words)).distinct.mkString(" OR ")
+      val join = List(SQLPart(
+        s" LEFT JOIN (SELECT $idCol AS $ftsId, -bm25($fts) AS $ftsScore FROM $fts WHERE $fts MATCH ?) AS $alias ON $alias.$ftsId = ${store.fqn}.$idCol",
+        query.json
+      ))
+      val score = SQLQuery(List(SQLPart.Fragment(s"(COALESCE($alias.$ftsScore, 0.0) + "), shared.score, SQLPart.Fragment(")")))
+      BestMatchPlan(score, join)
     }
+  }
+
+  override protected def textTermScore(t: TextTerm): SQLPart =
+    if SQLiteStore.EnableFTS then SQLPart.Fragment("0.0") else super.textTermScore(t)
 
   override protected def wordsText(column: String): Option[String] = Some(s"lightdb_words($column)")
 

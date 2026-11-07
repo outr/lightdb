@@ -46,55 +46,90 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
 
   def fqn: String = store.fqn
 
-  protected case class BestMatchPlan(scoreColumn: String,
-                                     scoreField: SQLPart,
-                                     joinFromSuffix: List[SQLPart],
-                                     matchFilter: SQLPart,
-                                     sortPart: SQLPart)
+  /** How a query's score is computed: the score expression, and any FROM sources and filter it needs. */
+  protected case class BestMatchPlan(score: SQLPart,
+                                     joinFromSuffix: List[SQLPart] = Nil,
+                                     matchFilter: SQLPart = SQLPart.Fragment("1=1"))
+
+  protected val scoreColumn: String = SqlIdent.quote("__score")
 
   /**
-   * Backends may provide a best-match (relevance) plan when Sort.BestMatch is requested.
-   *
-   * If defined, the plan may:
-   * - join extra FROM sources (e.g., FTS tables)
-   * - add a filter that constrains the match set
-   * - add a computed score column and an ORDER BY clause
+   * The score of each row the filter keeps, as Lucene scores the same query, so one LightDB query ranks alike on every store. A
+   * tokenized `Exact`, and each token of a tokenized `Equals`, scores BM25 (see [[textTermScore]]); any other filter scores 1. A
+   * `Multi` sums its `Must` and `Should` clauses, each times its boost (1 when none is given): a `Should` only where it matched, a
+   * group only where the group matched. `Filter` and `MustNot` clauses do not score. A group that requires no clause (no `Must`, and
+   * no `Should` it must match) adds 1 for every row it keeps, as Lucene's match-all clause does there. No filter scores every row 1.
    */
-  protected def bestMatchPlan(filter: Option[Filter[Doc]], direction: SortDirection): Option[BestMatchPlan] = {
-    val terms = textTerms(filter)
-    if terms.isEmpty then None
-    else if !ranksText then throw new UnsupportedOperationException(
+  protected def bestMatchPlan(filter: Option[Filter[Doc]]): BestMatchPlan = {
+    if textTerms(filter).nonEmpty && !ranksText then throw new UnsupportedOperationException(
       s"${store.name} (${getClass.getSimpleName}) cannot rank tokenized text, so it cannot sort by best match."
     )
-    else Some(bm25Plan(terms, direction))
+    BestMatchPlan(filter.map(scorePart(_, 1.0)).getOrElse(SQLPart.Fragment("1.0")))
   }
+
+  private def scorePart(f: Filter[Doc], boost: Double): SQLPart = f match {
+    case m: Filter.Multi[Doc] =>
+      val hasShould = m.filters.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
+      val minShouldMatch = if hasShould then m.minShould else 0
+      val clauses = m.filters.flatMap { c =>
+        val clauseBoost = boost * c.boost.getOrElse(1.0)
+        c.condition match {
+          case Condition.Must => List(scorePart(c.filter, clauseBoost))
+          case Condition.Should if leafTextTerms(c.filter, clauseBoost).nonEmpty => List(scorePart(c.filter, clauseBoost))
+          case Condition.Should => List(SQLQuery(List(
+            SQLPart.Fragment("(CASE WHEN "), filter2Part(c.filter), SQLPart.Fragment(" THEN "), scorePart(c.filter, clauseBoost),
+            SQLPart.Fragment(" ELSE 0.0 END)")
+          )))
+          case _ => Nil
+        }
+      }
+      val matchAll = if minShouldMatch <= 0 && !m.filters.exists(_.condition == Condition.Must) then List(number(boost)) else Nil
+      sumParts(clauses ::: matchAll)
+    case _ => leafTextTerms(f, boost) match {
+      case Nil => number(boost)
+      case terms => sumParts(terms.map(textTermScore))
+    }
+  }
+
+  private def number(d: Double): SQLPart = SQLPart.Fragment(java.math.BigDecimal.valueOf(d).toPlainString)
+
+  private def sumParts(parts: List[SQLPart]): SQLPart =
+    if parts.isEmpty then SQLPart.Fragment("0.0")
+    else SQLQuery(SQLPart.Fragment("(") :: parts.intersperse(SQLPart.Fragment(" + ")) ::: List(SQLPart.Fragment(")")))
 
   /** One query token a best-match ranking scores: the tokenized field it was asked of, its words (see [[TextWords]]), and the boost
     * of its clause. */
   protected case class TextTerm(fieldName: String, words: List[String], boost: Double)
+
+  /** The text terms one filter scores by BM25: a tokenized `Exact`'s token, or each token of a tokenized `Equals`. */
+  private def leafTextTerms(f: Filter[Doc], boost: Double): List[TextTerm] = {
+    def tokenized(name: String): Boolean = store.model.fields.exists(f => f.name == name && f.isTokenized)
+    def term(fieldName: String, token: String): Option[TextTerm] =
+      Some(TextWords(token)).filter(_.nonEmpty).map(words => TextTerm(fieldName, words, boost))
+    f match {
+      case e: Filter.Exact[Doc @unchecked, _] if tokenized(e.fieldName) => term(e.fieldName, e.query).toList
+      case e: Filter.Equals[Doc @unchecked, _] if e.value != null && e.value != None && tokenized(e.fieldName) =>
+        e.getJson(store.model) match {
+          case Str(s, _) => s.split("\\s+").toList.flatMap(t => term(e.fieldName, t))
+          case _ => Nil
+        }
+      case _ => Nil
+    }
+  }
 
   /**
    * The text terms of `filter` that score, as Lucene scores them: a tokenized `Exact`'s token and each token of a tokenized `Equals`,
    * under `Must` and `Should` clauses (`Filter` and `MustNot` clauses do not score).
    */
   protected def textTerms(filter: Option[Filter[Doc]]): List[TextTerm] = {
-    def tokenized(name: String): Boolean = store.model.fields.exists(f => f.name == name && f.isTokenized)
-    def term(fieldName: String, token: String, boost: Double): Option[TextTerm] =
-      Some(TextWords(token)).filter(_.nonEmpty).map(words => TextTerm(fieldName, words, boost))
     def loop(f: Filter[Doc], boost: Double): List[TextTerm] = f match {
-      case e: Filter.Exact[Doc @unchecked, _] if tokenized(e.fieldName) => term(e.fieldName, e.query, boost).toList
-      case e: Filter.Equals[Doc @unchecked, _] if e.value != null && e.value != None && tokenized(e.fieldName) =>
-        e.getJson(store.model) match {
-          case Str(s, _) => s.split("\\s+").toList.flatMap(t => term(e.fieldName, t, boost))
-          case _ => Nil
-        }
       case m: Filter.Multi[Doc] => m.filters.flatMap { c =>
         c.condition match {
           case Condition.Must | Condition.Should => loop(c.filter, boost * c.boost.getOrElse(1.0))
           case _ => Nil
         }
       }
-      case _ => Nil
+      case _ => leafTextTerms(f, boost)
     }
     filter.toList.flatMap(loop(_, 1.0)).distinct
   }
@@ -136,34 +171,27 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
   }
 
   /**
-   * Scores every row by BM25 over `terms` (Lucene's k1 and b): for each term a row holds, the term's inverse document frequency over
-   * the whole table, times its frequency in the row, saturated, with the row's length (in characters) against the table's average.
-   * A row the filter kept on another clause scores 0 for every term it does not hold.
+   * One term's BM25 score (Lucene's k1 and b): where the row holds it, the term's inverse document frequency over the whole table,
+   * times its frequency in the row, saturated, with the row's length (in characters) against the table's average; 0 elsewhere.
    */
-  private def bm25Plan(terms: List[TextTerm], direction: SortDirection): BestMatchPlan = {
+  protected def textTermScore(t: TextTerm): SQLPart = {
     import SQLPart.Fragment
-    val scoreColumn = SqlIdent.quote("__score")
     val alias = SqlIdent.quote("__bm")
     val k1 = TextWords.K1.toString
     val b = TextWords.B.toString
     val rows = s"(SELECT COUNT(*) FROM ${store.fqn} $alias)"
-    val parts: List[SQLPart] = terms.map { t =>
-      val column = SqlIdent.quote(t.fieldName)
-      val outer = s"${store.fqn}.$column"
-      val inner = s"$alias.$column"
-      def documents: SQLPart = SQLQuery(List(Fragment(s"(SELECT COUNT(*) FROM ${store.fqn} $alias WHERE "), textMatchPart(inner, t.words), Fragment(")")))
-      val idf = SQLQuery(List(Fragment(s"LN(1.0 + ($rows - "), documents, Fragment(" + 0.5) / ("), documents, Fragment(" + 0.5))")))
-      def frequency: SQLPart = SQLQuery(List(Fragment("CAST("), greatestPart(Fragment("1"), textFrequencyPart(outer, t.words)), Fragment(s" AS $doubleType)")))
-      val average = s"(SELECT AVG(CAST(${charLengthSQL(s"COALESCE($inner, '')")} AS $doubleType)) FROM ${store.fqn} $alias)"
-      val ratio = s"COALESCE(CAST(${charLengthSQL(s"COALESCE($outer, '')")} AS $doubleType) / NULLIF($average, 0), 1.0)"
-      SQLQuery(List(
-        Fragment("(CASE WHEN "), textMatchPart(outer, t.words), Fragment(s" THEN ${t.boost} * "), idf, Fragment(" * "), frequency,
-        Fragment(" / ("), frequency, Fragment(s" + $k1 * (1 - $b + $b * $ratio)) ELSE 0.0 END)")
-      ))
-    }
-    val score = SQLQuery(Fragment("(") :: parts.intersperse(Fragment(" + ")) ::: List(Fragment(s") AS $scoreColumn")))
-    val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
-    BestMatchPlan(scoreColumn, score, Nil, Fragment("1=1"), Fragment(s"$scoreColumn $dir"))
+    val column = SqlIdent.quote(t.fieldName)
+    val outer = s"${store.fqn}.$column"
+    val inner = s"$alias.$column"
+    def documents: SQLPart = SQLQuery(List(Fragment(s"(SELECT COUNT(*) FROM ${store.fqn} $alias WHERE "), textMatchPart(inner, t.words), Fragment(")")))
+    val idf = SQLQuery(List(Fragment(s"LN(1.0 + ($rows - "), documents, Fragment(" + 0.5) / ("), documents, Fragment(" + 0.5))")))
+    def frequency: SQLPart = SQLQuery(List(Fragment("CAST("), greatestPart(Fragment("1"), textFrequencyPart(outer, t.words)), Fragment(s" AS $doubleType)")))
+    val average = s"(SELECT AVG(CAST(${charLengthSQL(s"COALESCE($inner, '')")} AS $doubleType)) FROM ${store.fqn} $alias)"
+    val ratio = s"COALESCE(CAST(${charLengthSQL(s"COALESCE($outer, '')")} AS $doubleType) / NULLIF($average, 0), 1.0)"
+    SQLQuery(List(
+      Fragment("(CASE WHEN "), textMatchPart(outer, t.words), Fragment(" THEN "), number(t.boost), Fragment(" * "), idf, Fragment(" * "),
+      frequency, Fragment(" / ("), frequency, Fragment(s" + $k1 * (1 - $b + $b * $ratio)) ELSE 0.0 END)")
+    ))
   }
 
   /**
@@ -728,9 +756,13 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val bestMatchDirectionOpt: Option[SortDirection] = query.sort.collectFirst {
       case Sort.BestMatch(direction) => direction
     }
-    bestMatch = bestMatchDirectionOpt.flatMap(dir => bestMatchPlan(query.filter, dir))
+    bestMatch = Option.when(bestMatchDirectionOpt.nonEmpty || query.scoreDocs)(bestMatchPlan(query.filter))
+    def scoreSort(direction: SortDirection): SQLPart =
+      SQLPart.Fragment(s"$scoreColumn ${if direction == SortDirection.Descending then "DESC" else "ASC"}")
+    // Scores asked for and no order given: best first, as Lucene orders them.
+    val defaultScoreSort = Option.when(query.scoreDocs && query.sort.isEmpty)(scoreSort(SortDirection.Descending)).toList
 
-    val baseFieldParts: List[SQLPart] = if bestMatch.nonEmpty then {
+    val baseFieldParts: List[SQLPart] = if bestMatch.exists(_.joinFromSuffix.nonEmpty) then {
       // When joining auxiliary tables (e.g., FTS), disambiguate base-table columns and keep stable column labels.
       fields.map { f =>
         val q = SqlIdent.quote(f.name)
@@ -743,12 +775,12 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     SQLQueryBuilder(
       store = store,
       state = state,
-      fields = baseFieldParts ::: extraFields ::: bestMatch.toList.map(_.scoreField),
+      fields = baseFieldParts ::: extraFields ::: bestMatch.toList.map(p => SQLQuery(List(p.score, SQLPart.Fragment(s" AS $scoreColumn")))),
       filters = query.filter.map(filter2Part).toList ::: bestMatch.toList.map(_.matchFilter),
       group = Nil,
       having = Nil,
-      sort = query.sort.flatMap {
-        case Sort.BestMatch(_) => bestMatch.toList.map(_.sortPart)
+      sort = defaultScoreSort ::: query.sort.flatMap {
+        case Sort.BestMatch(direction) => List(scoreSort(direction))
         case Sort.ByField(index, direction) =>
           val dir = if direction == SortDirection.Descending then "DESC" else "ASC"
           List(SQLPart.Fragment(s"${SqlIdent.quote(index.name)} $dir"))
@@ -1585,23 +1617,25 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           throw new UnsupportedOperationException("SpatialIntersects filtering not supported on related child store")
         }
       case f: Filter.Multi[C] =>
-        val (shoulds, others) = f.filters.partition(f => f.condition == Condition.Filter || f.condition == Condition.Should)
-        if f.minShould != 1 && shoulds.nonEmpty then {
-          throw new UnsupportedOperationException("Should filtering only works in SQL for exactly one condition")
-        }
-        val shouldParts = shoulds.map(fc => filter2PartOn(fc.filter, targetStore)) match {
-          case Nil => Nil
-          case list => List(SQLQuery(SQLPart.Fragment("(") :: list.intersperse(SQLPart.Fragment(" OR ")) ::: List(SQLPart.Fragment(")"))))
-        }
-        val parts: List[SQLPart] = others.flatMap { fc =>
-          if fc.boost.nonEmpty then throw new UnsupportedOperationException("Boost not supported in SQL")
+        // As Lucene matches: `Must` and `Filter` clauses are required, `MustNot` excluded, and at least `minShould` of the `Should`
+        // clauses must match (none when it is 0). A boost changes the score only (see bestMatchPlan).
+        val shoulds = f.filters.collect { case fc if fc.condition == Condition.Should => filter2PartOn(fc.filter, targetStore) }
+        val shouldParts =
+          if shoulds.isEmpty || f.minShould <= 0 then Nil
+          else if f.minShould == 1 then
+            List(SQLQuery(SQLPart.Fragment("(") :: shoulds.intersperse(SQLPart.Fragment(" OR ")) ::: List(SQLPart.Fragment(")"))))
+          else {
+            val matched = shoulds.map(p => SQLQuery(List(SQLPart.Fragment("(CASE WHEN "), p, SQLPart.Fragment(" THEN 1 ELSE 0 END)"))))
+            List(SQLQuery(SQLPart.Fragment("((") :: matched.intersperse(SQLPart.Fragment(" + ")) ::: List(SQLPart.Fragment(s") >= ${f.minShould})"))))
+          }
+        val parts: List[SQLPart] = f.filters.flatMap { fc =>
           fc.condition match {
-            case Condition.Must => List(filter2PartOn(fc.filter, targetStore))
+            case Condition.Must | Condition.Filter => List(filter2PartOn(fc.filter, targetStore))
             case Condition.MustNot =>
               val p = filter2PartOn(fc.filter, targetStore)
               // Create a proper SQLQuery for NOT conditions to avoid flattening issues
               List(SQLQuery(List(SQLPart.Fragment("NOT("), p, SQLPart.Fragment(")"))))
-            case f => throw new UnsupportedOperationException(s"$f condition not supported in SQL")
+            case Condition.Should => Nil
           }
         }
         // Filter out any empty or invalid parts before creating the SQL
