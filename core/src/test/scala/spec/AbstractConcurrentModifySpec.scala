@@ -114,7 +114,8 @@ abstract class AbstractConcurrentModifySpec extends AsyncWordSpec with AsyncTask
   specName should {
     "initialize the database" in {
       deleteDirectoryIfExists(dbPath)
-      DB.init.succeed
+      // A server store (PostgreSQL, MariaDB) keeps its tables between runs, and the missing-record test needs the record missing.
+      DB.init.flatMap(_ => DB.truncate()).succeed
     }
     "keep every update of concurrent modify calls on one record" in {
       val id = Tally.id("concurrent")
