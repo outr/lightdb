@@ -79,6 +79,11 @@ object SQLDsl {
       override private[dsl] def render: SQLQuery = SQLQuery(List(SQLPart.Fragment(sql)))
     }
 
+    /** SQL rendered elsewhere, with its arguments: a LightDB filter as SQLStoreTransaction.filterSQL renders it. */
+    final case class Part(part: SQLPart) extends Expr {
+      override private[dsl] def render: SQLQuery = SQLQuery(List(part))
+    }
+
     sealed trait Term {
       def renderAsPart: SQLPart
     }
@@ -256,6 +261,11 @@ object SQLDsl {
 
     final case class Raw(sql: String) extends Value {
       override private[dsl] def render: SQLPart = SQLPart.Fragment(sql)
+    }
+
+    /** SQL rendered elsewhere, with its arguments: a score as SQLStoreTransaction.scoreSQL renders it. */
+    final case class Part(part: SQLPart) extends Value {
+      override private[dsl] def render: SQLPart = part
     }
 
     /** A column referenced as a value (e.g. as a function argument or comparison operand). */
@@ -504,6 +514,10 @@ object SQLDsl {
   def arg(value: Any): Value = Value.Arg(value)
   def rawValue(sql: String): Value = Value.Raw(sql)
   def rawExpr(sql: String): Expr = Expr.Raw(sql)
+
+  def partExpr(part: SQLPart): Expr = Expr.Part(part)
+
+  def partValue(part: SQLPart): Value = Value.Part(part)
 
   /** A SQL function call value: `func("split_part", col.asValue, arg("/"), arg(2))`. */
   def func(name: String, args: Value*): Value = Value.Func(name, args.toList)

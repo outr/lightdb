@@ -67,6 +67,21 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     BestMatchPlan(filter.map(scorePart(_, 1.0)).getOrElse(SQLPart.Fragment("1.0")))
   }
 
+  /** `filter` as a WHERE condition for a query built in [[lightdb.sql.dsl.SQLDsl]] over this store's table (see `SQLDsl.partExpr`):
+    * it keeps the rows this store's own query keeps. Columns are named unqualified, so the query may alias the table. */
+  def filterSQL(filter: Filter[Doc]): SQLPart = filter2Part(filter)
+
+  /** The score Sort.BestMatch ranks `filter`'s rows by (see [[bestMatchPlan]]), for a SQLDsl query over this store's table (see
+    * `SQLDsl.partValue`). Clause scores name their columns unqualified; a tokenized text term's BM25 names the table, so a query
+    * scoring text must not alias it. Fails where the score needs a join of its own (SQLite's FTS5 ranking). */
+  def scoreSQL(filter: Filter[Doc]): SQLPart = {
+    val plan = bestMatchPlan(Some(filter))
+    if plan.joinFromSuffix.nonEmpty then throw new UnsupportedOperationException(
+      s"${store.name}: this score needs a join of its own, so it cannot be embedded in another query."
+    )
+    plan.score
+  }
+
   private def scorePart(f: Filter[Doc], boost: Double): SQLPart = f match {
     case m: Filter.Multi[Doc] =>
       val hasShould = m.filters.exists(c => c.condition == Condition.Should || c.condition == Condition.Filter)
