@@ -13,10 +13,12 @@ import java.net.{InetSocketAddress, Socket}
  *   1. probe localhost:5432 — if reachable, use the local server (fast, nothing to start/stop);
  *   2. otherwise start an ephemeral Testcontainers PostgreSQL (auto-removed at JVM exit);
  *   3. if Docker is also unavailable, `None` — specs cancel gracefully (see [[PostgreSQLAvailability]]).
+ *
+ * The login is `LIGHTDB_POSTGRESQL_USER` / `LIGHTDB_POSTGRESQL_PASSWORD`, else `postgres` / `password`.
  */
 object PostgreSQLTestSupport {
-  val username = "postgres"
-  val password = "password"
+  val username: String = sys.env.getOrElse("LIGHTDB_POSTGRESQL_USER", "postgres")
+  val password: String = sys.env.getOrElse("LIGHTDB_POSTGRESQL_PASSWORD", "password")
 
   lazy val jdbcUrl: Option[String] = sys.env.get("LIGHTDB_POSTGRESQL_JDBC_URL").orElse(localUrl()).orElse(containerUrl())
 
