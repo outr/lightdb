@@ -108,7 +108,7 @@ object LuceneBlockJoinIndexer {
                 case _ if j == fabric.Null =>
                 case DefType.Arr(d2) =>
                   val v = j.asVector
-                  if v.isEmpty then add(new StringField(fieldName, "[]", storeField))
+                  if v.isEmpty then { if lightdb.lucene.EmptyListMarker.wanted(d2.defType) then add(new StringField(fieldName, "[]", storeField)) }
                   else v.foreach(x => addJson(x, d2.defType))
                 case DefType.Bool =>
                   add(new IntField(fieldName, if j.asBoolean then 1 else 0, storeField))

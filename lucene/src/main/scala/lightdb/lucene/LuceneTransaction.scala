@@ -676,7 +676,7 @@ case class LuceneTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]](
               case DefType.Arr(inner) =>
                 val v = json.asVector
                 if v.isEmpty then {
-                  add(new StringField(field.name, "[]", fs))
+                  if EmptyListMarker.wanted(inner.defType) then add(new StringField(field.name, "[]", fs))
                 } else {
                   v.foreach(json => addJson(json, inner.defType))
                 }
