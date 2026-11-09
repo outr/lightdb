@@ -5,14 +5,15 @@ import lightdb.LightDB
 import lightdb.doc.{Document, DocumentModel}
 import lightdb.field.Field
 import lightdb.sql.connect.ConnectionManager
-import lightdb.sql.{SQLState, SQLStore, SqlIdent}
+import lightdb.sql.{SQLState, SQLStore, SqlIdent, WriteFailure}
 import lightdb.store.{Store, StoreManager, StoreMode}
 import lightdb.transaction.Transaction
 import lightdb.transaction.batch.BatchConfig
+import org.postgresql.util.PSQLException
 import rapid.Task
 
 import java.nio.file.Path
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: String,
                                                                          path: Option[Path],
@@ -26,6 +27,26 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   override def supportsSchemas: Boolean = true
 
   override def supportsRowLocks: Boolean = true
+
+  // The driver marks every statement of a failed batch EXECUTE_FAILED, as the transaction is lost, and names the one that failed in
+  // its message ("Batch entry N"). The server's error names the column of a constraint and, for a value it could not take, the
+  // parameter ("unnamed portal parameter $N").
+  override protected def writeFailure(e: SQLException, batchSize: Int): WriteFailure = {
+    val generic = super.writeFailure(e, batchSize)
+    val entry = Option(e.getMessage).flatMap(PostgreSQLStore.BatchEntry.findFirstMatchIn).map(_.group(1).toInt)
+    val server = (e :: Option(e.getNextException).toList).collectFirst {
+      case p: PSQLException if p.getServerErrorMessage != null => p.getServerErrorMessage
+    }
+    server match {
+      case Some(message) => WriteFailure(
+        entry = entry.orElse(generic.entry.filter(_ => batchSize == 1)),
+        column = Option(message.getColumn),
+        parameter = Option(message.getWhere).flatMap(PostgreSQLStore.Parameter.findFirstMatchIn).map(_.group(1).toInt),
+        reason = (Option(message.getMessage).toList ::: Option(message.getConstraint).map(c => s"constraint \"$c\"").toList).mkString(", ")
+      )
+      case None => generic.copy(entry = entry.orElse(generic.entry.filter(_ => batchSize == 1)))
+    }
+  }
 
   override protected def initConnection(connection: Connection): Unit = {
     super.initConnection(connection)
@@ -96,7 +117,7 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
   protected def tables(connection: Connection): Set[String] = {
     val ps = connection.prepareStatement("SELECT * FROM information_schema.tables WHERE table_schema = ?;")
     try {
-      ps.setString(1, lightDB.name)
+      ps.setString(1, PostgreSQLText.clean(lightDB.name))
       val rs = ps.executeQuery()
       try {
         var set = Set.empty[String]
@@ -158,6 +179,8 @@ class PostgreSQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name: S
 }
 
 object PostgreSQLStore {
+  private val BatchEntry = """^Batch entry (\d+) """.r
+  private val Parameter = """unnamed portal parameter \$(\d+)""".r
   def jsonbIndexName(storeName: String, fieldName: String): String = s"${storeName}_${fieldName}_jsonb"
 
   /** A list column as jsonb, written exactly as its jsonb index's expression so the planner matches the two. */

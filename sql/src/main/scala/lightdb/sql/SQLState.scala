@@ -5,10 +5,11 @@ import lightdb.sql.connect.ConnectionManager
 import lightdb.store.Store
 import rapid.Task
 
-import java.sql.{Connection, PreparedStatement, ResultSet, Statement}
+import java.sql.{Connection, PreparedStatement, ResultSet, SQLException, Statement}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
+import scala.collection.mutable
 import scala.util.Try
 
 case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectionManager: ConnectionManager,
@@ -21,6 +22,9 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   @volatile private[sql] var connection: Connection = _
   private[sql] val batchInsert = new AtomicInteger(0)
   private[sql] val batchUpsert = new AtomicInteger(0)
+  // The ids of the records in each pending batch, in batch order, so a failed batch names its record.
+  private val insertIds = mutable.ArrayBuffer.empty[String]
+  private val upsertIds = mutable.ArrayBuffer.empty[String]
   private var statements = List.empty[Statement]
   private var resultSets = List.empty[ResultSet]
   private var dirty = false
@@ -130,15 +134,48 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   private def flushBatches(): Unit = withStateLock {
-    if batchInsert.get() > 0 && psInsert != null then {
-      psInsert.executeBatch()
+    if batchInsert.get() > 0 && psInsert != null then executeInserts()
+    if batchUpsert.get() > 0 && psUpsert != null then executeUpserts()
+  }
+
+  /** Adds the record `id`'s bound insert to the pending insert batch. */
+  private[sql] def addInsert(id: String): Unit = withStateLock {
+    psInsert.addBatch()
+    insertIds += id
+    batchInsert.incrementAndGet()
+  }
+
+  /** Adds the record `id`'s bound upsert to the pending upsert batch. */
+  private[sql] def addUpsert(id: String): Unit = withStateLock {
+    psUpsert.addBatch()
+    upsertIds += id
+    batchUpsert.incrementAndGet()
+  }
+
+  /** Runs the pending insert batch. A failure names the record it failed on (a [[RecordWriteException]]). */
+  private[sql] def executeInserts(): Array[Int] = withStateLock {
+    try executeBatch(psInsert, insertIds.toList)
+    finally {
+      insertIds.clear()
       batchInsert.set(0)
     }
-    if batchUpsert.get() > 0 && psUpsert != null then {
-      psUpsert.executeBatch()
+  }
+
+  /** Runs the pending upsert batch. A failure names the record it failed on (a [[RecordWriteException]]). */
+  private[sql] def executeUpserts(): Array[Int] = withStateLock {
+    try executeBatch(psUpsert, upsertIds.toList)
+    finally {
+      upsertIds.clear()
       batchUpsert.set(0)
     }
   }
+
+  private def executeBatch(ps: PreparedStatement, ids: List[String]): Array[Int] =
+    try ps.executeBatch()
+    catch {
+      case e: SQLException if store != null =>
+        throw store.recordWriteException(e, ids, store.fields.map(_.name))
+    }
 
   def markDirty(): Unit = withStateLock {
     dirtied()
@@ -170,6 +207,8 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
     resultSets = Nil
     psInsert = null
     psUpsert = null
+    insertIds.clear()
+    upsertIds.clear()
     Try(connectionManager.releaseConnection(this))
     connection = null
   }
@@ -219,6 +258,8 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   private def discardBatches(): Unit = {
     batchInsert.set(0)
     batchUpsert.set(0)
+    insertIds.clear()
+    upsertIds.clear()
     // Discard counters first: even a broken statement must not be re-flushed during cleanup.
     var failure: Throwable = null
     List(psInsert, psUpsert).filter(_ != null).foreach { ps =>

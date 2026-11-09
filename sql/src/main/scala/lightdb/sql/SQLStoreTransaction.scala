@@ -286,7 +286,7 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     val idCol = SqlIdent.quote(store.model._id.name)
     val ps = connection.prepareStatement(s"SELECT * FROM ${store.fqn} WHERE $idCol LIKE ? ORDER BY $idCol")
     state.register(ps)
-    ps.setString(1, s"$prefix%")
+    populate(ps, Str(s"$prefix%"), 0)
     val rs = ps.executeQuery()
     state.register(rs)
     storedRows(rs)
@@ -324,11 +324,14 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
             fields.zipWithIndex.foreach {
               case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
             }
-            ps.setString(fields.length + 1, doc._id.value)
+            populate(ps, Str(doc._id.value), fields.length)
             ps.addBatch()
           }
           state.markDirty()
-          ps.executeBatch().count(_ != 0)
+          val counts = try ps.executeBatch() catch {
+            case e: SQLException => throw store.recordWriteException(e, docs.map(_._id.value), fields.map(_.name) :+ store.idField.name)
+          }
+          counts.count(_ != 0)
         } finally state.returnPreparedStatement(sql, ps)
       }
     }
@@ -386,18 +389,14 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       store.fields.zipWithIndex.foreach {
         case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
       }
-      ps.addBatch()
-      state.batchInsert.incrementAndGet()
+      state.addInsert(doc._id.value)
       // Flush immediately so PK-violation surfaces as a DuplicateIdException at the call site.
       // For high-throughput inserts use the buffered/queued/async write handler — it batches via
       // `flushOps` below where a constraint violation also translates correctly (per-batch, not
       // per-doc).
-      try {
-        ps.executeBatch()
-        state.batchInsert.set(0)
-      } catch {
+      try state.executeInserts()
+      catch {
         case e: SQLException if SQLStoreTransaction.isUniqueViolation(e) =>
-          state.batchInsert.set(0)
           throw DuplicateIdException(store.name, doc._id)
       }
     }
@@ -410,11 +409,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
       store.fields.zipWithIndex.foreach {
         case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
       }
-      ps.addBatch()
-      state.batchUpsert.incrementAndGet()
+      state.addUpsert(doc._id.value)
       if upsertBatchMax <= 1 || state.batchUpsert.get() >= upsertBatchMax then {
-        ps.executeBatch()
-        state.batchUpsert.set(0)
+        state.executeUpserts()
         state.markDirty()
       }
     }
@@ -457,15 +454,13 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           store.fields.zipWithIndex.foreach {
             case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
           }
-          ps.addBatch()
+          state.addInsert(doc._id.value)
         }
-        try ps.executeBatch()
+        try state.executeInserts()
         catch {
           case e: SQLException if SQLStoreTransaction.isUniqueViolation(e) =>
-            state.batchInsert.set(0)
             throw DuplicateIdException(store.name, SQLStoreTransaction.failedInsertId(e, inserts.toList))
         }
-        state.batchInsert.set(0)
       }
     }
 
@@ -476,10 +471,9 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
           store.fields.zipWithIndex.foreach {
             case (field, index) => populate(ps, field.getJson(doc, indexingState), index)
           }
-          ps.addBatch()
+          state.addUpsert(doc._id.value)
         }
-        ps.executeBatch()
-        state.batchUpsert.set(0)
+        state.executeUpserts()
         state.markDirty()
       }
     }
@@ -1833,6 +1827,10 @@ object SQLStoreTransaction {
     while (cur != null) {
       if (matches(cur)) return true
       cur = cur match {
+        case r: RecordWriteException => r.getCause match {
+          case s: SQLException => s
+          case _ => null
+        }
         case b: java.sql.BatchUpdateException => b.getNextException
         case other => other.getNextException
       }
@@ -1841,12 +1839,21 @@ object SQLStoreTransaction {
   }
 
   /**
-   * Best-effort: when a batch insert fails with a unique-violation, walk the JDBC update counts
-   * (Statement.EXECUTE_FAILED = -3) to identify the offending row's _id. Falls back to the
-   * first doc in the batch when the driver doesn't report row-level statuses.
+   * Best-effort: when a batch insert fails with a unique-violation, take the record a
+   * [[RecordWriteException]] names, else walk the JDBC update counts (Statement.EXECUTE_FAILED = -3)
+   * to identify the offending row's _id. Falls back to the first doc in the batch when the driver
+   * doesn't report row-level statuses.
    */
   private[sql] def failedInsertId[Doc <: Document[Doc]](e: SQLException, docs: List[Doc]): Id[Doc] = {
+    val named = e match {
+      case r: RecordWriteException => r.id.flatMap(id => docs.find(_._id.value == id))
+      case _ => None
+    }
     val counts: Option[Array[Int]] = e match {
+      case r: RecordWriteException => r.getCause match {
+        case b: java.sql.BatchUpdateException => Option(b.getUpdateCounts)
+        case _ => None
+      }
       case b: java.sql.BatchUpdateException => Option(b.getUpdateCounts)
       case _ => None
     }
@@ -1854,6 +1861,6 @@ object SQLStoreTransaction {
       val i = arr.indexWhere(_ == java.sql.Statement.EXECUTE_FAILED)
       if (i >= 0 && i < docs.length) Some(i) else None
     }
-    docs(idx.getOrElse(0))._id
+    named.map(_._id).getOrElse(docs(idx.getOrElse(0))._id)
   }
 }

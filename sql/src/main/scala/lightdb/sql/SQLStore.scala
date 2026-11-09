@@ -16,7 +16,7 @@ import lightdb.transaction.handler.QueuedWriteHandler
 import rapid.Task
 
 import java.nio.file.Path
-import java.sql.{Connection, DatabaseMetaData}
+import java.sql.{BatchUpdateException, Connection, DatabaseMetaData, SQLException, Statement}
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -420,6 +420,29 @@ abstract class SQLStore[Doc <: Document[Doc], Model <: DocumentModel[Doc]](name:
 
   private[sql] def insertSQL: String = statements._1
   private[sql] def upsertSQL: String = statements._2
+
+  /** What the driver's exception says about a failed write batch of `batchSize` statements. A driver that runs on past a failed
+    * statement marks it `EXECUTE_FAILED`; one that stops there reports the counts of the statements before it. */
+  protected def writeFailure(e: SQLException, batchSize: Int): WriteFailure = {
+    val entry = e match {
+      case b: BatchUpdateException if b.getUpdateCounts != null =>
+        val counts = b.getUpdateCounts
+        val failed = counts.indexWhere(_ == Statement.EXECUTE_FAILED)
+        if failed >= 0 then Some(failed)
+        else if counts.length < batchSize then Some(counts.length)
+        else None
+      case _ => None
+    }
+    val reason = Option(Option(e.getNextException).getOrElse(e).getMessage).map(_.linesIterator.next()).getOrElse(e.toString)
+    WriteFailure(if batchSize == 1 then Some(0) else entry, None, None, reason)
+  }
+
+  /** A failed write batch of the records `ids`, whose statements bind `columns` in parameter order, as the record it failed on. */
+  def recordWriteException(e: SQLException, ids: Seq[String], columns: Seq[String]): RecordWriteException = {
+    val failure = writeFailure(e, ids.size)
+    val column = failure.column.orElse(failure.parameter.flatMap(p => columns.lift(p - 1)))
+    new RecordWriteException(name, failure.entry.flatMap(ids.lift), ids.size, column, failure.parameter, failure.reason, e)
+  }
 
   @volatile private var _retiredColumns: List[String] = Nil
 

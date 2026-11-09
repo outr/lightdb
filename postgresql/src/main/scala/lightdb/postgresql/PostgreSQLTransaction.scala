@@ -58,12 +58,19 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     case _ => false
   }
 
+  // A value is written into these as JSON text, which escapes a NUL, so it is cleaned first as the stored list was.
   private def containsPart(fieldName: String, values: List[Json]): SQLPart =
-    SQLPart(s"${PostgreSQLStore.jsonb(SqlIdent.quote(fieldName))} @> ?::jsonb", JsonFormatter.Compact(Arr(values.toVector)).json)
+    SQLPart(
+      s"${PostgreSQLStore.jsonb(SqlIdent.quote(fieldName))} @> ?::jsonb",
+      JsonFormatter.Compact(PostgreSQLText.clean(Arr(values.toVector))).json
+    )
 
   // An element is bounded by `[`/`,` on the left and `,`/`]` on the right, so anchoring on those boundaries gives exact matches
   // (no `42` matching `420`) while remaining LIKE-based, so the pg_trgm GIN index applies.
-  private def arrayBoundaryPatterns(v: String): List[String] = List(s"%[$v,%", s"%,$v,%", s"%,$v]%", s"%[$v]%")
+  private def arrayBoundaryPatterns(json: Json): List[String] = {
+    val v = JsonFormatter.Compact(PostgreSQLText.clean(json))
+    List(s"%[$v,%", s"%,$v,%", s"%,$v]%", s"%[$v]%")
+  }
 
   override protected def arrayContainsAllParts(fieldName: String, values: List[Json]): Option[SQLPart] =
     if (values.isEmpty) None
@@ -71,7 +78,7 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     else Some {
       val q = SqlIdent.quote(fieldName)
       val (clauses, args) = values.map { json =>
-        val patterns = arrayBoundaryPatterns(JsonFormatter.Compact(json))
+        val patterns = arrayBoundaryPatterns(json)
         (s"(${patterns.map(_ => s"$q ILIKE ?").mkString(" OR ")})", patterns.map(_.json))
       }.unzip
       SQLPart(clauses.mkString(" AND "), args.flatten*)
@@ -86,15 +93,17 @@ case class PostgreSQLTransaction[Doc <: Document[Doc], Model <: DocumentModel[Do
     else Some {
       val q = SqlIdent.quote(fieldName)
       val (clauses, args) = values.map { json =>
-        val patterns = arrayBoundaryPatterns(JsonFormatter.Compact(json))
+        val patterns = arrayBoundaryPatterns(json)
         (s"(${patterns.map(_ => s"$q NOT ILIKE ?").mkString(" AND ")})", patterns.map(_.json))
       }.unzip
       SQLPart(clauses.mkString(" AND "), args.flatten*)
     }
 
-  override def populate(ps: PreparedStatement, arg: Json, index: Int): Unit = arg match {
+  // Every value this store binds passes here, written or filtered by, so each string in it is made one PostgreSQL can hold
+  // (PostgreSQLText): a filter's value is cleaned as the stored value was, and still finds it.
+  override def populate(ps: PreparedStatement, arg: Json, index: Int): Unit = PostgreSQLText.clean(arg) match {
     case Bool(b, _) => ps.setBoolean(index + 1, b)
-    case _ => super.populate(ps, arg, index)
+    case cleaned => super.populate(ps, cleaned, index)
   }
 
   // pgvector columns surface through JDBC as a PGobject whose text value is the vector literal
