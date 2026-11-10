@@ -62,7 +62,7 @@ ThisBuild / Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF
 ThisBuild / Test / parallelExecution := false
 ThisBuild / Test / testOptions += Tests.Argument("-n", "spec.EmbeddedTest")
 
-val rapidVersion: String = "2.9.9"
+val rapidVersion: String = "2.9.10"
 
 val profigVersion: String = "3.7.1"
 
