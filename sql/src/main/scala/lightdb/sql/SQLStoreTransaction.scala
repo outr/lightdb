@@ -828,6 +828,43 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     }
   }
 
+  /**
+   * Streams the query from one statement, so its rows are those of one snapshot: the statement applies the query's
+   * offset and limit, and the driver fetches its rows `FetchSize` at a time (PostgreSQL through a portal, inside the
+   * transaction). A nested filter streams its broad query the same way and keeps the documents that match.
+   */
+  override def streamScored[V](query: Query[Doc, Model, V]): rapid.Stream[(V, Double)] = {
+    val single = query.copy(pageSize = None, countTotal = false, facets = Nil)
+    if NestedQuerySupport.containsNested(query.filter) then {
+      val matches = nestedMatches(single).drop(single.offset)
+      single.limit.fold(matches)(matches.take).map {
+        case (doc, score) => convertDoc(doc, single.conversion) -> score
+      }
+    } else {
+      rapid.Stream.force(doSearchDirect(single).map(_.streamWithScore))
+    }
+  }
+
+  /** The documents matching a nested filter, in the query's order: its broad query, from one statement, filtered here. */
+  private def nestedMatches[V](query: Query[Doc, Model, V]): rapid.Stream[(Doc, Double)] = rapid.Stream.force(Task.defer {
+    NestedQuerySupport.validateFallbackCompatible(query.filter)
+    val broadQuery = Query[Doc, Model, Doc](this, Conversion.Doc()).copy(
+      filter = NestedQuerySupport.stripNested(query.filter),
+      sort = query.sort,
+      offset = 0,
+      limit = None,
+      pageSize = None,
+      countTotal = false,
+      scoreDocs = query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch]) || query.minDocScore.nonEmpty,
+      minDocScore = query.minDocScore,
+      facets = Nil,
+      optimize = query.optimize
+    )
+    doSearchDirect(broadQuery).map(_.streamWithScore.filter {
+      case (doc, _) => query.filter.forall(f => NestedQuerySupport.eval(f, store.model, doc))
+    })
+  })
+
   private def doSearchWithNestedFallback[V](query: Query[Doc, Model, V]): Task[SearchResults[Doc, Model, V]] = {
     val includeFacets = query.facets.nonEmpty
     if query.limit.isEmpty && query.pageSize.isEmpty && !query.countTotal && !includeFacets then {
@@ -835,76 +872,32 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
         s"SQL nested fallback requires limit or pageSize to keep memory bounded for store '${store.name}'."
       ))
     } else {
-      NestedQuerySupport.validateFallbackCompatible(query.filter)
-      val broadFilter = NestedQuerySupport.stripNested(query.filter)
-      val broadQuery = Query[Doc, Model, Doc](this, Conversion.Doc()).copy(
-        filter = broadFilter,
-        sort = query.sort,
-        offset = 0,
-        limit = None,
-        pageSize = None,
-        countTotal = false,
-        scoreDocs = query.scoreDocs || query.sort.exists(_.isInstanceOf[Sort.BestMatch]) || query.minDocScore.nonEmpty,
-        minDocScore = query.minDocScore,
-        facets = Nil,
-        optimize = query.optimize
-      )
       val requestedLimit = query.limit.orElse(query.pageSize).getOrElse(Int.MaxValue)
-      val scanPageSize = math.max(1, math.min(query.pageSize.getOrElse(1000), requestedLimit))
-
-      def loop(scanOffset: Int,
-               matchedSoFar: Int,
-               collected: Vector[(V, Double)],
-               facetDocs: Vector[Doc]): Task[(Int, Vector[(V, Double)], Vector[Doc])] = {
-        val enoughForPage = collected.size >= requestedLimit
-        if !query.countTotal && enoughForPage && !includeFacets then {
-          Task.pure((matchedSoFar, collected, facetDocs))
-        } else {
-          val pageQuery = broadQuery.copy(offset = scanOffset, limit = Some(scanPageSize), pageSize = None)
-          doSearchDirect(pageQuery).flatMap(_.listWithScore).flatMap { page =>
-            if page.isEmpty then {
-              Task.pure((matchedSoFar, collected, facetDocs))
-            } else {
-              var matched = matchedSoFar
-              val buffer = scala.collection.mutable.ArrayBuffer.from(collected)
-              val facetBuffer = scala.collection.mutable.ArrayBuffer.from(facetDocs)
-              page.foreach {
-                case (doc, score) =>
-                  if query.filter.forall(f => NestedQuerySupport.eval(f, store.model, doc)) then {
-                    if includeFacets then {
-                      facetBuffer += doc
-                    }
-                    if matched >= query.offset && buffer.size < requestedLimit then {
-                      buffer += (convertDoc(doc, query.conversion) -> score)
-                    }
-                    matched += 1
-                  }
-              }
-              val continue =
-                page.size >= scanPageSize &&
-                  (query.countTotal || buffer.size < requestedLimit || includeFacets)
-              if continue then loop(scanOffset + page.size, matched, buffer.toVector, facetBuffer.toVector)
-              else Task.pure((matched, buffer.toVector, facetBuffer.toVector))
-            }
-          }
+      val end = math.min(Int.MaxValue.toLong, query.offset.toLong + requestedLimit).toInt
+      // Without a total or facets only the matches up to the page's end are read.
+      val matches = if query.countTotal || includeFacets then nestedMatches(query) else nestedMatches(query).take(end)
+      Task.defer {
+        var matched = 0
+        val collected = Vector.newBuilder[(V, Double)]
+        val facetDocs = Vector.newBuilder[Doc]
+        matches.foreach {
+          case (doc, score) =>
+            if includeFacets then facetDocs += doc
+            if matched >= query.offset && matched < end then collected += (convertDoc(doc, query.conversion) -> score)
+            matched += 1
+        }.count.map { _ =>
+          SearchResults(
+            model = store.model,
+            offset = query.offset,
+            limit = query.limit,
+            total = if query.countTotal then Some(matched) else None,
+            streamWithScore = rapid.Stream.emits(collected.result()),
+            facetResults =
+              if includeFacets then FacetComputation.fromDocs(facetDocs.result(), query.facets, store.model)
+              else Map.empty[FacetField[Doc], FacetResult],
+            transaction = this
+          )
         }
-      }
-
-      loop(scanOffset = 0, matchedSoFar = 0, collected = Vector.empty, facetDocs = Vector.empty).map { case (matched, collected, facetDocs) =>
-        val facetResults = if includeFacets then {
-          FacetComputation.fromDocs(facetDocs, query.facets, store.model)
-        } else {
-          Map.empty[FacetField[Doc], FacetResult]
-        }
-        SearchResults(
-          model = store.model,
-          offset = query.offset,
-          limit = query.limit,
-          total = if query.countTotal then Some(matched) else None,
-          streamWithScore = rapid.Stream.emits(collected),
-          facetResults = facetResults,
-          transaction = this
-        )
       }
     }
   }

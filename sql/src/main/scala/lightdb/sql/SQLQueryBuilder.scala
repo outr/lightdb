@@ -47,6 +47,8 @@ case class SQLQueryBuilder[Doc <: Document[Doc], Model <: DocumentModel[Doc]](st
     },
     limit match {
       case Some(l) => List(SQLPart.Fragment("\nLIMIT "), SQLPart.Arg(l.json))
+      // SQLite and MariaDB accept an OFFSET only after a LIMIT
+      case None if offset != 0 => List(SQLPart.Fragment(s"\nLIMIT ${Long.MaxValue}"))
       case None => Nil
     },
     if offset != 0 then List(SQLPart.Fragment(s"\nOFFSET $offset")) else Nil
