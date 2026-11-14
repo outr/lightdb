@@ -278,7 +278,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     state.register(s)
     val rs = s.executeQuery(s"SELECT * FROM ${store.fqn}")
     state.register(rs)
-    storedRows(rs)
+    ActionIterator(storedRows(rs), onClose = () => {
+      Try(rs.close())
+      Try(s.close())
+    })
   })
 
   override def jsonPrefixStream(prefix: String): rapid.Stream[Json] = rapid.Stream.fromIterator(Task {
@@ -289,7 +292,10 @@ trait SQLStoreTransaction[Doc <: Document[Doc], Model <: DocumentModel[Doc]]
     populate(ps, Str(s"$prefix%"), 0)
     val rs = ps.executeQuery()
     state.register(rs)
-    storedRows(rs)
+    ActionIterator(storedRows(rs), onClose = () => {
+      Try(rs.close())
+      Try(ps.close())
+    })
   })
 
   /**

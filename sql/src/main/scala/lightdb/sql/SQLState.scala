@@ -115,22 +115,18 @@ case class SQLState[Doc <: Document[Doc], Model <: DocumentModel[Doc]](connectio
   }
 
   /**
-   * Closes open result sets and non-prepared statements for this state.
-   * Needed for drivers like DuckDB that disallow executing new statements
-   * while a previous result set is still open. Prepared statements are
-   * left alone to avoid breaking statement pooling/reuse.
+   * Readies this state for a new statement: flushes the pending write batches, so the statement reads this
+   * transaction's writes, and forgets the result sets and plain statements already closed.
+   *
+   * A result set still open is left open: a stream reading it goes on after a statement run from inside its consumption
+   * (a get, a write, another query). PostgreSQL keeps each open result in its own portal, MariaDB reads the rest of a
+   * streaming result before the next statement, and H2, SQLite and DuckDB keep several results open on a connection.
+   * Each result set is closed when its stream ends, and any left open when the transaction closes.
    */
   def closePendingResults(): Unit = withStateLock {
-    // Ensure read-your-writes semantics: SQLStoreTransaction buffers inserts/upserts using JDBC batches.
-    // Before executing any new statements (especially SELECTs), flush pending batches so subsequent reads
-    // within the same transaction can see the writes.
     flushBatches()
-
-    resultSets.foreach(rs => Try(rs.close()))
-    resultSets = Nil
-    val (prepared, regular) = statements.partition(_.isInstanceOf[java.sql.PreparedStatement])
-    regular.foreach(s => Try(s.close()))
-    statements = prepared
+    resultSets = resultSets.filterNot(rs => Try(rs.isClosed).getOrElse(true))
+    statements = statements.filterNot(s => Try(s.isClosed).getOrElse(true))
   }
 
   private def flushBatches(): Unit = withStateLock {
