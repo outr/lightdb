@@ -66,7 +66,7 @@ val rapidVersion: String = "2.9.9"
 
 val profigVersion: String = "3.7.1"
 
-val reactifyVersion: String = "4.2.0"
+val reactifyVersion: String = "4.2.2"
 
 val spiceVersion: String = "1.10.4"
 
