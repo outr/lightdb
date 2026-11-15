@@ -90,7 +90,7 @@ val jedisVersion: String = "7.5.3"
 
 val fabricVersion: String = "1.30.0"
 
-val scribeVersion: String = "3.19.0"
+val scribeVersion: String = "3.19.1"
 
 val luceneVersion: String = "10.5.0"
 
