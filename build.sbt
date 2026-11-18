@@ -116,7 +116,7 @@ val googleAuthVersion: String = "1.48.0"
 
 val googleHttpClientGsonVersion: String = "2.1.1"
 
-val chronicleMapVersion: String = "2026.1"
+val chronicleMapVersion: String = "2026.2"
 
 val scalaTestVersion: String = "3.2.20"
 
