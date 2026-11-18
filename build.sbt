@@ -104,7 +104,7 @@ val duckdbVersion: String = "1.5.4.0"
 
 val h2Version: String = "2.4.240"
 
-val postgresqlVersion: String = "42.7.13"
+val postgresqlVersion: String = "42.7.14"
 
 val mariadbVersion: String = "3.5.9"
 
